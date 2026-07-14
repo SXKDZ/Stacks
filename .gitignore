@@ -48,3 +48,4 @@ next-env.d.ts
 /data/*.db-*
 /data/settings.json
 /data/settings.json.tmp
+/data/legacy-import.sql

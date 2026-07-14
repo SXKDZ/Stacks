@@ -18,8 +18,6 @@ import {
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "../app/lib/ai-prompts";
 
-type ConflictPolicy = "local" | "remote" | "keep_both";
-
 interface SettingsPayload {
   modelId?: string;
   region?: string;
@@ -27,11 +25,9 @@ interface SettingsPayload {
   temperature?: string | number;
   chatSystemPrompt?: string;
   summarySystemPrompt?: string;
-  localDataDir?: string;
   remotePath?: string;
   autoSync?: boolean;
   autoSyncInterval?: string | number;
-  conflictPolicy?: ConflictPolicy;
   secrets?: Record<string, string>;
 }
 
@@ -49,11 +45,9 @@ interface StructuredSettingsFile {
     summarySystem: string;
   };
   sync: {
-    localDataDir: string;
     remotePath: string;
     autoSync: string;
     autoSyncInterval: string;
-    conflictPolicy: string;
   };
   secrets: Record<string, string>;
 }
@@ -79,11 +73,9 @@ const environmentKeys = new Set([
   "PA_CHAT_SYSTEM_PROMPT",
   "PA_SUMMARY_SYSTEM_PROMPT",
   "PA_TEMPERATURE",
-  "PAPERCLI_AUTO_SYNC",
-  "PAPERCLI_AUTO_SYNC_INTERVAL",
-  "PAPERCLI_DATA_DIR",
-  "PAPERCLI_REMOTE_PATH",
-  "PAPERCLI_SYNC_POLICY",
+  "PA_AUTO_SYNC",
+  "PA_AUTO_SYNC_INTERVAL",
+  "PA_ONEDRIVE_PATH",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
 ]);
@@ -100,7 +92,16 @@ const repositoryRoot = resolve(paDirectory, "..");
 const settingsDirectory = join(paDirectory, "data");
 const settingsPath = join(settingsDirectory, "settings.json");
 const settingsTemporaryPath = join(settingsDirectory, "settings.json.tmp");
-const bridgePath = join(paDirectory, "scripts", "papercli_sync_bridge.py");
+const bridgePath = join(paDirectory, "scripts", "pa_sync_bridge.py");
+const localAssetDirectory = join(paDirectory, "data");
+const localD1Directory = join(
+  paDirectory,
+  ".wrangler",
+  "state",
+  "v3",
+  "d1",
+  "miniflare-D1DatabaseObject",
+);
 
 let syncRunning = false;
 let lastSyncAt: string | null = null;
@@ -133,11 +134,9 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     PA_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
     PA_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
     PA_TEMPERATURE: settings.ai.temperature,
-    PAPERCLI_AUTO_SYNC: settings.sync.autoSync,
-    PAPERCLI_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
-    PAPERCLI_DATA_DIR: settings.sync.localDataDir,
-    PAPERCLI_REMOTE_PATH: settings.sync.remotePath,
-    PAPERCLI_SYNC_POLICY: settings.sync.conflictPolicy,
+    PA_AUTO_SYNC: settings.sync.autoSync,
+    PA_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
+    PA_ONEDRIVE_PATH: settings.sync.remotePath,
     SEMANTIC_SCHOLAR_API_KEY: settings.secrets.SEMANTIC_SCHOLAR_API_KEY,
     SERPAPI_KEY: settings.secrets.SERPAPI_KEY,
   };
@@ -152,14 +151,16 @@ function truthy(value: string): boolean {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
-function expandUserPath(value: string): string {
-  if (value === "~") {
-    return homedir();
+function findLocalD1Database(): string | null {
+  if (!existsSync(localD1Directory)) {
+    return null;
   }
-  if (value.startsWith("~/") || value.startsWith("~\\")) {
-    return join(homedir(), value.slice(2));
-  }
-  return value;
+  const candidates = readdirSync(localD1Directory)
+    .filter((name) => name.endsWith(".sqlite") && name !== "metadata.sqlite")
+    .map((name) => join(localD1Directory, name))
+    .filter((path) => existsSync(path))
+    .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+  return candidates[0] ?? null;
 }
 
 function parseBody(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -249,11 +250,9 @@ function settingsFromCurrentValues(): StructuredSettingsFile {
       summarySystem: envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
     sync: {
-      localDataDir: envValue("PAPERCLI_DATA_DIR", join(homedir(), ".papercli")),
-      remotePath: envValue("PAPERCLI_REMOTE_PATH"),
-      autoSync: envValue("PAPERCLI_AUTO_SYNC", "false"),
-      autoSyncInterval: envValue("PAPERCLI_AUTO_SYNC_INTERVAL", "5"),
-      conflictPolicy: envValue("PAPERCLI_SYNC_POLICY", "keep_both"),
+      remotePath: envValue("PA_ONEDRIVE_PATH"),
+      autoSync: envValue("PA_AUTO_SYNC", "false"),
+      autoSyncInterval: envValue("PA_AUTO_SYNC_INTERVAL", "5"),
     },
     secrets: Object.fromEntries(secretKeys.map((key) => [key, envValue(key)])),
   };
@@ -269,11 +268,9 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "PA_TEMPERATURE": next.ai.temperature = value; break;
       case "PA_CHAT_SYSTEM_PROMPT": next.prompts.chatSystem = value; break;
       case "PA_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
-      case "PAPERCLI_DATA_DIR": next.sync.localDataDir = value; break;
-      case "PAPERCLI_REMOTE_PATH": next.sync.remotePath = value; break;
-      case "PAPERCLI_AUTO_SYNC": next.sync.autoSync = value; break;
-      case "PAPERCLI_AUTO_SYNC_INTERVAL": next.sync.autoSyncInterval = value; break;
-      case "PAPERCLI_SYNC_POLICY": next.sync.conflictPolicy = value; break;
+      case "PA_ONEDRIVE_PATH": next.sync.remotePath = value; break;
+      case "PA_AUTO_SYNC": next.sync.autoSync = value; break;
+      case "PA_AUTO_SYNC_INTERVAL": next.sync.autoSyncInterval = value; break;
       default:
         if (secretKeys.includes(key as typeof secretKeys[number])) {
           next.secrets[key] = value;
@@ -318,7 +315,7 @@ function detectOneDrivePaths(): string[] {
 }
 
 function currentSettings() {
-  const localDataDir = envValue("PAPERCLI_DATA_DIR", join(homedir(), ".papercli"));
+  const localD1Database = findLocalD1Database();
   return {
     local: true,
     ai: {
@@ -336,16 +333,14 @@ function currentSettings() {
       summarySystem: envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
     sync: {
-      localDataDir,
-      remotePath: envValue("PAPERCLI_REMOTE_PATH"),
-      autoSync: truthy(envValue("PAPERCLI_AUTO_SYNC", "false")),
-      autoSyncInterval: Number(envValue("PAPERCLI_AUTO_SYNC_INTERVAL", "5")) || 5,
-      conflictPolicy: (envValue("PAPERCLI_SYNC_POLICY", "keep_both") || "keep_both") as ConflictPolicy,
+      remotePath: envValue("PA_ONEDRIVE_PATH"),
+      autoSync: truthy(envValue("PA_AUTO_SYNC", "false")),
+      autoSyncInterval: Number(envValue("PA_AUTO_SYNC_INTERVAL", "5")) || 5,
       detectedPaths: detectOneDrivePaths(),
       running: syncRunning,
       lastSyncAt,
       lastResult: lastSyncResult,
-      sourceExists: existsSync(join(expandUserPath(localDataDir), "papers.db")),
+      sourceExists: Boolean(localD1Database),
     },
   };
 }
@@ -358,11 +353,9 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
     PA_CHAT_SYSTEM_PROMPT: String(data.chatSystemPrompt ?? envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT)).trim(),
     PA_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
     PA_TEMPERATURE: String(Math.min(1, Math.max(0, Number(data.temperature) || 0))),
-    PAPERCLI_DATA_DIR: String(data.localDataDir ?? envValue("PAPERCLI_DATA_DIR", join(homedir(), ".papercli"))).trim(),
-    PAPERCLI_REMOTE_PATH: String(data.remotePath ?? envValue("PAPERCLI_REMOTE_PATH")).trim(),
-    PAPERCLI_AUTO_SYNC: data.autoSync ? "true" : "false",
-    PAPERCLI_AUTO_SYNC_INTERVAL: String(Math.min(3600, Math.max(5, Number(data.autoSyncInterval) || 5))),
-    PAPERCLI_SYNC_POLICY: ["local", "remote", "keep_both"].includes(String(data.conflictPolicy)) ? String(data.conflictPolicy) : "keep_both",
+    PA_ONEDRIVE_PATH: String(data.remotePath ?? envValue("PA_ONEDRIVE_PATH")).trim(),
+    PA_AUTO_SYNC: data.autoSync ? "true" : "false",
+    PA_AUTO_SYNC_INTERVAL: String(Math.min(3600, Math.max(5, Number(data.autoSyncInterval) || 5))),
   };
   for (const key of secretKeys) {
     const replacement = data.secrets?.[key]?.trim();
@@ -387,8 +380,11 @@ async function runSync(auto = false): Promise<SyncResult> {
   if (syncRunning) {
     throw new Error("A PA sync is already running.");
   }
-  const localDirectory = envValue("PAPERCLI_DATA_DIR", join(homedir(), ".papercli"));
-  const remoteDirectory = envValue("PAPERCLI_REMOTE_PATH");
+  const localDatabase = findLocalD1Database();
+  const remoteDirectory = envValue("PA_ONEDRIVE_PATH");
+  if (!localDatabase) {
+    throw new Error("The local PA D1 database is not available yet.");
+  }
   if (!remoteDirectory) {
     throw new Error("Choose a OneDrive remote directory before syncing.");
   }
@@ -398,11 +394,13 @@ async function runSync(auto = false): Promise<SyncResult> {
       const args = [
         bridgePath,
         "--local",
-        localDirectory,
+        localAssetDirectory,
+        "--database",
+        localDatabase,
         "--remote",
         remoteDirectory,
         "--policy",
-        auto ? "local" : envValue("PAPERCLI_SYNC_POLICY", "keep_both"),
+        "local",
       ];
       if (auto) {
         args.push("--auto");
@@ -445,15 +443,15 @@ async function runSync(auto = false): Promise<SyncResult> {
   }
 }
 
-export function papercliSettings(): Plugin {
+export function paSettings(): Plugin {
   return {
-    name: "papercli-local-settings",
+    name: "pa-local-settings",
     apply: "serve",
     configureServer(server) {
       const observeDatabase = () => {
         const settings = currentSettings();
-        const databasePath = join(expandUserPath(settings.sync.localDataDir), "papers.db");
-        if (!settings.sync.autoSync || !settings.sync.remotePath || !existsSync(databasePath)) {
+        const databasePath = findLocalD1Database();
+        if (!settings.sync.autoSync || !settings.sync.remotePath || !databasePath) {
           return;
         }
         const modified = statSync(databasePath).mtimeMs;

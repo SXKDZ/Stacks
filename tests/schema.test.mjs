@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFile as execFileCallback } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+
+const execFile = promisify(execFileCallback);
 
 test("normalizes authors and venues as first-class linked records", async () => {
   const [schema, authorMigration] = await Promise.all([
@@ -24,10 +32,10 @@ test("keeps API credentials out of tracked examples", async () => {
   assert.doesNotMatch(example, /ABSKQ|jina_[a-z0-9]{20,}|s2k-/i);
 });
 
-test("persists local settings atomically and provides dependency-free PA sync", async () => {
+test("persists local settings atomically and backs up the normalized D1 library", async () => {
   const [plugin, bridge, example, ignore] = await Promise.all([
-    readFile(new URL("../build/papercli-settings-plugin.ts", import.meta.url), "utf8"),
-    readFile(new URL("../scripts/papercli_sync_bridge.py", import.meta.url), "utf8"),
+    readFile(new URL("../build/pa-settings-plugin.ts", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/pa_sync_bridge.py", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../.gitignore", import.meta.url), "utf8"),
   ]);
@@ -38,9 +46,11 @@ test("persists local settings atomically and provides dependency-free PA sync", 
   assert.match(plugin, /settings\.json\.tmp/);
   assert.match(plugin, /renameSync\(settingsTemporaryPath, settingsPath\)/);
   assert.doesNotMatch(plugin, /writeFileSync\(environmentPath/);
-  assert.match(bridge, /papercli_sync\.lock/);
+  assert.match(plugin, /findLocalD1Database/);
+  assert.match(bridge, /pa_sync\.lock/);
+  assert.match(bridge, /D1 is authoritative/);
   assert.match(bridge, /html_snapshots/);
-  assert.match(example, /PAPERCLI_REMOTE_PATH/);
+  assert.match(example, /PA_ONEDRIVE_PATH/);
   assert.match(example, /PA_MAX_TOKENS/);
   assert.match(ignore, /data\/settings\.json/);
 });
@@ -87,4 +97,50 @@ test("uses integrated sortable table headers without a detached sort control", a
   assert.doesNotMatch(component, /SORT\s*<\/span>/);
   assert.match(styles, /\.table-sort-button/);
   assert.match(styles, /\.library-toolbar/);
+  assert.match(styles, /\.research-grid \.paper-column-check/);
+  assert.match(styles, /\.paper-secondary-line/);
+});
+
+test("uses D1 as the active library and treats legacy SQLite as import-only", async () => {
+  const [library, bootstrap, localFiles, config] = await Promise.all([
+    readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../build/local-files-plugin.ts", import.meta.url), "utf8"),
+    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(library, /ensureDatabase/);
+  assert.match(bootstrap, /SELECT COUNT\(\*\) AS count FROM papers/);
+  assert.match(config, /paLocalFiles/);
+  assert.doesNotMatch(config, /local-papercli|papercliLocal/);
+  assert.doesNotMatch(localFiles, /UPDATE papers|INSERT INTO papers|DELETE FROM papers/);
+});
+
+test("backs up a D1 SQLite snapshot without replacing the live source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pa-sync-test-"));
+  const local = join(root, "local");
+  const remote = join(root, "remote");
+  const databasePath = join(root, "live-d1.sqlite");
+  try {
+    await mkdir(join(local, "pdfs"), { recursive: true });
+    await mkdir(join(local, "html_snapshots"), { recursive: true });
+    await writeFile(join(local, "pdfs", "paper.pdf"), "pdf fixture");
+    await writeFile(join(local, "html_snapshots", "paper.html"), "<p>fixture</p>");
+    const database = new DatabaseSync(databasePath);
+    database.exec("CREATE TABLE papers (id TEXT PRIMARY KEY, title TEXT NOT NULL)");
+    database.exec("INSERT INTO papers VALUES ('paper-1', 'Fixture')");
+    database.close();
+
+    const bridgePath = fileURLToPath(new URL("../scripts/pa_sync_bridge.py", import.meta.url));
+    const { stdout } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote, "--policy", "local"]);
+    const result = JSON.parse(stdout.trim());
+    assert.equal(result.ok, true);
+
+    const backup = new DatabaseSync(join(remote, "papers.db"), { readOnly: true });
+    assert.equal(backup.prepare("SELECT COUNT(*) AS count FROM papers").get().count, 1);
+    backup.close();
+    assert.equal(await readFile(join(remote, "pdfs", "paper.pdf"), "utf8"), "pdf fixture");
+    assert.equal(await readFile(join(remote, "html_snapshots", "paper.html"), "utf8"), "<p>fixture</p>");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

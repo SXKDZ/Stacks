@@ -1,9 +1,8 @@
-"""Dependency-free OneDrive sync bridge for Paper Assistant.
+"""Dependency-free OneDrive backup bridge for Paper Assistant.
 
-The bridge mirrors PaperCLI's directory-based sync contract: papers.db, PDFs,
-and HTML snapshots are synchronized under lock. The selected conflict policy
-decides which database/file wins; keep_both preserves timestamped conflict
-copies before choosing the newest database as the shared canonical copy.
+The live normalized D1 database is the only library source. This bridge creates
+a consistent SQLite backup in OneDrive and mirrors PA-managed PDFs and HTML
+snapshots without ever replacing the database used by the running server.
 """
 
 import argparse
@@ -22,8 +21,9 @@ from pathlib import Path
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Sync a PaperCLI library")
+    parser = argparse.ArgumentParser(description="Back up a PA library")
     parser.add_argument("--local", required=True)
+    parser.add_argument("--database", required=True)
     parser.add_argument("--remote", required=True)
     parser.add_argument(
         "--policy",
@@ -125,14 +125,14 @@ def clear_stale_lock(path):
     except Exception:
         path.unlink()
         return
-    raise RuntimeError("Another PaperCLI sync is already running.")
+    raise RuntimeError("Another PA sync is already running.")
 
 
 @contextmanager
 def sync_locks(local_directory, remote_directory):
     lock_paths = [
-        local_directory / ".papercli_sync.lock",
-        remote_directory / ".papercli_sync.lock",
+        local_directory / ".pa_sync.lock",
+        remote_directory / ".pa_sync.lock",
     ]
     for path in lock_paths:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -163,7 +163,7 @@ def conflict_name(path, label):
 
 
 def sync_database(local_database, remote_database, policy, result):
-    result["progress"].append({"message": "Comparing PaperCLI databases"})
+    result["progress"].append({"message": "Comparing PA D1 backups"})
     if not remote_database.exists():
         copy_database(local_database, remote_database)
         count = paper_count(local_database)
@@ -277,16 +277,19 @@ def sync_assets(local_directory, remote_directory, suffix, kind, policy, result)
 
 def main():
     args = parse_args()
-    local_directory, local_database = database_target(args.local)
+    local_directory = Path(args.local).expanduser().resolve()
+    local_database = Path(args.database).expanduser().resolve()
     remote_directory, remote_database = database_target(args.remote)
     if not local_database.exists():
         raise FileNotFoundError(
-            "PaperCLI database not found at {}".format(local_database)
+            "PA D1 database not found at {}".format(local_database)
         )
     if local_directory == remote_directory:
-        raise ValueError("Local and remote PaperCLI directories must be different.")
+        raise ValueError("Local and remote PA directories must be different.")
 
-    policy = "local" if args.auto else args.policy
+    # D1 is authoritative while PA is running. OneDrive receives a consistent
+    # backup; restoring a remote snapshot is an explicit offline operation.
+    policy = "local"
     detail_keys = (
         "papers_added",
         "papers_updated",

@@ -1,60 +1,43 @@
 # Paper Assistant
 
-Paper Assistant (PA) is a modern browser-based reading workspace for the
-PaperCLI library. It keeps papers, authors, venues, collections, summaries,
-notes, stored documents, and paper-aware chat together in one interface.
+Paper Assistant (PA) is a browser-based research library and reading workspace.
+It combines normalized paper metadata, authors, venues, collections, local
+documents, Markdown/LaTeX summaries, academic search, and paper-grounded chat.
 
-## What is included
+## Highlights
 
-- Overview and searchable library views with reading state, favorites, notes,
-  collections, and the full PaperCLI publication metadata set.
-- Normalized author and venue records. Papers link to ordered authors through
-  `paper_authors` and to a venue by foreign key, so a rename propagates across
-  the whole library.
-- Compact author and venue tables with selection, bulk update, bulk delete,
-  individual editing, and one-click filtering to linked papers.
-- Complete create/edit/delete flows for papers, authors, venues, and
-  collections, including PaperCLI paths, identifiers, summaries, and notes.
-- An in-app PDF/HTML reader for files already stored by PaperCLI.
-- Stored and on-demand summaries plus paper-grounded Bedrock chat.
-- Semantic Scholar and Google Scholar discovery and Jina Reader URL imports.
-- A local Settings workspace for the Bedrock model, generation parameters,
-  integration keys, PaperCLI paths, and OneDrive sync.
-- Responsive light and dark themes using Inter for a coherent interface and
-  JetBrains Mono for prompt placeholders, without an account or user-profile system.
+- Normalized D1 data model with ordered `paper_authors`, canonical venues, and
+  many-to-many collections.
+- Searchable, sortable, resizable paper grid plus compact author and venue
+  indexes with bulk edit and delete.
+- Full create, edit, and delete flows for papers, authors, venues, and
+  collections.
+- Click-through author, venue, and collection links that open their papers.
+- Embedded PDF and local HTML readers.
+- Markdown, GitHub-flavored Markdown, and LaTeX rendering through KaTeX.
+- Bedrock-powered summaries and multi-paper discussion with configurable model
+  and prompt templates.
+- Semantic Scholar, Google Scholar through SerpAPI, arXiv, DBLP, and Crossref
+  discovery with no cross-provider fallback.
+- Light and dark themes using Inter and Lucide icons.
 
-## Local data behavior
+## Data model
 
-In development, PA looks for `~/.papercli/papers.db`. The local Vite plugin
-creates an ignored demonstration copy at `data/papercli-demo.db`, upgrades
-that copy with PA-only fields, and exposes it to the app. Normal PA library
-editing never mutates the original PaperCLI database.
+D1 is PA's only active database. All reads and edits go through
+`app/api/library/route.ts`; there is no legacy SQLite CRUD adapter.
 
-Existing `pdf_path` and `html_snapshot_path` values are served read-only from
-the PaperCLI data directory so they open inside PA. If the database is absent,
-the app falls back to the included demo data and local D1 store.
+The original CLI SQLite database may be used once as a read-only import source:
 
-Set `PAPERCLI_DATA_DIR` before starting PA to use a non-default PaperCLI data
-directory. Remove `data/papercli-demo.db` if you want to refresh the safe
-demonstration copy from the source database.
+```bash
+PA_LEGACY_IMPORT_DIR=~/.papercli npm run db:import-legacy
+```
 
-## OneDrive sync
+The importer produces an ignored SQL file, loads the local D1 store, and never
+writes to the source database. Imported PDF and HTML paths continue to resolve
+read-only from `PA_LEGACY_IMPORT_DIR`. Newly selected files are copied into
+PA-managed `data/pdfs/` or `data/html_snapshots/` storage.
 
-The Settings → OneDrive sync panel mirrors PaperCLI's directory contract. It
-synchronizes the live PaperCLI `papers.db`, `pdfs/`, and `html_snapshots/`
-between `PAPERCLI_DATA_DIR` and `PAPERCLI_REMOTE_PATH`, uses the same 30-minute
-lock-file boundary, and supports these conflict policies:
-
-- Prefer local PaperCLI
-- Prefer OneDrive
-- Keep both conflict copies and use the newest database as canonical
-
-Manual sync is an explicit action because it can change both live directories.
-Auto-sync watches the live PaperCLI database and runs after the configured
-delay, using local-wins conflict handling like PaperCLI's background sync. The
-safe PA demonstration copy remains separate.
-
-## Setup
+## Local setup
 
 Requirements: Node.js 22.13 or newer.
 
@@ -62,68 +45,74 @@ Requirements: Node.js 22.13 or newer.
 cd PaperAssistant
 npm install
 cp .env.example .env
-npm run dev -- --port 8000
+npm run db:import-legacy
+npm run dev -- --host 0.0.0.0 --port 8000
 ```
 
 Open <http://localhost:8000>.
 
-The ignored `.env` file is a read-only bootstrap source for:
+`.env` is an ignored bootstrap source. Settings changed in the UI are written
+atomically to ignored `data/settings.json` with owner-only permissions; PA does
+not rewrite `.env` or expose saved secrets.
 
-- `SERPAPI_KEY`
+## OneDrive backup
+
+Settings → OneDrive sync creates a consistent SQLite backup of the normalized
+D1 library and mirrors PA-managed `pdfs/` and `html_snapshots/` files. D1
+remains authoritative while the server is running, so Sync never replaces or
+mutates the live database. A remote restore is an explicit offline operation.
+
+Relevant bootstrap settings are:
+
+- `PA_ONEDRIVE_PATH`
+- `PA_AUTO_SYNC`
+- `PA_AUTO_SYNC_INTERVAL`
+
+## Configuration
+
+The ignored `.env` can provide:
+
 - `AWS_BEARER_TOKEN_BEDROCK`
-- `AWS_REGION` (defaults to `us-east-1`)
+- `AWS_REGION`
 - `BEDROCK_MODEL_ID`
 - `PA_MAX_TOKENS`
 - `PA_TEMPERATURE`
-- `JINA_API_KEY`
+- `PA_CHAT_SYSTEM_PROMPT`
+- `PA_SUMMARY_SYSTEM_PROMPT`
 - `SEMANTIC_SCHOLAR_API_KEY`
-- `PAPERCLI_DATA_DIR`
-- `PAPERCLI_REMOTE_PATH`
-- `PAPERCLI_AUTO_SYNC`
-- `PAPERCLI_AUTO_SYNC_INTERVAL`
-- `PAPERCLI_SYNC_POLICY`
+- `SERPAPI_KEY`
+- `JINA_API_KEY`
+- `PA_LEGACY_IMPORT_DIR`
+- `PA_ONEDRIVE_PATH`
+- `PA_AUTO_SYNC`
+- `PA_AUTO_SYNC_INTERVAL`
 
-Changes made in Settings are written atomically to ignored
-`data/settings.json` with owner-only permissions. PA never rewrites `.env`, so
-saving a model, prompt, integration key, or sync option does not restart the
-development server. Hosted deployments continue to use deployment environment
-variables. Never commit `.env`, `data/settings.json`, or `data/*.db`.
+Never commit `.env`, `data/settings.json`, D1 state, generated import SQL, or
+database files.
 
 ## Architecture
 
 ```text
-app/components/       React application and interaction surfaces
-app/api/              Bedrock, discovery, import, summary, and D1 APIs
-app/lib/              shared types and fallback demo data
+app/components/       React UI and interaction surfaces
+app/api/              library CRUD, discovery, import, AI, and settings routes
+app/lib/              shared types, prompts, Bedrock, and scholarly providers
 db/                   normalized Drizzle schema and D1 bootstrap
-build/                local PaperCLI adapter and Sites/Vite integration
 drizzle/              generated SQL migrations
-scripts/              dependency-free PaperCLI/OneDrive sync bridge
-tests/                build, data-model, and secret-safety checks
+build/                PA settings, local-file, and Sites/Vite integrations
+scripts/              read-only legacy importer and OneDrive backup bridge
+worker/               Cloudflare worker entry
+tests/                build, schema, UI-contract, and secret-safety checks
 ```
 
-The hosted data model uses Cloudflare D1 through Drizzle. Local PaperCLI
-development uses a compatibility adapter over the safe SQLite copy so the same
-frontend mutation contract works in both environments.
-
-### Backend implementation
-
-The repository ships the complete backend used by the website. Route handlers
-under `app/api/` provide library CRUD, imports, academic discovery, summaries,
-paper-grounded chat, Bedrock model discovery, and settings. `db/` and
-`drizzle/` define and migrate the normalized D1 data model. Local development
-uses the adapters in `build/` plus `scripts/papercli_sync_bridge.py` for the
-safe PaperCLI SQLite copy, local documents, and OneDrive synchronization. The
-`worker/` entry packages those services for the hosted runtime.
+The browser and backend ship together. `app/api/` contains the route handlers;
+`db/`, `drizzle/`, and `worker/` provide persistence and deployment; local
+development uses Wrangler's D1 state under `.wrangler/`.
 
 ## Verification
 
 ```bash
 npm run lint
-./node_modules/.bin/tsc --noEmit
+npm exec tsc -- --noEmit
 npm test
 npm run db:generate
 ```
-
-`npm test` includes a production build and validates the normalized data model
-and secret-handling boundaries.

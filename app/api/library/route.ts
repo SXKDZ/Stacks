@@ -164,10 +164,10 @@ async function readSnapshot() {
       preprintId: paper.preprint_id,
       semanticScholarId: paper.semantic_scholar_id,
       url: paper.url,
-      pdfUrl: paper.pdf_url,
+      pdfUrl: paper.pdf_url || (paper.local_path ? `/pa-files/pdfs/${encodeURIComponent(paper.local_path)}` : null),
       localPath: paper.local_path,
       htmlSnapshotPath: paper.html_snapshot_path,
-      htmlUrl: paper.html_snapshot_path,
+      htmlUrl: paper.html_snapshot_path ? `/pa-files/html/${encodeURIComponent(paper.html_snapshot_path)}` : null,
       summary: paper.summary,
       notes: paper.notes,
       readingStatus: paper.reading_status,
@@ -455,6 +455,9 @@ async function updateEntities(
 
 async function updatePaper(id: string, data: Record<string, unknown>): Promise<void> {
   const database = await ensureDatabase();
+  if ("title" in data && !cleanString(data.title)) {
+    throw new Error("A paper title is required.");
+  }
   const allowedFields = {
     title: "title",
     abstract: "abstract",
@@ -490,6 +493,21 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   const values = entries.map(([key, value]) => {
     if (key === "favorite") {
       return value ? 1 : 0;
+    }
+    if (key === "abstract" || key === "summary" || key === "notes") {
+      return typeof value === "string" ? value : "";
+    }
+    if (key === "title") {
+      return cleanString(value) ?? "";
+    }
+    if (key === "paperType") {
+      return cleanString(value) ?? "other";
+    }
+    if (key === "readingStatus") {
+      return cleanString(value) ?? "inbox";
+    }
+    if (key === "year") {
+      return cleanNumber(value);
     }
     return value === "" ? null : value ?? null;
   });

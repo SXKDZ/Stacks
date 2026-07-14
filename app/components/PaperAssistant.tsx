@@ -42,7 +42,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, ReactNode } from "react";
+import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
@@ -85,6 +85,14 @@ const identifierSources: Array<{
 ];
 
 type EditablePaperType = "conference" | "journal" | "workshop" | "preprint" | "website" | "other";
+type PaperColumnKey = "title" | "venue" | "year" | "status";
+
+const defaultPaperColumnWidths: Record<PaperColumnKey, number> = {
+  title: 60,
+  venue: 20,
+  year: 8,
+  status: 12,
+};
 
 const paperTypeOptions: Array<{ value: EditablePaperType; label: string }> = [
   { value: "conference", label: "Conference paper" },
@@ -254,12 +262,12 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ status, compact = false }: { status: string; compact?: boolean }) {
   const Icon = status === "complete" ? CheckCircle2 : status === "reading" ? Clock3 : Inbox;
   return (
-    <span className={`status-pill status-${status}`}>
+    <span className={`status-pill status-${status} ${compact ? "is-compact" : ""}`} aria-label={statusLabel(status)} title={compact ? statusLabel(status) : undefined}>
       <Icon size={13} strokeWidth={2} />
-      {statusLabel(status)}
+      {compact ? null : statusLabel(status)}
     </span>
   );
 }
@@ -289,7 +297,6 @@ export default function PaperAssistant() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
-  const [dataSource, setDataSource] = useState<"papercli" | "d1" | "preview">("preview");
   const [mobileNav, setMobileNav] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
@@ -321,18 +328,12 @@ export default function PaperAssistant() {
       setSyncing(true);
     }
     try {
-      let response = await fetch("/api/local-papercli", { cache: "no-store" });
-      let source: "papercli" | "d1" = "papercli";
-      if (!response.ok) {
-        response = await fetch("/api/library", { cache: "no-store" });
-        source = "d1";
-      }
+      const response = await fetch("/api/library", { cache: "no-store" });
       if (!response.ok) {
         throw new Error(await readError(response));
       }
       const nextSnapshot = (await response.json()) as LibrarySnapshot;
       setSnapshot(nextSnapshot);
-      setDataSource(source);
       setSelectedPaper((current) => {
         if (!current) {
           return null;
@@ -342,7 +343,6 @@ export default function PaperAssistant() {
       setDemoMode(false);
     } catch {
       setSnapshot(demoSnapshot);
-      setDataSource("preview");
       setDemoMode(true);
     } finally {
       setLoading(false);
@@ -352,8 +352,7 @@ export default function PaperAssistant() {
 
   async function mutateLibrary(body: MutationBody, successMessage: string): Promise<boolean> {
     try {
-      const endpoint = dataSource === "papercli" ? "/api/local-papercli" : "/api/library";
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/library", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -363,7 +362,6 @@ export default function PaperAssistant() {
       }
       const nextSnapshot = (await response.json()) as LibrarySnapshot;
       setSnapshot(nextSnapshot);
-      setDataSource(dataSource === "papercli" ? "papercli" : "d1");
       setSelectedPaper((current) => {
         if (!current) {
           return null;
@@ -599,7 +597,7 @@ export default function PaperAssistant() {
           <span className={`sync-dot ${demoMode ? "is-demo" : ""}`} />
           <span>
             <strong>{demoMode ? "Preview library" : libraryName.trim() || "My Paper Library"}</strong>
-            <small>{demoMode ? "Waiting for local database" : dataSource === "papercli" ? `${snapshot.stats.papers} papers · source database unchanged` : `${snapshot.stats.papers} papers · changes saved`}</small>
+            <small>{demoMode ? "Waiting for D1" : `${snapshot.stats.papers} papers · D1-backed library`}</small>
           </span>
           <button className="icon-button" onClick={() => void loadLibrary(true)} aria-label="Refresh library">
             <RefreshCw size={14} className={syncing ? "spin" : ""} />
@@ -745,6 +743,21 @@ export default function PaperAssistant() {
           onEdit={() => setModal({ kind: "edit-paper", paper: selectedPaper })}
           onSummarize={summarizePaper}
           onDelete={() => void deleteRecords("paper", [selectedPaper.id])}
+          onOpenAuthor={(authorName) => {
+            setQuery(authorName);
+            setView("library");
+            setSelectedPaper(null);
+          }}
+          onOpenVenue={() => {
+            setQuery(venueLine(selectedPaper));
+            setView("library");
+            setSelectedPaper(null);
+          }}
+          onOpenCollection={(collectionName) => {
+            setQuery(collectionName);
+            setView("library");
+            setSelectedPaper(null);
+          }}
         />
       ) : null}
 
@@ -966,6 +979,21 @@ function LibraryView({
 }) {
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState<{ key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" }>({ key: "recent", direction: "desc" });
+  const [columnWidths, setColumnWidths] = useState<Record<PaperColumnKey, number>>(defaultPaperColumnWidths);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const saved = JSON.parse(window.localStorage.getItem("pa-paper-grid-widths-v2") ?? "null") as Partial<Record<PaperColumnKey, number>> | null;
+        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value))) {
+          setColumnWidths((current) => ({ ...current, ...saved }));
+        }
+      } catch {
+        // Invalid browser preferences fall back to the balanced default widths.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const filtered = useMemo(() => {
     const result = papers.filter((paper) => {
       const statusMatch = status === "all" || paper.readingStatus === status || (status === "favorite" && paper.favorite);
@@ -993,10 +1021,52 @@ function LibraryView({
     });
   }, [papers, query, sort, status]);
 
-  function toggleSort(key: "title" | "venue" | "year" | "status") {
+  function toggleSort(key: PaperColumnKey) {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: key === "year" ? "desc" : "asc" });
+  }
+
+  function resizeColumn(event: ReactPointerEvent<HTMLButtonElement>, key: PaperColumnKey) {
+    event.preventDefault();
+    event.stopPropagation();
+    const header = event.currentTarget.closest("th");
+    const table = event.currentTarget.closest("table");
+    if (!header || !table) {
+      return;
+    }
+    const startX = event.clientX;
+    const startWidth = header.getBoundingClientRect().width;
+    const tableWidth = table.getBoundingClientRect().width;
+    const minimums: Record<PaperColumnKey, number> = { title: 280, venue: 140, year: 72, status: 72 };
+    const maximum = Math.max(minimums[key], tableWidth * (key === "title" ? 0.68 : 0.32));
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const width = Math.min(maximum, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
+      const percentage = Number(((width / tableWidth) * 100).toFixed(2));
+      setColumnWidths((current) => {
+        const next = { ...current, [key]: percentage };
+        window.localStorage.setItem("pa-paper-grid-widths-v2", JSON.stringify(next));
+        return next;
+      });
+    };
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      document.body.classList.remove("is-resizing-column");
+    };
+    document.body.classList.add("is-resizing-column");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  }
+
+  function resetColumnWidth(event: ReactMouseEvent<HTMLButtonElement>, key: PaperColumnKey) {
+    event.preventDefault();
+    event.stopPropagation();
+    setColumnWidths((current) => {
+      const next = { ...current, [key]: defaultPaperColumnWidths[key] };
+      window.localStorage.setItem("pa-paper-grid-widths-v2", JSON.stringify(next));
+      return next;
+    });
   }
 
   function toggleAll() {
@@ -1023,31 +1093,36 @@ function LibraryView({
             </button>
           ))}
         </div>
+        {selected.length ? (
+          <div className="library-selection-actions">
+            <span><CheckCircle2 size={15} /> {selected.length} selected</span>
+            <button onClick={() => setSelected([])}>Clear</button>
+            <button className="danger-text" onClick={deleteSelected}><Trash2 size={14} /> Delete</button>
+          </div>
+        ) : null}
       </div>
 
-      {selected.length ? (
-        <div className="bulk-bar">
-          <span><CheckCircle2 size={16} /> {selected.length} selected</span>
-          <button onClick={() => setSelected([])}>Clear</button>
-          <button className="danger-text" onClick={deleteSelected}><Trash2 size={15} /> Delete</button>
-        </div>
-      ) : null}
-
       {filtered.length ? (
-        <div className="paper-table-wrap">
-          <table className="paper-table">
+        <div className="paper-table-wrap paper-grid-shell">
+          <table className="paper-table research-grid">
+            <colgroup>
+              <col className="paper-column-check" />
+              <col style={{ width: `${columnWidths.title}%` }} />
+              <col style={{ width: `${columnWidths.venue}%` }} />
+              <col style={{ width: `${columnWidths.year}%` }} />
+              <col style={{ width: `${columnWidths.status}%` }} />
+            </colgroup>
             <thead>
               <tr>
-                <th className="check-cell">
+                <th className="check-cell" scope="col">
                   <button onClick={toggleAll} aria-label="Select all visible papers">
                     <SelectionBox checked={Boolean(filtered.length) && filtered.every((paper) => selected.includes(paper.id))} />
                   </button>
                 </th>
-                <SortablePaperHeader label="Paper" sortKey="title" sort={sort} onSort={toggleSort} />
-                <SortablePaperHeader label="Venue" sortKey="venue" sort={sort} onSort={toggleSort} />
-                <SortablePaperHeader label="Year" sortKey="year" sort={sort} onSort={toggleSort} />
-                <SortablePaperHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
-                <th />
+                <SortablePaperHeader label="Paper" sortKey="title" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+                <SortablePaperHeader label="Venue" sortKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+                <SortablePaperHeader label="Year" sortKey="year" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+                <SortablePaperHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
               </tr>
             </thead>
             <tbody>
@@ -1068,7 +1143,7 @@ function LibraryView({
                       <SelectionBox checked={selected.includes(paper.id)} />
                     </button>
                   </td>
-                  <td>
+                  <td className="paper-main-column">
                     <div className="paper-title-cell">
                       <button
                         className={`star-button ${paper.favorite ? "is-starred" : ""}`}
@@ -1082,17 +1157,18 @@ function LibraryView({
                       </button>
                       <span>
                         <strong>{paper.title}</strong>
-                        <small>{authorLine(paper)}</small>
-                        <span className="collection-chips">
-                          {paper.collections.slice(0, 2).map((collection) => <i key={collection.id} className={`chip-${collection.color}`}>{collection.name}</i>)}
+                        <span className="paper-secondary-line">
+                          <small>{authorLine(paper)}</small>
+                          <span className="collection-chips">
+                            {paper.collections.slice(0, 2).map((collection) => <i key={collection.id} className={`chip-${collection.color}`}>{collection.name}</i>)}
+                          </span>
                         </span>
                       </span>
                     </div>
                   </td>
-                  <td><span className="venue-cell"><b>{paper.venueAcronym || "—"}</b><small>{paper.paperType}</small></span></td>
-                  <td className="muted-cell">{paper.year ?? "—"}</td>
-                  <td><StatusPill status={paper.readingStatus} /></td>
-                  <td><button className="icon-button row-more" aria-label="Open paper"><ArrowUpRight size={16} /></button></td>
+                  <td><span className="venue-cell"><b>{paper.venueAcronym || paper.venueName || "—"}</b><small>{paper.paperType}</small></span></td>
+                  <td className="muted-cell year-cell">{paper.year ?? "—"}</td>
+                  <td className="status-cell"><StatusPill status={paper.readingStatus} compact /></td>
                 </tr>
               ))}
             </tbody>
@@ -1106,22 +1182,32 @@ function LibraryView({
   );
 }
 
-function SortablePaperHeader({ label, sortKey, sort, onSort }: {
+function SortablePaperHeader({ label, sortKey, sort, onSort, onResize, onResetWidth }: {
   label: string;
-  sortKey: "title" | "venue" | "year" | "status";
+  sortKey: PaperColumnKey;
   sort: { key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" };
-  onSort: (key: "title" | "venue" | "year" | "status") => void;
+  onSort: (key: PaperColumnKey) => void;
+  onResize: (event: ReactPointerEvent<HTMLButtonElement>, key: PaperColumnKey) => void;
+  onResetWidth: (event: ReactMouseEvent<HTMLButtonElement>, key: PaperColumnKey) => void;
 }) {
   const active = sort.key === sortKey;
   const ariaSort: AriaAttributes["aria-sort"] = active
     ? sort.direction === "asc" ? "ascending" : "descending"
     : "none";
   return (
-    <th aria-sort={ariaSort}>
+    <th aria-sort={ariaSort} className="is-resizable">
       <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(sortKey)}>
         <span>{label}</span>
-        {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : <ArrowUpDown size={13} />}
+        {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
       </button>
+      <button
+        type="button"
+        className="column-resize-handle"
+        aria-label={`Resize ${label} column`}
+        title={`Drag to resize ${label}; double-click to reset`}
+        onPointerDown={(event) => onResize(event, sortKey)}
+        onDoubleClick={(event) => onResetWidth(event, sortKey)}
+      />
     </th>
   );
 }
@@ -1147,12 +1233,27 @@ function AuthorsView({
   onDelete: () => void;
   onOpenPapers: (author: Author) => void;
 }) {
-  const filtered = authors.filter((author) => matchesSearch([author.displayName, author.affiliation, author.orcid], query));
+  const [sort, setSort] = useState<{ key: "author" | "affiliation" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "author", direction: "asc" });
+  const filtered = useMemo(() => authors
+    .filter((author) => matchesSearch([author.displayName, author.affiliation], query))
+    .sort((left, right) => {
+      let comparison = 0;
+      if (sort.key === "author") comparison = left.displayName.localeCompare(right.displayName);
+      if (sort.key === "affiliation") comparison = (left.affiliation ?? "").localeCompare(right.affiliation ?? "");
+      if (sort.key === "papers") comparison = left.paperCount - right.paperCount;
+      if (sort.key === "latest") comparison = (left.latestYear ?? 0) - (right.latestYear ?? 0);
+      return sort.direction === "asc" ? comparison : -comparison;
+    }), [authors, query, sort]);
+  function toggleSort(key: typeof sort.key) {
+    setSort((current) => current.key === key
+      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
+  }
   return (
     <div className="data-view">
-      <EntityToolbar query={query} setQuery={setQuery} placeholder="Search names, affiliations, ORCID…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
+      <EntityToolbar query={query} setQuery={setQuery} placeholder="Search names and affiliations…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
       <div className="author-table-wrap">
-        <div className="author-table-header"><span /><span>Author</span><span>Affiliation</span><span>Papers</span><span>Latest</span><span>Identifier</span><span /></div>
+        <div className="author-table-header"><span /><EntitySortHeader label="Author" active={sort.key === "author"} direction={sort.direction} onClick={() => toggleSort("author")} /><EntitySortHeader label="Affiliation" active={sort.key === "affiliation"} direction={sort.direction} onClick={() => toggleSort("affiliation")} /><EntitySortHeader label="Papers" active={sort.key === "papers"} direction={sort.direction} onClick={() => toggleSort("papers")} /><EntitySortHeader label="Latest" active={sort.key === "latest"} direction={sort.direction} onClick={() => toggleSort("latest")} /><span /></div>
         {filtered.map((author, index) => (
           <div className={`author-row ${selected.includes(author.id) ? "is-selected" : ""}`} key={author.id}>
             <button onClick={() => {
@@ -1164,12 +1265,11 @@ function AuthorsView({
             }} aria-label={`Select ${author.displayName}`}><SelectionBox checked={selected.includes(author.id)} /></button>
             <button className="author-name-button" onClick={() => onOpenPapers(author)}>
               <span className={`compact-avatar avatar-${index % 5}`}>{initials(author.displayName)}</span>
-              <span><strong>{author.displayName}</strong><small>{author.affiliation || author.orcid || "No affiliation recorded"}</small></span>
+              <span><strong>{author.displayName}</strong></span>
             </button>
             <span className="row-muted">{author.affiliation || "—"}</span>
             <strong>{author.paperCount}</strong>
             <span className="row-muted">{author.latestYear ?? "—"}</span>
-            <span className="row-muted identifier-cell">{author.orcid ? `ORCID ${author.orcid}` : author.semanticScholarId || "—"}</span>
             <button className="row-edit-button" onClick={() => onEdit(author)} aria-label={`Edit ${author.displayName}`}><Pencil size={13} /> Edit</button>
           </div>
         ))}
@@ -1200,12 +1300,28 @@ function VenuesView({
   onDelete: () => void;
   onOpenPapers: (venue: Venue) => void;
 }) {
-  const filtered = venues.filter((venue) => matchesSearch([venue.name, venue.acronym, venue.type, venue.publisher], query));
+  const [sort, setSort] = useState<{ key: "venue" | "type" | "publisher" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "venue", direction: "asc" });
+  const filtered = useMemo(() => venues
+    .filter((venue) => matchesSearch([venue.name, venue.acronym, venue.type, venue.publisher], query))
+    .sort((left, right) => {
+      let comparison = 0;
+      if (sort.key === "venue") comparison = left.name.localeCompare(right.name);
+      if (sort.key === "type") comparison = left.type.localeCompare(right.type);
+      if (sort.key === "publisher") comparison = (left.publisher ?? "").localeCompare(right.publisher ?? "");
+      if (sort.key === "papers") comparison = left.paperCount - right.paperCount;
+      if (sort.key === "latest") comparison = (left.latestYear ?? 0) - (right.latestYear ?? 0);
+      return sort.direction === "asc" ? comparison : -comparison;
+    }), [query, sort, venues]);
+  function toggleSort(key: typeof sort.key) {
+    setSort((current) => current.key === key
+      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
+  }
   return (
     <div className="data-view">
-      <EntityToolbar query={query} setQuery={setQuery} placeholder="Search venue names, types, publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
+      <EntityToolbar query={query} setQuery={setQuery} placeholder="Search venue names, types, and publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
       <div className="venue-table-wrap">
-        <div className="venue-table-header"><span /><span>Venue</span><span>Type</span><span>Publisher</span><span>Papers</span><span>Latest</span><span /></div>
+        <div className="venue-table-header"><span /><EntitySortHeader label="Venue" active={sort.key === "venue"} direction={sort.direction} onClick={() => toggleSort("venue")} /><EntitySortHeader label="Type" active={sort.key === "type"} direction={sort.direction} onClick={() => toggleSort("type")} /><EntitySortHeader label="Publisher" active={sort.key === "publisher"} direction={sort.direction} onClick={() => toggleSort("publisher")} /><EntitySortHeader label="Papers" active={sort.key === "papers"} direction={sort.direction} onClick={() => toggleSort("papers")} /><EntitySortHeader label="Latest" active={sort.key === "latest"} direction={sort.direction} onClick={() => toggleSort("latest")} /><span /></div>
         {filtered.map((venue) => (
           <div className={`venue-row ${selected.includes(venue.id) ? "is-selected" : ""}`} key={venue.id}>
             <button onClick={() => {
@@ -1267,7 +1383,7 @@ function CollectionsView({
               </div>
               <button className="collection-main" onClick={() => onOpen(collection)}>
                 <h3>{collection.name}</h3>
-                <p>{collection.description}</p>
+                {collection.description ? <p>{collection.description}</p> : null}
                 <span>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</span>
               </button>
               <div className="collection-papers">
@@ -1281,6 +1397,10 @@ function CollectionsView({
       {!filtered.length ? <EmptyState icon={<FolderOpen size={24} />} title="No collections found" detail="Create a focused space for your next research question." /> : null}
     </div>
   );
+}
+
+function EntitySortHeader({ label, active, direction, onClick }: { label: string; active: boolean; direction: "asc" | "desc"; onClick: () => void }) {
+  return <button type="button" className={`entity-sort-button ${active ? "is-active" : ""}`} onClick={onClick}><span>{label}</span>{active ? direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : <ArrowUpDown size={13} />}</button>;
 }
 
 function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk, onDelete }: {
@@ -1302,9 +1422,7 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
           <button className="danger-text" onClick={onDelete}><Trash2 size={14} /> Delete</button>
           <button className="icon-button" onClick={onClear} aria-label="Clear selection"><X size={15} /></button>
         </div>
-      ) : (
-        <span className="toolbar-note"><Database size={14} /> Canonical records update linked papers automatically</span>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1428,7 +1546,7 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
   );
 }
 
-function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSummarize, onDelete }: {
+function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSummarize, onDelete, onOpenAuthor, onOpenVenue, onOpenCollection }: {
   paper: Paper;
   onClose: () => void;
   onUpdate: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
@@ -1437,6 +1555,9 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSumma
   onEdit: () => void;
   onSummarize: (paper: Paper) => Promise<boolean>;
   onDelete: () => void;
+  onOpenAuthor: (authorName: string) => void;
+  onOpenVenue: () => void;
+  onOpenCollection: (collectionName: string) => void;
 }) {
   const [summarizing, setSummarizing] = useState(false);
 
@@ -1463,11 +1584,29 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSumma
             </button>
           </div>
           <h2>{paper.title}</h2>
-          <p className="detail-authors">{authorLine(paper)}</p>
+          <div className="detail-authors" aria-label="Paper authors">
+            {paper.authors.length
+              ? paper.authors.map((author) => <button type="button" key={author.id} onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>)
+              : <span>Authors not recorded</span>}
+          </div>
           <div className="detail-meta-grid">
-            <span><small>Venue</small><strong>{venueLine(paper)}</strong></span>
+            <span><small>Venue</small><button type="button" className="detail-entity-link" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</button></span>
             <span><small>Year</small><strong>{paper.year ?? "—"}</strong></span>
             <span><small>Type</small><strong>{paper.paperType}</strong></span>
+          </div>
+          <div className="detail-quick-section">
+            <div>
+              <p className="eyebrow">Reading status</p>
+              <div className="status-selector">
+                {["inbox", "reading", "complete"].map((status) => (
+                  <button key={status} className={paper.readingStatus === status ? "is-active" : ""} onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}>{statusLabel(status)}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="eyebrow">Collections</p>
+              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <button type="button" key={collection.id} className={`chip-${collection.color}`} onClick={() => onOpenCollection(collection.name)}>{collection.name}</button>) : <span className="row-muted">No collections yet</span>}</div>
+            </div>
           </div>
           <div className="drawer-cta-row">
             {hasViewer ? <button className="primary-action" onClick={onRead}><BookOpen size={16} /> Read inside PA</button> : null}
@@ -1501,14 +1640,6 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSumma
             </div>
           ) : null}
           <div className="detail-section">
-            <p className="eyebrow">Reading status</p>
-            <div className="status-selector">
-              {["inbox", "reading", "complete"].map((status) => (
-                <button key={status} className={paper.readingStatus === status ? "is-active" : ""} onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}>{statusLabel(status)}</button>
-              ))}
-            </div>
-          </div>
-          <div className="detail-section">
             <p className="eyebrow">Research notes</p>
             <textarea
               defaultValue={paper.notes}
@@ -1529,10 +1660,6 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSumma
               {paper.localPath ? <span><b>File</b>{paper.localPath}</span> : null}
               {paper.htmlSnapshotPath ? <span><b>HTML</b>{paper.htmlSnapshotPath}</span> : null}
             </div>
-          </div>
-          <div className="detail-section">
-            <p className="eyebrow">Collections</p>
-            <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <i key={collection.id} className={`chip-${collection.color}`}>{collection.name}</i>) : <span className="row-muted">No collections yet</span>}</div>
           </div>
         </div>
         <div className="drawer-footer"><span>Added {formatDate(paper.addedAt)}</span><button className="danger-text" onClick={onDelete}><Trash2 size={14} /> Delete paper</button></div>
@@ -2079,14 +2206,14 @@ function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
     <ModalFrame title="Edit paper" subtitle="Update the complete PA record, linked authors, venue, files, summary, and notes." onClose={onClose} className="add-modal">
       <form className="modal-body entity-form" onSubmit={submit}>
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
+        <label><span>Reading status</span><select name="readingStatus" defaultValue={paper.readingStatus}><option value="inbox">To read</option><option value="reading">Reading</option><option value="complete">Read</option></select></label>
+        <label><span>Paper type</span><select name="paperType" value={paperType} onChange={(event) => setPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
         <label className="field-span-2"><span>Authors</span><input name="authors" defaultValue={paper.authors.map((author) => author.displayName).join(", ")} /><small>Comma-separated. Renaming a canonical author from the Authors view updates every linked paper.</small></label>
         <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
-        <label><span>Paper type</span><select name="paperType" value={paperType} onChange={(event) => setPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-        <PaperMetadataFields paperType={paperType} paper={paper} notify={notify} />
-        <label><span>Reading status</span><select name="readingStatus" defaultValue={paper.readingStatus}><option value="inbox">To read</option><option value="reading">Reading</option><option value="complete">Read</option></select></label>
         <span />
+        <PaperMetadataFields paperType={paperType} paper={paper} notify={notify} />
         <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} defaultValue={paper.abstract} /></label>
-        <label className="field-span-2"><span>PA summary</span><textarea name="summary" rows={5} defaultValue={paper.summary} /></label>
+        <label className="field-span-2 summary-field"><span>PA summary</span><textarea name="summary" rows={5} defaultValue={paper.summary} /></label>
         <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={4} defaultValue={paper.notes} /></label>
         <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}>Cancel</button><button className="primary-action"><Save size={15} /> Save paper</button></div>
       </form>
@@ -2124,8 +2251,6 @@ function EntityModal({ entity, record, onClose, mutateLibrary }: {
           <label><span>Given name</span><input name="givenName" defaultValue={author?.givenName ?? ""} /></label>
           <label><span>Family name</span><input name="familyName" defaultValue={author?.familyName ?? ""} /></label>
           <label className="field-span-2"><span>Affiliation</span><input name="affiliation" defaultValue={author?.affiliation ?? ""} placeholder="University or organization" /></label>
-          <label className="field-span-2"><span>ORCID</span><input name="orcid" defaultValue={author?.orcid ?? ""} placeholder="0000-0000-0000-0000" /></label>
-          <label className="field-span-2"><span>Semantic Scholar ID</span><input name="semanticScholarId" defaultValue={author?.semanticScholarId ?? ""} /></label>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={3} defaultValue={author?.notes ?? ""} /></label>
         </> : entity === "venue" ? <>
           <label className="field-span-2"><span>Full venue name *</span><input name="name" defaultValue={venue?.name} required autoFocus /></label>

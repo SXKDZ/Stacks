@@ -12,7 +12,9 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs tests/schema.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:prepare-import": "node scripts/import_legacy_sqlite_to_d1.mjs",
+    "db:import-legacy": "npm run db:prepare-import && WRANGLER_LOG_PATH=.wrangler/wrangler.log wrangler d1 execute DB --local --persist-to .wrangler/state --file=data/legacy-import.sql"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

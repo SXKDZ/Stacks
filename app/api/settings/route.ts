@@ -30,11 +30,9 @@ export async function GET(): Promise<Response> {
       summarySystem: process.env.PA_SUMMARY_SYSTEM_PROMPT ?? DEFAULT_SUMMARY_SYSTEM_PROMPT,
     },
     sync: {
-      localDataDir: process.env.PAPERCLI_DATA_DIR ?? "~/.papercli",
       remotePath: "",
       autoSync: false,
       autoSyncInterval: 5,
-      conflictPolicy: "keep_both",
       detectedPaths: [],
       running: false,
       lastSyncAt: null,

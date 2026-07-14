@@ -206,10 +206,15 @@ async function initializeDatabase(): Promise<void> {
     }
   }
 
-  const preparedSeeds = seedStatements.map(([statement, values]) => {
-    return database.prepare(statement).bind(...values);
-  });
-  await database.batch(preparedSeeds);
+  const paperCount = await database
+    .prepare("SELECT COUNT(*) AS count FROM papers")
+    .first<{ count: number }>();
+  if (Number(paperCount?.count ?? 0) === 0) {
+    const preparedSeeds = seedStatements.map(([statement, values]) => {
+      return database.prepare(statement).bind(...values);
+    });
+    await database.batch(preparedSeeds);
+  }
 }
 
 export async function ensureDatabase(): Promise<D1Database> {

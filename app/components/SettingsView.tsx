@@ -27,7 +27,6 @@ import {
 
 type SettingsTab = "appearance" | "model" | "prompts" | "sync" | "integrations";
 type ThemeMode = "dark" | "light";
-type ConflictPolicy = "local" | "remote" | "keep_both";
 
 interface SyncResult {
   ok: boolean;
@@ -52,11 +51,9 @@ interface SettingsSnapshot {
     summarySystem: string;
   };
   sync: {
-    localDataDir: string;
     remotePath: string;
     autoSync: boolean;
     autoSyncInterval: number;
-    conflictPolicy: ConflictPolicy;
     detectedPaths: string[];
     running: boolean;
     lastSyncAt: string | null;
@@ -99,11 +96,9 @@ const defaultSettings: SettingsSnapshot = {
     summarySystem: DEFAULT_SUMMARY_SYSTEM_PROMPT,
   },
   sync: {
-    localDataDir: "~/.papercli",
     remotePath: "",
     autoSync: false,
     autoSyncInterval: 5,
-    conflictPolicy: "keep_both",
     detectedPaths: [],
     running: false,
     lastSyncAt: null,
@@ -184,7 +179,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [selectingDirectory, setSelectingDirectory] = useState<"local" | "remote" | null>(null);
+  const [selectingDirectory, setSelectingDirectory] = useState(false);
   const [endpoint, setEndpoint] = useState("/api/local-settings");
   const [models, setModels] = useState<BedrockModelOption[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -290,36 +285,25 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
   }
 
-  async function chooseDirectory(target: "local" | "remote") {
-    setSelectingDirectory(target);
+  async function chooseDirectory() {
+    setSelectingDirectory(true);
     try {
       const response = await fetch("/api/local-directory-picker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target }),
+        body: JSON.stringify({ target: "remote" }),
       });
       if (!response.ok) {
         throw new Error(await errorMessage(response));
       }
-      const payload = await response.json() as { path: string | null; sourceExists?: boolean };
+      const payload = await response.json() as { path: string | null };
       if (payload.path) {
-        if (target === "local") {
-          setSettings((current) => ({
-            ...current,
-            sync: {
-              ...current.sync,
-              localDataDir: payload.path ?? current.sync.localDataDir,
-              sourceExists: payload.sourceExists ?? current.sync.sourceExists,
-            },
-          }));
-        } else {
-          updateSync("remotePath", payload.path);
-        }
+        updateSync("remotePath", payload.path);
       }
     } catch (error) {
       notify(error instanceof Error ? error.message : "The folder selector could not be opened.", "error");
     } finally {
-      setSelectingDirectory(null);
+      setSelectingDirectory(false);
     }
   }
 
@@ -331,11 +315,9 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       temperature: settings.ai.temperature,
       chatSystemPrompt: settings.prompts.chatSystem,
       summarySystemPrompt: settings.prompts.summarySystem,
-      localDataDir: settings.sync.localDataDir,
       remotePath: settings.sync.remotePath,
       autoSync: settings.sync.autoSync,
       autoSyncInterval: settings.sync.autoSyncInterval,
-      conflictPolicy: settings.sync.conflictPolicy,
       secrets,
     };
   }
@@ -395,7 +377,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <button className={tab === "appearance" ? "is-active" : ""} onClick={() => setTab("appearance")}><Palette size={16} /><span><strong>Appearance</strong><small>Library name and theme</small></span></button>
         <button className={tab === "model" ? "is-active" : ""} onClick={() => setTab("model")}><Bot size={16} /><span><strong>AI model</strong><small>Bedrock and generation</small></span></button>
         <button className={tab === "prompts" ? "is-active" : ""} onClick={() => setTab("prompts")}><MessageSquareText size={16} /><span><strong>Prompt templates</strong><small>Summary and discussion</small></span></button>
-        <button className={tab === "sync" ? "is-active" : ""} onClick={() => setTab("sync")}><CloudCog size={16} /><span><strong>OneDrive sync</strong><small>Database and local files</small></span></button>
+        <button className={tab === "sync" ? "is-active" : ""} onClick={() => setTab("sync")}><CloudCog size={16} /><span><strong>OneDrive sync</strong><small>D1 backup and local files</small></span></button>
         <button className={tab === "integrations" ? "is-active" : ""} onClick={() => setTab("integrations")}><KeyRound size={16} /><span><strong>Integrations</strong><small>Discovery and extraction</small></span></button>
         <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>{settings.local ? "Stored locally" : "Deployment managed"}</strong><small>{settings.local ? "Protected structured file; secrets are never displayed" : "Use deployment environment variables"}</small></span></div>
       </aside>
@@ -448,21 +430,19 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "sync" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Mirror PA’s database, PDFs, HTML snapshots, and conflict policies." />
+            <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up PA’s normalized D1 library, PDFs, and HTML snapshots." />
             <div className="sync-status-card">
               <span className={`sync-status-icon ${settings.sync.lastResult?.ok ? "is-success" : ""}`}><FolderSync size={20} /></span>
               <div><strong>{settings.sync.lastResult?.summary ?? "Ready to connect OneDrive"}</strong><small>{timeLabel(settings.sync.lastSyncAt)}</small></div>
-              <button type="button" className="primary-action" onClick={() => void syncNow()} disabled={syncing || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.sync.sourceExists ? "Choose a PA folder containing papers.db" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Synchronize PA now"}>{syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} {syncing ? "Syncing…" : "Sync now"}</button>
+              <button type="button" className="primary-action" onClick={() => void syncNow()} disabled={syncing || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.sync.sourceExists ? "PA’s local D1 database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"}>{syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} {syncing ? "Syncing…" : "Sync now"}</button>
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>Local PA data directory</span><div className="path-picker-control"><input value={settings.sync.localDataDir} onChange={(event) => updateSync("localDataDir", event.target.value)} placeholder="~/.papercli" /><button type="button" onClick={() => void chooseDirectory("local")} disabled={selectingDirectory !== null}>{selectingDirectory === "local" ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />} Choose</button></div><small className={settings.sync.sourceExists ? "field-ok" : "field-warning"}>{settings.sync.sourceExists ? "papers.db found" : "No papers.db detected at this path"}</small></label>
-                <label className="span-2"><span>OneDrive remote directory</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PA" /><button type="button" onClick={() => void chooseDirectory("remote")} disabled={selectingDirectory !== null}>{selectingDirectory === "remote" ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />} Choose</button></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PA`} key={path} />)}</datalist><small>PA creates or synchronizes papers.db, pdfs/, and html_snapshots/ here.</small></label>
-                <label><span>Conflict policy</span><select value={settings.sync.conflictPolicy} onChange={(event) => updateSync("conflictPolicy", event.target.value as ConflictPolicy)}><option value="keep_both">Keep both + newest canonical</option><option value="local">Prefer local PA</option><option value="remote">Prefer OneDrive</option></select></label>
+                <label className="span-2"><span>OneDrive remote directory</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PA" /><button type="button" onClick={() => void chooseDirectory()} disabled={selectingDirectory}>{selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />} Choose</button></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PA`} key={path} />)}</datalist><small>PA stores a consistent D1 SQLite backup plus pdfs/ and html_snapshots/ here.</small></label>
                 <label><span>Auto-sync interval</span><div className="unit-input"><input type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
               <label className="settings-toggle"><input type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-sync after live PA changes</strong><small>Uses local-wins conflict handling for background synchronization.</small></div></label>
-              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>PA sync safety boundary.</strong> “Sync now” changes both the live PA directory and the chosen OneDrive directory. The demonstration database remains a separate safe copy.</p></div>
+              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>D1 remains authoritative.</strong> Sync writes a consistent backup to OneDrive and never replaces the database used by the running PA server.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
