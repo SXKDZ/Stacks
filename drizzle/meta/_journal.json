@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1784044592724,
+      "tag": "0000_loving_ultimatum",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784045903720,
+      "tag": "0001_heavy_outlaw_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784051604565,
+      "tag": "0002_bumpy_arachne",
+      "breakpoints": true
+    }
+  ]
+}
