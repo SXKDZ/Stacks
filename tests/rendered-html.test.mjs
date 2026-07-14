@@ -50,6 +50,10 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.match(application, /MarkdownContent/);
   assert.match(application, /abstract-copy/);
   assert.match(application, /summary-copy/);
+  assert.match(application, /reader-summary-scroll/);
+  assert.match(application, /reader-notes-editor/);
+  assert.match(application, /aria-label="My notes"/);
+  assert.match(application, /"Notes saved\."/);
   assert.doesNotMatch(application, /onSummarize/);
   assert.match(application, /field-label-action/);
   assert.ok(application.indexOf("Research notes") < application.indexOf("Publication details"));

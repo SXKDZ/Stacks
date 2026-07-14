@@ -897,6 +897,7 @@ function PaperAssistantWorkspace() {
           paper={readerPaper}
           onClose={() => setReaderPaper(null)}
           onChat={() => setChatPaper(readerPaper)}
+          onUpdate={updatePaper}
         />
       ) : null}
 
@@ -2127,10 +2128,11 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onDelet
   );
 }
 
-function ReaderDrawer({ paper, onClose, onChat }: {
+function ReaderDrawer({ paper, onClose, onChat, onUpdate }: {
   paper: Paper;
   onClose: () => void;
   onChat: () => void;
+  onUpdate: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
 }) {
   const viewerUrl = paper.htmlUrl || paper.pdfUrl;
   const isHtml = Boolean(paper.htmlUrl);
@@ -2164,13 +2166,23 @@ function ReaderDrawer({ paper, onClose, onChat }: {
               ? paper.authors.map((author) => author.displayName).join(", ")
               : "Authors not recorded"}
           </p>
-          <div className="reader-summary">
+          <div className="reader-summary reader-summary-scroll">
             <p className="eyebrow">Summary</p>
             <MarkdownContent content={paper.summary || paper.abstract || "No summary is available for this paper yet."} />
           </div>
-          <div className="reader-summary">
+          <div className="reader-summary reader-notes-section">
             <p className="eyebrow">My notes</p>
-            <MarkdownContent content={paper.notes || "Open paper details to add research notes."} />
+            <textarea
+              className="reader-notes-editor"
+              defaultValue={paper.notes}
+              placeholder="Add an observation, question, or connection…"
+              aria-label="My notes"
+              onBlur={(event) => {
+                if (event.target.value !== paper.notes) {
+                  void onUpdate(paper, { notes: event.target.value }, "Notes saved.");
+                }
+              }}
+            />
           </div>
           <button className="reader-chat-button" onClick={onChat}><Sparkles size={15} /> Discuss this paper with PA</button>
         </aside>

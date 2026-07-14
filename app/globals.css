@@ -2943,6 +2943,33 @@ td.number-cell {
   margin: 0 0 8px;
 }
 
+.reader-summary-scroll > .markdown-content {
+  max-height: clamp(150px, 28vh, 280px);
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+
+.reader-notes-editor {
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  display: block;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  line-height: 1.55;
+  min-height: 116px;
+  outline: 0;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.reader-notes-editor:focus {
+  border-color: var(--violet);
+}
+
 .reader-chat-button {
   align-items: center;
   background: var(--violet);
@@ -5782,6 +5809,10 @@ textarea::placeholder {
 [data-theme="light"] .markdown-content blockquote,
 [data-theme="light"] .reader-summary > .markdown-content {
   color: #4e5667;
+}
+
+[data-theme="light"] .reader-notes-editor {
+  background: rgba(255, 255, 255, 0.9);
 }
 
 [data-theme="light"] .markdown-content code {
