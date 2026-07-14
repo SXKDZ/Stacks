@@ -306,6 +306,40 @@ function authorLine(paper: Paper): string {
   return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
 }
 
+function fullAuthorLine(paper: Paper): string {
+  return paper.authors.map((author) => author.displayName).join(", ");
+}
+
+function ExpandableAuthorNames({ paper, limit = 3 }: { paper: Paper; limit?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const authors = paper.authors.map((author) => author.displayName);
+  const hiddenCount = Math.max(0, authors.length - limit);
+  const visibleAuthors = expanded ? authors : authors.slice(0, limit);
+
+  if (!authors.length) {
+    return <span className="expandable-author-list"><span>Authors not recorded</span></span>;
+  }
+
+  return (
+    <span className={`expandable-author-list ${expanded ? "is-expanded" : ""}`}>
+      <span>{visibleAuthors.join(", ")}</span>
+      {hiddenCount ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          title={expanded ? "Hide additional authors" : `Show ${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((current) => !current);
+          }}
+        >
+          {expanded ? "Show fewer" : `More ${hiddenCount} ${hiddenCount === 1 ? "author" : "authors"}`}
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
 function venueLine(paper: Paper): string {
   return paper.venueAcronym || paper.venueName || "Unassigned venue";
 }
@@ -983,7 +1017,7 @@ function Dashboard({
             <h2>{currentPaper.title}</h2>
             <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
             <div className="paper-byline">
-              <span>{authorLine(currentPaper)}</span>
+              <span>{fullAuthorLine(currentPaper)}</span>
               <i />
               <span>{venueLine(currentPaper)} · {currentPaper.year}</span>
             </div>
@@ -1039,15 +1073,15 @@ function Dashboard({
         </div>
         <div className="recent-list">
           {recentPapers.map((paper) => (
-            <button className="recent-row" key={paper.id} onClick={() => openPaper(paper)}>
+            <article className="recent-row" key={paper.id}>
               <span className={`type-tile type-${paper.paperType}`}><FileText size={18} /></span>
               <span className="recent-copy">
-                <strong>{paper.title}</strong>
-                <small>{authorLine(paper)} · {venueLine(paper)} {paper.year}</small>
+                <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
+                <span className="recent-meta"><ExpandableAuthorNames paper={paper} /><span>· {venueLine(paper)} {paper.year}</span></span>
               </span>
               <StatusPill status={paper.readingStatus} />
-              <ArrowUpRight size={16} className="row-arrow" />
-            </button>
+              <button type="button" className="recent-open-button" onClick={() => openPaper(paper)} aria-label={`Open ${paper.title}`}><ArrowUpRight size={16} className="row-arrow" /></button>
+            </article>
           ))}
         </div>
       </section>
@@ -1360,7 +1394,7 @@ function LibraryView({
                       <span>
                         <strong>{paper.title}</strong>
                         <span className="paper-secondary-line">
-                          <small>{authorLine(paper)}</small>
+                          <ExpandableAuthorNames paper={paper} />
                         </span>
                         <span className="paper-collection-line" aria-label="Collections">
                           {paper.collections.slice(0, 3).map((collection) => <i key={collection.id} className="collection-chip">{collection.name}</i>)}
@@ -2249,7 +2283,7 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
                 {availableDiscussionPapers.map((item) => {
                   const selected = selectedPaperIds.includes(item.id);
                   const onlySelected = selected && selectedPaperIds.length === 1;
-                  return <button type="button" className={selected ? "is-selected" : ""} onClick={() => toggleDiscussionPaper(item.id)} disabled={onlySelected} key={item.id}><span className="selection-box">{selected ? <Check size={11} /> : null}</span><span><strong>{item.title}</strong><small>{authorLine(item)} · {item.year ?? "n.d."}</small></span></button>;
+                  return <button type="button" className={selected ? "is-selected" : ""} onClick={() => toggleDiscussionPaper(item.id)} disabled={onlySelected} key={item.id}><span className="selection-box">{selected ? <Check size={11} /> : null}</span><span><strong>{item.title}</strong><small>{fullAuthorLine(item)} · {item.year ?? "n.d."}</small></span></button>;
                 })}
               </div>
               <div className="chat-paper-picker-footer"><span>Up to 8 papers can ground one discussion.</span><button type="button" onClick={() => setPaperPickerOpen(false)}>Done</button></div>
@@ -2885,7 +2919,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
               </div>
             </div>
             <div className="transfer-paper-details">
-              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small>{authorLine(selectedTransferPaper) || "Authors unavailable"} · {venueLine(selectedTransferPaper) || "Venue unavailable"} · {selectedTransferPaper.year ?? "Year unavailable"}</small></span> : <small>Select a paper to inspect it before moving.</small>}
+              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small>{fullAuthorLine(selectedTransferPaper) || "Authors unavailable"} · {venueLine(selectedTransferPaper) || "Venue unavailable"} · {selectedTransferPaper.year ?? "Year unavailable"}</small></span> : <small>Select a paper to inspect it before moving.</small>}
             </div>
           </section>
         </>}
@@ -2981,7 +3015,7 @@ function CommandPalette({ snapshot, onClose, setView, openPaper, addPaper }: {
             return <button key={action.id} onClick={() => { setView(action.id); onClose(); }}><span className="command-icon"><Icon size={16} /></span><span><strong>Go to {action.label}</strong><small>Open the {action.label.toLowerCase()} view</small></span><ArrowRight size={15} /></button>;
           })}
           {matches.length ? <p>Papers</p> : null}
-          {matches.map((paper) => <button key={paper.id} onClick={() => { openPaper(paper); onClose(); }}><span className="command-icon"><FileText size={16} /></span><span><strong>{paper.title}</strong><small>{authorLine(paper)} · {paper.year}</small></span><ArrowRight size={15} /></button>)}
+          {matches.map((paper) => <button key={paper.id} onClick={() => { openPaper(paper); onClose(); }}><span className="command-icon"><FileText size={16} /></span><span><strong>{paper.title}</strong><small>{fullAuthorLine(paper)} · {paper.year}</small></span><ArrowRight size={15} /></button>)}
         </div>
         <div className="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>↵</kbd> Open</span><span>PA command palette</span></div>
       </section>
