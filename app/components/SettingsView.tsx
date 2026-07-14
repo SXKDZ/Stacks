@@ -74,6 +74,7 @@ interface ModelAccessResult {
   modelId: string;
   message: string;
   endpoint?: "mantle" | "runtime";
+  region?: string;
 }
 
 interface PromptVariableDefinition {
@@ -115,12 +116,19 @@ const secretFields = [
 ] as const;
 
 const fallbackBedrockModels: BedrockModelOption[] = [
-  { id: "anthropic.claude-opus-4-8", label: "Claude Opus 4.8 · Mantle", endpoint: "mantle", scope: "Mantle" },
-  { id: "anthropic.claude-sonnet-5", label: "Claude Sonnet 5 · Mantle", endpoint: "mantle", scope: "Mantle" },
+  { id: "us.anthropic.claude-opus-4-8", label: "Claude Opus 4.8 · US", endpoint: "runtime", scope: "US" },
+  { id: "us.anthropic.claude-sonnet-5", label: "Claude Sonnet 5 · US", endpoint: "runtime", scope: "US" },
   { id: "us.anthropic.claude-sonnet-4-6", label: "Claude Sonnet 4.6 · US", endpoint: "runtime", scope: "US" },
   { id: "us.anthropic.claude-opus-4-6-v1", label: "Claude Opus 4.6 · US", endpoint: "runtime", scope: "US" },
   { id: "us.anthropic.claude-haiku-4-5-20251001-v1:0", label: "Claude Haiku 4.5 · US", endpoint: "runtime", scope: "US" },
 ];
+
+function normalizedModelId(modelId: string): string {
+  if (modelId === "anthropic.claude-opus-4-8") {
+    return "us.anthropic.claude-opus-4-8";
+  }
+  return modelId;
+}
 
 const discussionVariables: PromptVariableDefinition[] = [
   { token: "{{papers}}", description: "All selected papers combined into numbered Paper 1, Paper 2, … sections." },
@@ -202,7 +210,8 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       if (!response.ok) {
         throw new Error(await errorMessage(response));
       }
-      setSettings((await response.json()) as SettingsSnapshot);
+      const payload = (await response.json()) as SettingsSnapshot;
+      setSettings({ ...payload, ai: { ...payload.ai, modelId: normalizedModelId(payload.ai.modelId) } });
       setModelAccess(null);
       setEndpoint(selectedEndpoint);
     } catch (error) {
@@ -277,6 +286,9 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       }
       const result = await response.json() as ModelAccessResult;
       setModelAccess(result);
+      if (result.available && result.region && result.region !== settings.ai.region) {
+        updateAi("region", result.region);
+      }
       notify(result.message, result.available ? "success" : "error");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Model access could not be tested.", "error");
@@ -399,16 +411,16 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "model" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose a Bedrock Runtime profile or a Bedrock Mantle Claude model." />
+            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose an available Amazon Bedrock inference profile." />
             <div className="settings-card">
-              <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>API key authentication · Runtime Converse + Mantle Messages</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
+              <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>API key authentication · Runtime Converse</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
               <div className="settings-form-grid">
-                <label className="span-2"><span>Model</span><select value={knownModel ? settings.ai.modelId : "custom"} onChange={(event) => updateAi("modelId", event.target.value === "custom" ? "" : event.target.value)}>{modelOptions.map((model) => <option value={model.id} key={model.id}>{model.label}</option>)}<option value="custom">Custom Bedrock model ID…</option></select><small>{models.length ? `${models.length} active Anthropic profiles and Mantle models loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
+                <label className="span-2"><span>Model</span><select value={knownModel ? settings.ai.modelId : "custom"} onChange={(event) => updateAi("modelId", event.target.value === "custom" ? "" : event.target.value)}>{modelOptions.map((model) => <option value={model.id} key={model.id}>{model.label}</option>)}<option value="custom">Custom Bedrock model ID…</option></select><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Base Anthropic IDs use Bedrock Mantle; geo, global, and inference-profile IDs use Bedrock Runtime.</small></label> : null}
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><button type="button" onClick={() => void loadModels(true)} disabled={loadingModels}>{loadingModels ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />} Refresh models</button><button type="button" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()}>{testingModel ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} Test access</button></div>
                 <label><span>AWS region</span><input value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)} placeholder="us-east-1" /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" max="8192" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /></label>
-                <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} /><small>Lower values keep research answers more consistent and restrained.</small></label>
+                <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />

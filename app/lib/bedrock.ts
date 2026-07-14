@@ -41,6 +41,29 @@ export function isMantleModel(model: string): boolean {
   return model.startsWith("anthropic.");
 }
 
+function invocationModel(model: string): string {
+  if (model === "anthropic.claude-opus-4-8") {
+    return "us.anthropic.claude-opus-4-8";
+  }
+  return model;
+}
+
+function candidateRegions(region: string, model: string): string[] {
+  if (!model.startsWith("us.") && !model.startsWith("global.")) {
+    return [region];
+  }
+  return Array.from(new Set([region, "us-east-2", "us-east-1", "us-west-2"]));
+}
+
+function supportsTemperature(model: string): boolean {
+  return !model.includes("claude-opus-4-8");
+}
+
+function canTryAnotherRegion(status: number, message: string): boolean {
+  return (status === 403 || status === 404)
+    && /not available|does not exist|not found/i.test(message);
+}
+
 function upstreamMessage(raw: string): string {
   try {
     const parsed = JSON.parse(raw) as {
@@ -57,8 +80,10 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
   content: string;
   usage: Record<string, unknown> | null;
   endpoint: "mantle" | "runtime";
+  region: string;
 }> {
-  if (isMantleModel(options.model)) {
+  const model = invocationModel(options.model);
+  if (isMantleModel(model)) {
     const response = await fetch(
       `https://bedrock-mantle.${options.region}.api.aws/anthropic/v1/messages`,
       {
@@ -69,9 +94,9 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: options.model,
+          model,
           max_tokens: options.maxTokens,
-          temperature: options.temperature,
+          ...(supportsTemperature(model) ? { temperature: options.temperature } : {}),
           system: options.system,
           messages: options.messages,
         }),
@@ -83,14 +108,20 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
     }
     const payload = JSON.parse(raw) as MantleResponse;
     const content = payload.content?.map((block) => block.text ?? "").join("\n").trim() ?? "";
-    return { content, usage: payload.usage ?? null, endpoint: "mantle" };
+    return { content, usage: payload.usage ?? null, endpoint: "mantle", region: options.region };
   }
 
-  const response = await fetch(
-    `https://bedrock-runtime.${options.region}.amazonaws.com/model/${encodeURIComponent(options.model)}/converse`,
-    {
-      method: "POST",
-      headers: {
+  let lastError: BedrockInvocationError | null = null;
+  for (const region of candidateRegions(options.region, model)) {
+    const inferenceConfig = {
+      maxTokens: options.maxTokens,
+      ...(supportsTemperature(model) ? { temperature: options.temperature } : {}),
+    };
+    const response = await fetch(
+      `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(model)}/converse`,
+      {
+        method: "POST",
+        headers: {
         Authorization: `Bearer ${options.token}`,
         "Content-Type": "application/json",
       },
@@ -101,17 +132,23 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
           content: [{ text: message.content }],
         })),
         inferenceConfig: {
-          maxTokens: options.maxTokens,
-          temperature: options.temperature,
+          ...inferenceConfig,
         },
       }),
-    },
-  );
-  const raw = await response.text();
-  if (!response.ok) {
-    throw new BedrockInvocationError(upstreamMessage(raw), response.status);
+      },
+    );
+    const raw = await response.text();
+    if (!response.ok) {
+      const message = upstreamMessage(raw);
+      lastError = new BedrockInvocationError(message, response.status);
+      if (canTryAnotherRegion(response.status, message)) {
+        continue;
+      }
+      throw lastError;
+    }
+    const payload = JSON.parse(raw) as RuntimeResponse;
+    const content = payload.output?.message?.content?.map((block) => block.text ?? "").join("\n").trim() ?? "";
+    return { content, usage: payload.usage ?? null, endpoint: "runtime", region };
   }
-  const payload = JSON.parse(raw) as RuntimeResponse;
-  const content = payload.output?.message?.content?.map((block) => block.text ?? "").join("\n").trim() ?? "";
-  return { content, usage: payload.usage ?? null, endpoint: "runtime" };
+  throw lastError ?? new BedrockInvocationError("No compatible Bedrock region was available.", 503);
 }

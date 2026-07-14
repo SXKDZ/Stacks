@@ -2,7 +2,6 @@
 
 import {
   ArrowRight,
-  ArrowUpDown,
   ArrowUpRight,
   BookOpen,
   Building2,
@@ -43,7 +42,7 @@ import {
   X,
 } from "lucide-react";
 import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -86,6 +85,8 @@ const identifierSources: Array<{
 
 type EditablePaperType = "conference" | "journal" | "workshop" | "preprint" | "website" | "other";
 type PaperColumnKey = "title" | "venue" | "year" | "status";
+type AuthorColumnKey = "author" | "affiliation" | "papers" | "latest";
+type VenueColumnKey = "venue" | "type" | "publisher" | "papers" | "latest";
 
 const defaultPaperColumnWidths: Record<PaperColumnKey, number> = {
   title: 60,
@@ -93,6 +94,86 @@ const defaultPaperColumnWidths: Record<PaperColumnKey, number> = {
   year: 8,
   status: 12,
 };
+
+const defaultAuthorColumnWidths: Record<AuthorColumnKey, number> = {
+  author: 42,
+  affiliation: 34,
+  papers: 12,
+  latest: 12,
+};
+
+const defaultVenueColumnWidths: Record<VenueColumnKey, number> = {
+  venue: 35,
+  type: 15,
+  publisher: 26,
+  papers: 12,
+  latest: 12,
+};
+
+function useResizableColumns<Key extends string>(
+  storageKey: string,
+  defaults: Record<Key, number>,
+  minimums: Record<Key, number>,
+) {
+  const [widths, setWidths] = useState<Record<Key, number>>(defaults);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as Partial<Record<Key, number>> | null;
+        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value))) {
+          setWidths((current) => ({ ...current, ...saved }));
+        }
+      } catch {
+        // Invalid browser preferences fall back to the balanced default widths.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [storageKey]);
+
+  function resizeColumn(event: ReactPointerEvent<HTMLButtonElement>, key: Key) {
+    event.preventDefault();
+    event.stopPropagation();
+    const header = event.currentTarget.closest("th");
+    const table = event.currentTarget.closest("table");
+    if (!header || !table) {
+      return;
+    }
+    const startX = event.clientX;
+    const startWidth = header.getBoundingClientRect().width;
+    const tableWidth = table.getBoundingClientRect().width;
+    const maximum = Math.max(minimums[key], tableWidth * 0.7);
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const width = Math.min(maximum, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
+      const percentage = Number(((width / tableWidth) * 100).toFixed(2));
+      setWidths((current) => {
+        const next = { ...current, [key]: percentage };
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+        return next;
+      });
+    };
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      document.body.classList.remove("is-resizing-column");
+    };
+    document.body.classList.add("is-resizing-column");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  }
+
+  function resetColumnWidth(event: ReactMouseEvent<HTMLButtonElement>, key: Key) {
+    event.preventDefault();
+    event.stopPropagation();
+    setWidths((current) => {
+      const next = { ...current, [key]: defaults[key] };
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  return { widths, resizeColumn, resetColumnWidth };
+}
 
 const paperTypeOptions: Array<{ value: EditablePaperType; label: string }> = [
   { value: "conference", label: "Conference paper" },
@@ -312,7 +393,7 @@ export default function PaperAssistant() {
   const [libraryName, setLibraryName] = useState("My Paper Library");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function notify(message: string, tone: ToastState["tone"] = "success") {
+  const notify = useCallback((message: string, tone: ToastState["tone"] = "success") => {
     if (toastTimer.current) {
       clearTimeout(toastTimer.current);
     }
@@ -321,7 +402,7 @@ export default function PaperAssistant() {
     toastTimer.current = setTimeout(() => {
       setToast(null);
     }, 3200);
-  }
+  }, []);
 
   async function loadLibrary(showSync = false) {
     if (showSync) {
@@ -1159,9 +1240,9 @@ function LibraryView({
                         <strong>{paper.title}</strong>
                         <span className="paper-secondary-line">
                           <small>{authorLine(paper)}</small>
-                          <span className="collection-chips">
-                            {paper.collections.slice(0, 2).map((collection) => <i key={collection.id} className={`chip-${collection.color}`}>{collection.name}</i>)}
-                          </span>
+                        </span>
+                        <span className="paper-collection-line" aria-label="Collections">
+                          {paper.collections.slice(0, 3).map((collection) => <i key={collection.id} className={`chip-${collection.color}`}>{collection.name}</i>)}
                         </span>
                       </span>
                     </div>
@@ -1195,7 +1276,7 @@ function SortablePaperHeader({ label, sortKey, sort, onSort, onResize, onResetWi
     ? sort.direction === "asc" ? "ascending" : "descending"
     : "none";
   return (
-    <th aria-sort={ariaSort} className="is-resizable">
+    <th aria-sort={ariaSort} className={`is-resizable ${sortKey === "year" || sortKey === "status" ? "is-centered" : ""}`}>
       <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(sortKey)}>
         <span>{label}</span>
         {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
@@ -1234,6 +1315,11 @@ function AuthorsView({
   onOpenPapers: (author: Author) => void;
 }) {
   const [sort, setSort] = useState<{ key: "author" | "affiliation" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "author", direction: "asc" });
+  const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<AuthorColumnKey>(
+    "pa-author-grid-widths-v1",
+    defaultAuthorColumnWidths,
+    { author: 220, affiliation: 160, papers: 80, latest: 80 },
+  );
   const filtered = useMemo(() => authors
     .filter((author) => matchesSearch([author.displayName, author.affiliation], query))
     .sort((left, right) => {
@@ -1249,30 +1335,68 @@ function AuthorsView({
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
   }
+  function toggleAll() {
+    const visibleIds = filtered.map((author) => author.id);
+    if (visibleIds.every((id) => selected.includes(id))) {
+      setSelected(selected.filter((id) => !visibleIds.includes(id)));
+      return;
+    }
+    setSelected(Array.from(new Set([...selected, ...visibleIds])));
+  }
   return (
     <div className="data-view">
       <EntityToolbar query={query} setQuery={setQuery} placeholder="Search names and affiliations…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
-      <div className="author-table-wrap">
-        <div className="author-table-header"><span /><EntitySortHeader label="Author" active={sort.key === "author"} direction={sort.direction} onClick={() => toggleSort("author")} /><EntitySortHeader label="Affiliation" active={sort.key === "affiliation"} direction={sort.direction} onClick={() => toggleSort("affiliation")} /><EntitySortHeader label="Papers" active={sort.key === "papers"} direction={sort.direction} onClick={() => toggleSort("papers")} /><EntitySortHeader label="Latest" active={sort.key === "latest"} direction={sort.direction} onClick={() => toggleSort("latest")} /><span /></div>
-        {filtered.map((author, index) => (
-          <div className={`author-row ${selected.includes(author.id) ? "is-selected" : ""}`} key={author.id}>
-            <button onClick={() => {
-              if (selected.includes(author.id)) {
-                setSelected(selected.filter((id) => id !== author.id));
-              } else {
-                setSelected([...selected, author.id]);
-              }
-            }} aria-label={`Select ${author.displayName}`}><SelectionBox checked={selected.includes(author.id)} /></button>
-            <button className="author-name-button" onClick={() => onOpenPapers(author)}>
-              <span className={`compact-avatar avatar-${index % 5}`}>{initials(author.displayName)}</span>
-              <span><strong>{author.displayName}</strong></span>
-            </button>
-            <span className="row-muted">{author.affiliation || "—"}</span>
-            <strong>{author.paperCount}</strong>
-            <span className="row-muted">{author.latestYear ?? "—"}</span>
-            <button className="row-edit-button" onClick={() => onEdit(author)} aria-label={`Edit ${author.displayName}`}><Pencil size={13} /> Edit</button>
-          </div>
-        ))}
+      <div className="data-grid-shell author-table-wrap">
+        <table className="paper-table research-grid entity-research-grid author-grid">
+          <colgroup>
+            <col className="paper-column-check" />
+            <col style={{ width: `${widths.author}%` }} />
+            <col style={{ width: `${widths.affiliation}%` }} />
+            <col style={{ width: `${widths.papers}%` }} />
+            <col style={{ width: `${widths.latest}%` }} />
+            <col className="entity-column-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th className="check-cell" scope="col">
+                <button onClick={toggleAll} aria-label="Select all visible authors">
+                  <SelectionBox checked={Boolean(filtered.length) && filtered.every((author) => selected.includes(author.id))} />
+                </button>
+              </th>
+              <SortableEntityHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableEntityHeader label="Affiliation" columnKey="affiliation" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((author, index) => (
+              <tr className={selected.includes(author.id) ? "is-selected" : ""} key={author.id}>
+                <td className="check-cell">
+                  <button onClick={() => {
+                    if (selected.includes(author.id)) {
+                      setSelected(selected.filter((id) => id !== author.id));
+                    } else {
+                      setSelected([...selected, author.id]);
+                    }
+                  }} aria-label={`Select ${author.displayName}`}><SelectionBox checked={selected.includes(author.id)} /></button>
+                </td>
+                <td>
+                  <button className="entity-primary-button" onClick={() => onOpenPapers(author)}>
+                    <span className={`compact-avatar avatar-${index % 5}`}>{initials(author.displayName)}</span>
+                    <span><strong>{author.displayName}</strong></span>
+                  </button>
+                </td>
+                <td className="entity-meta-cell">{author.affiliation || "—"}</td>
+                <td className="entity-number-cell">{author.paperCount}</td>
+                <td className="entity-number-cell">{author.latestYear ?? "—"}</td>
+                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(author)} aria-label={`Edit ${author.displayName}`} title="Edit author"><Pencil size={15} /></button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="table-footer">Showing {filtered.length} of {authors.length} authors</div>
       </div>
       {!filtered.length ? <EmptyState icon={<UsersRound size={24} />} title="No authors found" detail="Try another name or affiliation." /> : null}
     </div>
@@ -1301,6 +1425,11 @@ function VenuesView({
   onOpenPapers: (venue: Venue) => void;
 }) {
   const [sort, setSort] = useState<{ key: "venue" | "type" | "publisher" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "venue", direction: "asc" });
+  const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<VenueColumnKey>(
+    "pa-venue-grid-widths-v1",
+    defaultVenueColumnWidths,
+    { venue: 220, type: 100, publisher: 150, papers: 80, latest: 80 },
+  );
   const filtered = useMemo(() => venues
     .filter((venue) => matchesSearch([venue.name, venue.acronym, venue.type, venue.publisher], query))
     .sort((left, right) => {
@@ -1317,31 +1446,71 @@ function VenuesView({
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
   }
+  function toggleAll() {
+    const visibleIds = filtered.map((venue) => venue.id);
+    if (visibleIds.every((id) => selected.includes(id))) {
+      setSelected(selected.filter((id) => !visibleIds.includes(id)));
+      return;
+    }
+    setSelected(Array.from(new Set([...selected, ...visibleIds])));
+  }
   return (
     <div className="data-view">
       <EntityToolbar query={query} setQuery={setQuery} placeholder="Search venue names, types, and publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
-      <div className="venue-table-wrap">
-        <div className="venue-table-header"><span /><EntitySortHeader label="Venue" active={sort.key === "venue"} direction={sort.direction} onClick={() => toggleSort("venue")} /><EntitySortHeader label="Type" active={sort.key === "type"} direction={sort.direction} onClick={() => toggleSort("type")} /><EntitySortHeader label="Publisher" active={sort.key === "publisher"} direction={sort.direction} onClick={() => toggleSort("publisher")} /><EntitySortHeader label="Papers" active={sort.key === "papers"} direction={sort.direction} onClick={() => toggleSort("papers")} /><EntitySortHeader label="Latest" active={sort.key === "latest"} direction={sort.direction} onClick={() => toggleSort("latest")} /><span /></div>
-        {filtered.map((venue) => (
-          <div className={`venue-row ${selected.includes(venue.id) ? "is-selected" : ""}`} key={venue.id}>
-            <button onClick={() => {
-              if (selected.includes(venue.id)) {
-                setSelected(selected.filter((id) => id !== venue.id));
-              } else {
-                setSelected([...selected, venue.id]);
-              }
-            }} aria-label={`Select ${venue.name}`}><SelectionBox checked={selected.includes(venue.id)} /></button>
-            <button className="venue-name-button" onClick={() => onOpenPapers(venue)}>
-              <span className="venue-monogram">{(venue.acronym || venue.name).slice(0, 4)}</span>
-              <span><strong>{venue.name}</strong><small>{venue.acronym || "No acronym"}</small></span>
-            </button>
-            <span className="type-badge">{venue.type}</span>
-            <span className="row-muted">{venue.publisher || "—"}</span>
-            <strong>{venue.paperCount}</strong>
-            <span className="row-muted">{venue.latestYear ?? "—"}</span>
-            <button className="row-edit-button" onClick={() => onEdit(venue)} aria-label={`Edit ${venue.name}`}><Pencil size={13} /> Edit</button>
-          </div>
-        ))}
+      <div className="data-grid-shell venue-table-wrap">
+        <table className="paper-table research-grid entity-research-grid venue-grid">
+          <colgroup>
+            <col className="paper-column-check" />
+            <col style={{ width: `${widths.venue}%` }} />
+            <col style={{ width: `${widths.type}%` }} />
+            <col style={{ width: `${widths.publisher}%` }} />
+            <col style={{ width: `${widths.papers}%` }} />
+            <col style={{ width: `${widths.latest}%` }} />
+            <col className="entity-column-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th className="check-cell" scope="col">
+                <button onClick={toggleAll} aria-label="Select all visible venues">
+                  <SelectionBox checked={Boolean(filtered.length) && filtered.every((venue) => selected.includes(venue.id))} />
+                </button>
+              </th>
+              <SortableEntityHeader label="Venue" columnKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableEntityHeader label="Type" columnKey="type" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableEntityHeader label="Publisher" columnKey="publisher" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((venue) => (
+              <tr className={selected.includes(venue.id) ? "is-selected" : ""} key={venue.id}>
+                <td className="check-cell">
+                  <button onClick={() => {
+                    if (selected.includes(venue.id)) {
+                      setSelected(selected.filter((id) => id !== venue.id));
+                    } else {
+                      setSelected([...selected, venue.id]);
+                    }
+                  }} aria-label={`Select ${venue.name}`}><SelectionBox checked={selected.includes(venue.id)} /></button>
+                </td>
+                <td>
+                  <button className="entity-primary-button" onClick={() => onOpenPapers(venue)}>
+                    <span className="venue-monogram">{(venue.acronym || venue.name).slice(0, 4)}</span>
+                    <span><strong>{venue.name}</strong><small>{venue.acronym || "No acronym"}</small></span>
+                  </button>
+                </td>
+                <td className="entity-meta-cell entity-type-cell">{venue.type}</td>
+                <td className="entity-meta-cell">{venue.publisher || "—"}</td>
+                <td className="entity-number-cell">{venue.paperCount}</td>
+                <td className="entity-number-cell">{venue.latestYear ?? "—"}</td>
+                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(venue)} aria-label={`Edit ${venue.name}`} title="Edit venue"><Pencil size={15} /></button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="table-footer">Showing {filtered.length} of {venues.length} venues</div>
       </div>
       {!filtered.length ? <EmptyState icon={<Building2 size={24} />} title="No venues found" detail="Try a different conference, journal, or publisher." /> : null}
     </div>
@@ -1373,12 +1542,12 @@ function CollectionsView({
         {filtered.map((collection) => {
           const related = papers.filter((paper) => paper.collections.some((paperCollection) => paperCollection.id === collection.id));
           return (
-            <article className={`collection-card collection-${collection.color}`} key={collection.id}>
+            <article className="collection-card" key={collection.id}>
               <div className="collection-card-top">
-                <span className="collection-icon"><FolderOpen size={19} /></span>
+                <span className="collection-icon"><FolderOpen size={18} /><i className={`collection-swatch swatch-${collection.color}`} /></span>
                 <div className="collection-actions">
-                  <button type="button" className="row-edit-button" onClick={() => onEdit(collection)} aria-label={`Edit ${collection.name}`}><Pencil size={14} /> Edit</button>
-                  <button type="button" className="row-delete-button" onClick={() => onDelete(collection)} aria-label={`Delete ${collection.name}`}><Trash2 size={14} /> Delete</button>
+                  <button type="button" className="row-icon-button" onClick={() => onEdit(collection)} aria-label={`Edit ${collection.name}`} title="Edit collection"><Pencil size={15} /></button>
+                  <button type="button" className="row-icon-button is-danger" onClick={() => onDelete(collection)} aria-label={`Delete ${collection.name}`} title="Delete collection"><Trash2 size={15} /></button>
                 </div>
               </div>
               <button className="collection-main" onClick={() => onOpen(collection)}>
@@ -1387,8 +1556,8 @@ function CollectionsView({
                 <span>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</span>
               </button>
               <div className="collection-papers">
-                {related.slice(0, 3).map((paper) => <span key={paper.id}><FileText size={16} />{paper.title}</span>)}
-                {!related.length ? <span className="row-muted">This collection is ready for its first paper.</span> : null}
+                {related.slice(0, 2).map((paper) => <span key={paper.id}><FileText size={14} />{paper.title}</span>)}
+                {!related.length ? <span className="row-muted">No papers yet</span> : null}
               </div>
             </article>
           );
@@ -1399,8 +1568,43 @@ function CollectionsView({
   );
 }
 
-function EntitySortHeader({ label, active, direction, onClick }: { label: string; active: boolean; direction: "asc" | "desc"; onClick: () => void }) {
-  return <button type="button" className={`entity-sort-button ${active ? "is-active" : ""}`} onClick={onClick}><span>{label}</span>{active ? direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : <ArrowUpDown size={13} />}</button>;
+function SortableEntityHeader<Key extends string>({
+  label,
+  columnKey,
+  sort,
+  onSort,
+  onResize,
+  onResetWidth,
+  centered = false,
+}: {
+  label: string;
+  columnKey: Key;
+  sort: { key: string; direction: "asc" | "desc" };
+  onSort: (key: Key) => void;
+  onResize: (event: ReactPointerEvent<HTMLButtonElement>, key: Key) => void;
+  onResetWidth: (event: ReactMouseEvent<HTMLButtonElement>, key: Key) => void;
+  centered?: boolean;
+}) {
+  const active = sort.key === columnKey;
+  const ariaSort: AriaAttributes["aria-sort"] = active
+    ? sort.direction === "asc" ? "ascending" : "descending"
+    : "none";
+  return (
+    <th aria-sort={ariaSort} className={`is-resizable ${centered ? "is-centered" : ""}`}>
+      <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(columnKey)}>
+        <span>{label}</span>
+        {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
+      </button>
+      <button
+        type="button"
+        className="column-resize-handle"
+        aria-label={`Resize ${label} column`}
+        title={`Drag to resize ${label}; double-click to reset`}
+        onPointerDown={(event) => onResize(event, columnKey)}
+        onDoubleClick={(event) => onResetWidth(event, columnKey)}
+      />
+    </th>
+  );
 }
 
 function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk, onDelete }: {

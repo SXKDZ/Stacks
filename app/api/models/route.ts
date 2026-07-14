@@ -82,8 +82,10 @@ export async function GET(request: Request): Promise<Response> {
       };
     });
   const mantlePayload = mantleResponse.ok ? JSON.parse(mantleRaw) as { data?: Array<{ id?: string }> } : {};
+  const runtimeProfileIds = new Set(profileModels.map((model) => model.id));
   const mantleModels = (mantlePayload.data ?? [])
     .filter((model) => model.id?.startsWith("anthropic."))
+    .filter((model) => !runtimeProfileIds.has(`us.${model.id}`))
     .map((model) => {
       const id = model.id ?? "";
       const label = id
@@ -104,7 +106,7 @@ export async function GET(request: Request): Promise<Response> {
   const models = [...mantleModels, ...profileModels]
     .sort((left, right) => {
       if (left.scope !== right.scope) {
-        return left.scope === "Mantle" ? -1 : right.scope === "Mantle" ? 1 : left.scope === "US" ? -1 : right.scope === "US" ? 1 : 0;
+        return left.scope === "US" ? -1 : right.scope === "US" ? 1 : left.scope === "Global" ? -1 : right.scope === "Global" ? 1 : 0;
       }
       return right.label.localeCompare(left.label, undefined, { numeric: true });
     });
@@ -133,7 +135,13 @@ export async function POST(request: Request): Promise<Response> {
       maxTokens: 8,
       temperature: 0,
     });
-    return Response.json({ available: true, modelId, endpoint: result.endpoint, message: "This credential can invoke the selected model." });
+    return Response.json({
+      available: true,
+      modelId,
+      endpoint: result.endpoint,
+      region: result.region,
+      message: `This credential can invoke the selected model through ${result.region}.`,
+    });
   } catch (error) {
     if (error instanceof BedrockInvocationError) {
       return Response.json({ available: false, modelId, message: error.message });
