@@ -2917,6 +2917,16 @@ td.number-cell {
   margin: 16px 0 7px;
 }
 
+.reader-authors {
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .reader-summary {
   border-top: 1px solid var(--line);
   color: #5d5562;

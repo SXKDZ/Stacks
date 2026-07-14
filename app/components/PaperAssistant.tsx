@@ -2125,7 +2125,11 @@ function ReaderDrawer({ paper, onClose, onChat }: {
         <aside className="reader-notes">
           <div className="reader-paper-meta"><StatusPill status={paper.readingStatus} /><span>{venueLine(paper)} · {paper.year ?? "n.d."}</span></div>
           <h2>{paper.title}</h2>
-          <p className="detail-authors">{authorLine(paper)}</p>
+          <p className="reader-authors">
+            {paper.authors.length
+              ? paper.authors.map((author) => author.displayName).join(", ")
+              : "Authors not recorded"}
+          </p>
           <div className="reader-summary">
             <p className="eyebrow">Summary</p>
             <MarkdownContent content={paper.summary || paper.abstract || "No summary is available for this paper yet."} />

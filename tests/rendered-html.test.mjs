@@ -29,6 +29,7 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.doesNotMatch(layout, /manrope|newsreader/i);
   assert.doesNotMatch(application, /Your research, in motion/);
   assert.doesNotMatch(application, /Research OS/);
+  assert.match(application, /paper\.authors\.map\(\(author\) => author\.displayName\)\.join\(", "\)/);
   assert.match(application, /AuthorsView/);
   assert.match(application, /VenuesView/);
   assert.match(application, /DiscoverView/);
