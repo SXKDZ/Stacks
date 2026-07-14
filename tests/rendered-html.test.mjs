@@ -54,6 +54,9 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.match(application, /reader-notes-editor/);
   assert.match(application, /aria-label="My notes"/);
   assert.match(application, /"Notes saved\."/);
+  assert.match(application, /const \[filterBuilderOpen, setFilterBuilderOpen\] = useState\(false\)/);
+  assert.match(application, /filterBuilderOpen \? "is-open"/);
+  assert.match(application, /aria-pressed=\{filterBuilderOpen\}/);
   assert.doesNotMatch(application, /onSummarize/);
   assert.match(application, /field-label-action/);
   assert.ok(application.indexOf("Research notes") < application.indexOf("Publication details"));
@@ -67,6 +70,8 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.match(settings, /BEDROCK_MODEL_ID|modelId/);
   assert.doesNotMatch(application, /Cited by|<small>Citations<\/small>|h-index/i);
   assert.match(styles, /prefers-reduced-motion/);
+  assert.match(styles, /scrollbar-gutter: stable/);
+  assert.match(styles, /\.filter-builder-toggle\.is-open/);
   assert.match(styles, /AIScientist-aligned application skin/);
   assert.match(styles, /\.markdown-content \.katex-display/);
   assert.match(styles, /@media \(max-width: 560px\)/);

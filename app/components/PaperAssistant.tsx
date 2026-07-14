@@ -1117,7 +1117,7 @@ function LibraryView({
   const [status, setStatus] = useState("all");
   const [filterKind, setFilterKind] = useState<LibraryFilterKind>("collection");
   const [filterValue, setFilterValue] = useState("");
-  const [filterBuilderOpen, setFilterBuilderOpen] = useState(true);
+  const [filterBuilderOpen, setFilterBuilderOpen] = useState(false);
   const [sort, setSort] = useState<{ key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" }>({ key: "recent", direction: "desc" });
   const [columnWidths, setColumnWidths] = useState<Record<PaperColumnKey, number>>(defaultPaperColumnWidths);
   const [page, setPage] = useState(1);
@@ -1287,7 +1287,7 @@ function LibraryView({
     <div className="data-view">
       <div className="view-toolbar library-toolbar">
         <PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search titles, authors, venues…" />
-        <button type="button" className={`filter-builder-toggle ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} title="Build library filters"><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
+        <button type="button" className={`filter-builder-toggle ${filterBuilderOpen ? "is-open" : ""} ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} aria-pressed={filterBuilderOpen} title={filterBuilderOpen ? "Close library filters" : "Build library filters"}><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
         <div className="filter-tabs">
           {["all", "inbox", "reading", "complete", "favorite"].map((item) => (
             <button key={item} className={status === item ? "is-active" : ""} onClick={() => { setStatus(item); setPage(1); }}>

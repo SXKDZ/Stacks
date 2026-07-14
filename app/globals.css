@@ -45,6 +45,7 @@
 
 html {
   background: var(--canvas);
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -6007,11 +6008,16 @@ textarea::placeholder {
   padding: 0 10px;
 }
 
+.filter-builder-toggle.is-open,
 .filter-builder-toggle.has-filters,
 .filter-builder-toggle:hover {
   background: var(--violet-soft);
   border-color: color-mix(in srgb, var(--violet) 32%, var(--line));
   color: var(--violet-dark);
+}
+
+.filter-builder-toggle.is-open {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 18%, transparent);
 }
 
 .filter-builder-toggle b {
