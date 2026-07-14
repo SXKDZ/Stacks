@@ -22,13 +22,13 @@ test("ships the Paper Assistant application shell and product metadata", async (
   ]);
 
   assert.match(page, /<PaperAssistant \/>/);
-  assert.match(layout, /Paper Assistant — Your Research OS/);
+  assert.match(layout, /title: "Paper Assistant"/);
   assert.match(layout, /@fontsource-variable\/inter/);
   assert.match(layout, /@fontsource-variable\/jetbrains-mono/);
   assert.match(layout, /katex\/dist\/katex\.min\.css/);
   assert.doesNotMatch(layout, /manrope|newsreader/i);
-  assert.match(application, /Your research, in motion/);
-  assert.match(application, /Research OS/);
+  assert.doesNotMatch(application, /Your research, in motion/);
+  assert.doesNotMatch(application, /Research OS/);
   assert.match(application, /AuthorsView/);
   assert.match(application, /VenuesView/);
   assert.match(application, /DiscoverView/);
@@ -40,8 +40,15 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.match(application, /OpenReview/);
   assert.match(application, /ChatDrawer/);
   assert.match(application, /PaperEditModal/);
-  assert.match(application, /Read inside PA/);
+  assert.doesNotMatch(application, /Read inside PA/);
+  assert.match(application, /> Read<\/button>/);
+  assert.match(application, /> Source<\/a>/);
   assert.match(application, /MarkdownContent/);
+  assert.match(application, /abstract-copy/);
+  assert.match(application, /summary-copy/);
+  assert.doesNotMatch(application, /onSummarize/);
+  assert.match(application, /field-label-action/);
+  assert.ok(application.indexOf("Research notes") < application.indexOf("Publication details"));
   assert.match(markdown, /react-markdown/);
   assert.match(markdown, /remark-gfm/);
   assert.match(markdown, /remark-math/);

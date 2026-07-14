@@ -88,10 +88,10 @@ export async function POST(request: Request): Promise<Response> {
       token,
       region,
       model,
-      system: `${templatedPrompt}\n\nUse concise GitHub-flavored Markdown with short headings and lists. Preserve important mathematical expressions using $...$ for inline math and $$...$$ on separate lines for display equations.`,
+      system: templatedPrompt,
       messages: [{
         role: "user",
-        content: `Summarize this paper for a researcher. Include: Short take (2 sentences), Core contribution, Method, Main evidence or claims, Limitations or open questions, and Why it may matter.\n\n${context}`,
+        content: "Write the structured academic review defined by the system prompt. Cover every requested section, explicitly marking material that is not described or not applicable.",
       }],
       maxTokens: Math.min(8192, Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1400")))),
       temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "PA_TEMPERATURE", "0.2")))),

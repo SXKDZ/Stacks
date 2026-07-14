@@ -48,7 +48,6 @@ export const papers = sqliteTable(
     notes: text("notes").notNull().default(""),
     readingStatus: text("reading_status").notNull().default("inbox"),
     favorite: integer("favorite", { mode: "boolean" }).notNull().default(false),
-    citationCount: integer("citation_count").notNull().default(0),
     venueId: text("venue_id").references(() => venues.id, {
       onDelete: "set null",
       onUpdate: "cascade",
@@ -71,10 +70,8 @@ export const authors = sqliteTable(
     displayName: text("display_name").notNull(),
     givenName: text("given_name"),
     familyName: text("family_name"),
-    affiliation: text("affiliation"),
     orcid: text("orcid"),
     semanticScholarId: text("semantic_scholar_id"),
-    hIndex: integer("h_index").notNull().default(0),
     notes: text("notes"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -114,8 +111,6 @@ export const collections = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    description: text("description").notNull().default(""),
-    color: text("color").notNull().default("violet"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

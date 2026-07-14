@@ -8,7 +8,11 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
+  ChevronsLeft,
+  ChevronsRight,
   CircleDot,
   Clock3,
   Command,
@@ -21,6 +25,7 @@ import {
   Inbox,
   Library,
   Link2,
+  ListFilter,
   LoaderCircle,
   Menu,
   Moon,
@@ -46,6 +51,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
+import { BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import type {
   Author,
   ChatMessage,
@@ -85,29 +91,28 @@ const identifierSources: Array<{
 
 type EditablePaperType = "conference" | "journal" | "workshop" | "preprint" | "website" | "other";
 type PaperColumnKey = "title" | "venue" | "year" | "status";
-type AuthorColumnKey = "author" | "affiliation" | "papers" | "latest";
+type AuthorColumnKey = "author" | "papers" | "latest";
 type VenueColumnKey = "venue" | "type" | "publisher" | "papers" | "latest";
 
 const defaultPaperColumnWidths: Record<PaperColumnKey, number> = {
-  title: 60,
-  venue: 20,
-  year: 8,
-  status: 12,
+  title: 56,
+  venue: 18,
+  year: 7,
+  status: 9,
 };
 
 const defaultAuthorColumnWidths: Record<AuthorColumnKey, number> = {
-  author: 42,
-  affiliation: 34,
+  author: 66,
   papers: 12,
   latest: 12,
 };
 
 const defaultVenueColumnWidths: Record<VenueColumnKey, number> = {
-  venue: 35,
-  type: 15,
-  publisher: 26,
-  papers: 12,
-  latest: 12,
+  venue: 32,
+  type: 13,
+  publisher: 22,
+  papers: 10,
+  latest: 10,
 };
 
 function useResizableColumns<Key extends string>(
@@ -223,44 +228,6 @@ const navigation: Array<{
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-const viewTitles: Record<ViewId, { eyebrow: string; title: string; description: string }> = {
-  home: {
-    eyebrow: "Research workspace",
-    title: "Your research, in motion.",
-    description: "A clear view of what you are reading, collecting, and connecting.",
-  },
-  library: {
-    eyebrow: "Paper library",
-    title: "All papers",
-    description: "Search, sort, and manage the evidence behind your work.",
-  },
-  authors: {
-    eyebrow: "People index",
-    title: "Authors",
-    description: "One canonical profile for every researcher in your library.",
-  },
-  venues: {
-    eyebrow: "Publication index",
-    title: "Venues",
-    description: "Normalize conferences, journals, workshops, and preprint archives.",
-  },
-  collections: {
-    eyebrow: "Research map",
-    title: "Collections",
-    description: "Shape papers into projects, reading lists, and lines of inquiry.",
-  },
-  discover: {
-    eyebrow: "Academic discovery",
-    title: "Find what matters next.",
-    description: "Search scholarly sources and bring clean metadata straight into PA.",
-  },
-  settings: {
-    eyebrow: "Application environment",
-    title: "Settings",
-    description: "Configure models, integrations, and live PA sync in one place.",
-  },
-};
-
 type ModalState =
   | { kind: "add-paper" }
   | { kind: "edit-paper"; paper: Paper }
@@ -275,10 +242,39 @@ interface ToastState {
 }
 
 type ThemeMode = "dark" | "light";
+type LibraryFilterKind = "author" | "venue" | "collection" | "year";
+type LibraryFilterJoin = "AND" | "OR";
+
+interface LibraryFilterClause {
+  key: string;
+  kind: LibraryFilterKind;
+  valueId: string;
+  label: string;
+  join: LibraryFilterJoin;
+  negated: boolean;
+  openGroups: number;
+  closeGroups: number;
+}
+
+let libraryFilterSequence = 0;
+
+function createLibraryFilter(kind: LibraryFilterKind, valueId: string, label: string): LibraryFilterClause {
+  libraryFilterSequence += 1;
+  return {
+    key: `library-filter-${libraryFilterSequence}`,
+    kind,
+    valueId,
+    label,
+    join: "AND",
+    negated: false,
+    openGroups: 0,
+    closeGroups: 0,
+  };
+}
 
 interface MutationBody {
   entity: "paper" | "author" | "venue" | "collection";
-  action: "create" | "update" | "delete" | "bulk-update" | "bulk-delete";
+  action: "create" | "bulk-create" | "update" | "delete" | "bulk-update" | "bulk-delete";
   id?: string;
   ids?: string[];
   data?: Record<string, unknown>;
@@ -331,6 +327,70 @@ function matchesSearch(values: Array<string | number | null | undefined>, query:
   return values.some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
 
+function matchesLibraryClause(paper: Paper, clause: LibraryFilterClause): boolean {
+  const matches = clause.kind === "author"
+    ? paper.authors.some((author) => author.id === clause.valueId)
+    : clause.kind === "venue"
+      ? paper.venueId === clause.valueId
+      : clause.kind === "collection"
+        ? paper.collections.some((collection) => collection.id === clause.valueId)
+        : String(paper.year ?? "") === clause.valueId;
+  return clause.negated ? !matches : matches;
+}
+
+function matchesLibraryFilters(paper: Paper, clauses: LibraryFilterClause[]): boolean {
+  if (!clauses.length) {
+    return true;
+  }
+  type FilterToken = boolean | LibraryFilterJoin | "(" | ")";
+  const tokens: FilterToken[] = [];
+  clauses.forEach((clause, index) => {
+    if (index) {
+      tokens.push(clause.join);
+    }
+    for (let group = 0; group < clause.openGroups; group += 1) {
+      tokens.push("(");
+    }
+    tokens.push(matchesLibraryClause(paper, clause));
+    for (let group = 0; group < clause.closeGroups; group += 1) {
+      tokens.push(")");
+    }
+  });
+  let cursor = 0;
+  function parsePrimary(): boolean {
+    const token = tokens[cursor];
+    if (token === "(") {
+      cursor += 1;
+      const value = parseOr();
+      if (tokens[cursor] === ")") {
+        cursor += 1;
+      }
+      return value;
+    }
+    cursor += 1;
+    return token === true;
+  }
+  function parseAnd(): boolean {
+    let value = parsePrimary();
+    while (tokens[cursor] === "AND") {
+      cursor += 1;
+      const right = parsePrimary();
+      value = value && right;
+    }
+    return value;
+  }
+  function parseOr(): boolean {
+    let value = parseAnd();
+    while (tokens[cursor] === "OR") {
+      cursor += 1;
+      const right = parseAnd();
+      value = value || right;
+    }
+    return value;
+  }
+  return parseOr();
+}
+
 async function readError(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as { error?: string; detail?: string };
@@ -372,6 +432,10 @@ function EmptyState({ icon, title, detail }: { icon: ReactNode; title: string; d
 }
 
 export default function PaperAssistant() {
+  return <BackgroundTaskProvider><PaperAssistantWorkspace /></BackgroundTaskProvider>;
+}
+
+function PaperAssistantWorkspace() {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>(demoSnapshot);
   const [view, setView] = useState<ViewId>("home");
   const [query, setQuery] = useState("");
@@ -391,6 +455,7 @@ export default function PaperAssistant() {
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [themeReady, setThemeReady] = useState(false);
   const [libraryName, setLibraryName] = useState("My Paper Library");
+  const [libraryFilters, setLibraryFilters] = useState<LibraryFilterClause[]>([]);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const notify = useCallback((message: string, tone: ToastState["tone"] = "success") => {
@@ -530,6 +595,7 @@ export default function PaperAssistant() {
   function changeView(nextView: ViewId) {
     setView(nextView);
     setQuery("");
+    setLibraryFilters([]);
     setMobileNav(false);
     setSelectedPaper(null);
   }
@@ -568,38 +634,6 @@ export default function PaperAssistant() {
     );
   }
 
-  async function summarizePaper(paper: Paper): Promise<boolean> {
-    try {
-      const response = await fetch("/api/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paper: {
-            title: paper.title,
-            abstract: paper.abstract,
-            authors: paper.authors.map((author) => author.displayName),
-            venue: venueLine(paper),
-            year: paper.year,
-            url: paper.url,
-            doi: paper.doi,
-          },
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await readError(response));
-      }
-      const payload = (await response.json()) as { summary: string };
-      return mutateLibrary(
-        { entity: "paper", action: "update", id: paper.id, data: { summary: payload.summary } },
-        "Summary generated and saved.",
-      );
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Summary generation failed.", "error");
-      return false;
-    }
-  }
-
-  const title = viewTitles[view];
   const currentPaper = useMemo(() => {
     const byRecentActivity = [...snapshot.papers].sort((left, right) => {
       const leftTime = new Date(left.updatedAt || left.addedAt).getTime();
@@ -620,7 +654,6 @@ export default function PaperAssistant() {
             <span className="brand-mark">PA</span>
             <span className="brand-copy">
               <strong>Paper Assistant</strong>
-              <span>Research OS</span>
             </span>
           </button>
           <button className="icon-button mobile-close" onClick={() => setMobileNav(false)} aria-label="Close navigation">
@@ -675,10 +708,9 @@ export default function PaperAssistant() {
         </button>
 
         <div className="sync-card">
-          <span className={`sync-dot ${demoMode ? "is-demo" : ""}`} />
           <span>
             <strong>{demoMode ? "Preview library" : libraryName.trim() || "My Paper Library"}</strong>
-            <small>{demoMode ? "Waiting for D1" : `${snapshot.stats.papers} papers · D1-backed library`}</small>
+            <small>{demoMode ? "Loading library" : `${snapshot.stats.papers} papers · Local library`}</small>
           </span>
           <button className="icon-button" onClick={() => void loadLibrary(true)} aria-label="Refresh library">
             <RefreshCw size={14} className={syncing ? "spin" : ""} />
@@ -711,33 +743,6 @@ export default function PaperAssistant() {
         </header>
 
         <section className="workspace">
-          <div className="page-heading">
-            <div>
-              <p className="eyebrow">{title.eyebrow}</p>
-              <h1>{title.title}</h1>
-              <p>{title.description}</p>
-            </div>
-            {view !== "home" && view !== "discover" && view !== "settings" ? (
-              <button
-                className="primary-action"
-                onClick={() => {
-                  if (view === "library") {
-                    setModal({ kind: "add-paper" });
-                  } else if (view === "authors") {
-                    setModal({ kind: "entity", entity: "author" });
-                  } else if (view === "venues") {
-                    setModal({ kind: "entity", entity: "venue" });
-                  } else {
-                    setModal({ kind: "entity", entity: "collection" });
-                  }
-                }}
-              >
-                <Plus size={17} />
-                {view === "library" ? "Add paper" : `New ${view.slice(0, -1)}`}
-              </button>
-            ) : null}
-          </div>
-
           {loading ? (
             <LoadingWorkspace />
           ) : view === "home" ? (
@@ -753,6 +758,8 @@ export default function PaperAssistant() {
               papers={snapshot.papers}
               query={query}
               setQuery={setQuery}
+              filters={libraryFilters}
+              setFilters={setLibraryFilters}
               selected={selectedPapers}
               setSelected={setSelectedPapers}
               openPaper={setSelectedPaper}
@@ -769,8 +776,10 @@ export default function PaperAssistant() {
               onEdit={(author) => setModal({ kind: "entity", entity: "author", record: author })}
               onBulk={() => setModal({ kind: "bulk", entity: "author", ids: selectedAuthors })}
               onDelete={() => void deleteRecords("author", selectedAuthors)}
+              onCreate={() => setModal({ kind: "entity", entity: "author" })}
               onOpenPapers={(author) => {
-                setQuery(author.displayName);
+                setQuery("");
+                setLibraryFilters([createLibraryFilter("author", author.id, author.displayName)]);
                 setView("library");
               }}
             />
@@ -784,8 +793,10 @@ export default function PaperAssistant() {
               onEdit={(venue) => setModal({ kind: "entity", entity: "venue", record: venue })}
               onBulk={() => setModal({ kind: "bulk", entity: "venue", ids: selectedVenues })}
               onDelete={() => void deleteRecords("venue", selectedVenues)}
+              onCreate={() => setModal({ kind: "entity", entity: "venue" })}
               onOpenPapers={(venue) => {
-                setQuery(venue.acronym || venue.name);
+                setQuery("");
+                setLibraryFilters([createLibraryFilter("venue", venue.id, venue.acronym || venue.name)]);
                 setView("library");
               }}
             />
@@ -797,8 +808,10 @@ export default function PaperAssistant() {
               setQuery={setQuery}
               onEdit={(collection) => setModal({ kind: "entity", entity: "collection", record: collection })}
               onDelete={(collection) => void deleteRecords("collection", [collection.id])}
+              onCreate={() => setModal({ kind: "entity", entity: "collection" })}
               onOpen={(collection) => {
-                setQuery(collection.name);
+                setQuery("");
+                setLibraryFilters([createLibraryFilter("collection", collection.id, collection.name)]);
                 setView("library");
               }}
             />
@@ -822,20 +835,23 @@ export default function PaperAssistant() {
           onChat={() => setChatPaper(selectedPaper)}
           onRead={() => setReaderPaper(selectedPaper)}
           onEdit={() => setModal({ kind: "edit-paper", paper: selectedPaper })}
-          onSummarize={summarizePaper}
           onDelete={() => void deleteRecords("paper", [selectedPaper.id])}
           onOpenAuthor={(authorName) => {
-            setQuery(authorName);
+            const author = selectedPaper.authors.find((candidate) => candidate.displayName === authorName);
+            setQuery("");
+            setLibraryFilters(author ? [createLibraryFilter("author", author.id, author.displayName)] : []);
             setView("library");
             setSelectedPaper(null);
           }}
           onOpenVenue={() => {
-            setQuery(venueLine(selectedPaper));
+            setQuery("");
+            setLibraryFilters(selectedPaper.venueId ? [createLibraryFilter("venue", selectedPaper.venueId, venueLine(selectedPaper))] : []);
             setView("library");
             setSelectedPaper(null);
           }}
-          onOpenCollection={(collectionName) => {
-            setQuery(collectionName);
+          onOpenCollection={(collectionId, collectionName) => {
+            setQuery("");
+            setLibraryFilters([createLibraryFilter("collection", collectionId, collectionName)]);
             setView("library");
             setSelectedPaper(null);
           }}
@@ -873,6 +889,7 @@ export default function PaperAssistant() {
         <EntityModal
           entity={modal.entity}
           record={modal.record}
+          papers={snapshot.papers}
           onClose={() => setModal(null)}
           mutateLibrary={mutateLibrary}
         />
@@ -935,7 +952,7 @@ function Dashboard({
   setView: (view: ViewId) => void;
   openChat: (paper: Paper | null) => void;
 }) {
-  const recentPapers = snapshot.papers.slice(0, 4);
+  const recentPapers = snapshot.papers.slice(0, 8);
   const readingProgress = snapshot.stats.papers
     ? Math.round(((snapshot.stats.papers - snapshot.stats.unread) / snapshot.stats.papers) * 100)
     : 0;
@@ -1043,6 +1060,8 @@ function LibraryView({
   papers,
   query,
   setQuery,
+  filters,
+  setFilters,
   selected,
   setSelected,
   openPaper,
@@ -1052,6 +1071,8 @@ function LibraryView({
   papers: Paper[];
   query: string;
   setQuery: (value: string) => void;
+  filters: LibraryFilterClause[];
+  setFilters: (filters: LibraryFilterClause[]) => void;
   selected: string[];
   setSelected: (value: string[]) => void;
   openPaper: (paper: Paper) => void;
@@ -1059,13 +1080,18 @@ function LibraryView({
   updatePaper: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
 }) {
   const [status, setStatus] = useState("all");
+  const [filterKind, setFilterKind] = useState<LibraryFilterKind>("collection");
+  const [filterValue, setFilterValue] = useState("");
+  const [filterBuilderOpen, setFilterBuilderOpen] = useState(true);
   const [sort, setSort] = useState<{ key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" }>({ key: "recent", direction: "desc" });
   const [columnWidths, setColumnWidths] = useState<Record<PaperColumnKey, number>>(defaultPaperColumnWidths);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       try {
-        const saved = JSON.parse(window.localStorage.getItem("pa-paper-grid-widths-v2") ?? "null") as Partial<Record<PaperColumnKey, number>> | null;
+      const saved = JSON.parse(window.localStorage.getItem("pa-paper-grid-widths-v3") ?? "null") as Partial<Record<PaperColumnKey, number>> | null;
         if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value))) {
           setColumnWidths((current) => ({ ...current, ...saved }));
         }
@@ -1078,11 +1104,12 @@ function LibraryView({
   const filtered = useMemo(() => {
     const result = papers.filter((paper) => {
       const statusMatch = status === "all" || paper.readingStatus === status || (status === "favorite" && paper.favorite);
+      const filterMatch = matchesLibraryFilters(paper, filters);
       const queryMatch = matchesSearch(
         [paper.title, paper.abstract, paper.year, paper.venueName, paper.venueAcronym, ...paper.authors.map((author) => author.displayName), ...paper.collections.map((collection) => collection.name)],
         query,
       );
-      return statusMatch && queryMatch;
+      return statusMatch && filterMatch && queryMatch;
     });
     return result.sort((left, right) => {
       let comparison = 0;
@@ -1100,7 +1127,49 @@ function LibraryView({
       }
       return sort.direction === "asc" ? comparison : -comparison;
     });
-  }, [papers, query, sort, status]);
+  }, [filters, papers, query, sort, status]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedPapers = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const filterOptions = useMemo<Record<LibraryFilterKind, Array<{ id: string; label: string }>>>(() => {
+    function collectionOptions() {
+      const options = new Map<string, string>();
+      papers.forEach((paper) => paper.collections.forEach((collection) => options.set(collection.id, collection.name)));
+      return Array.from(options, ([id, label]) => ({ id, label })).sort((left, right) => left.label.localeCompare(right.label));
+    }
+    function authorOptions() {
+      const options = new Map<string, string>();
+      papers.forEach((paper) => paper.authors.forEach((author) => options.set(author.id, author.displayName)));
+      return Array.from(options, ([id, label]) => ({ id, label })).sort((left, right) => left.label.localeCompare(right.label));
+    }
+    function yearOptions() {
+      return Array.from(new Set(papers.map((paper) => paper.year).filter((year): year is number => typeof year === "number")))
+        .sort((left, right) => right - left)
+        .map((year) => ({ id: String(year), label: String(year) }));
+    }
+    function venueOptions() {
+      const options = new Map<string, string>();
+      papers.forEach((paper) => {
+        if (paper.venueId) {
+          options.set(paper.venueId, venueLine(paper));
+        }
+      });
+      return Array.from(options, ([id, label]) => ({ id, label })).sort((left, right) => left.label.localeCompare(right.label));
+    }
+    return {
+      collection: collectionOptions(),
+      author: authorOptions(),
+      venue: venueOptions(),
+      year: yearOptions(),
+    };
+  }, [papers]);
+  const effectivePaperColumnWidths = {
+    title: Math.max(38, columnWidths.title),
+    venue: Math.min(28, Math.max(12, columnWidths.venue)),
+    year: Math.min(6, Math.max(4.5, columnWidths.year)),
+    status: Math.min(8, Math.max(6, columnWidths.status)),
+  };
+  const paperColumnTotal = Object.values(effectivePaperColumnWidths).reduce((total, width) => total + width, 0);
 
   function toggleSort(key: PaperColumnKey) {
     setSort((current) => current.key === key
@@ -1126,7 +1195,7 @@ function LibraryView({
       const percentage = Number(((width / tableWidth) * 100).toFixed(2));
       setColumnWidths((current) => {
         const next = { ...current, [key]: percentage };
-        window.localStorage.setItem("pa-paper-grid-widths-v2", JSON.stringify(next));
+        window.localStorage.setItem("pa-paper-grid-widths-v3", JSON.stringify(next));
         return next;
       });
     };
@@ -1145,13 +1214,13 @@ function LibraryView({
     event.stopPropagation();
     setColumnWidths((current) => {
       const next = { ...current, [key]: defaultPaperColumnWidths[key] };
-      window.localStorage.setItem("pa-paper-grid-widths-v2", JSON.stringify(next));
+      window.localStorage.setItem("pa-paper-grid-widths-v3", JSON.stringify(next));
       return next;
     });
   }
 
   function toggleAll() {
-    const visibleIds = filtered.map((paper) => paper.id);
+    const visibleIds = pagedPapers.map((paper) => paper.id);
     if (visibleIds.every((id) => selected.includes(id))) {
       setSelected(selected.filter((id) => !visibleIds.includes(id)));
     } else {
@@ -1159,17 +1228,34 @@ function LibraryView({
     }
   }
 
+  function updateFilter(key: string, update: Partial<LibraryFilterClause>) {
+    setFilters(filters.map((clause) => clause.key === key ? { ...clause, ...update } : clause));
+    setPage(1);
+  }
+
+  function changeFilterKind(clause: LibraryFilterClause, kind: LibraryFilterKind) {
+    const option = filterOptions[kind][0];
+    updateFilter(clause.key, { kind, valueId: option?.id ?? "", label: option?.label ?? "" });
+  }
+
+  function addFilter() {
+    const option = filterOptions[filterKind].find((candidate) => candidate.id === filterValue);
+    if (!option) {
+      return;
+    }
+    setFilters([...filters, createLibraryFilter(filterKind, option.id, option.label)]);
+    setFilterValue("");
+    setPage(1);
+  }
+
   return (
     <div className="data-view">
       <div className="view-toolbar library-toolbar">
-        <label className="inline-search">
-          <Search size={16} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search titles, authors, venues…" />
-          {query ? <button onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button> : null}
-        </label>
+        <PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search titles, authors, venues…" />
+        <button type="button" className={`filter-builder-toggle ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} title="Build library filters"><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
         <div className="filter-tabs">
           {["all", "inbox", "reading", "complete", "favorite"].map((item) => (
-            <button key={item} className={status === item ? "is-active" : ""} onClick={() => setStatus(item)}>
+            <button key={item} className={status === item ? "is-active" : ""} onClick={() => { setStatus(item); setPage(1); }}>
               {item === "all" ? "All" : item === "favorite" ? "Starred" : statusLabel(item)}
             </button>
           ))}
@@ -1177,27 +1263,62 @@ function LibraryView({
         {selected.length ? (
           <div className="library-selection-actions">
             <span><CheckCircle2 size={15} /> {selected.length} selected</span>
-            <button onClick={() => setSelected([])}>Clear</button>
-            <button className="danger-text" onClick={deleteSelected}><Trash2 size={14} /> Delete</button>
+            <button className="selection-icon-button" onClick={() => setSelected([])} aria-label="Clear selection" title="Clear selection"><X size={15} /></button>
+            <button className="selection-icon-button is-danger" onClick={deleteSelected} aria-label="Delete selected papers" title="Delete selected papers"><Trash2 size={15} /></button>
           </div>
         ) : null}
       </div>
 
+      {filterBuilderOpen ? (
+        <section className="filter-builder-panel" aria-label="Library filter expression">
+          <header><span><ListFilter size={15} /><strong>Filter expression</strong><small>Combine exact library records with AND, OR, NOT, and parentheses.</small></span>{filters.length ? <button type="button" onClick={() => { setFilters([]); setPage(1); }}><X size={14} /> Clear all</button> : null}</header>
+          <div className="filter-clause-list">
+            {filters.map((clause, index) => (
+              <div className="filter-clause-row" key={clause.key}>
+                {index ? <select aria-label={`Relationship before ${clause.label}`} value={clause.join} onChange={(event) => updateFilter(clause.key, { join: event.target.value as LibraryFilterJoin })}><option value="AND">AND</option><option value="OR">OR</option></select> : <span className="filter-start">WHERE</span>}
+                <button type="button" className={clause.openGroups ? "is-active" : ""} onClick={() => updateFilter(clause.key, { openGroups: (clause.openGroups + 1) % 3 })} aria-label="Add opening parenthesis">{clause.openGroups ? "(".repeat(clause.openGroups) : "("}</button>
+                <button type="button" className={clause.negated ? "is-active" : ""} onClick={() => updateFilter(clause.key, { negated: !clause.negated })} aria-pressed={clause.negated}>NOT</button>
+                <select aria-label={`Field for ${clause.label}`} value={clause.kind} onChange={(event) => changeFilterKind(clause, event.target.value as LibraryFilterKind)}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
+                <span>=</span>
+                <select aria-label={`Value for ${clause.kind}`} value={clause.valueId} onChange={(event) => { const option = filterOptions[clause.kind].find((candidate) => candidate.id === event.target.value); if (option) updateFilter(clause.key, { valueId: option.id, label: option.label }); }}>{filterOptions[clause.kind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
+                <button type="button" className={clause.closeGroups ? "is-active" : ""} onClick={() => updateFilter(clause.key, { closeGroups: (clause.closeGroups + 1) % 3 })} aria-label="Add closing parenthesis">{clause.closeGroups ? ")".repeat(clause.closeGroups) : ")"}</button>
+                <button type="button" className="is-danger" onClick={() => { setFilters(filters.filter((candidate) => candidate.key !== clause.key)); setPage(1); }} aria-label={`Remove ${clause.kind} filter`}><Trash2 size={14} /></button>
+              </div>
+            ))}
+            <div className="filter-clause-row filter-clause-add">
+              <span className="filter-start">ADD</span>
+              <select aria-label="New filter field" value={filterKind} onChange={(event) => { setFilterKind(event.target.value as LibraryFilterKind); setFilterValue(""); }}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
+              <span>=</span>
+              <select aria-label={`New ${filterKind} filter value`} value={filterValue} onChange={(event) => setFilterValue(event.target.value)}><option value="">Choose…</option>{filterOptions[filterKind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
+              <button type="button" className="filter-add-button" onClick={addFilter} disabled={!filterValue} aria-label="Add filter"><Plus size={14} /> Add</button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {filtered.length ? (
         <div className="paper-table-wrap paper-grid-shell">
+          <TablePagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={filtered.length}
+            itemLabel="papers"
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
           <table className="paper-table research-grid">
             <colgroup>
               <col className="paper-column-check" />
-              <col style={{ width: `${columnWidths.title}%` }} />
-              <col style={{ width: `${columnWidths.venue}%` }} />
-              <col style={{ width: `${columnWidths.year}%` }} />
-              <col style={{ width: `${columnWidths.status}%` }} />
+              <col style={{ width: `${(effectivePaperColumnWidths.title / paperColumnTotal) * 94}%` }} />
+              <col style={{ width: `${(effectivePaperColumnWidths.venue / paperColumnTotal) * 94}%` }} />
+              <col style={{ width: `${(effectivePaperColumnWidths.year / paperColumnTotal) * 94}%` }} />
+              <col style={{ width: `${(effectivePaperColumnWidths.status / paperColumnTotal) * 94}%` }} />
             </colgroup>
             <thead>
               <tr>
                 <th className="check-cell" scope="col">
                   <button onClick={toggleAll} aria-label="Select all visible papers">
-                    <SelectionBox checked={Boolean(filtered.length) && filtered.every((paper) => selected.includes(paper.id))} />
+                    <SelectionBox checked={Boolean(pagedPapers.length) && pagedPapers.every((paper) => selected.includes(paper.id))} />
                   </button>
                 </th>
                 <SortablePaperHeader label="Paper" sortKey="title" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
@@ -1207,7 +1328,7 @@ function LibraryView({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((paper) => (
+              {pagedPapers.map((paper) => (
                 <tr key={paper.id} className={selected.includes(paper.id) ? "is-selected" : ""} onClick={() => openPaper(paper)}>
                   <td className="check-cell">
                     <button
@@ -1242,7 +1363,7 @@ function LibraryView({
                           <small>{authorLine(paper)}</small>
                         </span>
                         <span className="paper-collection-line" aria-label="Collections">
-                          {paper.collections.slice(0, 3).map((collection) => <i key={collection.id} className={`chip-${collection.color}`}>{collection.name}</i>)}
+                          {paper.collections.slice(0, 3).map((collection) => <i key={collection.id} className="collection-chip">{collection.name}</i>)}
                         </span>
                       </span>
                     </div>
@@ -1254,7 +1375,14 @@ function LibraryView({
               ))}
             </tbody>
           </table>
-          <div className="table-footer">Showing {filtered.length} of {papers.length} papers</div>
+          <TablePagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={filtered.length}
+            itemLabel="papers"
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
         </div>
       ) : (
         <EmptyState icon={<Search size={24} />} title="No papers found" detail="Try another search or clear the current filters." />
@@ -1302,6 +1430,7 @@ function AuthorsView({
   onEdit,
   onBulk,
   onDelete,
+  onCreate,
   onOpenPapers,
 }: {
   authors: Author[];
@@ -1312,31 +1441,37 @@ function AuthorsView({
   onEdit: (author: Author) => void;
   onBulk: () => void;
   onDelete: () => void;
+  onCreate: () => void;
   onOpenPapers: (author: Author) => void;
 }) {
-  const [sort, setSort] = useState<{ key: "author" | "affiliation" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "author", direction: "asc" });
+  const [sort, setSort] = useState<{ key: "author" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "author", direction: "asc" });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<AuthorColumnKey>(
-    "pa-author-grid-widths-v1",
+    "pa-author-grid-widths-v3",
     defaultAuthorColumnWidths,
-    { author: 220, affiliation: 160, papers: 80, latest: 80 },
+    { author: 260, papers: 80, latest: 80 },
   );
   const filtered = useMemo(() => authors
-    .filter((author) => matchesSearch([author.displayName, author.affiliation], query))
+    .filter((author) => matchesSearch([author.displayName, author.givenName, author.familyName, author.notes], query))
     .sort((left, right) => {
       let comparison = 0;
       if (sort.key === "author") comparison = left.displayName.localeCompare(right.displayName);
-      if (sort.key === "affiliation") comparison = (left.affiliation ?? "").localeCompare(right.affiliation ?? "");
       if (sort.key === "papers") comparison = left.paperCount - right.paperCount;
       if (sort.key === "latest") comparison = (left.latestYear ?? 0) - (right.latestYear ?? 0);
       return sort.direction === "asc" ? comparison : -comparison;
     }), [authors, query, sort]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedAuthors = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const authorColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
   function toggleSort(key: typeof sort.key) {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
   }
   function toggleAll() {
-    const visibleIds = filtered.map((author) => author.id);
+    const visibleIds = pagedAuthors.map((author) => author.id);
     if (visibleIds.every((id) => selected.includes(id))) {
       setSelected(selected.filter((id) => !visibleIds.includes(id)));
       return;
@@ -1345,33 +1480,39 @@ function AuthorsView({
   }
   return (
     <div className="data-view">
-      <EntityToolbar query={query} setQuery={setQuery} placeholder="Search names and affiliations…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
+      <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search author names…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add author" />
       <div className="data-grid-shell author-table-wrap">
+        <TablePagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={filtered.length}
+          itemLabel="authors"
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
         <table className="paper-table research-grid entity-research-grid author-grid">
           <colgroup>
             <col className="paper-column-check" />
-            <col style={{ width: `${widths.author}%` }} />
-            <col style={{ width: `${widths.affiliation}%` }} />
-            <col style={{ width: `${widths.papers}%` }} />
-            <col style={{ width: `${widths.latest}%` }} />
+            <col style={{ width: `${(widths.author / authorColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.papers / authorColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.latest / authorColumnTotal) * 90}%` }} />
             <col className="entity-column-actions" />
           </colgroup>
           <thead>
             <tr>
               <th className="check-cell" scope="col">
                 <button onClick={toggleAll} aria-label="Select all visible authors">
-                  <SelectionBox checked={Boolean(filtered.length) && filtered.every((author) => selected.includes(author.id))} />
+                  <SelectionBox checked={Boolean(pagedAuthors.length) && pagedAuthors.every((author) => selected.includes(author.id))} />
                 </button>
               </th>
               <SortableEntityHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Affiliation" columnKey="affiliation" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
               <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
               <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
               <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((author, index) => (
+            {pagedAuthors.map((author, index) => (
               <tr className={selected.includes(author.id) ? "is-selected" : ""} key={author.id}>
                 <td className="check-cell">
                   <button onClick={() => {
@@ -1388,7 +1529,6 @@ function AuthorsView({
                     <span><strong>{author.displayName}</strong></span>
                   </button>
                 </td>
-                <td className="entity-meta-cell">{author.affiliation || "—"}</td>
                 <td className="entity-number-cell">{author.paperCount}</td>
                 <td className="entity-number-cell">{author.latestYear ?? "—"}</td>
                 <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(author)} aria-label={`Edit ${author.displayName}`} title="Edit author"><Pencil size={15} /></button></td>
@@ -1396,9 +1536,16 @@ function AuthorsView({
             ))}
           </tbody>
         </table>
-        <div className="table-footer">Showing {filtered.length} of {authors.length} authors</div>
+        <TablePagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={filtered.length}
+          itemLabel="authors"
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
       </div>
-      {!filtered.length ? <EmptyState icon={<UsersRound size={24} />} title="No authors found" detail="Try another name or affiliation." /> : null}
+      {!filtered.length ? <EmptyState icon={<UsersRound size={24} />} title="No authors found" detail="Try another author name." /> : null}
     </div>
   );
 }
@@ -1412,6 +1559,7 @@ function VenuesView({
   onEdit,
   onBulk,
   onDelete,
+  onCreate,
   onOpenPapers,
 }: {
   venues: Venue[];
@@ -1422,11 +1570,14 @@ function VenuesView({
   onEdit: (venue: Venue) => void;
   onBulk: () => void;
   onDelete: () => void;
+  onCreate: () => void;
   onOpenPapers: (venue: Venue) => void;
 }) {
   const [sort, setSort] = useState<{ key: "venue" | "type" | "publisher" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "venue", direction: "asc" });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<VenueColumnKey>(
-    "pa-venue-grid-widths-v1",
+    "pa-venue-grid-widths-v2",
     defaultVenueColumnWidths,
     { venue: 220, type: 100, publisher: 150, papers: 80, latest: 80 },
   );
@@ -1441,13 +1592,17 @@ function VenuesView({
       if (sort.key === "latest") comparison = (left.latestYear ?? 0) - (right.latestYear ?? 0);
       return sort.direction === "asc" ? comparison : -comparison;
     }), [query, sort, venues]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedVenues = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const venueColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
   function toggleSort(key: typeof sort.key) {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
   }
   function toggleAll() {
-    const visibleIds = filtered.map((venue) => venue.id);
+    const visibleIds = pagedVenues.map((venue) => venue.id);
     if (visibleIds.every((id) => selected.includes(id))) {
       setSelected(selected.filter((id) => !visibleIds.includes(id)));
       return;
@@ -1456,23 +1611,31 @@ function VenuesView({
   }
   return (
     <div className="data-view">
-      <EntityToolbar query={query} setQuery={setQuery} placeholder="Search venue names, types, and publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} />
+      <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search venue names, types, and publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add venue" />
       <div className="data-grid-shell venue-table-wrap">
+        <TablePagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={filtered.length}
+          itemLabel="venues"
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
         <table className="paper-table research-grid entity-research-grid venue-grid">
           <colgroup>
             <col className="paper-column-check" />
-            <col style={{ width: `${widths.venue}%` }} />
-            <col style={{ width: `${widths.type}%` }} />
-            <col style={{ width: `${widths.publisher}%` }} />
-            <col style={{ width: `${widths.papers}%` }} />
-            <col style={{ width: `${widths.latest}%` }} />
+            <col style={{ width: `${(widths.venue / venueColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.type / venueColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.publisher / venueColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.papers / venueColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.latest / venueColumnTotal) * 90}%` }} />
             <col className="entity-column-actions" />
           </colgroup>
           <thead>
             <tr>
               <th className="check-cell" scope="col">
                 <button onClick={toggleAll} aria-label="Select all visible venues">
-                  <SelectionBox checked={Boolean(filtered.length) && filtered.every((venue) => selected.includes(venue.id))} />
+                  <SelectionBox checked={Boolean(pagedVenues.length) && pagedVenues.every((venue) => selected.includes(venue.id))} />
                 </button>
               </th>
               <SortableEntityHeader label="Venue" columnKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
@@ -1484,7 +1647,7 @@ function VenuesView({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((venue) => (
+            {pagedVenues.map((venue) => (
               <tr className={selected.includes(venue.id) ? "is-selected" : ""} key={venue.id}>
                 <td className="check-cell">
                   <button onClick={() => {
@@ -1510,7 +1673,14 @@ function VenuesView({
             ))}
           </tbody>
         </table>
-        <div className="table-footer">Showing {filtered.length} of {venues.length} venues</div>
+        <TablePagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={filtered.length}
+          itemLabel="venues"
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
       </div>
       {!filtered.length ? <EmptyState icon={<Building2 size={24} />} title="No venues found" detail="Try a different conference, journal, or publisher." /> : null}
     </div>
@@ -1524,6 +1694,7 @@ function CollectionsView({
   setQuery,
   onEdit,
   onDelete,
+  onCreate,
   onOpen,
 }: {
   collections: Collection[];
@@ -1532,33 +1703,33 @@ function CollectionsView({
   setQuery: (value: string) => void;
   onEdit: (collection: Collection) => void;
   onDelete: (collection: Collection) => void;
+  onCreate: () => void;
   onOpen: (collection: Collection) => void;
 }) {
-  const filtered = collections.filter((collection) => matchesSearch([collection.name, collection.description], query));
+  const filtered = collections.filter((collection) => matchesSearch([collection.name], query));
   return (
     <div className="data-view">
-      <div className="view-toolbar compact-toolbar"><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search collections…" /></label></div>
+      <div className="view-toolbar compact-toolbar"><PageSearch value={query} onChange={setQuery} placeholder="Search collections…" /><ToolbarCreateButton label="Add collection" onClick={onCreate} /></div>
       <div className="collection-grid">
         {filtered.map((collection) => {
           const related = papers.filter((paper) => paper.collections.some((paperCollection) => paperCollection.id === collection.id));
           return (
             <article className="collection-card" key={collection.id}>
-              <div className="collection-card-top">
-                <span className="collection-icon"><FolderOpen size={18} /><i className={`collection-swatch swatch-${collection.color}`} /></span>
+              <header className="collection-card-top">
+                <button type="button" className="collection-heading" onClick={() => onOpen(collection)}>
+                  <span className="collection-icon"><FolderOpen size={18} /></span>
+                  <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
+                </button>
                 <div className="collection-actions">
                   <button type="button" className="row-icon-button" onClick={() => onEdit(collection)} aria-label={`Edit ${collection.name}`} title="Edit collection"><Pencil size={15} /></button>
                   <button type="button" className="row-icon-button is-danger" onClick={() => onDelete(collection)} aria-label={`Delete ${collection.name}`} title="Delete collection"><Trash2 size={15} /></button>
                 </div>
-              </div>
-              <button className="collection-main" onClick={() => onOpen(collection)}>
-                <h3>{collection.name}</h3>
-                {collection.description ? <p>{collection.description}</p> : null}
-                <span>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</span>
+              </header>
+              <button type="button" className="collection-papers" onClick={() => onOpen(collection)} aria-label={`Open papers in ${collection.name}`}>
+                {related.slice(0, 5).map((paper) => <span key={paper.id}><FileText size={14} /><b>{paper.title}</b></span>)}
+                {related.length > 5 ? <small>+{related.length - 5} more papers</small> : null}
+                {!related.length ? <span className="row-muted"><FileText size={14} /><b>Add papers to this collection</b></span> : null}
               </button>
-              <div className="collection-papers">
-                {related.slice(0, 2).map((paper) => <span key={paper.id}><FileText size={14} />{paper.title}</span>)}
-                {!related.length ? <span className="row-muted">No papers yet</span> : null}
-              </div>
             </article>
           );
         })}
@@ -1607,7 +1778,7 @@ function SortableEntityHeader<Key extends string>({
   );
 }
 
-function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk, onDelete }: {
+function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk, onDelete, onCreate, createLabel }: {
   query: string;
   setQuery: (value: string) => void;
   placeholder: string;
@@ -1615,18 +1786,91 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
   onClear: () => void;
   onBulk: () => void;
   onDelete: () => void;
+  onCreate: () => void;
+  createLabel: string;
 }) {
   return (
     <div className="view-toolbar entity-toolbar">
-      <label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} /></label>
+      <PageSearch value={query} onChange={setQuery} placeholder={placeholder} />
       {selected ? (
         <div className="selection-actions">
           <span>{selected} selected</span>
-          <button onClick={onBulk}><Pencil size={14} /> Bulk edit</button>
-          <button className="danger-text" onClick={onDelete}><Trash2 size={14} /> Delete</button>
-          <button className="icon-button" onClick={onClear} aria-label="Clear selection"><X size={15} /></button>
+          <button className="selection-icon-button" onClick={onBulk} aria-label="Bulk edit selected records" title="Bulk edit"><Pencil size={15} /></button>
+          <button className="selection-icon-button is-danger" onClick={onDelete} aria-label="Delete selected records" title="Delete selected"><Trash2 size={15} /></button>
+          <button className="selection-icon-button" onClick={onClear} aria-label="Clear selection" title="Clear selection"><X size={15} /></button>
         </div>
       ) : null}
+      <ToolbarCreateButton label={createLabel} onClick={onCreate} />
+    </div>
+  );
+}
+
+function ToolbarCreateButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button type="button" className="toolbar-create-button" onClick={onClick} aria-label={label} title={label}><Plus size={17} /></button>;
+}
+
+function PageSearch({ value, onChange, placeholder }: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="inline-search page-search">
+      <Search size={18} aria-hidden="true" />
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label={placeholder} />
+      {value ? <button type="button" onClick={() => onChange("")} aria-label="Clear search" title="Clear search"><X size={14} /></button> : null}
+    </label>
+  );
+}
+
+function TablePagination({ page, pageSize, total, itemLabel, onPageChange, onPageSizeChange }: {
+  page: number;
+  pageSize: number;
+  total: number;
+  itemLabel: string;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const start = total ? (page - 1) * pageSize + 1 : 0;
+  const end = Math.min(page * pageSize, total);
+  const nearbyPages = Array.from(new Set([1, 2, page - 1, page, page + 1, pageCount - 1, pageCount]))
+    .filter((candidate) => candidate >= 1 && candidate <= pageCount)
+    .sort((left, right) => left - right);
+  const pageItems: Array<number | string> = [];
+  nearbyPages.forEach((candidate, index) => {
+    const previous = nearbyPages[index - 1];
+    if (previous && candidate - previous > 1) {
+      pageItems.push(`ellipsis-${previous}`);
+    }
+    pageItems.push(candidate);
+  });
+  function jump(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const target = Math.min(pageCount, Math.max(1, Number(form.get("page")) || 1));
+    onPageChange(target);
+  }
+  return (
+    <div className="table-pagination">
+      <span>Showing {start}–{end} of {total} {itemLabel}</span>
+      <div className="table-pagination-controls">
+        <label>Rows <select aria-label={`Rows per page for ${itemLabel}`} value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}><option value="10">10</option><option value="25">25</option><option value="50">50</option></select></label>
+        <nav className="pagination-pages" aria-label={`${itemLabel} pages`}>
+          <button type="button" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label="First page" title="First page"><ChevronsLeft size={15} /></button>
+          <button type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1} aria-label="Previous page" title="Previous page"><ChevronLeft size={15} /></button>
+          {pageItems.map((item) => typeof item === "number"
+            ? <button type="button" className={item === page ? "is-current" : ""} aria-current={item === page ? "page" : undefined} onClick={() => onPageChange(item)} key={item}>{item}</button>
+            : <span className="pagination-ellipsis" key={item}>…</span>)}
+          <button type="button" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} aria-label="Next page" title="Next page"><ChevronRight size={15} /></button>
+          <button type="button" onClick={() => onPageChange(pageCount)} disabled={page >= pageCount} aria-label="Last page" title="Last page"><ChevronsRight size={15} /></button>
+        </nav>
+        <form className="pagination-jump" onSubmit={jump}>
+          <input key={page} name="page" type="number" min="1" max={pageCount} defaultValue={page} aria-label={`Go to ${itemLabel} page`} />
+          <span>of {pageCount} pages</span>
+          <button type="submit">Go</button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -1682,11 +1926,6 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
   return (
     <div className="discover-view">
       <form className="discover-search" onSubmit={search}>
-        <div className="discover-search-box">
-          <Search size={21} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a topic, title, DOI, or researcher" autoFocus />
-          <button type="submit" disabled={loading || !query.trim()}>{loading ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />} Search</button>
-        </div>
         <div className="provider-switch">
           <span>Search in</span>
           {discoveryProviders.map((item) => (
@@ -1700,7 +1939,11 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
             </button>
           ))}
         </div>
-        <p className="provider-detail">{discoveryProviders.find((item) => item.id === provider)?.detail}</p>
+        <div className="discover-search-box">
+          <Search size={21} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a topic, title, DOI, or researcher" autoFocus />
+          <button type="submit" disabled={loading || !query.trim()}>{loading ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />} Search</button>
+        </div>
       </form>
 
       {!results.length && !loading ? (
@@ -1750,34 +1993,24 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
   );
 }
 
-function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSummarize, onDelete, onOpenAuthor, onOpenVenue, onOpenCollection }: {
+function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onDelete, onOpenAuthor, onOpenVenue, onOpenCollection }: {
   paper: Paper;
   onClose: () => void;
   onUpdate: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
   onChat: () => void;
   onRead: () => void;
   onEdit: () => void;
-  onSummarize: (paper: Paper) => Promise<boolean>;
   onDelete: () => void;
   onOpenAuthor: (authorName: string) => void;
   onOpenVenue: () => void;
-  onOpenCollection: (collectionName: string) => void;
+  onOpenCollection: (collectionId: string, collectionName: string) => void;
 }) {
-  const [summarizing, setSummarizing] = useState(false);
-
-  async function generateSummary() {
-    setSummarizing(true);
-    await onSummarize(paper);
-    setSummarizing(false);
-  }
-
   const hasViewer = Boolean(paper.pdfUrl || paper.htmlUrl);
   return (
     <div className="drawer-layer">
       <button className="drawer-scrim" onClick={onClose} aria-label="Close paper details" />
       <aside className="detail-drawer" aria-label="Paper details">
-        <div className="drawer-header">
-          <span className="drawer-label"><FileText size={15} /> Paper details</span>
+        <div className="drawer-header is-minimal">
           <button className="icon-button" onClick={onClose} aria-label="Close"><PanelRightClose size={19} /></button>
         </div>
         <div className="drawer-content">
@@ -1809,40 +2042,23 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSumma
             </div>
             <div>
               <p className="eyebrow">Collections</p>
-              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <button type="button" key={collection.id} className={`chip-${collection.color}`} onClick={() => onOpenCollection(collection.name)}>{collection.name}</button>) : <span className="row-muted">No collections yet</span>}</div>
+              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <button type="button" key={collection.id} className="collection-chip" onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</button>) : <span className="row-muted">No collections yet</span>}</div>
             </div>
           </div>
           <div className="drawer-cta-row">
-            {hasViewer ? <button className="primary-action" onClick={onRead}><BookOpen size={16} /> Read inside PA</button> : null}
+            {hasViewer ? <button className="primary-action" onClick={onRead}><BookOpen size={16} /> Read</button> : null}
+            {paper.url ? <a className="secondary-action" href={paper.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Source</a> : null}
             <button className="secondary-action" onClick={onChat}><Sparkles size={16} /> Ask PA</button>
             <button className="secondary-action" onClick={onEdit}><Pencil size={15} /> Edit</button>
           </div>
-          {paper.url ? <a className="source-link" href={paper.url} target="_blank" rel="noreferrer">Open source page <ExternalLink size={12} /></a> : null}
           <div className="detail-section summary-section">
-            <div className="detail-section-heading">
-              <p className="eyebrow">PA summary</p>
-              <button onClick={() => void generateSummary()} disabled={summarizing}>
-                {summarizing ? <LoaderCircle size={13} className="spin" /> : <WandSparkles size={13} />}
-                {paper.summary ? "Regenerate" : "Generate summary"}
-              </button>
-            </div>
+            <p className="eyebrow">PA summary</p>
             {paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet. PA can ground one in the paper’s source and metadata.</p>}
           </div>
           <div className="detail-section">
             <p className="eyebrow">Abstract</p>
-            <MarkdownContent content={paper.abstract || "No abstract is recorded for this paper."} />
+            <MarkdownContent content={paper.abstract || "No abstract is recorded for this paper."} className="abstract-copy" />
           </div>
-          {paper.volume || paper.issue || paper.pages || paper.category ? (
-            <div className="detail-section">
-              <p className="eyebrow">Publication details</p>
-              <div className="publication-grid">
-                {paper.volume ? <span><small>Volume</small><strong>{paper.volume}</strong></span> : null}
-                {paper.issue ? <span><small>Issue</small><strong>{paper.issue}</strong></span> : null}
-                {paper.pages ? <span><small>Pages</small><strong>{paper.pages}</strong></span> : null}
-                {paper.category ? <span><small>Category</small><strong>{paper.category}</strong></span> : null}
-              </div>
-            </div>
-          ) : null}
           <div className="detail-section">
             <p className="eyebrow">Research notes</p>
             <textarea
@@ -1855,16 +2071,21 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onSumma
               }}
             />
           </div>
-          <div className="detail-section">
-            <p className="eyebrow">Identifiers</p>
-            <div className="identifier-list">
-              {paper.doi ? <span><b>DOI</b>{paper.doi}</span> : null}
-              {paper.preprintId || paper.arxivId ? <span><b>Preprint</b>{paper.preprintId || paper.arxivId}</span> : null}
-              {paper.semanticScholarId ? <span><b>S2</b>{paper.semanticScholarId}</span> : null}
-              {paper.localPath ? <span><b>File</b>{paper.localPath}</span> : null}
-              {paper.htmlSnapshotPath ? <span><b>HTML</b>{paper.htmlSnapshotPath}</span> : null}
+          {paper.volume || paper.issue || paper.pages || paper.category || paper.doi || paper.preprintId || paper.arxivId || paper.localPath || paper.htmlSnapshotPath ? (
+            <div className="detail-section">
+              <p className="eyebrow">Publication details</p>
+              <div className="identifier-list publication-detail-list">
+                {paper.volume ? <span><b>Volume</b>{paper.volume}</span> : null}
+                {paper.issue ? <span><b>Issue</b>{paper.issue}</span> : null}
+                {paper.pages ? <span><b>Pages</b>{paper.pages}</span> : null}
+                {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
+                {paper.doi ? <span><b>DOI</b>{paper.doi}</span> : null}
+                {paper.preprintId || paper.arxivId ? <span><b>Preprint</b>{paper.preprintId || paper.arxivId}</span> : null}
+                {paper.localPath ? <span><b>File</b>{paper.localPath}</span> : null}
+                {paper.htmlSnapshotPath ? <span><b>HTML</b>{paper.htmlSnapshotPath}</span> : null}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
         <div className="drawer-footer"><span>Added {formatDate(paper.addedAt)}</span><button className="danger-text" onClick={onDelete}><Trash2 size={14} /> Delete paper</button></div>
       </aside>
@@ -1930,6 +2151,7 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
   const [paperQuery, setPaperQuery] = useState("");
   const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([paper.id]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const { runTask } = useBackgroundTasks();
 
   const selectedDiscussionPapers = papers.filter((item) => selectedPaperIds.includes(item.id));
   const availableDiscussionPapers = papers.filter((item) => matchesSearch([
@@ -1964,26 +2186,28 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
     setInput("");
     setLoading(true);
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMessages.filter((message) => message.id !== "welcome").map(({ role, content: messageContent }) => ({ role, content: messageContent })),
-          papers: selectedDiscussionPapers.map((selected) => ({
-            title: selected.title,
-            abstract: selected.abstract,
-            summary: selected.summary,
-            notes: selected.notes,
-            authors: selected.authors.map((author) => author.displayName),
-            venue: venueLine(selected),
-            year: selected.year,
-          })),
-        }),
+      const payload = await runTask(`Ask PA · ${selectedDiscussionPapers.length} ${selectedDiscussionPapers.length === 1 ? "paper" : "papers"}`, async () => {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: nextMessages.filter((message) => message.id !== "welcome").map(({ role, content: messageContent }) => ({ role, content: messageContent })),
+            papers: selectedDiscussionPapers.map((selected) => ({
+              title: selected.title,
+              abstract: selected.abstract,
+              summary: selected.summary,
+              notes: selected.notes,
+              authors: selected.authors.map((author) => author.displayName),
+              venue: venueLine(selected),
+              year: selected.year,
+            })),
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        return response.json() as Promise<{ content: string }>;
       });
-      if (!response.ok) {
-        throw new Error(await readError(response));
-      }
-      const payload = (await response.json()) as { content: string };
       setMessages([...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: payload.content }]);
     } catch (error) {
       setMessages([...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: error instanceof Error ? `I couldn’t complete that request: ${error.message}` : "I couldn’t complete that request." }]);
@@ -2079,6 +2303,7 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
   const pathInput = useRef<HTMLInputElement | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const { runTask } = useBackgroundTasks();
 
   async function loadLocalFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -2087,19 +2312,21 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
     }
     setUploading(true);
     try {
-      const response = await fetch("/api/local-file-import", {
-        method: "POST",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-          "X-PA-File-Kind": kind,
-          "X-PA-File-Name": encodeURIComponent(file.name),
-        },
-        body: file,
+      const payload = await runTask(`Copy ${file.name} into PA storage`, async () => {
+        const response = await fetch("/api/local-file-import", {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+            "X-PA-File-Kind": kind,
+            "X-PA-File-Name": encodeURIComponent(file.name),
+          },
+          body: file,
+        });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        return response.json() as Promise<{ storedPath: string }>;
       });
-      if (!response.ok) {
-        throw new Error(await readError(response));
-      }
-      const payload = await response.json() as { storedPath: string };
       if (pathInput.current) {
         pathInput.current.value = payload.storedPath;
       }
@@ -2163,16 +2390,18 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
   notify: (message: string, tone?: ToastState["tone"]) => void;
 }) {
-  const [tab, setTab] = useState<"search" | "identifier" | "url" | "manual">("search");
+  const [tab, setTab] = useState<"search" | "identifier" | "bibliography" | "url" | "manual">("search");
   const [query, setQuery] = useState("");
   const [url, setUrl] = useState("");
   const [provider, setProvider] = useState<DiscoveryProvider>("semantic-scholar");
   const [identifierSource, setIdentifierSource] = useState<IdentifierSource>("arxiv");
   const [identifier, setIdentifier] = useState("");
+  const [bibliographyFile, setBibliographyFile] = useState<File | null>(null);
   const [results, setResults] = useState<DiscoveryResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<string[]>([]);
   const [manualPaperType, setManualPaperType] = useState<EditablePaperType>("conference");
+  const { runTask } = useBackgroundTasks();
 
   async function searchPapers(event: FormEvent) {
     event.preventDefault();
@@ -2181,11 +2410,13 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
     }
     setLoading(true);
     try {
-      const response = await fetch("/api/discover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, provider }) });
-      if (!response.ok) {
-        throw new Error(await readError(response));
-      }
-      const payload = (await response.json()) as { results: DiscoveryResult[] };
+      const payload = await runTask(`Search ${discoveryProviders.find((item) => item.id === provider)?.label ?? "academic sources"}`, async () => {
+        const response = await fetch("/api/discover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, provider }) });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        return response.json() as Promise<{ results: DiscoveryResult[] }>;
+      });
       setResults(payload.results);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Search failed.", "error");
@@ -2205,12 +2436,18 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
     event.preventDefault();
     setLoading(true);
     try {
-      const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
-      if (!response.ok) {
-        throw new Error(await readError(response));
-      }
-      const result = (await response.json()) as Record<string, unknown>;
-      const succeeded = await mutateLibrary({ entity: "paper", action: "create", data: { ...result, authors: [] } }, "Page imported with Jina Reader.");
+      const succeeded = await runTask("Import web source and acquire content", async () => {
+        const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        const result = (await response.json()) as Record<string, unknown>;
+        const imported = await mutateLibrary({ entity: "paper", action: "create", data: { ...result, authors: [] } }, "Page imported with Jina Reader.");
+        if (!imported) {
+          throw new Error("The imported source could not be saved.");
+        }
+        return imported;
+      });
       if (succeeded) {
         onClose();
       }
@@ -2228,24 +2465,69 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
     }
     setLoading(true);
     try {
-      const response = await fetch("/api/import-identifier", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: identifierSource, identifier }),
+      const sourceLabel = identifierSources.find((source) => source.id === identifierSource)?.label ?? "Source";
+      const succeeded = await runTask(`Resolve and import ${sourceLabel}`, async () => {
+        const response = await fetch("/api/import-identifier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: identifierSource, identifier }),
+        });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        const payload = await response.json() as { paper: DiscoveryResult };
+        const imported = await mutateLibrary(
+          { entity: "paper", action: "create", data: { ...payload.paper } },
+          `${sourceLabel} paper imported.`,
+        );
+        if (!imported) {
+          throw new Error("The resolved paper could not be saved.");
+        }
+        return imported;
       });
-      if (!response.ok) {
-        throw new Error(await readError(response));
-      }
-      const payload = await response.json() as { paper: DiscoveryResult };
-      const succeeded = await mutateLibrary(
-        { entity: "paper", action: "create", data: { ...payload.paper } },
-        `${identifierSources.find((source) => source.id === identifierSource)?.label ?? "Source"} paper imported.`,
-      );
       if (succeeded) {
         onClose();
       }
     } catch (error) {
       notify(error instanceof Error ? error.message : "Identifier import failed.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function importBibliography(event: FormEvent) {
+    event.preventDefault();
+    if (!bibliographyFile) {
+      return;
+    }
+    const filename = bibliographyFile.name.toLowerCase();
+    const format = filename.endsWith(".ris") || filename.endsWith(".txt") ? "ris" : "bibtex";
+    setLoading(true);
+    try {
+      const succeeded = await runTask(`Import ${bibliographyFile.name}`, async () => {
+        const response = await fetch("/api/import-bibliography", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ format, content: await bibliographyFile.text() }),
+        });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        const payload = await response.json() as { papers: Array<Record<string, unknown>> };
+        const imported = await mutateLibrary(
+          { entity: "paper", action: "bulk-create", data: { papers: payload.papers } },
+          `${payload.papers.length} ${format === "bibtex" ? "BibTeX" : "RIS"} ${payload.papers.length === 1 ? "record" : "records"} imported.`,
+        );
+        if (!imported) {
+          throw new Error("The bibliography records could not be saved.");
+        }
+        return imported;
+      });
+      if (succeeded) {
+        onClose();
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Bibliography import failed.", "error");
     } finally {
       setLoading(false);
     }
@@ -2287,12 +2569,13 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
   }
 
   return (
-    <ModalFrame title="Add to Paper Assistant" subtitle="Search academic sources, import a URL, or enter metadata yourself." onClose={onClose} className="add-modal">
+    <ModalFrame title="Add to Paper Assistant" subtitle="Search academic sources, import bibliography files, or enter metadata yourself." onClose={onClose} className="add-modal">
       <div className="modal-tabs">
-        <button className={tab === "search" ? "is-active" : ""} onClick={() => setTab("search")}><Search size={15} /> Academic search</button>
-        <button className={tab === "identifier" ? "is-active" : ""} onClick={() => setTab("identifier")}><Database size={15} /> Identifier</button>
-        <button className={tab === "url" ? "is-active" : ""} onClick={() => setTab("url")}><Link2 size={15} /> URL or PDF</button>
-        <button className={tab === "manual" ? "is-active" : ""} onClick={() => setTab("manual")}><Pencil size={15} /> Manual</button>
+        <button aria-pressed={tab === "search"} className={tab === "search" ? "is-active" : ""} onClick={() => setTab("search")}><Search size={15} /> Academic search</button>
+        <button aria-pressed={tab === "identifier"} className={tab === "identifier" ? "is-active" : ""} onClick={() => setTab("identifier")}><Database size={15} /> Identifier</button>
+        <button aria-pressed={tab === "bibliography"} className={tab === "bibliography" ? "is-active" : ""} onClick={() => setTab("bibliography")}><Upload size={15} /> BibTeX / RIS</button>
+        <button aria-pressed={tab === "url"} className={tab === "url" ? "is-active" : ""} onClick={() => setTab("url")}><Link2 size={15} /> URL / PDF link</button>
+        <button aria-pressed={tab === "manual"} className={tab === "manual" ? "is-active" : ""} onClick={() => setTab("manual")}><Pencil size={15} /> Manual</button>
       </div>
       {tab === "search" ? (
         <div className="modal-body">
@@ -2317,9 +2600,10 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
         <form className="modal-body identifier-import-form" onSubmit={importByIdentifier}>
           <div className="identifier-source-grid">
             {identifierSources.map((source) => (
-              <button type="button" className={identifierSource === source.id ? "is-active" : ""} onClick={() => { setIdentifierSource(source.id); setIdentifier(""); }} key={source.id}>
+              <button type="button" aria-pressed={identifierSource === source.id} className={identifierSource === source.id ? "is-active" : ""} onClick={() => { setIdentifierSource(source.id); setIdentifier(""); }} key={source.id}>
                 <Database size={16} />
                 <span><strong>{source.label}</strong><small>{source.hint}</small></span>
+                {identifierSource === source.id ? <Check className="selected-option-check" size={15} /> : null}
               </button>
             ))}
           </div>
@@ -2334,7 +2618,25 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
             />
           </label>
           <button className="primary-action full-action" disabled={loading || !identifier.trim()}>{loading ? <LoaderCircle size={16} className="spin" /> : <ArrowRight size={16} />} Resolve and import</button>
-          <p className="identifier-footnote">PA supports web and identifier imports here; BibTeX, RIS, and local PDF imports remain available through the companion CLI.</p>
+          <p className="identifier-footnote">Identifier imports resolve one canonical record. Use BibTeX / RIS for batch bibliography files.</p>
+        </form>
+      ) : tab === "bibliography" ? (
+        <form className="modal-body bibliography-import-form" onSubmit={importBibliography}>
+          <label className={`bibliography-dropzone ${bibliographyFile ? "has-file" : ""}`}>
+            <span className="bibliography-upload-icon">{bibliographyFile ? <Check size={23} /> : <Upload size={23} />}</span>
+            <span><strong>{bibliographyFile?.name ?? "Choose a BibTeX or RIS file"}</strong><small>{bibliographyFile ? `${Math.max(1, Math.round(bibliographyFile.size / 1024))} KB · ready to import` : ".bib, .bibtex, .ris, or RIS-formatted .txt · up to 5 MB"}</small></span>
+            <input
+              type="file"
+              accept=".bib,.bibtex,.ris,.txt,application/x-bibtex,application/x-research-info-systems"
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setBibliographyFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          <div className="bibliography-format-notes">
+            <div><strong>BibTeX</strong><small>Imports title, ordered authors, year, venue, DOI, URL, volume, issue, pages, and ePrint ID.</small></div>
+            <div><strong>RIS</strong><small>Imports journal or conference metadata, ordered authors, DOI, URL, and page range.</small></div>
+          </div>
+          <button className="primary-action full-action" disabled={loading || !bibliographyFile}>{loading ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />} Import bibliography</button>
+          <p className="identifier-footnote">Every valid record is normalized into PA’s library with linked author and venue records.</p>
         </form>
       ) : tab === "url" ? (
         <form className="modal-body import-form" onSubmit={importUrl}>
@@ -2355,7 +2657,7 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
           <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} placeholder="What this paper contributes…" /></label>
           <label className="field-span-2"><span>Summary</span><textarea name="summary" rows={4} placeholder="A compact synthesis for your library…" /></label>
           <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={3} placeholder="Observations, questions, and connections…" /></label>
-          <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}>Cancel</button><button className="primary-action"><Plus size={16} /> Add paper</button></div>
+          <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label="Add paper" title="Add paper"><Plus size={17} /></button></div>
         </form>
       )}
     </ModalFrame>
@@ -2369,6 +2671,42 @@ function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
   notify: (message: string, tone?: ToastState["tone"]) => void;
 }) {
   const [paperType, setPaperType] = useState<EditablePaperType>(() => editablePaperType(paper.paperType));
+  const [summary, setSummary] = useState(paper.summary);
+  const [summarizing, setSummarizing] = useState(false);
+  const { runTask } = useBackgroundTasks();
+
+  async function generateSummary() {
+    setSummarizing(true);
+    try {
+      const payload = await runTask(`Generate summary · ${paper.title}`, async () => {
+        const response = await fetch("/api/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paper: {
+              title: paper.title,
+              abstract: paper.abstract,
+              authors: paper.authors.map((author) => author.displayName),
+              venue: venueLine(paper),
+              year: paper.year,
+              url: paper.url,
+              doi: paper.doi,
+            },
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        return response.json() as Promise<{ summary: string }>;
+      });
+      setSummary(payload.summary);
+      notify("Summary generated. Save the paper to keep it.", "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Summary generation failed.", "error");
+    } finally {
+      setSummarizing(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2394,9 +2732,8 @@ function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
           ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
           ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
           abstract: form.get("abstract"),
-          summary: form.get("summary"),
+          summary,
           notes: form.get("notes"),
-          readingStatus: form.get("readingStatus"),
         },
       },
       "Paper metadata updated across the library.",
@@ -2410,32 +2747,56 @@ function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
     <ModalFrame title="Edit paper" subtitle="Update the complete PA record, linked authors, venue, files, summary, and notes." onClose={onClose} className="add-modal">
       <form className="modal-body entity-form" onSubmit={submit}>
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
-        <label><span>Reading status</span><select name="readingStatus" defaultValue={paper.readingStatus}><option value="inbox">To read</option><option value="reading">Reading</option><option value="complete">Read</option></select></label>
+        <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
         <label><span>Paper type</span><select name="paperType" value={paperType} onChange={(event) => setPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
         <label className="field-span-2"><span>Authors</span><input name="authors" defaultValue={paper.authors.map((author) => author.displayName).join(", ")} /><small>Comma-separated. Renaming a canonical author from the Authors view updates every linked paper.</small></label>
-        <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
-        <span />
         <PaperMetadataFields paperType={paperType} paper={paper} notify={notify} />
+        <label className="field-span-2 summary-field"><span className="field-label-action"><span>PA summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><textarea name="summary" rows={5} value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
         <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} defaultValue={paper.abstract} /></label>
-        <label className="field-span-2 summary-field"><span>PA summary</span><textarea name="summary" rows={5} defaultValue={paper.summary} /></label>
         <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={4} defaultValue={paper.notes} /></label>
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}>Cancel</button><button className="primary-action"><Save size={15} /> Save paper</button></div>
+        <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label="Save paper" title="Save paper"><Save size={17} /></button></div>
       </form>
     </ModalFrame>
   );
 }
 
-function EntityModal({ entity, record, onClose, mutateLibrary }: {
+function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
   entity: "author" | "venue" | "collection";
   record?: Author | Venue | Collection;
+  papers: Paper[];
   onClose: () => void;
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
 }) {
   const editing = Boolean(record);
   const title = `${editing ? "Edit" : "New"} ${entity}`;
+  const [collectionPaperQuery, setCollectionPaperQuery] = useState("");
+  const [availablePaperQuery, setAvailablePaperQuery] = useState("");
+  const [collectionPaperPage, setCollectionPaperPage] = useState(1);
+  const [availablePaperPage, setAvailablePaperPage] = useState(1);
+  const [selectedCollectionPaperId, setSelectedCollectionPaperId] = useState<string | null>(null);
+  const [selectedAvailablePaperId, setSelectedAvailablePaperId] = useState<string | null>(null);
+  const initialCollectionPaperIds = useMemo(() => {
+    if (entity !== "collection" || !record) {
+      return [];
+    }
+    return papers
+      .filter((paper) => paper.collections.some((collection) => collection.id === record.id))
+      .map((paper) => paper.id);
+  }, [entity, papers, record]);
+  const [collectionPaperIds, setCollectionPaperIds] = useState<string[]>(() => {
+    if (entity !== "collection" || !record) {
+      return [];
+    }
+    return papers
+      .filter((paper) => paper.collections.some((collection) => collection.id === record.id))
+      .map((paper) => paper.id);
+  });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const data: Record<string, unknown> = Object.fromEntries(new FormData(event.currentTarget).entries());
+    if (entity === "collection") {
+      data.paperIds = collectionPaperIds;
+    }
     const succeeded = await mutateLibrary(
       { entity, action: editing ? "update" : "create", id: record?.id, data },
       `${entity[0].toUpperCase()}${entity.slice(1)} ${editing ? "updated" : "created"}.`,
@@ -2447,14 +2808,43 @@ function EntityModal({ entity, record, onClose, mutateLibrary }: {
   const author = entity === "author" ? (record as Author | undefined) : undefined;
   const venue = entity === "venue" ? (record as Venue | undefined) : undefined;
   const collection = entity === "collection" ? (record as Collection | undefined) : undefined;
+  const papersInCollection = entity === "collection" ? papers
+    .filter((paper) => collectionPaperIds.includes(paper.id))
+    .filter((paper) => matchesSearch([paper.title, authorLine(paper), venueLine(paper)], collectionPaperQuery)) : [];
+  const papersOutsideCollection = entity === "collection" ? papers
+    .filter((paper) => !collectionPaperIds.includes(paper.id))
+    .filter((paper) => matchesSearch([paper.title, authorLine(paper), venueLine(paper)], availablePaperQuery)) : [];
+  const transferPageSize = 10;
+  const collectionPageCount = Math.max(1, Math.ceil(papersInCollection.length / transferPageSize));
+  const availablePageCount = Math.max(1, Math.ceil(papersOutsideCollection.length / transferPageSize));
+  const currentCollectionPage = Math.min(collectionPaperPage, collectionPageCount);
+  const currentAvailablePage = Math.min(availablePaperPage, availablePageCount);
+  const pagedCollectionPapers = papersInCollection.slice((currentCollectionPage - 1) * transferPageSize, currentCollectionPage * transferPageSize);
+  const pagedAvailablePapers = papersOutsideCollection.slice((currentAvailablePage - 1) * transferPageSize, currentAvailablePage * transferPageSize);
+  const selectedTransferPaper = papers.find((paper) => paper.id === (selectedCollectionPaperId ?? selectedAvailablePaperId));
+  function addSelectedPaperToCollection() {
+    if (!selectedAvailablePaperId) {
+      return;
+    }
+    setCollectionPaperIds((current) => Array.from(new Set([...current, selectedAvailablePaperId])));
+    setSelectedCollectionPaperId(selectedAvailablePaperId);
+    setSelectedAvailablePaperId(null);
+  }
+  function removeSelectedPaperFromCollection() {
+    if (!selectedCollectionPaperId) {
+      return;
+    }
+    setCollectionPaperIds((current) => current.filter((id) => id !== selectedCollectionPaperId));
+    setSelectedAvailablePaperId(selectedCollectionPaperId);
+    setSelectedCollectionPaperId(null);
+  }
   return (
-    <ModalFrame title={title} subtitle={entity === "author" ? "Changes propagate to every linked paper." : entity === "venue" ? "Keep publication metadata consistent across your library." : "Define a focused space for related work."} onClose={onClose}>
+    <ModalFrame title={title} subtitle={entity === "author" ? "Changes propagate to every linked paper." : entity === "venue" ? "Keep publication metadata consistent across your library." : "Move papers between this collection and the rest of your library."} onClose={onClose} className={entity === "collection" ? "collection-manager-modal" : undefined}>
       <form className="modal-body entity-form" onSubmit={submit}>
         {entity === "author" ? <>
           <label className="field-span-2"><span>Display name *</span><input name="displayName" defaultValue={author?.displayName} required autoFocus /></label>
           <label><span>Given name</span><input name="givenName" defaultValue={author?.givenName ?? ""} /></label>
           <label><span>Family name</span><input name="familyName" defaultValue={author?.familyName ?? ""} /></label>
-          <label className="field-span-2"><span>Affiliation</span><input name="affiliation" defaultValue={author?.affiliation ?? ""} placeholder="University or organization" /></label>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={3} defaultValue={author?.notes ?? ""} /></label>
         </> : entity === "venue" ? <>
           <label className="field-span-2"><span>Full venue name *</span><input name="name" defaultValue={venue?.name} required autoFocus /></label>
@@ -2465,12 +2855,63 @@ function EntityModal({ entity, record, onClose, mutateLibrary }: {
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={3} defaultValue={venue?.notes ?? ""} /></label>
         </> : <>
           <label className="field-span-2"><span>Collection name *</span><input name="name" defaultValue={collection?.name} required autoFocus /></label>
-          <label className="field-span-2"><span>Description</span><textarea name="description" rows={4} defaultValue={collection?.description ?? ""} /></label>
-          <label className="field-span-2"><span>Color</span><select name="color" defaultValue={collection?.color ?? "violet"}><option value="violet">Violet</option><option value="cyan">Cyan</option><option value="amber">Amber</option><option value="green">Green</option><option value="rose">Rose</option></select></label>
+          <section className="collection-transfer field-span-2">
+            <div className="collection-transfer-grid">
+              <div className="transfer-column">
+                <header><strong>Papers in collection</strong><small>{collectionPaperIds.length}</small></header>
+                <PageSearch value={collectionPaperQuery} onChange={(value) => { setCollectionPaperQuery(value); setCollectionPaperPage(1); }} placeholder="Search collection…" />
+                <div className="transfer-paper-list" role="listbox" aria-label="Papers in collection">
+                  {pagedCollectionPapers.map((paper) => <button type="button" role="option" aria-selected={selectedCollectionPaperId === paper.id} className={`${selectedCollectionPaperId === paper.id ? "is-selected" : ""} ${!initialCollectionPaperIds.includes(paper.id) ? "is-changed" : ""}`} onClick={() => { setSelectedCollectionPaperId(paper.id); setSelectedAvailablePaperId(null); }} key={paper.id}><FileText size={14} /><span>{paper.title}</span></button>)}
+                  {!papersInCollection.length ? <p>No matching papers.</p> : null}
+                </div>
+                <TransferPagination page={currentCollectionPage} total={papersInCollection.length} pageSize={transferPageSize} onPageChange={setCollectionPaperPage} label="collection papers" />
+              </div>
+              <div className="transfer-actions" aria-label="Move papers">
+                <button type="button" onClick={addSelectedPaperToCollection} disabled={!selectedAvailablePaperId} aria-label="Add selected paper to collection" title="Add to collection"><ChevronLeft size={17} /></button>
+                <button type="button" onClick={removeSelectedPaperFromCollection} disabled={!selectedCollectionPaperId} aria-label="Remove selected paper from collection" title="Remove from collection"><ChevronRight size={17} /></button>
+              </div>
+              <div className="transfer-column">
+                <header><strong>All remaining papers</strong><small>{papers.length - collectionPaperIds.length}</small></header>
+                <PageSearch value={availablePaperQuery} onChange={(value) => { setAvailablePaperQuery(value); setAvailablePaperPage(1); }} placeholder="Search library…" />
+                <div className="transfer-paper-list" role="listbox" aria-label="All remaining papers">
+                  {pagedAvailablePapers.map((paper) => <button type="button" role="option" aria-selected={selectedAvailablePaperId === paper.id} className={`${selectedAvailablePaperId === paper.id ? "is-selected" : ""} ${initialCollectionPaperIds.includes(paper.id) ? "is-changed" : ""}`} onClick={() => { setSelectedAvailablePaperId(paper.id); setSelectedCollectionPaperId(null); }} key={paper.id}><FileText size={14} /><span>{paper.title}</span></button>)}
+                  {!papersOutsideCollection.length ? <p>No matching papers.</p> : null}
+                </div>
+                <TransferPagination page={currentAvailablePage} total={papersOutsideCollection.length} pageSize={transferPageSize} onPageChange={setAvailablePaperPage} label="available papers" />
+              </div>
+            </div>
+            <div className="transfer-paper-details">
+              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small>{authorLine(selectedTransferPaper) || "Authors unavailable"} · {venueLine(selectedTransferPaper) || "Venue unavailable"} · {selectedTransferPaper.year ?? "Year unavailable"}</small></span> : <small>Select a paper to inspect it before moving.</small>}
+            </div>
+          </section>
         </>}
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}>Cancel</button><button className="primary-action">{editing ? <Pencil size={16} /> : <Plus size={16} />}{editing ? "Save changes" : `Create ${entity}`}</button></div>
+        <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label={editing ? `Save ${entity}` : `Create ${entity}`} title={editing ? `Save ${entity}` : `Create ${entity}`}>{editing ? <Save size={17} /> : <Plus size={17} />}</button></div>
       </form>
     </ModalFrame>
+  );
+}
+
+function TransferPagination({ page, total, pageSize, onPageChange, label }: {
+  page: number;
+  total: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  label: string;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const start = total ? (page - 1) * pageSize + 1 : 0;
+  const end = Math.min(page * pageSize, total);
+  return (
+    <div className="transfer-pagination">
+      <span>{start}–{end} of {total}</span>
+      <nav aria-label={`${label} pages`}>
+        <button type="button" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label={`First ${label} page`}><ChevronsLeft size={13} /></button>
+        <button type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1} aria-label={`Previous ${label} page`}><ChevronLeft size={13} /></button>
+        <span>{page} / {pageCount}</span>
+        <button type="button" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} aria-label={`Next ${label} page`}><ChevronRight size={13} /></button>
+        <button type="button" onClick={() => onPageChange(pageCount)} disabled={page >= pageCount} aria-label={`Last ${label} page`}><ChevronsRight size={13} /></button>
+      </nav>
+    </div>
   );
 }
 
@@ -2500,7 +2941,6 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
     <ModalFrame title={`Bulk edit ${ids.length} ${entity}s`} subtitle="Only filled fields will be applied to every selected record." onClose={onClose}>
       <form className="modal-body entity-form" onSubmit={submit}>
         {entity === "author" ? <>
-          <label className="field-span-2"><span>Affiliation</span><input name="affiliation" autoFocus placeholder="Apply a shared affiliation" /></label>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </> : <>
           <label><span>Type</span><select name="type" defaultValue=""><option value="">Leave unchanged</option><option value="conference">Conference</option><option value="journal">Journal</option><option value="workshop">Workshop</option><option value="preprint">Preprint archive</option><option value="other">Other</option></select></label>
@@ -2508,7 +2948,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </>}
         <div className="bulk-warning field-span-2"><Database size={16} /><span><strong>Linked data stays intact.</strong> These changes will be visible immediately on every related paper.</span></div>
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}>Cancel</button><button className="primary-action"><Pencil size={16} /> Apply to {ids.length}</button></div>
+        <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label={`Apply changes to ${ids.length} records`} title={`Apply to ${ids.length} records`}><Save size={17} /></button></div>
       </form>
     </ModalFrame>
   );

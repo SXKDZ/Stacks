@@ -10,7 +10,6 @@ export type ViewId =
 export interface PaperAuthor {
   id: string;
   displayName: string;
-  affiliation: string | null;
   orcid: string | null;
   order: number;
   corresponding: boolean;
@@ -19,7 +18,6 @@ export interface PaperAuthor {
 export interface PaperCollection {
   id: string;
   name: string;
-  color: string;
 }
 
 export interface Paper {
@@ -45,7 +43,6 @@ export interface Paper {
   notes: string;
   readingStatus: string;
   favorite: boolean;
-  citationCount: number;
   venueId: string | null;
   venueName: string | null;
   venueAcronym: string | null;
@@ -60,10 +57,8 @@ export interface Author {
   displayName: string;
   givenName: string | null;
   familyName: string | null;
-  affiliation: string | null;
   orcid: string | null;
   semanticScholarId: string | null;
-  hIndex: number;
   notes: string | null;
   paperCount: number;
   latestYear: number | null;
@@ -84,8 +79,6 @@ export interface Venue {
 export interface Collection {
   id: string;
   name: string;
-  description: string;
-  color: string;
   paperCount: number;
 }
 

@@ -24,6 +24,7 @@ import {
   DEFAULT_CHAT_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
+import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 
 type SettingsTab = "appearance" | "model" | "prompts" | "sync" | "integrations";
 type ThemeMode = "dark" | "light";
@@ -181,7 +182,8 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   libraryName: string;
   onLibraryNameChange: (name: string) => void;
 }) {
-  const [tab, setTab] = useState<SettingsTab>("model");
+  const { runTask } = useBackgroundTasks();
+  const [tab, setTab] = useState<SettingsTab>("appearance");
   const [settings, setSettings] = useState<SettingsSnapshot>(defaultSettings);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -363,15 +365,17 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
     setSyncing(true);
     try {
-      const response = await fetch("/api/local-sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: settingsData() }),
+      const payload = await runTask("Sync PA library to OneDrive", async () => {
+        const response = await fetch("/api/local-sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: settingsData() }),
+        });
+        if (!response.ok) {
+          throw new Error(await errorMessage(response));
+        }
+        return response.json() as Promise<{ result: SyncResult; sync: SettingsSnapshot["sync"] }>;
       });
-      if (!response.ok) {
-        throw new Error(await errorMessage(response));
-      }
-      const payload = (await response.json()) as { result: SyncResult; sync: SettingsSnapshot["sync"] };
       setSettings((current) => ({ ...current, sync: payload.sync }));
       notify(payload.result.summary);
     } catch (error) {
@@ -389,7 +393,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <button className={tab === "appearance" ? "is-active" : ""} onClick={() => setTab("appearance")}><Palette size={16} /><span><strong>Appearance</strong><small>Library name and theme</small></span></button>
         <button className={tab === "model" ? "is-active" : ""} onClick={() => setTab("model")}><Bot size={16} /><span><strong>AI model</strong><small>Bedrock and generation</small></span></button>
         <button className={tab === "prompts" ? "is-active" : ""} onClick={() => setTab("prompts")}><MessageSquareText size={16} /><span><strong>Prompt templates</strong><small>Summary and discussion</small></span></button>
-        <button className={tab === "sync" ? "is-active" : ""} onClick={() => setTab("sync")}><CloudCog size={16} /><span><strong>OneDrive sync</strong><small>D1 backup and local files</small></span></button>
+        <button className={tab === "sync" ? "is-active" : ""} onClick={() => setTab("sync")}><CloudCog size={16} /><span><strong>OneDrive sync</strong><small>Library backup and local files</small></span></button>
         <button className={tab === "integrations" ? "is-active" : ""} onClick={() => setTab("integrations")}><KeyRound size={16} /><span><strong>Integrations</strong><small>Discovery and extraction</small></span></button>
         <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>{settings.local ? "Stored locally" : "Deployment managed"}</strong><small>{settings.local ? "Protected structured file; secrets are never displayed" : "Use deployment environment variables"}</small></span></div>
       </aside>
@@ -418,7 +422,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <label className="span-2"><span>Model</span><select value={knownModel ? settings.ai.modelId : "custom"} onChange={(event) => updateAi("modelId", event.target.value === "custom" ? "" : event.target.value)}>{modelOptions.map((model) => <option value={model.id} key={model.id}>{model.label}</option>)}<option value="custom">Custom Bedrock model ID…</option></select><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Base Anthropic IDs use Bedrock Mantle; geo, global, and inference-profile IDs use Bedrock Runtime.</small></label> : null}
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><button type="button" onClick={() => void loadModels(true)} disabled={loadingModels}>{loadingModels ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />} Refresh models</button><button type="button" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()}>{testingModel ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} Test access</button></div>
-                <label><span>AWS region</span><input value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)} placeholder="us-east-1" /></label>
+                <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" max="8192" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
@@ -442,19 +446,19 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "sync" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up PA’s normalized D1 library, PDFs, and HTML snapshots." />
+            <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up PA’s library database, PDFs, and HTML snapshots." />
             <div className="sync-status-card">
               <span className={`sync-status-icon ${settings.sync.lastResult?.ok ? "is-success" : ""}`}><FolderSync size={20} /></span>
               <div><strong>{settings.sync.lastResult?.summary ?? "Ready to connect OneDrive"}</strong><small>{timeLabel(settings.sync.lastSyncAt)}</small></div>
-              <button type="button" className="primary-action" onClick={() => void syncNow()} disabled={syncing || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.sync.sourceExists ? "PA’s local D1 database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"}>{syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} {syncing ? "Syncing…" : "Sync now"}</button>
+              <button type="button" className="primary-action" onClick={() => void syncNow()} disabled={syncing || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.sync.sourceExists ? "PA’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"}>{syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} {syncing ? "Syncing…" : "Sync now"}</button>
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive remote directory</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PA" /><button type="button" onClick={() => void chooseDirectory()} disabled={selectingDirectory}>{selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />} Choose</button></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PA`} key={path} />)}</datalist><small>PA stores a consistent D1 SQLite backup plus pdfs/ and html_snapshots/ here.</small></label>
+                <label className="span-2"><span>OneDrive remote directory</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PA" /><button type="button" onClick={() => void chooseDirectory()} disabled={selectingDirectory}>{selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />} Choose</button></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PA`} key={path} />)}</datalist><small>PA stores a consistent library backup plus pdfs/ and html_snapshots/ here.</small></label>
                 <label><span>Auto-sync interval</span><div className="unit-input"><input type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
               <label className="settings-toggle"><input type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-sync after live PA changes</strong><small>Uses local-wins conflict handling for background synchronization.</small></div></label>
-              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>D1 remains authoritative.</strong> Sync writes a consistent backup to OneDrive and never replaces the database used by the running PA server.</p></div>
+              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>The local library remains authoritative.</strong> Sync writes a consistent backup to OneDrive and never replaces the database used by the running PA server.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>

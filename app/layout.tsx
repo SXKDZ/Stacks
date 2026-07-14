@@ -5,7 +5,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Paper Assistant — Your Research OS",
+  title: "Paper Assistant",
   description:
     "A modern research library for papers, authors, venues, collections, discovery, and grounded AI reading assistance.",
   applicationName: "Paper Assistant",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     shortcut: "/favicon.svg",
   },
   openGraph: {
-    title: "Paper Assistant — Your Research OS",
+    title: "Paper Assistant",
     description:
       "Read, organize, summarize, and discuss your PA library in one modern workspace.",
     type: "website",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Paper Assistant — Your Research OS",
+    title: "Paper Assistant",
     description:
       "Read, organize, summarize, and discuss your PA library in one modern workspace.",
     images: ["/og-paper-assistant.png"],

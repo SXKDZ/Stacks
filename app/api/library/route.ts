@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 interface MutationRequest {
   entity?: "paper" | "author" | "venue" | "collection";
-  action?: "create" | "update" | "delete" | "bulk-update" | "bulk-delete";
+  action?: "create" | "bulk-create" | "update" | "delete" | "bulk-update" | "bulk-delete";
   id?: string;
   ids?: string[];
   data?: Record<string, unknown>;
@@ -32,7 +32,6 @@ interface PaperRow {
   notes: string;
   reading_status: string;
   favorite: number;
-  citation_count: number;
   venue_id: string | null;
   added_at: string;
   updated_at: string;
@@ -82,7 +81,7 @@ async function readSnapshot() {
       database
         .prepare(
           `SELECT pa.paper_id, pa.author_id, pa.author_order, pa.corresponding,
-                  a.display_name, a.affiliation, a.orcid
+                  a.display_name, a.orcid
            FROM paper_authors pa
            INNER JOIN authors a ON a.id = pa.author_id
            ORDER BY pa.paper_id, pa.author_order`,
@@ -90,7 +89,7 @@ async function readSnapshot() {
         .all(),
       database
         .prepare(
-          `SELECT pc.paper_id, c.id, c.name, c.color
+          `SELECT pc.paper_id, c.id, c.name
            FROM paper_collections pc
            INNER JOIN collections c ON c.id = pc.collection_id
            ORDER BY c.name`,
@@ -136,7 +135,6 @@ async function readSnapshot() {
       .map((link) => ({
         id: String(link.author_id),
         displayName: String(link.display_name),
-        affiliation: cleanString(link.affiliation),
         orcid: cleanString(link.orcid),
         order: Number(link.author_order),
         corresponding: Boolean(link.corresponding),
@@ -146,7 +144,6 @@ async function readSnapshot() {
       .map((link) => ({
         id: String(link.id),
         name: String(link.name),
-        color: String(link.color),
       }));
 
     return {
@@ -172,7 +169,6 @@ async function readSnapshot() {
       notes: paper.notes,
       readingStatus: paper.reading_status,
       favorite: Boolean(paper.favorite),
-      citationCount: paper.citation_count,
       venueId: paper.venue_id,
       venueName: paper.venue_name,
       venueAcronym: paper.venue_acronym,
@@ -188,10 +184,8 @@ async function readSnapshot() {
     displayName: String(author.display_name),
     givenName: cleanString(author.given_name),
     familyName: cleanString(author.family_name),
-    affiliation: cleanString(author.affiliation),
     orcid: cleanString(author.orcid),
     semanticScholarId: cleanString(author.semantic_scholar_id),
-    hIndex: Number(author.h_index ?? 0),
     notes: cleanString(author.notes),
     paperCount: Number(author.paper_count ?? 0),
     latestYear: cleanNumber(author.latest_year),
@@ -213,8 +207,6 @@ async function readSnapshot() {
     (collection) => ({
       id: String(collection.id),
       name: String(collection.name),
-      description: String(collection.description),
-      color: String(collection.color),
       paperCount: Number(collection.paper_count ?? 0),
     }),
   );
@@ -317,8 +309,8 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
         id, title, abstract, year, paper_type, volume, issue, pages, category,
         doi, arxiv_id, preprint_id, semantic_scholar_id, url, pdf_url,
         local_path, html_snapshot_path, summary, notes, reading_status,
-        favorite, citation_count, venue_id, added_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        favorite, venue_id, added_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
     )
     .bind(
       id,
@@ -342,7 +334,6 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       cleanString(data.notes) ?? "",
       cleanString(data.readingStatus) ?? "inbox",
       data.favorite ? 1 : 0,
-      cleanNumber(data.citationCount) ?? 0,
       venueId,
     )
     .run();
@@ -356,9 +347,7 @@ const entityConfigurations = {
       displayName: "display_name",
       givenName: "given_name",
       familyName: "family_name",
-      affiliation: "affiliation",
       orcid: "orcid",
-      hIndex: "h_index",
       notes: "notes",
     },
   },
@@ -377,8 +366,6 @@ const entityConfigurations = {
     table: "collections",
     fields: {
       name: "name",
-      description: "description",
-      color: "color",
     },
   },
 } as const;
@@ -386,7 +373,7 @@ const entityConfigurations = {
 async function createEntity(
   entity: "author" | "venue" | "collection",
   data: Record<string, unknown>,
-): Promise<void> {
+): Promise<string> {
   const database = await ensureDatabase();
   const id = createId(entity);
   if (entity === "author") {
@@ -396,12 +383,12 @@ async function createEntity(
     }
     await database
       .prepare(
-        `INSERT INTO authors (id, display_name, given_name, family_name, affiliation, orcid, h_index, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO authors (id, display_name, given_name, family_name, orcid, notes)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, name, cleanString(data.givenName), cleanString(data.familyName), cleanString(data.affiliation), cleanString(data.orcid), cleanNumber(data.hIndex) ?? 0, cleanString(data.notes))
+      .bind(id, name, cleanString(data.givenName), cleanString(data.familyName), cleanString(data.orcid), cleanString(data.notes))
       .run();
-    return;
+    return id;
   }
   if (entity === "venue") {
     const name = cleanString(data.name);
@@ -414,7 +401,7 @@ async function createEntity(
       )
       .bind(id, name, cleanString(data.acronym), cleanString(data.type) ?? "conference", cleanString(data.publisher), cleanString(data.url), cleanString(data.notes))
       .run();
-    return;
+    return id;
   }
   const name = cleanString(data.name);
   if (!name) {
@@ -422,10 +409,44 @@ async function createEntity(
   }
   await database
     .prepare(
-      "INSERT INTO collections (id, name, description, color) VALUES (?, ?, ?, ?)",
+      "INSERT INTO collections (id, name) VALUES (?, ?)",
     )
-    .bind(id, name, cleanString(data.description) ?? "", cleanString(data.color) ?? "violet")
+    .bind(id, name)
     .run();
+  await syncCollectionPapers(database, id, data.paperIds);
+  return id;
+}
+
+async function syncCollectionPapers(
+  database: D1Database,
+  collectionId: string,
+  paperIds: unknown,
+): Promise<void> {
+  if (!Array.isArray(paperIds)) {
+    return;
+  }
+  const normalizedIds = Array.from(new Set(paperIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))));
+  const existingResult = await database
+    .prepare("SELECT paper_id FROM paper_collections WHERE collection_id = ?")
+    .bind(collectionId)
+    .all<{ paper_id: string }>();
+  const existingIds = new Set(existingResult.results.map((row) => row.paper_id));
+  const desiredIds = new Set(normalizedIds);
+  const statements = [
+    ...normalizedIds
+      .filter((paperId) => !existingIds.has(paperId))
+      .map((paperId) => database
+        .prepare("INSERT OR IGNORE INTO paper_collections (paper_id, collection_id) VALUES (?, ?)")
+        .bind(paperId, collectionId)),
+    ...Array.from(existingIds)
+      .filter((paperId) => !desiredIds.has(paperId))
+      .map((paperId) => database
+        .prepare("DELETE FROM paper_collections WHERE paper_id = ? AND collection_id = ?")
+        .bind(paperId, collectionId)),
+  ];
+  if (statements.length) {
+    await database.batch(statements);
+  }
 }
 
 async function updateEntities(
@@ -435,22 +456,27 @@ async function updateEntities(
 ): Promise<void> {
   const configuration = entityConfigurations[entity];
   const entries = Object.entries(data).filter(([key]) => key in configuration.fields);
-  if (!ids.length || !entries.length) {
+  if (!ids.length) {
     return;
   }
   const database = await ensureDatabase();
-  const assignments = entries
-    .map(([key]) => `${configuration.fields[key as keyof typeof configuration.fields]} = ?`)
-    .join(", ");
-  const values = entries.map(([, value]) => value ?? null);
-  const statements = ids.map((id) => {
-    return database
-      .prepare(
-        `UPDATE ${configuration.table} SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      )
-      .bind(...values, id);
-  });
-  await database.batch(statements);
+  if (entries.length) {
+    const assignments = entries
+      .map(([key]) => `${configuration.fields[key as keyof typeof configuration.fields]} = ?`)
+      .join(", ");
+    const values = entries.map(([, value]) => value ?? null);
+    const statements = ids.map((id) => {
+      return database
+        .prepare(
+          `UPDATE ${configuration.table} SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        )
+        .bind(...values, id);
+    });
+    await database.batch(statements);
+  }
+  if (entity === "collection" && "paperIds" in data) {
+    await Promise.all(ids.map((id) => syncCollectionPapers(database, id, data.paperIds)));
+  }
 }
 
 async function updatePaper(id: string, data: Record<string, unknown>): Promise<void> {
@@ -568,6 +594,18 @@ export async function POST(request: Request): Promise<Response> {
         await createPaper(data);
       } else {
         await createEntity(body.entity, data);
+      }
+    } else if (body.action === "bulk-create") {
+      if (body.entity !== "paper" || !Array.isArray(data.papers)) {
+        return jsonError("Bulk create requires a paper list.");
+      }
+      if (data.papers.length > 500) {
+        return jsonError("Import no more than 500 papers at a time.");
+      }
+      for (const paper of data.papers) {
+        if (paper && typeof paper === "object" && !Array.isArray(paper)) {
+          await createPaper(paper as Record<string, unknown>);
+        }
       }
     } else if (body.action === "update" || body.action === "bulk-update") {
       if (body.entity === "paper") {

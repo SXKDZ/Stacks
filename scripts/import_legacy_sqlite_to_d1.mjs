@@ -62,7 +62,6 @@ for (const paper of papers) {
 const readingIds = new Set(papers.slice(0, 3).map((paper) => String(paper.id)));
 const favoriteIds = new Set(papers.slice(1, 6).map((paper) => String(paper.id)));
 const seenDois = new Set();
-const colors = ["violet", "cyan", "amber", "green", "rose"];
 const statements = [
   "PRAGMA foreign_keys = OFF;",
   "BEGIN TRANSACTION;",
@@ -81,12 +80,12 @@ for (const venue of venues.values()) {
 }
 
 for (const author of authors) {
-  statements.push(`INSERT INTO authors (id, display_name, given_name, family_name, affiliation, orcid, semantic_scholar_id, h_index, notes) VALUES (${sql(legacyId("author", author.id))}, ${sql(author.full_name)}, ${sql(author.first_name)}, ${sql(author.last_name)}, ${sql(author.affiliation)}, NULL, NULL, 0, NULL);`);
+  statements.push(`INSERT INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id, notes) VALUES (${sql(legacyId("author", author.id))}, ${sql(author.full_name)}, ${sql(author.first_name)}, ${sql(author.last_name)}, NULL, NULL, NULL);`);
 }
 
 for (let index = 0; index < collections.length; index += 1) {
   const collection = collections[index];
-  statements.push(`INSERT INTO collections (id, name, description, color, created_at, updated_at) VALUES (${sql(legacyId("collection", collection.id))}, ${sql(collection.name)}, ${sql(text(collection.description) || "")}, ${sql(colors[index % colors.length])}, ${sql(collection.created_at)}, ${sql(collection.last_modified || collection.created_at)});`);
+  statements.push(`INSERT INTO collections (id, name, created_at, updated_at) VALUES (${sql(legacyId("collection", collection.id))}, ${sql(collection.name)}, ${sql(collection.created_at)}, ${sql(collection.last_modified || collection.created_at)});`);
 }
 
 for (const paper of papers) {
@@ -103,14 +102,14 @@ for (const paper of papers) {
   statements.push(`INSERT INTO papers (
     id, title, abstract, year, paper_type, volume, issue, pages, category,
     doi, arxiv_id, preprint_id, semantic_scholar_id, url, pdf_url, local_path,
-    html_snapshot_path, summary, notes, reading_status, favorite, citation_count,
+    html_snapshot_path, summary, notes, reading_status, favorite,
     venue_id, added_at, updated_at
   ) VALUES (
     ${sql(legacyId("paper", paper.id))}, ${sql(paper.title)}, ${sql(text(paper.abstract) || "")}, ${sql(paper.year)}, ${sql(paperType)},
     ${sql(paper.volume)}, ${sql(paper.issue)}, ${sql(paper.pages)}, ${sql(paper.category)}, ${sql(doi)},
     ${sql(preprintId)}, ${sql(preprintId)}, NULL, ${sql(paper.url)}, NULL, ${sql(paper.pdf_path)},
     ${sql(paper.html_snapshot_path)}, ${sql(summary)}, ${sql(notes)}, ${sql(readingIds.has(String(paper.id)) ? "reading" : "inbox")},
-    ${favoriteIds.has(String(paper.id)) ? 1 : 0}, 0, ${sql(venue?.id)}, ${sql(paper.added_date)}, ${sql(paper.modified_date)}
+    ${favoriteIds.has(String(paper.id)) ? 1 : 0}, ${sql(venue?.id)}, ${sql(paper.added_date)}, ${sql(paper.modified_date)}
   );`);
 }
 
