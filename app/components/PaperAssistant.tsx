@@ -47,7 +47,7 @@ import {
   X,
 } from "lucide-react";
 import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -244,6 +244,7 @@ interface ToastState {
 type ThemeMode = "dark" | "light";
 type LibraryFilterKind = "author" | "venue" | "collection" | "year";
 type LibraryFilterJoin = "AND" | "OR";
+type LibraryFilterOption = { id: string; label: string };
 
 interface LibraryFilterClause {
   key: string;
@@ -688,6 +689,7 @@ function PaperAssistantWorkspace() {
             <span className="brand-mark">PA</span>
             <span className="brand-copy">
               <strong>Paper Assistant</strong>
+              <span className="brand-slogan">From papers to perspective.</span>
             </span>
           </button>
           <button className="icon-button mobile-close" onClick={() => setMobileNav(false)} aria-label="Close navigation">
@@ -1166,7 +1168,7 @@ function LibraryView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedPapers = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const filterOptions = useMemo<Record<LibraryFilterKind, Array<{ id: string; label: string }>>>(() => {
+  const filterOptions = useMemo<Record<LibraryFilterKind, LibraryFilterOption[]>>(() => {
     function collectionOptions() {
       const options = new Map<string, string>();
       papers.forEach((paper) => paper.collections.forEach((collection) => options.set(collection.id, collection.name)));
@@ -1315,7 +1317,19 @@ function LibraryView({
                 <button type="button" className={clause.negated ? "is-active" : ""} onClick={() => updateFilter(clause.key, { negated: !clause.negated })} aria-pressed={clause.negated}>NOT</button>
                 <select aria-label={`Field for ${clause.label}`} value={clause.kind} onChange={(event) => changeFilterKind(clause, event.target.value as LibraryFilterKind)}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
                 <span>=</span>
-                <select aria-label={`Value for ${clause.kind}`} value={clause.valueId} onChange={(event) => { const option = filterOptions[clause.kind].find((candidate) => candidate.id === event.target.value); if (option) updateFilter(clause.key, { valueId: option.id, label: option.label }); }}>{filterOptions[clause.kind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
+                {clause.kind === "author" || clause.kind === "venue" ? (
+                  <FilterValueCombobox
+                    kind={clause.kind}
+                    options={filterOptions[clause.kind]}
+                    valueId={clause.valueId}
+                    fallbackLabel={clause.label}
+                    ariaLabel={`Value for ${clause.kind}`}
+                    onSelect={(option) => updateFilter(clause.key, { valueId: option.id, label: option.label })}
+                    onClear={() => updateFilter(clause.key, { valueId: "", label: "" })}
+                  />
+                ) : (
+                  <select className="filter-value-select" aria-label={`Value for ${clause.kind}`} value={clause.valueId} onChange={(event) => { const option = filterOptions[clause.kind].find((candidate) => candidate.id === event.target.value); if (option) updateFilter(clause.key, { valueId: option.id, label: option.label }); }}>{filterOptions[clause.kind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
+                )}
                 <button type="button" className={clause.closeGroups ? "is-active" : ""} onClick={() => updateFilter(clause.key, { closeGroups: (clause.closeGroups + 1) % 3 })} aria-label="Add closing parenthesis">{clause.closeGroups ? ")".repeat(clause.closeGroups) : ")"}</button>
                 <button type="button" className="is-danger" onClick={() => { setFilters(filters.filter((candidate) => candidate.key !== clause.key)); setPage(1); }} aria-label={`Remove ${clause.kind} filter`}><Trash2 size={14} /></button>
               </div>
@@ -1324,7 +1338,18 @@ function LibraryView({
               <span className="filter-start">ADD</span>
               <select aria-label="New filter field" value={filterKind} onChange={(event) => { setFilterKind(event.target.value as LibraryFilterKind); setFilterValue(""); }}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
               <span>=</span>
-              <select aria-label={`New ${filterKind} filter value`} value={filterValue} onChange={(event) => setFilterValue(event.target.value)}><option value="">Choose…</option>{filterOptions[filterKind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
+              {filterKind === "author" || filterKind === "venue" ? (
+                <FilterValueCombobox
+                  kind={filterKind}
+                  options={filterOptions[filterKind]}
+                  valueId={filterValue}
+                  ariaLabel={`New ${filterKind} filter value`}
+                  onSelect={(option) => setFilterValue(option.id)}
+                  onClear={() => setFilterValue("")}
+                />
+              ) : (
+                <select className="filter-value-select" aria-label={`New ${filterKind} filter value`} value={filterValue} onChange={(event) => setFilterValue(event.target.value)}><option value="">Choose…</option>{filterOptions[filterKind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
+              )}
               <button type="button" className="filter-add-button" onClick={addFilter} disabled={!filterValue} aria-label="Add filter"><Plus size={14} /> Add</button>
             </div>
           </div>
@@ -1364,7 +1389,11 @@ function LibraryView({
             </thead>
             <tbody>
               {pagedPapers.map((paper) => (
-                <tr key={paper.id} className={selected.includes(paper.id) ? "is-selected" : ""} onClick={() => openPaper(paper)}>
+                <tr
+                  key={paper.id}
+                  className={`${selected.includes(paper.id) ? "is-selected" : ""} ${paper.collections.length ? "has-collections" : ""}`.trim()}
+                  onClick={() => openPaper(paper)}
+                >
                   <td className="check-cell">
                     <button
                       onClick={(event) => {
@@ -1397,9 +1426,11 @@ function LibraryView({
                         <span className="paper-secondary-line">
                           <ExpandableAuthorNames paper={paper} />
                         </span>
-                        <span className="paper-collection-line" aria-label="Collections">
-                          {paper.collections.slice(0, 3).map((collection) => <i key={collection.id} className="collection-chip">{collection.name}</i>)}
-                        </span>
+                        {paper.collections.length ? (
+                          <span className="paper-collection-line" aria-label="Collections">
+                            {paper.collections.slice(0, 3).map((collection) => <i key={collection.id} className="collection-chip">{collection.name}</i>)}
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                   </td>
@@ -1741,12 +1772,28 @@ function CollectionsView({
   onCreate: () => void;
   onOpen: (collection: Collection) => void;
 }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(3);
   const filtered = collections.filter((collection) => matchesSearch([collection.name], query));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedCollections = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   return (
     <div className="data-view">
-      <div className="view-toolbar compact-toolbar"><PageSearch value={query} onChange={setQuery} placeholder="Search collections…" /><ToolbarCreateButton label="Add collection" onClick={onCreate} /></div>
+      <div className="view-toolbar compact-toolbar"><PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search collections…" /><ToolbarCreateButton label="Add collection" onClick={onCreate} /></div>
+      {filtered.length ? (
+        <TablePagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={filtered.length}
+          itemLabel="collections"
+          pageSizeOptions={[3, 6, 12]}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
+      ) : null}
       <div className="collection-grid">
-        {filtered.map((collection) => {
+        {pagedCollections.map((collection) => {
           const related = papers.filter((paper) => paper.collections.some((paperCollection) => paperCollection.id === collection.id));
           return (
             <article className="collection-card" key={collection.id}>
@@ -1761,14 +1808,24 @@ function CollectionsView({
                 </div>
               </header>
               <button type="button" className="collection-papers" onClick={() => onOpen(collection)} aria-label={`Open papers in ${collection.name}`}>
-                {related.slice(0, 5).map((paper) => <span key={paper.id}><FileText size={14} /><b>{paper.title}</b></span>)}
-                {related.length > 5 ? <small>+{related.length - 5} more papers</small> : null}
+                {related.map((paper) => <span key={paper.id}><FileText size={14} /><b>{paper.title}</b></span>)}
                 {!related.length ? <span className="row-muted"><FileText size={14} /><b>Add papers to this collection</b></span> : null}
               </button>
             </article>
           );
         })}
       </div>
+      {filtered.length ? (
+        <TablePagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={filtered.length}
+          itemLabel="collections"
+          pageSizeOptions={[3, 6, 12]}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
+      ) : null}
       {!filtered.length ? <EmptyState icon={<FolderOpen size={24} />} title="No collections found" detail="Create a focused space for your next research question." /> : null}
     </div>
   );
@@ -1858,11 +1915,120 @@ function PageSearch({ value, onChange, placeholder }: {
   );
 }
 
-function TablePagination({ page, pageSize, total, itemLabel, onPageChange, onPageSizeChange }: {
+function FilterValueCombobox({ kind, options, valueId, fallbackLabel = "", ariaLabel, onSelect, onClear }: {
+  kind: "author" | "venue";
+  options: LibraryFilterOption[];
+  valueId: string;
+  fallbackLabel?: string;
+  ariaLabel: string;
+  onSelect: (option: LibraryFilterOption) => void;
+  onClear: () => void;
+}) {
+  const listboxId = useId();
+  const selectedLabel = options.find((option) => option.id === valueId)?.label ?? (valueId ? fallbackLabel : "");
+  const [query, setQuery] = useState(selectedLabel);
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const synchronizedValue = useRef(valueId);
+  const normalizedQuery = query.trim().toLowerCase();
+  const matchingOptions = options
+    .filter((option) => !normalizedQuery || option.label.toLowerCase().includes(normalizedQuery))
+    .slice(0, 8);
+
+  useEffect(() => {
+    if (synchronizedValue.current === valueId) {
+      return;
+    }
+    synchronizedValue.current = valueId;
+    setQuery(selectedLabel);
+    setActiveIndex(0);
+  }, [selectedLabel, valueId]);
+
+  function chooseOption(option: LibraryFilterOption) {
+    synchronizedValue.current = option.id;
+    setQuery(option.label);
+    setOpen(false);
+    setActiveIndex(0);
+    onSelect(option);
+  }
+
+  return (
+    <div
+      className={`filter-value-combobox ${open ? "is-open" : ""}`}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <Search size={13} aria-hidden="true" />
+      <input
+        value={query}
+        role="combobox"
+        aria-label={ariaLabel}
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        aria-activedescendant={open && matchingOptions[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined}
+        placeholder={`Search ${kind === "author" ? "authors" : "venues"}…`}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          const nextQuery = event.target.value;
+          setQuery(nextQuery);
+          setOpen(true);
+          setActiveIndex(0);
+          if (valueId && nextQuery !== selectedLabel) {
+            synchronizedValue.current = "";
+            onClear();
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setOpen(true);
+            setActiveIndex((current) => Math.min(current + 1, Math.max(0, matchingOptions.length - 1)));
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex((current) => Math.max(0, current - 1));
+          } else if (event.key === "Enter" && open && matchingOptions[activeIndex]) {
+            event.preventDefault();
+            chooseOption(matchingOptions[activeIndex]);
+          } else if (event.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+      />
+      <ChevronDown size={13} aria-hidden="true" />
+      {open ? (
+        <div className="filter-value-options" id={listboxId} role="listbox" aria-label={`${kind} matches`}>
+          {matchingOptions.length ? matchingOptions.map((option, index) => (
+            <button
+              type="button"
+              id={`${listboxId}-option-${index}`}
+              role="option"
+              aria-selected={option.id === valueId}
+              className={`${index === activeIndex ? "is-active" : ""} ${option.id === valueId ? "is-selected" : ""}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => chooseOption(option)}
+              key={option.id}
+            >
+              <span>{option.label}</span>
+              {option.id === valueId ? <Check size={13} /> : null}
+            </button>
+          )) : <span className="filter-value-empty">No matching {kind === "author" ? "authors" : "venues"}</span>}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [10, 25, 50], onPageChange, onPageSizeChange }: {
   page: number;
   pageSize: number;
   total: number;
   itemLabel: string;
+  pageSizeOptions?: number[];
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
 }) {
@@ -1890,7 +2056,7 @@ function TablePagination({ page, pageSize, total, itemLabel, onPageChange, onPag
     <div className="table-pagination">
       <span>Showing {start}–{end} of {total} {itemLabel}</span>
       <div className="table-pagination-controls">
-        <label>Rows <select aria-label={`Rows per page for ${itemLabel}`} value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}><option value="10">10</option><option value="25">25</option><option value="50">50</option></select></label>
+        <label>Rows <select aria-label={`Rows per page for ${itemLabel}`} value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>{pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}</select></label>
         <nav className="pagination-pages" aria-label={`${itemLabel} pages`}>
           <button type="button" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label="First page" title="First page"><ChevronsLeft size={15} /></button>
           <button type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1} aria-label="Previous page" title="Previous page"><ChevronLeft size={15} /></button>
@@ -1920,6 +2086,8 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
   const [results, setResults] = useState<DiscoveryResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
 
   async function search(event?: FormEvent) {
     event?.preventDefault();
@@ -1938,6 +2106,7 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
       }
       const payload = (await response.json()) as { results: DiscoveryResult[] };
       setResults(payload.results);
+      setPage(1);
       if (!payload.results.length) {
         notify("No matching papers found.", "info");
       }
@@ -1958,6 +2127,10 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
     }
   }
 
+  const pageCount = Math.max(1, Math.ceil(results.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedResults = results.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="discover-view">
       <form className="discover-search" onSubmit={search}>
@@ -1967,7 +2140,7 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
             <button
               type="button"
               className={provider === item.id ? "is-active" : ""}
-              onClick={() => setProvider(item.id)}
+              onClick={() => { setProvider(item.id); setPage(1); }}
               key={item.id}
             >
               {item.label}
@@ -1977,7 +2150,7 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
         <div className="discover-search-box">
           <Search size={21} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a topic, title, DOI, or researcher" autoFocus />
-          <button type="submit" disabled={loading || !query.trim()}>{loading ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />} Search</button>
+          <button type="submit" disabled={loading || !query.trim()} aria-label={`Search ${providerLabel(provider)}`} title={`Search ${providerLabel(provider)}`}>{loading ? <LoaderCircle size={17} className="spin" /> : <Search size={17} />}</button>
         </div>
       </form>
 
@@ -2003,7 +2176,16 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
       {results.length ? (
         <div className="discovery-results">
           <div className="results-heading"><span>{results.length} results</span><small>from {results[0]?.source}</small></div>
-          {results.map((result) => {
+          <TablePagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={results.length}
+            itemLabel="results"
+            pageSizeOptions={[5, 10, 20]}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
+          {pagedResults.map((result) => {
             const key = result.sourceId || result.title;
             const isAdded = added.includes(key);
             return (
@@ -2016,12 +2198,21 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
                   <MarkdownContent content={result.abstract || "No abstract is available for this result."} className="result-abstract markdown-compact" />
                   <div className="result-tags"><span>{result.venueName || "Venue unknown"}</span>{result.doi ? <span>DOI {result.doi}</span> : null}{result.pdfUrl ? <span>Open PDF</span> : null}</div>
                 </div>
-                <button className={isAdded ? "added-button" : "result-add"} disabled={isAdded} onClick={() => void addResult(result)}>
-                  {isAdded ? <><Check size={16} /> Added</> : <><Plus size={16} /> Add</>}
+                <button className={isAdded ? "added-button" : "result-add"} disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} title={isAdded ? "Added to library" : "Add to library"}>
+                  {isAdded ? <Check size={16} /> : <Plus size={16} />}
                 </button>
               </article>
             );
           })}
+          <TablePagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={results.length}
+            itemLabel="results"
+            pageSizeOptions={[5, 10, 20]}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
         </div>
       ) : null}
     </div>
