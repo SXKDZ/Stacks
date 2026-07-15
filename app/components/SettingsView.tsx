@@ -5,6 +5,7 @@ import {
   Check,
   Cloud,
   CloudCog,
+  ChevronDown,
   DatabaseBackup,
   FolderOpen,
   FolderSync,
@@ -18,10 +19,11 @@ import {
   ShieldCheck,
   Sun,
 } from "lucide-react";
-import type { FormEvent, ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
+import type { FormEvent, ReactNode, RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_CHAT_SYSTEM_PROMPT,
+  DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
@@ -49,6 +51,7 @@ interface SettingsSnapshot {
   integrations: Record<string, boolean>;
   prompts: {
     chatSystem: string;
+    extractionSystem: string;
     summarySystem: string;
   };
   sync: {
@@ -83,6 +86,8 @@ interface PromptVariableDefinition {
   description: string;
 }
 
+type PromptKey = "chatSystem" | "summarySystem" | "extractionSystem";
+
 const defaultSettings: SettingsSnapshot = {
   local: true,
   ai: {
@@ -95,6 +100,7 @@ const defaultSettings: SettingsSnapshot = {
   integrations: {},
   prompts: {
     chatSystem: DEFAULT_CHAT_SYSTEM_PROMPT,
+    extractionSystem: DEFAULT_EXTRACTION_SYSTEM_PROMPT,
     summarySystem: DEFAULT_SUMMARY_SYSTEM_PROMPT,
   },
   sync: {
@@ -156,6 +162,12 @@ const summaryVariables: PromptVariableDefinition[] = [
   { token: "{{source_text}}", description: "Full text extracted through the configured reader, or “Not available”." },
 ];
 
+const extractionVariables: PromptVariableDefinition[] = [
+  { token: "{{filename}}", description: "The local PDF filename being analyzed." },
+  { token: "{{embedded_metadata}}", description: "Title, author, subject, and other metadata embedded in the PDF." },
+  { token: "{{source_text}}", description: "Text extracted from the first pages of the PDF." },
+];
+
 function timeLabel(value: string | null): string {
   if (!value) {
     return "Never synced in this session";
@@ -195,6 +207,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [loadingModels, setLoadingModels] = useState(false);
   const [testingModel, setTestingModel] = useState(false);
   const [modelAccess, setModelAccess] = useState<ModelAccessResult | null>(null);
+  const promptEditors = useRef<Record<PromptKey, HTMLTextAreaElement | null>>({
+    chatSystem: null,
+    summarySystem: null,
+    extractionSystem: null,
+  });
 
   const modelOptions = models.length ? models : fallbackBedrockModels;
   const knownModel = modelOptions.some((model) => model.id === settings.ai.modelId);
@@ -264,10 +281,19 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     setSettings((current) => ({ ...current, prompts: { ...current.prompts, [key]: value } }));
   }
 
-  function insertPromptVariable(key: "chatSystem" | "summarySystem", variable: string) {
+  function insertPromptVariable(key: PromptKey, variable: string) {
+    const editor = promptEditors.current[key];
     const current = settings.prompts[key];
-    const separator = current && !current.endsWith("\n") ? "\n" : "";
-    updatePrompt(key, `${current}${separator}${variable}`);
+    const selectionStart = editor?.selectionStart ?? current.length;
+    const selectionEnd = editor?.selectionEnd ?? selectionStart;
+    const next = `${current.slice(0, selectionStart)}${variable}${current.slice(selectionEnd)}`;
+    updatePrompt(key, next);
+    window.requestAnimationFrame(() => {
+      const nextEditor = promptEditors.current[key];
+      const caret = selectionStart + variable.length;
+      nextEditor?.focus();
+      nextEditor?.setSelectionRange(caret, caret);
+    });
   }
 
   async function testModelAccess() {
@@ -328,6 +354,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       maxTokens: settings.ai.maxTokens,
       temperature: settings.ai.temperature,
       chatSystemPrompt: settings.prompts.chatSystem,
+      extractionSystemPrompt: settings.prompts.extractionSystem,
       summarySystemPrompt: settings.prompts.summarySystem,
       remotePath: settings.sync.remotePath,
       autoSync: settings.sync.autoSync,
@@ -392,7 +419,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <p>Configuration</p>
         <button className={tab === "appearance" ? "is-active" : ""} onClick={() => setTab("appearance")}><Palette size={16} /><span><strong>Appearance</strong><small>Library name and theme</small></span></button>
         <button className={tab === "model" ? "is-active" : ""} onClick={() => setTab("model")}><Bot size={16} /><span><strong>AI model</strong><small>Bedrock and generation</small></span></button>
-        <button className={tab === "prompts" ? "is-active" : ""} onClick={() => setTab("prompts")}><MessageSquareText size={16} /><span><strong>Prompt templates</strong><small>Summary and discussion</small></span></button>
+        <button className={tab === "prompts" ? "is-active" : ""} onClick={() => setTab("prompts")}><MessageSquareText size={16} /><span><strong>Prompt templates</strong><small>Discussion, summaries, extraction</small></span></button>
         <button className={tab === "sync" ? "is-active" : ""} onClick={() => setTab("sync")}><CloudCog size={16} /><span><strong>OneDrive sync</strong><small>Library backup and local files</small></span></button>
         <button className={tab === "integrations" ? "is-active" : ""} onClick={() => setTab("integrations")}><KeyRound size={16} /><span><strong>Integrations</strong><small>Discovery and extraction</small></span></button>
         <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>{settings.local ? "Stored locally" : "Deployment managed"}</strong><small>{settings.local ? "Protected structured file; secrets are never displayed" : "Use deployment environment variables"}</small></span></div>
@@ -423,7 +450,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Base Anthropic IDs use Bedrock Mantle; geo, global, and inference-profile IDs use Bedrock Runtime.</small></label> : null}
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><button type="button" onClick={() => void loadModels(true)} disabled={loadingModels}>{loadingModels ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />} Refresh models</button><button type="button" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()}>{testingModel ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} Test access</button></div>
                 <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
-                <label><span>Maximum output tokens</span><input type="number" min="128" max="8192" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /></label>
+                <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>PA sends this value to the selected model without imposing an artificial upper limit; the model’s own output limit still applies.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
             </div>
@@ -433,12 +460,20 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "prompts" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<MessageSquareText size={19} />} title="Prompt templates" detail="Shape how PA discusses papers and writes reusable library summaries." />
+            <SettingsHeading icon={<MessageSquareText size={19} />} title="Prompt templates" detail="Shape discussion, summary, and PDF metadata extraction." />
             <div className="settings-card prompt-settings-card">
-              <div className="settings-form-grid">
-                <label className="span-2"><span>Discussion system prompt</span><textarea rows={8} value={settings.prompts.chatSystem} onChange={(event) => updatePrompt("chatSystem", event.target.value)} /><small>PA numbers discussion context as Paper 1, Paper 2, and so on. Insert a placeholder wherever that context should appear.</small><PromptVariables variables={discussionVariables} onInsert={(variable) => insertPromptVariable("chatSystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("chatSystem", DEFAULT_CHAT_SYSTEM_PROMPT)}>Restore discussion default</button></label>
-                <label className="span-2"><span>Summary system prompt</span><textarea rows={8} value={settings.prompts.summarySystem} onChange={(event) => updatePrompt("summarySystem", event.target.value)} /><small>Summary placeholders are replaced with the selected paper’s current metadata and extracted content.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</button></label>
-              </div>
+              <details className="prompt-template-section">
+                <summary><span><strong>Discussion system prompt</strong><small>Ask PA with up to eight selected papers.</small></span><ChevronDown size={16} /></summary>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="chatSystem" value={settings.prompts.chatSystem} onChange={(value) => updatePrompt("chatSystem", value)} /><small>PA numbers discussion context as Paper 1, Paper 2, and so on. Insert a placeholder wherever that context should appear.</small><PromptVariables variables={discussionVariables} onInsert={(variable) => insertPromptVariable("chatSystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("chatSystem", DEFAULT_CHAT_SYSTEM_PROMPT)}>Restore discussion default</button></div>
+              </details>
+              <details className="prompt-template-section">
+                <summary><span><strong>Summary system prompt</strong><small>Create the reusable PA summary stored with a paper.</small></span><ChevronDown size={16} /></summary>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Summary placeholders are replaced with the selected paper’s current metadata and extracted content.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</button></div>
+              </details>
+              <details className="prompt-template-section">
+                <summary><span><strong>PDF extraction system prompt</strong><small>Extract structured metadata from local PDF text.</small></span><ChevronDown size={16} /></summary>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the first pages, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</button></div>
+              </details>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
@@ -485,14 +520,57 @@ function SettingsHeading({ icon, title, detail }: { icon: ReactNode; title: stri
   return <div className="settings-heading"><span>{icon}</span><div><h2>{title}</h2><p>{detail}</p></div></div>;
 }
 
+function PromptEditor({ inputRef, promptKey, value, onChange }: {
+  inputRef: RefObject<Record<PromptKey, HTMLTextAreaElement | null>>;
+  promptKey: PromptKey;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const highlightLayer = useRef<HTMLPreElement | null>(null);
+  const parts = value.split(/(\{\{[a-zA-Z0-9_]+\}\}|^#{1,6}\s.+$|`[^`\n]+`)/gm);
+
+  return (
+    <div className="prompt-code-editor">
+      <pre ref={highlightLayer} aria-hidden="true">
+        {parts.map((part, index) => {
+          const className = /^\{\{.+\}\}$/.test(part)
+            ? "is-variable"
+            : /^#{1,6}\s/.test(part)
+              ? "is-heading"
+              : /^`.+`$/.test(part)
+                ? "is-code"
+                : undefined;
+          return <span className={className} key={`${index}-${part.slice(0, 12)}`}>{part}</span>;
+        })}
+        {value.endsWith("\n") ? "\n" : null}
+      </pre>
+      <textarea
+        ref={(node) => { inputRef.current[promptKey] = node; }}
+        rows={8}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onScroll={(event) => {
+          if (!highlightLayer.current) {
+            return;
+          }
+          highlightLayer.current.scrollTop = event.currentTarget.scrollTop;
+          highlightLayer.current.scrollLeft = event.currentTarget.scrollLeft;
+        }}
+        spellCheck={false}
+        aria-label={`${promptKey === "chatSystem" ? "Discussion" : promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
+      />
+    </div>
+  );
+}
+
 function PromptVariables({ variables, onInsert }: { variables: PromptVariableDefinition[]; onInsert: (variable: string) => void }) {
   return (
     <div className="prompt-variable-help">
       <div className="prompt-variable-list">
         <span>Insert placeholder</span>
-        {variables.map((variable) => <button type="button" onClick={() => onInsert(variable.token)} title={variable.description} aria-label={`Insert ${variable.token}: ${variable.description}`} key={variable.token}>{variable.token}</button>)}
+        {variables.map((variable) => <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => onInsert(variable.token)} title={variable.description} aria-label={`Insert ${variable.token}: ${variable.description}`} key={variable.token}>{variable.token}</button>)}
       </div>
-      <details className="prompt-variable-reference" open>
+      <details className="prompt-variable-reference">
         <summary>What each placeholder inserts</summary>
         <div>{variables.map((variable) => <p key={variable.token}><code>{variable.token}</code><span>{variable.description}</span></p>)}</div>
       </details>

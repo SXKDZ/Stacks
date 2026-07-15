@@ -21,6 +21,19 @@ export const DEFAULT_SUMMARY_SYSTEM_PROMPT = [
   "\n\nPaper to summarize:\n{{paper1}}",
 ].join(" ");
 
+export const DEFAULT_EXTRACTION_SYSTEM_PROMPT = [
+  "You are an expert at extracting bibliographic metadata from academic papers.",
+  "Use only the supplied PDF text and embedded metadata. Never infer unavailable values.",
+  "Return one valid JSON object without Markdown fences using exactly these keys:",
+  '"title", "authors", "abstract", "year", "venueName", "venueAcronym", "paperType", "doi", "url", "category", and "preprintId".',
+  '"authors" must be an ordered array of names; "year" must be an integer or null;',
+  '"paperType" must be one of "conference", "journal", "workshop", "preprint", or "other".',
+  "Use null for unavailable scalar values and an empty array for unavailable authors.",
+  "For conferences, remove proceedings and ordinal wording from venueName and use the common conference acronym.",
+  "For journals, use the full journal name and a conventional abbreviated venueAcronym when present.",
+  "\n\nFile: {{filename}}\nEmbedded metadata: {{embedded_metadata}}\n\nFirst two PDF pages:\n{{source_text}}",
+].join(" ");
+
 export function renderPromptTemplate(
   template: string,
   replacements: Record<string, string>,

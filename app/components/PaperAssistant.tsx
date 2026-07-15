@@ -20,6 +20,7 @@ import {
   Database,
   ExternalLink,
   FileText,
+  FileSearch,
   FolderOpen,
   Home,
   Inbox,
@@ -51,7 +52,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
-import { BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
+import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import type {
   Author,
   ChatMessage,
@@ -93,6 +94,28 @@ type EditablePaperType = "conference" | "journal" | "workshop" | "preprint" | "w
 type PaperColumnKey = "title" | "venue" | "year" | "status";
 type AuthorColumnKey = "author" | "papers" | "latest";
 type VenueColumnKey = "venue" | "type" | "publisher" | "papers" | "latest";
+
+interface ExtractedPdfMetadata {
+  title: string;
+  authors: string[];
+  abstract: string;
+  year: number | null;
+  venueName: string;
+  venueAcronym: string;
+  paperType: EditablePaperType;
+  doi: string | null;
+  url: string | null;
+  category: string | null;
+  preprintId: string | null;
+}
+
+interface PdfExtractionResponse {
+  metadata: ExtractedPdfMetadata;
+  analyzedPages: number;
+  totalPages: number;
+  usedFallback: boolean;
+  warning?: string;
+}
 
 const defaultPaperColumnWidths: Record<PaperColumnKey, number> = {
   title: 56,
@@ -334,9 +357,32 @@ function ExpandableAuthorNames({ paper, limit = 3 }: { paper: Paper; limit?: num
             setExpanded((current) => !current);
           }}
         >
-          {expanded ? "Show fewer" : `More ${hiddenCount} ${hiddenCount === 1 ? "author" : "authors"}`}
+          {expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
         </button>
       ) : null}
+    </span>
+  );
+}
+
+function ExpandableAuthorButtons({ paper, onOpenAuthor, limit = 5 }: {
+  paper: Paper;
+  onOpenAuthor: (authorName: string) => void;
+  limit?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleAuthors = expanded ? paper.authors : paper.authors.slice(0, limit);
+  const hiddenCount = Math.max(0, paper.authors.length - limit);
+  if (!paper.authors.length) {
+    return <span>Authors not recorded</span>;
+  }
+  return (
+    <span className="expandable-author-buttons">
+      <span>
+        {visibleAuthors.map((author, index) => (
+          <span key={author.id}><button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>{index < visibleAuthors.length - 1 ? ", " : ""}</span>
+        ))}
+      </span>
+      {hiddenCount ? <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button> : null}
     </span>
   );
 }
@@ -436,6 +482,21 @@ async function readError(response: Response): Promise<string> {
   } catch {
     return `Request failed with ${response.status}.`;
   }
+}
+
+async function extractPdfMetadata(file: Blob, filename: string): Promise<PdfExtractionResponse> {
+  const response = await fetch("/api/extract-pdf", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/pdf",
+      "X-PA-File-Name": encodeURIComponent(filename),
+    },
+    body: file,
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+  return response.json() as Promise<PdfExtractionResponse>;
 }
 
 function StatusPill({ status, compact = false }: { status: string; compact?: boolean }) {
@@ -689,7 +750,7 @@ function PaperAssistantWorkspace() {
             <span className="brand-mark">PA</span>
             <span className="brand-copy">
               <strong>Paper Assistant</strong>
-              <span className="brand-slogan">From papers to perspective.</span>
+              <span className="brand-slogan">Read deeper. Connect further.</span>
             </span>
           </button>
           <button className="icon-button mobile-close" onClick={() => setMobileNav(false)} aria-label="Close navigation">
@@ -731,6 +792,8 @@ function PaperAssistantWorkspace() {
         </nav>
 
         <div className="sidebar-spacer" />
+
+        <BackgroundTaskDock />
 
         <button className="assistant-card" onClick={() => setChatPaper(currentPaper ?? null)}>
           <span className="assistant-orb">
@@ -845,6 +908,7 @@ function PaperAssistantWorkspace() {
               onEdit={(collection) => setModal({ kind: "entity", entity: "collection", record: collection })}
               onDelete={(collection) => void deleteRecords("collection", [collection.id])}
               onCreate={() => setModal({ kind: "entity", entity: "collection" })}
+              onOpenPaper={setSelectedPaper}
               onOpen={(collection) => {
                 setQuery("");
                 setLibraryFilters([createLibraryFilter("collection", collection.id, collection.name)]);
@@ -856,6 +920,7 @@ function PaperAssistantWorkspace() {
               mutateLibrary={mutateLibrary}
               notify={notify}
               onImport={() => setModal({ kind: "add-paper" })}
+              onSearchLibrary={() => setCommandOpen(true)}
             />
           ) : (
             <SettingsView notify={notify} theme={theme} onThemeChange={setTheme} libraryName={libraryName} onLibraryNameChange={setLibraryName} />
@@ -907,6 +972,8 @@ function PaperAssistantWorkspace() {
 
       {modal?.kind === "add-paper" ? (
         <AddPaperModal
+          authors={snapshot.authors}
+          venues={snapshot.venues}
           onClose={() => setModal(null)}
           mutateLibrary={mutateLibrary}
           notify={notify}
@@ -916,6 +983,8 @@ function PaperAssistantWorkspace() {
       {modal?.kind === "edit-paper" ? (
         <PaperEditModal
           paper={modal.paper}
+          authors={snapshot.authors}
+          venues={snapshot.venues}
           onClose={() => setModal(null)}
           mutateLibrary={mutateLibrary}
           notify={notify}
@@ -1037,7 +1106,7 @@ function Dashboard({
             <div className="document-stack document-back" />
             <div className="document-stack document-middle" />
             <div className="document-sheet">
-              <div className="sheet-label">PAPER / {currentPaper.year}</div>
+              <div className="sheet-label">PAPER / {new Date().getFullYear()}</div>
               <div className="sheet-title" />
               <div className="sheet-title short" />
               <div className="sheet-rule" />
@@ -1080,10 +1149,9 @@ function Dashboard({
               <span className={`type-tile type-${paper.paperType}`}><FileText size={18} /></span>
               <span className="recent-copy">
                 <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
-                <span className="recent-meta"><ExpandableAuthorNames paper={paper} /><span>· {venueLine(paper)} {paper.year}</span></span>
+                <span className="recent-meta"><ExpandableAuthorNames paper={paper} /><span>{venueLine(paper)} {paper.year}</span></span>
               </span>
               <StatusPill status={paper.readingStatus} />
-              <button type="button" className="recent-open-button" onClick={() => openPaper(paper)} aria-label={`Open ${paper.title}`}><ArrowUpRight size={16} className="row-arrow" /></button>
             </article>
           ))}
         </div>
@@ -1124,6 +1192,12 @@ function LibraryView({
   const [columnWidths, setColumnWidths] = useState<Record<PaperColumnKey, number>>(defaultPaperColumnWidths);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    if (filters.length > 0) {
+      setFilterBuilderOpen(true);
+    }
+  }, [filters.length]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1203,10 +1277,10 @@ function LibraryView({
   const effectivePaperColumnWidths = {
     title: Math.max(38, columnWidths.title),
     venue: Math.min(28, Math.max(12, columnWidths.venue)),
-    year: Math.min(6, Math.max(4.5, columnWidths.year)),
-    status: Math.min(8, Math.max(6, columnWidths.status)),
+    year: 88,
+    status: 88,
   };
-  const paperColumnTotal = Object.values(effectivePaperColumnWidths).reduce((total, width) => total + width, 0);
+  const resizablePaperColumnTotal = effectivePaperColumnWidths.title + effectivePaperColumnWidths.venue;
 
   function toggleSort(key: PaperColumnKey) {
     setSort((current) => current.key === key
@@ -1300,8 +1374,8 @@ function LibraryView({
         {selected.length ? (
           <div className="library-selection-actions">
             <span><CheckCircle2 size={15} /> {selected.length} selected</span>
-            <button className="selection-icon-button" onClick={() => setSelected([])} aria-label="Clear selection" title="Clear selection"><X size={15} /></button>
-            <button className="selection-icon-button is-danger" onClick={deleteSelected} aria-label="Delete selected papers" title="Delete selected papers"><Trash2 size={15} /></button>
+            <button className="selection-icon-button" onClick={() => setSelected([])}><X size={15} /><span>Clear</span></button>
+            <button className="selection-icon-button is-danger" onClick={deleteSelected}><Trash2 size={15} /><span>Delete</span></button>
           </div>
         ) : null}
       </div>
@@ -1369,10 +1443,10 @@ function LibraryView({
           <table className="paper-table research-grid">
             <colgroup>
               <col className="paper-column-check" />
-              <col style={{ width: `${(effectivePaperColumnWidths.title / paperColumnTotal) * 94}%` }} />
-              <col style={{ width: `${(effectivePaperColumnWidths.venue / paperColumnTotal) * 94}%` }} />
-              <col style={{ width: `${(effectivePaperColumnWidths.year / paperColumnTotal) * 94}%` }} />
-              <col style={{ width: `${(effectivePaperColumnWidths.status / paperColumnTotal) * 94}%` }} />
+              <col style={{ width: `${(effectivePaperColumnWidths.title / resizablePaperColumnTotal) * 100}%` }} />
+              <col style={{ width: `${(effectivePaperColumnWidths.venue / resizablePaperColumnTotal) * 100}%` }} />
+              <col className="paper-column-year" />
+              <col className="paper-column-status" />
             </colgroup>
             <thead>
               <tr>
@@ -1383,8 +1457,8 @@ function LibraryView({
                 </th>
                 <SortablePaperHeader label="Paper" sortKey="title" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
                 <SortablePaperHeader label="Venue" sortKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-                <SortablePaperHeader label="Year" sortKey="year" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-                <SortablePaperHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+                <SortablePaperHeader label="Year" sortKey="year" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
+                <SortablePaperHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
               </tr>
             </thead>
             <tbody>
@@ -1457,32 +1531,33 @@ function LibraryView({
   );
 }
 
-function SortablePaperHeader({ label, sortKey, sort, onSort, onResize, onResetWidth }: {
+function SortablePaperHeader({ label, sortKey, sort, onSort, onResize, onResetWidth, resizable = true }: {
   label: string;
   sortKey: PaperColumnKey;
   sort: { key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" };
   onSort: (key: PaperColumnKey) => void;
   onResize: (event: ReactPointerEvent<HTMLButtonElement>, key: PaperColumnKey) => void;
   onResetWidth: (event: ReactMouseEvent<HTMLButtonElement>, key: PaperColumnKey) => void;
+  resizable?: boolean;
 }) {
   const active = sort.key === sortKey;
   const ariaSort: AriaAttributes["aria-sort"] = active
     ? sort.direction === "asc" ? "ascending" : "descending"
     : "none";
   return (
-    <th aria-sort={ariaSort} className={`is-resizable ${sortKey === "year" || sortKey === "status" ? "is-centered" : ""}`}>
+    <th aria-sort={ariaSort} className={`${resizable ? "is-resizable" : "is-fixed-width"} ${sortKey === "year" || sortKey === "status" ? "is-centered" : ""}`}>
       <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(sortKey)}>
         <span>{label}</span>
         {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
       </button>
-      <button
+      {resizable ? <button
         type="button"
         className="column-resize-handle"
         aria-label={`Resize ${label} column`}
         title={`Drag to resize ${label}; double-click to reset`}
         onPointerDown={(event) => onResize(event, sortKey)}
         onDoubleClick={(event) => onResetWidth(event, sortKey)}
-      />
+      /> : null}
     </th>
   );
 }
@@ -1597,7 +1672,7 @@ function AuthorsView({
                 </td>
                 <td className="entity-number-cell">{author.paperCount}</td>
                 <td className="entity-number-cell">{author.latestYear ?? "—"}</td>
-                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(author)} aria-label={`Edit ${author.displayName}`} title="Edit author"><Pencil size={15} /></button></td>
+                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(author)}><Pencil size={15} /><span>Edit</span></button></td>
               </tr>
             ))}
           </tbody>
@@ -1734,7 +1809,7 @@ function VenuesView({
                 <td className="entity-meta-cell">{venue.publisher || "—"}</td>
                 <td className="entity-number-cell">{venue.paperCount}</td>
                 <td className="entity-number-cell">{venue.latestYear ?? "—"}</td>
-                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(venue)} aria-label={`Edit ${venue.name}`} title="Edit venue"><Pencil size={15} /></button></td>
+                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(venue)}><Pencil size={15} /><span>Edit</span></button></td>
               </tr>
             ))}
           </tbody>
@@ -1762,6 +1837,7 @@ function CollectionsView({
   onDelete,
   onCreate,
   onOpen,
+  onOpenPaper,
 }: {
   collections: Collection[];
   papers: Paper[];
@@ -1771,15 +1847,16 @@ function CollectionsView({
   onDelete: (collection: Collection) => void;
   onCreate: () => void;
   onOpen: (collection: Collection) => void;
+  onOpenPaper: (paper: Paper) => void;
 }) {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(3);
+  const [pageSize, setPageSize] = useState(6);
   const filtered = collections.filter((collection) => matchesSearch([collection.name], query));
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedCollections = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   return (
-    <div className="data-view">
+    <div className="data-view collections-view">
       <div className="view-toolbar compact-toolbar"><PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search collections…" /><ToolbarCreateButton label="Add collection" onClick={onCreate} /></div>
       {filtered.length ? (
         <TablePagination
@@ -1787,33 +1864,24 @@ function CollectionsView({
           pageSize={pageSize}
           total={filtered.length}
           itemLabel="collections"
-          pageSizeOptions={[3, 6, 12]}
+          pageSizeOptions={[6, 9, 12]}
+          pageSizeLabel="Collections"
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       ) : null}
       <div className="collection-grid">
-        {pagedCollections.map((collection) => {
-          const related = papers.filter((paper) => paper.collections.some((paperCollection) => paperCollection.id === collection.id));
-          return (
-            <article className="collection-card" key={collection.id}>
-              <header className="collection-card-top">
-                <button type="button" className="collection-heading" onClick={() => onOpen(collection)}>
-                  <span className="collection-icon"><FolderOpen size={18} /></span>
-                  <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
-                </button>
-                <div className="collection-actions">
-                  <button type="button" className="row-icon-button" onClick={() => onEdit(collection)} aria-label={`Edit ${collection.name}`} title="Edit collection"><Pencil size={15} /></button>
-                  <button type="button" className="row-icon-button is-danger" onClick={() => onDelete(collection)} aria-label={`Delete ${collection.name}`} title="Delete collection"><Trash2 size={15} /></button>
-                </div>
-              </header>
-              <button type="button" className="collection-papers" onClick={() => onOpen(collection)} aria-label={`Open papers in ${collection.name}`}>
-                {related.map((paper) => <span key={paper.id}><FileText size={14} /><b>{paper.title}</b></span>)}
-                {!related.length ? <span className="row-muted"><FileText size={14} /><b>Add papers to this collection</b></span> : null}
-              </button>
-            </article>
-          );
-        })}
+        {pagedCollections.map((collection) => (
+          <CollectionCard
+            collection={collection}
+            papers={papers.filter((paper) => paper.collections.some((paperCollection) => paperCollection.id === collection.id))}
+            onEdit={() => onEdit(collection)}
+            onDelete={() => onDelete(collection)}
+            onOpen={() => onOpen(collection)}
+            onOpenPaper={onOpenPaper}
+            key={collection.id}
+          />
+        ))}
       </div>
       {filtered.length ? (
         <TablePagination
@@ -1821,13 +1889,59 @@ function CollectionsView({
           pageSize={pageSize}
           total={filtered.length}
           itemLabel="collections"
-          pageSizeOptions={[3, 6, 12]}
+          pageSizeOptions={[6, 9, 12]}
+          pageSizeLabel="Collections"
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       ) : null}
       {!filtered.length ? <EmptyState icon={<FolderOpen size={24} />} title="No collections found" detail="Create a focused space for your next research question." /> : null}
     </div>
+  );
+}
+
+function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPaper }: {
+  collection: Collection;
+  papers: Paper[];
+  onEdit: () => void;
+  onDelete: () => void;
+  onOpen: () => void;
+  onOpenPaper: (paper: Paper) => void;
+}) {
+  const pageSize = 5;
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(papers.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visiblePapers = papers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const start = papers.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const end = Math.min(currentPage * pageSize, papers.length);
+  return (
+    <article className="collection-card">
+      <header className="collection-card-top">
+        <button type="button" className="collection-heading" onClick={onOpen}>
+          <span className="collection-icon"><FolderOpen size={18} /></span>
+          <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
+        </button>
+        <div className="collection-actions">
+          <button type="button" className="row-icon-button" onClick={onEdit}><Pencil size={15} /><span>Edit</span></button>
+          <button type="button" className="row-icon-button is-danger" onClick={onDelete}><Trash2 size={15} /><span>Delete</span></button>
+        </div>
+      </header>
+      <div className="collection-papers" aria-label={`Papers in ${collection.name}`}>
+        {visiblePapers.map((paper) => <button type="button" onClick={() => onOpenPaper(paper)} key={paper.id}><FileText size={14} /><b>{paper.title}</b></button>)}
+        {!papers.length ? <span className="row-muted"><FileText size={14} /><b>No papers in this collection</b></span> : null}
+      </div>
+      {papers.length > pageSize ? (
+        <div className="collection-card-pagination">
+          <span>{start}–{end} of {papers.length}</span>
+          <nav aria-label={`${collection.name} paper pages`}>
+            <button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1} aria-label="Previous papers"><ChevronLeft size={13} /></button>
+            <span>{currentPage} / {pageCount}</span>
+            <button type="button" onClick={() => setPage(Math.min(pageCount, currentPage + 1))} disabled={currentPage >= pageCount} aria-label="Next papers"><ChevronRight size={13} /></button>
+          </nav>
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -1887,9 +2001,9 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
       {selected ? (
         <div className="selection-actions">
           <span>{selected} selected</span>
-          <button className="selection-icon-button" onClick={onBulk} aria-label="Bulk edit selected records" title="Bulk edit"><Pencil size={15} /></button>
-          <button className="selection-icon-button is-danger" onClick={onDelete} aria-label="Delete selected records" title="Delete selected"><Trash2 size={15} /></button>
-          <button className="selection-icon-button" onClick={onClear} aria-label="Clear selection" title="Clear selection"><X size={15} /></button>
+          <button className="selection-icon-button" onClick={onBulk}><Pencil size={15} /><span>Edit</span></button>
+          <button className="selection-icon-button is-danger" onClick={onDelete}><Trash2 size={15} /><span>Delete</span></button>
+          <button className="selection-icon-button" onClick={onClear}><X size={15} /><span>Clear</span></button>
         </div>
       ) : null}
       <ToolbarCreateButton label={createLabel} onClick={onCreate} />
@@ -1898,7 +2012,7 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
 }
 
 function ToolbarCreateButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button type="button" className="toolbar-create-button" onClick={onClick} aria-label={label} title={label}><Plus size={17} /></button>;
+  return <button type="button" className="toolbar-create-button" onClick={onClick} aria-label={label} title={label}><Plus size={17} /><span>Add</span></button>;
 }
 
 function PageSearch({ value, onChange, placeholder }: {
@@ -2023,21 +2137,24 @@ function FilterValueCombobox({ kind, options, valueId, fallbackLabel = "", ariaL
   );
 }
 
-function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [10, 25, 50], onPageChange, onPageSizeChange }: {
+function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [10, 25, 50], pageSizeLabel = "Rows", onPageChange, onPageSizeChange }: {
   page: number;
   pageSize: number;
   total: number;
   itemLabel: string;
   pageSizeOptions?: number[];
+  pageSizeLabel?: string;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
 }) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const start = total ? (page - 1) * pageSize + 1 : 0;
   const end = Math.min(page * pageSize, total);
-  const nearbyPages = Array.from(new Set([1, 2, page - 1, page, page + 1, pageCount - 1, pageCount]))
-    .filter((candidate) => candidate >= 1 && candidate <= pageCount)
-    .sort((left, right) => left - right);
+  const nearbyPages = pageCount <= 7
+    ? Array.from({ length: pageCount }, (_, index) => index + 1)
+    : Array.from(new Set([1, page - 1, page, page + 1, pageCount]))
+      .filter((candidate) => candidate >= 1 && candidate <= pageCount)
+      .sort((left, right) => left - right);
   const pageItems: Array<number | string> = [];
   nearbyPages.forEach((candidate, index) => {
     const previous = nearbyPages[index - 1];
@@ -2056,7 +2173,7 @@ function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [
     <div className="table-pagination">
       <span>Showing {start}–{end} of {total} {itemLabel}</span>
       <div className="table-pagination-controls">
-        <label>Rows <select aria-label={`Rows per page for ${itemLabel}`} value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>{pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}</select></label>
+        <label>{pageSizeLabel} <select aria-label={`${pageSizeLabel} per page for ${itemLabel}`} value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>{pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}</select></label>
         <nav className="pagination-pages" aria-label={`${itemLabel} pages`}>
           <button type="button" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label="First page" title="First page"><ChevronsLeft size={15} /></button>
           <button type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1} aria-label="Previous page" title="Previous page"><ChevronLeft size={15} /></button>
@@ -2076,10 +2193,11 @@ function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [
   );
 }
 
-function DiscoverView({ mutateLibrary, notify, onImport }: {
+function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
   notify: (message: string, tone?: ToastState["tone"]) => void;
   onImport: () => void;
+  onSearchLibrary: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [provider, setProvider] = useState<DiscoveryProvider>("semantic-scholar");
@@ -2150,7 +2268,7 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
         <div className="discover-search-box">
           <Search size={21} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a topic, title, DOI, or researcher" autoFocus />
-          <button type="submit" disabled={loading || !query.trim()} aria-label={`Search ${providerLabel(provider)}`} title={`Search ${providerLabel(provider)}`}>{loading ? <LoaderCircle size={17} className="spin" /> : <Search size={17} />}</button>
+          <button type="submit" disabled={loading || !query.trim()}>{loading ? <LoaderCircle size={17} className="spin" /> : <Search size={17} />}<span>Search</span></button>
         </div>
       </form>
 
@@ -2165,7 +2283,7 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
             ))}
           </div>
           <div className="discovery-capabilities">
-            <div><Search size={17} /><span><strong>Search your library</strong><small>Title, abstract, author, venue, notes, filters, and fuzzy matching.</small></span></div>
+            <button type="button" onClick={onSearchLibrary}><Search size={17} /><span><strong>Search your library</strong><small>Title, abstract, author, venue, notes, filters, and fuzzy matching.</small></span><ArrowRight size={15} /></button>
             <button type="button" onClick={onImport}><Database size={17} /><span><strong>Import by source</strong><small>arXiv, DOI, DBLP, OpenReview, URL/PDF, or manual metadata.</small></span><ArrowRight size={15} /></button>
           </div>
         </div>
@@ -2199,7 +2317,7 @@ function DiscoverView({ mutateLibrary, notify, onImport }: {
                   <div className="result-tags"><span>{result.venueName || "Venue unknown"}</span>{result.doi ? <span>DOI {result.doi}</span> : null}{result.pdfUrl ? <span>Open PDF</span> : null}</div>
                 </div>
                 <button className={isAdded ? "added-button" : "result-add"} disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} title={isAdded ? "Added to library" : "Add to library"}>
-                  {isAdded ? <Check size={16} /> : <Plus size={16} />}
+                  {isAdded ? <><Check size={16} /><span>Added</span></> : <><Plus size={16} /><span>Add</span></>}
                 </button>
               </article>
             );
@@ -2248,9 +2366,7 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onDelet
           </div>
           <h2>{paper.title}</h2>
           <div className="detail-authors" aria-label="Paper authors">
-            {paper.authors.length
-              ? paper.authors.map((author) => <button type="button" key={author.id} onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>)
-              : <span>Authors not recorded</span>}
+            <ExpandableAuthorButtons paper={paper} onOpenAuthor={onOpenAuthor} />
           </div>
           <div className="detail-meta-grid">
             <span><small>Venue</small><button type="button" className="detail-entity-link" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</button></span>
@@ -2353,9 +2469,7 @@ function ReaderDrawer({ paper, onClose, onChat, onUpdate }: {
           <div className="reader-paper-meta"><StatusPill status={paper.readingStatus} /><span>{venueLine(paper)} · {paper.year ?? "n.d."}</span></div>
           <h2>{paper.title}</h2>
           <p className="reader-authors">
-            {paper.authors.length
-              ? paper.authors.map((author) => author.displayName).join(", ")
-              : "Authors not recorded"}
+            <ExpandableAuthorNames paper={paper} limit={3} />
           </p>
           <div className="reader-summary reader-summary-scroll">
             <p className="eyebrow">Summary</p>
@@ -2391,6 +2505,7 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
   const [paperPickerOpen, setPaperPickerOpen] = useState(false);
   const [paperQuery, setPaperQuery] = useState("");
   const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([paper.id]);
+  const [drawerWidth, setDrawerWidth] = useState(460);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const { runTask } = useBackgroundTasks();
 
@@ -2464,10 +2579,42 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
     }
   }
 
+  function resizeChat(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = drawerWidth;
+    const maximum = Math.max(380, Math.min(860, window.innerWidth - 278));
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      setDrawerWidth(Math.min(maximum, Math.max(380, startWidth + startX - moveEvent.clientX)));
+    };
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      document.body.classList.remove("is-resizing-chat");
+    };
+    document.body.classList.add("is-resizing-chat");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  }
+
   return (
     <div className="drawer-layer chat-layer">
       <button className="drawer-scrim" onClick={onClose} aria-label="Close assistant" />
-      <aside className="chat-drawer">
+      <aside className="chat-drawer" style={{ width: `${drawerWidth}px` }}>
+        <button
+          type="button"
+          className="chat-resize-handle"
+          aria-label="Resize Ask PA panel"
+          title="Drag to resize"
+          onPointerDown={resizeChat}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+              event.preventDefault();
+              const delta = event.key === "ArrowLeft" ? 24 : -24;
+              setDrawerWidth((current) => Math.min(860, Math.max(380, current + delta)));
+            }
+          }}
+        />
         <div className="chat-header">
           <span className="assistant-orb large"><Sparkles size={19} /></span>
           <span><strong>Ask PA</strong><small>Grounded in the selected paper</small></span>
@@ -2602,16 +2749,66 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
   );
 }
 
-function PaperMetadataFields({ paperType, paper, notify }: {
+function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; defaultValue?: string }) {
+  const listboxId = useId();
+  const [value, setValue] = useState(defaultValue);
+  const [open, setOpen] = useState(false);
+  const fragment = value.split(",").at(-1)?.trim().toLowerCase() ?? "";
+  const selectedNames = new Set(value.split(",").slice(0, -1).map((name) => name.trim().toLowerCase()));
+  const matches = fragment ? authors
+    .filter((author) => author.displayName.toLowerCase().includes(fragment) && !selectedNames.has(author.displayName.toLowerCase()))
+    .slice(0, 8) : [];
+  function choose(author: Author) {
+    const parts = value.split(",");
+    parts[parts.length - 1] = ` ${author.displayName}`;
+    setValue(`${parts.join(",").trimStart()}, `);
+    setOpen(false);
+  }
+  return (
+    <label className="field-span-2 autocomplete-field">
+      <span>Authors</span>
+      <input name="authors" value={value} onChange={(event) => { setValue(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
+      {open && matches.length ? <div className="metadata-autocomplete-options" id={listboxId} role="listbox">{matches.map((author) => <button type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</div> : null}
+      <small>Separate names with commas. Choose a match to reuse its canonical author record.</small>
+    </label>
+  );
+}
+
+function VenueNameField({ venues, label, defaultValue = "", placeholder }: { venues: Venue[]; label: string; defaultValue?: string; placeholder: string }) {
+  const listboxId = useId();
+  const [value, setValue] = useState(defaultValue);
+  const [open, setOpen] = useState(false);
+  const query = value.trim().toLowerCase();
+  const matches = query ? venues.filter((venue) => `${venue.name} ${venue.acronym ?? ""}`.toLowerCase().includes(query)).slice(0, 8) : [];
+  function choose(venue: Venue, button: HTMLButtonElement) {
+    setValue(venue.name);
+    const form = button.closest("form");
+    const acronym = form?.elements.namedItem("venueAcronym");
+    if (acronym instanceof HTMLInputElement) {
+      acronym.value = venue.acronym ?? "";
+    }
+    setOpen(false);
+  }
+  return (
+    <label className="autocomplete-field">
+      <span>{label}</span>
+      <input name="venueName" value={value} onChange={(event) => { setValue(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder={placeholder} />
+      {open && matches.length ? <div className="metadata-autocomplete-options" id={listboxId} role="listbox">{matches.map((venue) => <button type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={(event) => choose(venue, event.currentTarget)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</div> : null}
+    </label>
+  );
+}
+
+function PaperMetadataFields({ paperType, paper, venues, notify }: {
   paperType: EditablePaperType;
   paper?: Paper;
+  venues: Venue[];
   notify: (message: string, tone?: ToastState["tone"]) => void;
 }) {
   const visible = metadataVisibility(paperType);
   const venueLabel = paperType === "preprint" ? "Website / archive" : "Full venue name";
   return (
     <>
-      {visible.venueName ? <label><span>{venueLabel}</span><input name="venueName" defaultValue={paper?.venueName ?? ""} placeholder={paperType === "preprint" ? "arXiv" : "Neural Information Processing Systems"} /></label> : null}
+      {visible.venueName ? <VenueNameField venues={venues} label={venueLabel} defaultValue={paper?.venueName ?? ""} placeholder={paperType === "preprint" ? "arXiv" : "Neural Information Processing Systems"} /> : null}
       {visible.venueAcronym ? <label><span>Venue acronym</span><input name="venueAcronym" defaultValue={paper?.venueAcronym ?? ""} placeholder="NeurIPS" /></label> : null}
       {visible.volumeIssue ? <label><span>Volume</span><input name="volume" defaultValue={paper?.volume ?? ""} placeholder="42" /></label> : null}
       {visible.volumeIssue ? <label><span>Issue</span><input name="issue" defaultValue={paper?.issue ?? ""} placeholder="3" /></label> : null}
@@ -2626,18 +2823,21 @@ function PaperMetadataFields({ paperType, paper, notify }: {
   );
 }
 
-function AddPaperModal({ onClose, mutateLibrary, notify }: {
+function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
+  authors: Author[];
+  venues: Venue[];
   onClose: () => void;
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
   notify: (message: string, tone?: ToastState["tone"]) => void;
 }) {
-  const [tab, setTab] = useState<"search" | "identifier" | "bibliography" | "url" | "manual">("search");
+  const [tab, setTab] = useState<"search" | "identifier" | "bibliography" | "pdf" | "url" | "manual">("search");
   const [query, setQuery] = useState("");
   const [url, setUrl] = useState("");
   const [provider, setProvider] = useState<DiscoveryProvider>("semantic-scholar");
   const [identifierSource, setIdentifierSource] = useState<IdentifierSource>("arxiv");
   const [identifier, setIdentifier] = useState("");
   const [bibliographyFile, setBibliographyFile] = useState<File | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [results, setResults] = useState<DiscoveryResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<string[]>([]);
@@ -2774,6 +2974,45 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
     }
   }
 
+  async function importLocalPdf(event: FormEvent) {
+    event.preventDefault();
+    if (!pdfFile) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const succeeded = await runTask(`Import and extract ${pdfFile.name}`, async () => {
+        const upload = await fetch("/api/local-file-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/pdf", "X-PA-File-Kind": "pdf", "X-PA-File-Name": encodeURIComponent(pdfFile.name) },
+          body: pdfFile,
+        });
+        if (!upload.ok) {
+          throw new Error(await readError(upload));
+        }
+        const { storedPath } = await upload.json() as { storedPath: string };
+        const extraction = await extractPdfMetadata(pdfFile, pdfFile.name);
+        const imported = await mutateLibrary({
+          entity: "paper",
+          action: "create",
+          data: { ...extraction.metadata, localPath: storedPath, readingStatus: "inbox" },
+        }, "PDF imported and metadata extracted.");
+        if (!imported) {
+          throw new Error("The extracted PDF record could not be saved.");
+        }
+        return extraction;
+      });
+      if (succeeded.warning) {
+        notify(succeeded.warning, "info");
+      }
+      onClose();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The PDF could not be imported.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function addManual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -2815,6 +3054,7 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
         <button aria-pressed={tab === "search"} className={tab === "search" ? "is-active" : ""} onClick={() => setTab("search")}><Search size={15} /> Academic search</button>
         <button aria-pressed={tab === "identifier"} className={tab === "identifier" ? "is-active" : ""} onClick={() => setTab("identifier")}><Database size={15} /> Identifier</button>
         <button aria-pressed={tab === "bibliography"} className={tab === "bibliography" ? "is-active" : ""} onClick={() => setTab("bibliography")}><Upload size={15} /> BibTeX / RIS</button>
+        <button aria-pressed={tab === "pdf"} className={tab === "pdf" ? "is-active" : ""} onClick={() => setTab("pdf")}><FileSearch size={15} /> Local PDF</button>
         <button aria-pressed={tab === "url"} className={tab === "url" ? "is-active" : ""} onClick={() => setTab("url")}><Link2 size={15} /> URL / PDF link</button>
         <button aria-pressed={tab === "manual"} className={tab === "manual" ? "is-active" : ""} onClick={() => setTab("manual")}><Pencil size={15} /> Manual</button>
       </div>
@@ -2879,6 +3119,16 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
           <button className="primary-action full-action" disabled={loading || !bibliographyFile}>{loading ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />} Import bibliography</button>
           <p className="identifier-footnote">Every valid record is normalized into PA’s library with linked author and venue records.</p>
         </form>
+      ) : tab === "pdf" ? (
+        <form className="modal-body bibliography-import-form" onSubmit={importLocalPdf}>
+          <label className={`bibliography-dropzone ${pdfFile ? "has-file" : ""}`}>
+            <span className="bibliography-upload-icon">{pdfFile ? <Check size={23} /> : <FileSearch size={23} />}</span>
+            <span><strong>{pdfFile?.name ?? "Choose a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : "PA copies the file locally and extracts metadata from its first pages."}</small></span>
+            <input type="file" accept=".pdf,application/pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setPdfFile(event.target.files?.[0] ?? null)} />
+          </label>
+          <button className="primary-action full-action" disabled={loading || !pdfFile}>{loading ? <LoaderCircle size={16} className="spin" /> : <FileSearch size={16} />} Import and extract PDF</button>
+          <p className="identifier-footnote">Extracted fields remain editable after import. The PDF is served from PA’s local storage.</p>
+        </form>
       ) : tab === "url" ? (
         <form className="modal-body import-form" onSubmit={importUrl}>
           <div className="import-illustration"><Upload size={28} /><span /></div>
@@ -2891,22 +3141,24 @@ function AddPaperModal({ onClose, mutateLibrary, notify }: {
       ) : (
         <form className="modal-body entity-form" onSubmit={addManual}>
           <label className="field-span-2"><span>Paper title *</span><input name="title" required autoFocus placeholder="A precise, complete title" /></label>
-          <label className="field-span-2"><span>Authors</span><input name="authors" placeholder="Amina Rahman, Theo Martins" /><small>Separate author names with commas. Each becomes a linked author record.</small></label>
-          <label><span>Year</span><input name="year" type="number" min="1500" max="2200" placeholder="2026" /></label>
+          <AuthorNamesField authors={authors} />
+          <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={new Date().getFullYear()} /></label>
           <label><span>Paper type</span><select name="paperType" value={manualPaperType} onChange={(event) => setManualPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-          <PaperMetadataFields paperType={manualPaperType} notify={notify} />
+          <PaperMetadataFields paperType={manualPaperType} venues={venues} notify={notify} />
           <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} placeholder="What this paper contributes…" /></label>
           <label className="field-span-2"><span>Summary</span><textarea name="summary" rows={4} placeholder="A compact synthesis for your library…" /></label>
           <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={3} placeholder="Observations, questions, and connections…" /></label>
-          <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label="Add paper" title="Add paper"><Plus size={17} /></button></div>
+          <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button><button className="primary-action"><Plus size={17} /><span>Add paper</span></button></div>
         </form>
       )}
     </ModalFrame>
   );
 }
 
-function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
+function PaperEditModal({ paper, authors, venues, onClose, mutateLibrary, notify }: {
   paper: Paper;
+  authors: Author[];
+  venues: Venue[];
   onClose: () => void;
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
   notify: (message: string, tone?: ToastState["tone"]) => void;
@@ -2914,6 +3166,8 @@ function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
   const [paperType, setPaperType] = useState<EditablePaperType>(() => editablePaperType(paper.paperType));
   const [summary, setSummary] = useState(paper.summary);
   const [summarizing, setSummarizing] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
   const { runTask } = useBackgroundTasks();
 
   async function generateSummary() {
@@ -2946,6 +3200,60 @@ function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
       notify(error instanceof Error ? error.message : "Summary generation failed.", "error");
     } finally {
       setSummarizing(false);
+    }
+  }
+
+  function applyExtractedMetadata(metadata: ExtractedPdfMetadata) {
+    const form = formRef.current;
+    if (!form) {
+      return;
+    }
+    const setField = (name: string, value: string | number | null | undefined) => {
+      const field = form.elements.namedItem(name);
+      if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+        field.value = value === null || value === undefined ? "" : String(value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    };
+    setField("title", metadata.title);
+    setField("authors", metadata.authors.join(", "));
+    setField("year", metadata.year);
+    setField("venueName", metadata.venueName);
+    setField("venueAcronym", metadata.venueAcronym);
+    setField("category", metadata.category);
+    setField("preprintId", metadata.preprintId);
+    setField("doi", metadata.doi);
+    setField("url", metadata.url);
+    setField("abstract", metadata.abstract);
+  }
+
+  async function extractFromStoredPdf() {
+    const form = formRef.current;
+    if (!form) {
+      return;
+    }
+    const path = String(new FormData(form).get("localPath") ?? "").trim();
+    if (!path) {
+      notify("Choose or enter a local PDF path before extracting metadata.", "error");
+      return;
+    }
+    setExtracting(true);
+    try {
+      const payload = await runTask(`Extract PDF metadata · ${paper.title}`, async () => {
+        const fileResponse = await fetch(`/pa-files/pdfs/${encodeURIComponent(path)}`);
+        if (!fileResponse.ok) {
+          throw new Error("The stored PDF could not be opened.");
+        }
+        return extractPdfMetadata(await fileResponse.blob(), path);
+      });
+      setPaperType(editablePaperType(payload.metadata.paperType));
+      window.setTimeout(() => applyExtractedMetadata(payload.metadata), 0);
+      notify(payload.warning ?? `Metadata extracted from ${payload.analyzedPages} PDF ${payload.analyzedPages === 1 ? "page" : "pages"}.`, payload.warning ? "info" : "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "PDF metadata extraction failed.", "error");
+    } finally {
+      setExtracting(false);
     }
   }
 
@@ -2986,16 +3294,24 @@ function PaperEditModal({ paper, onClose, mutateLibrary, notify }: {
 
   return (
     <ModalFrame title="Edit paper" subtitle="Update the complete PA record, linked authors, venue, files, summary, and notes." onClose={onClose} className="add-modal">
-      <form className="modal-body entity-form" onSubmit={submit}>
+      <form ref={formRef} className="modal-body entity-form" onSubmit={submit}>
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
         <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
         <label><span>Paper type</span><select name="paperType" value={paperType} onChange={(event) => setPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-        <label className="field-span-2"><span>Authors</span><input name="authors" defaultValue={paper.authors.map((author) => author.displayName).join(", ")} /><small>Comma-separated. Renaming a canonical author from the Authors view updates every linked paper.</small></label>
-        <PaperMetadataFields paperType={paperType} paper={paper} notify={notify} />
+        <AuthorNamesField authors={authors} defaultValue={paper.authors.map((author) => author.displayName).join(", ")} />
+        <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} />
         <label className="field-span-2 summary-field"><span className="field-label-action"><span>PA summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><textarea name="summary" rows={5} value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
         <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} defaultValue={paper.abstract} /></label>
         <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={4} defaultValue={paper.notes} /></label>
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label="Save paper" title="Save paper"><Save size={17} /></button></div>
+        <div className="form-actions field-span-2 edit-paper-form-actions">
+          <button type="button" className="secondary-action extraction-footer-action" onClick={() => void extractFromStoredPdf()} disabled={extracting} title="Extract metadata from the stored PDF">
+            {extracting ? <LoaderCircle size={17} className="spin" /> : <FileSearch size={17} />}
+            <span>{extracting ? "Extracting" : "Extracted Metadata"}</span>
+          </button>
+          <span className="form-actions-spacer" />
+          <button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button>
+          <button className="primary-action"><Save size={17} /><span>Save paper</span></button>
+        </div>
       </form>
     </ModalFrame>
   );
@@ -3126,7 +3442,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
             </div>
           </section>
         </>}
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label={editing ? `Save ${entity}` : `Create ${entity}`} title={editing ? `Save ${entity}` : `Create ${entity}`}>{editing ? <Save size={17} /> : <Plus size={17} />}</button></div>
+        <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button><button className="primary-action">{editing ? <Save size={17} /> : <Plus size={17} />}<span>{editing ? `Save ${entity}` : `Create ${entity}`}</span></button></div>
       </form>
     </ModalFrame>
   );
@@ -3189,7 +3505,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </>}
         <div className="bulk-warning field-span-2"><Database size={16} /><span><strong>Linked data stays intact.</strong> These changes will be visible immediately on every related paper.</span></div>
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action modal-action-icon" onClick={onClose} aria-label="Cancel" title="Cancel"><X size={17} /></button><button className="primary-action modal-action-icon" aria-label={`Apply changes to ${ids.length} records`} title={`Apply to ${ids.length} records`}><Save size={17} /></button></div>
+        <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button><button className="primary-action"><Save size={17} /><span>Apply changes</span></button></div>
       </form>
     </ModalFrame>
   );

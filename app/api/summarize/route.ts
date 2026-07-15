@@ -93,7 +93,7 @@ export async function POST(request: Request): Promise<Response> {
         role: "user",
         content: "Write the structured academic review defined by the system prompt. Cover every requested section, explicitly marking material that is not described or not applicable.",
       }],
-      maxTokens: Math.min(8192, Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1400")))),
+      maxTokens: Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1400"))),
       temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "PA_TEMPERATURE", "0.2")))),
     });
     const summary = result.content;

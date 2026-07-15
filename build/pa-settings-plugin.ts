@@ -15,6 +15,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import {
   DEFAULT_CHAT_SYSTEM_PROMPT,
+  DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "../app/lib/ai-prompts";
 
@@ -24,6 +25,7 @@ interface SettingsPayload {
   maxTokens?: string | number;
   temperature?: string | number;
   chatSystemPrompt?: string;
+  extractionSystemPrompt?: string;
   summarySystemPrompt?: string;
   remotePath?: string;
   autoSync?: boolean;
@@ -42,6 +44,7 @@ interface StructuredSettingsFile {
   };
   prompts: {
     chatSystem: string;
+    extractionSystem: string;
     summarySystem: string;
   };
   sync: {
@@ -71,6 +74,7 @@ const environmentKeys = new Set([
   "JINA_API_KEY",
   "PA_MAX_TOKENS",
   "PA_CHAT_SYSTEM_PROMPT",
+  "PA_EXTRACTION_SYSTEM_PROMPT",
   "PA_SUMMARY_SYSTEM_PROMPT",
   "PA_TEMPERATURE",
   "PA_AUTO_SYNC",
@@ -132,6 +136,7 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     JINA_API_KEY: settings.secrets.JINA_API_KEY,
     PA_MAX_TOKENS: settings.ai.maxTokens,
     PA_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
+    PA_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
     PA_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
     PA_TEMPERATURE: settings.ai.temperature,
     PA_AUTO_SYNC: settings.sync.autoSync,
@@ -247,6 +252,7 @@ function settingsFromCurrentValues(): StructuredSettingsFile {
     },
     prompts: {
       chatSystem: envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
+      extractionSystem: envValue("PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
       summarySystem: envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
     sync: {
@@ -267,6 +273,7 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "PA_MAX_TOKENS": next.ai.maxTokens = value; break;
       case "PA_TEMPERATURE": next.ai.temperature = value; break;
       case "PA_CHAT_SYSTEM_PROMPT": next.prompts.chatSystem = value; break;
+      case "PA_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
       case "PA_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
       case "PA_ONEDRIVE_PATH": next.sync.remotePath = value; break;
       case "PA_AUTO_SYNC": next.sync.autoSync = value; break;
@@ -330,6 +337,7 @@ function currentSettings() {
     ),
     prompts: {
       chatSystem: envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
+      extractionSystem: envValue("PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
       summarySystem: envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
     sync: {
@@ -349,8 +357,9 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
   const updates: Record<string, string> = {
     BEDROCK_MODEL_ID: String(data.modelId ?? envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")).trim(),
     AWS_REGION: String(data.region ?? envValue("AWS_REGION", "us-east-1")).trim(),
-    PA_MAX_TOKENS: String(Math.min(8192, Math.max(128, Number(data.maxTokens) || 1200))),
+    PA_MAX_TOKENS: String(Math.max(128, Number(data.maxTokens) || 1200)),
     PA_CHAT_SYSTEM_PROMPT: String(data.chatSystemPrompt ?? envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT)).trim(),
+    PA_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
     PA_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
     PA_TEMPERATURE: String(Math.min(1, Math.max(0, Number(data.temperature) || 0))),
     PA_ONEDRIVE_PATH: String(data.remotePath ?? envValue("PA_ONEDRIVE_PATH")).trim(),

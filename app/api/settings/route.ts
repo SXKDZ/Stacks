@@ -1,5 +1,6 @@
 import {
   DEFAULT_CHAT_SYSTEM_PROMPT,
+  DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 
@@ -27,6 +28,7 @@ export async function GET(): Promise<Response> {
     },
     prompts: {
       chatSystem: process.env.PA_CHAT_SYSTEM_PROMPT ?? DEFAULT_CHAT_SYSTEM_PROMPT,
+      extractionSystem: process.env.PA_EXTRACTION_SYSTEM_PROMPT ?? DEFAULT_EXTRACTION_SYSTEM_PROMPT,
       summarySystem: process.env.PA_SUMMARY_SYSTEM_PROMPT ?? DEFAULT_SUMMARY_SYSTEM_PROMPT,
     },
     sync: {

@@ -30,8 +30,8 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.doesNotMatch(application, /Your research, in motion/);
   assert.doesNotMatch(application, /Research OS/);
   assert.match(application, /paper\.authors\.map\(\(author\) => author\.displayName\)\.join\(", "\)/);
-  assert.match(application, /More \$\{hiddenCount\}/);
-  assert.match(application, /Show fewer/);
+  assert.match(application, /\$\{hiddenCount\} more \$\{hiddenCount === 1/);
+  assert.match(application, /Show less/);
   assert.match(application, /aria-expanded=\{expanded\}/);
   assert.match(application, /AuthorsView/);
   assert.match(application, /VenuesView/);

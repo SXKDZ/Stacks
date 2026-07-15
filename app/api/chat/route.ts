@@ -80,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
       model,
       system: `${systemPrompt}\n\nGive concise, useful next steps. Format responses as GitHub-flavored Markdown. Use $...$ for inline mathematics and $$...$$ on separate lines for display equations. Use fenced code blocks when code is useful.`,
       messages,
-      maxTokens: Math.min(8192, Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1200")))),
+      maxTokens: Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1200"))),
       temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "PA_TEMPERATURE", "0.25")))),
     });
     return Response.json({

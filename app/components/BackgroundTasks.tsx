@@ -15,6 +15,10 @@ interface BackgroundTask {
 
 interface BackgroundTaskContextValue {
   runTask: <Result>(label: string, operation: () => Promise<Result>) => Promise<Result>;
+  tasks: BackgroundTask[];
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  dismissTask: (id: string) => void;
 }
 
 const BackgroundTaskContext = createContext<BackgroundTaskContextValue | null>(null);
@@ -50,38 +54,48 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ runTask }), [runTask]);
-  const running = tasks.filter((task) => task.status === "running").length;
+  const dismissTask = useCallback((id: string) => {
+    setTasks((current) => current.filter((task) => task.id !== id));
+  }, []);
+  const value = useMemo(() => ({ runTask, tasks, open, setOpen, dismissTask }), [dismissTask, open, runTask, tasks]);
 
   return (
     <BackgroundTaskContext.Provider value={value}>
       {children}
-      {tasks.length ? (
-        <aside className={`background-task-dock ${open ? "is-open" : ""}`} aria-label="Background tasks">
-          {open ? (
-            <div className="background-task-panel">
-              <header>
-                <span><ListChecks size={16} /><strong>Background tasks</strong></span>
-                <button type="button" onClick={() => setOpen(false)} aria-label="Collapse background tasks"><X size={15} /></button>
-              </header>
-              <div className="background-task-list">
-                {tasks.map((task) => (
-                  <div className={`background-task-row is-${task.status}`} key={task.id}>
-                    {task.status === "running" ? <LoaderCircle className="spin" size={16} /> : task.status === "complete" ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
-                    <span><strong>{task.label}</strong>{task.detail ? <small>{task.detail}</small> : <small>{task.status === "running" ? "Running in the background" : task.status === "complete" ? "Completed" : "Needs attention"}</small>}</span>
-                    {task.status !== "running" ? <button type="button" onClick={() => setTasks((current) => current.filter((candidate) => candidate.id !== task.id))} aria-label={`Dismiss ${task.label}`}><X size={13} /></button> : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <button type="button" className="background-task-trigger" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
-            {running ? <LoaderCircle className="spin" size={17} /> : <ListChecks size={17} />}
-            <span>{running ? `${running} running` : "Tasks"}</span>
-            <ChevronUp size={14} />
-          </button>
-        </aside>
-      ) : null}
     </BackgroundTaskContext.Provider>
+  );
+}
+
+export function BackgroundTaskDock() {
+  const { tasks, open, setOpen, dismissTask } = useBackgroundTasks();
+  const running = tasks.filter((task) => task.status === "running").length;
+  if (!tasks.length) {
+    return null;
+  }
+  return (
+    <aside className={`background-task-dock ${open ? "is-open" : ""}`} aria-label="Background tasks">
+      {open ? (
+        <div className="background-task-panel">
+          <header>
+            <span><ListChecks size={16} /><strong>Background tasks</strong></span>
+            <button type="button" onClick={() => setOpen(false)} aria-label="Collapse background tasks"><X size={15} /></button>
+          </header>
+          <div className="background-task-list">
+            {tasks.map((task) => (
+              <div className={`background-task-row is-${task.status}`} key={task.id}>
+                {task.status === "running" ? <LoaderCircle className="spin" size={16} /> : task.status === "complete" ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
+                <span><strong>{task.label}</strong>{task.detail ? <small>{task.detail}</small> : <small>{task.status === "running" ? "Running in the background" : task.status === "complete" ? "Completed" : "Needs attention"}</small>}</span>
+                {task.status !== "running" ? <button type="button" onClick={() => dismissTask(task.id)} aria-label={`Dismiss ${task.label}`}><X size={13} /></button> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <button type="button" className="background-task-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {running ? <LoaderCircle className="spin" size={17} /> : <ListChecks size={17} />}
+        <span>{running ? `${running} running` : "Tasks"}</span>
+        <ChevronUp size={14} />
+      </button>
+    </aside>
   );
 }
