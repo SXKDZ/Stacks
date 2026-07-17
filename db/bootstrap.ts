@@ -78,6 +78,11 @@ const schemaStatements = [
     tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (paper_id, tag_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS app_settings (
+    id TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   "CREATE INDEX IF NOT EXISTS papers_title_idx ON papers(title)",
   "CREATE INDEX IF NOT EXISTS papers_year_idx ON papers(year)",
   "CREATE INDEX IF NOT EXISTS papers_venue_idx ON papers(venue_id)",

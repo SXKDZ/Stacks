@@ -24,6 +24,7 @@ interface SettingsPayload {
   region?: string;
   maxTokens?: string | number;
   temperature?: string | number;
+  pdfPages?: string | number;
   chatSystemPrompt?: string;
   extractionSystemPrompt?: string;
   summarySystemPrompt?: string;
@@ -41,6 +42,7 @@ interface StructuredSettingsFile {
     region: string;
     maxTokens: string;
     temperature: string;
+    pdfPages: string;
   };
   prompts: {
     chatSystem: string;
@@ -73,6 +75,7 @@ const environmentKeys = new Set([
   "BEDROCK_MODEL_ID",
   "JINA_API_KEY",
   "PA_MAX_TOKENS",
+  "PA_PDF_PAGES",
   "PA_CHAT_SYSTEM_PROMPT",
   "PA_EXTRACTION_SYSTEM_PROMPT",
   "PA_SUMMARY_SYSTEM_PROMPT",
@@ -135,6 +138,7 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     BEDROCK_MODEL_ID: settings.ai.modelId,
     JINA_API_KEY: settings.secrets.JINA_API_KEY,
     PA_MAX_TOKENS: settings.ai.maxTokens,
+    PA_PDF_PAGES: settings.ai.pdfPages,
     PA_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
     PA_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
     PA_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
@@ -209,10 +213,12 @@ function commandOutput(command: string, args: string[]): Promise<string | null> 
   });
 }
 
-async function chooseDirectory(target: "local" | "remote"): Promise<string | null> {
+async function chooseDirectory(target: "local" | "remote" | "storage"): Promise<string | null> {
   const prompt = target === "remote"
     ? "Choose the OneDrive folder for PA sync"
-    : "Choose the local PA data folder containing papers.db";
+    : target === "storage"
+      ? "Choose the destination folder for the PA library"
+      : "Choose the local PA data folder containing papers.db";
   let selected: string | null;
   if (process.platform === "darwin") {
     selected = await commandOutput("osascript", ["-e", `POSIX path of (choose folder with prompt ${JSON.stringify(prompt)})`]);
@@ -249,6 +255,7 @@ function settingsFromCurrentValues(): StructuredSettingsFile {
       region: envValue("AWS_REGION", "us-east-1"),
       maxTokens: envValue("PA_MAX_TOKENS", "1200"),
       temperature: envValue("PA_TEMPERATURE", "0.25"),
+      pdfPages: envValue("PA_PDF_PAGES", "10"),
     },
     prompts: {
       chatSystem: envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
@@ -272,6 +279,7 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "AWS_REGION": next.ai.region = value; break;
       case "PA_MAX_TOKENS": next.ai.maxTokens = value; break;
       case "PA_TEMPERATURE": next.ai.temperature = value; break;
+      case "PA_PDF_PAGES": next.ai.pdfPages = value; break;
       case "PA_CHAT_SYSTEM_PROMPT": next.prompts.chatSystem = value; break;
       case "PA_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
       case "PA_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
@@ -331,6 +339,7 @@ function currentSettings() {
       region: envValue("AWS_REGION", "us-east-1"),
       maxTokens: Number(envValue("PA_MAX_TOKENS", "1200")) || 1200,
       temperature: Number(envValue("PA_TEMPERATURE", "0.25")) || 0,
+      pdfPages: Math.min(20, Math.max(1, Number(envValue("PA_PDF_PAGES", "10")) || 10)),
     },
     integrations: Object.fromEntries(
       secretKeys.map((key) => [key, Boolean(envValue(key))]),
@@ -358,6 +367,7 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
     BEDROCK_MODEL_ID: String(data.modelId ?? envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")).trim(),
     AWS_REGION: String(data.region ?? envValue("AWS_REGION", "us-east-1")).trim(),
     PA_MAX_TOKENS: String(Math.max(128, Number(data.maxTokens) || 1200)),
+    PA_PDF_PAGES: String(Math.min(20, Math.max(1, Number(data.pdfPages) || 10))),
     PA_CHAT_SYSTEM_PROMPT: String(data.chatSystemPrompt ?? envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT)).trim(),
     PA_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
     PA_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
@@ -502,7 +512,7 @@ export function paSettings(): Plugin {
           }
           try {
             const body = await parseBody(request);
-            const target = body.target === "local" ? "local" : "remote";
+            const target = body.target === "local" ? "local" : body.target === "storage" ? "storage" : "remote";
             const path = await chooseDirectory(target);
             sendJson(response, {
               path,

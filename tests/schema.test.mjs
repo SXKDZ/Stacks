@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { readApplicationStyles } from "./read-application-styles.mjs";
 
 const execFile = promisify(execFileCallback);
 
@@ -48,6 +49,8 @@ test("persists local settings atomically and backs up the normalized library", a
   assert.match(plugin, /api\/local-runtime-settings/);
   assert.match(plugin, /api\/local-sync/);
   assert.match(plugin, /api\/local-directory-picker/);
+  assert.match(plugin, /"local" \| "remote" \| "storage"/);
+  assert.match(plugin, /Choose the destination folder for the PA library/);
   assert.match(plugin, /settings\.json\.tmp/);
   assert.match(plugin, /renameSync\(settingsTemporaryPath, settingsPath\)/);
   assert.doesNotMatch(plugin, /writeFileSync\(environmentPath/);
@@ -72,6 +75,33 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(bedrock, /\/converse/);
   assert.match(prompts, /\{\{papers\}\}/);
   assert.match(prompts, /\{\{paper1\}\}/);
+});
+
+test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {
+  const [bootstrap, settingsRoute, settingsStore, doctor, chat, grounding, settingsView, version] = await Promise.all([
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/settings/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/settings-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/storage-management/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/document-grounding.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/version/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS app_settings/);
+  assert.match(settingsRoute, /saveStoredSettings/);
+  assert.doesNotMatch(settingsRoute, /501|Not implemented/i);
+  assert.match(settingsStore, /Preferences use D1|app_settings/);
+  assert.match(doctor, /PRAGMA quick_check/);
+  assert.match(doctor, /PRAGMA foreign_key_check/);
+  assert.match(doctor, /orphanedAssociations/);
+  assert.match(chat, /PA_PDF_PAGES/);
+  assert.match(chat, /pdfStartPage/);
+  assert.match(grounding, /getDocumentProxy/);
+  assert.match(grounding, /redirect: "manual"/);
+  assert.match(settingsView, /PDF grounding pages/);
+  assert.match(settingsView, /About & updates/);
+  assert.match(version, /releases\/latest/);
 });
 
 test("supports provider search and PA-style identifier imports", async () => {
@@ -120,6 +150,7 @@ test("persists collection membership through the paper-collection composite key"
   assert.match(schema, /primaryKey\(\{ columns: \[table\.paperId, table\.collectionId\] \}\)/);
   assert.match(library, /INSERT OR IGNORE INTO paper_collections \(paper_id, collection_id\)/);
   assert.match(library, /DELETE FROM paper_collections WHERE paper_id = \? AND collection_id = \?/);
+  assert.match(library, /createPaper[\s\S]*?if \(Array\.isArray\(data\.collectionNames\)\)[\s\S]*?syncPaperCollectionsByName\(database, id, data\.collectionNames\)/);
   assert.match(application, /Papers in collection/);
   assert.match(application, /All remaining papers/);
   assert.match(application, /aria-label="Remove selected paper from collection"/);
@@ -132,7 +163,7 @@ test("persists collection membership through the paper-collection composite key"
 test("uses integrated sortable table headers without a detached sort control", async () => {
   const [component, styles] = await Promise.all([
     readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readApplicationStyles(),
   ]);
   assert.match(component, /SortablePaperHeader/);
   assert.match(component, /aria-sort/);
@@ -162,18 +193,23 @@ test("combines exact linked-record filters with boolean relationships", async ()
   assert.doesNotMatch(application, /onOpen=\{\(collection\) => \{\s*setQuery\(collection\.name\)/);
 });
 
-test("tracks long-running work through one background task lifecycle", async () => {
-  const [tasks, application, settings] = await Promise.all([
+test("tracks long-running work while persisting chat as separate discussions", async () => {
+  const [tasks, application, settings, chatWorkspace] = await Promise.all([
     readFile(new URL("../app/components/BackgroundTasks.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ChatWorkspace.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(tasks, /runTask/);
-  assert.match(tasks, /Background tasks/);
+  assert.match(tasks, /Activity log/);
+  assert.match(tasks, /pa-activity-log-v1/);
   assert.match(application, /Generate summary ·/);
-  assert.match(application, /Ask PA ·/);
   assert.match(application, /Copy \$\{file\.name\} into PA storage/);
   assert.match(settings, /Sync PA library to OneDrive/);
+  assert.match(chatWorkspace, /pa-chat-sessions-v2/);
+  assert.match(chatWorkspace, /persistSessions/);
+  assert.match(chatWorkspace, /Discussion title/);
+  assert.doesNotMatch(chatWorkspace, /runTask/);
 });
 
 test("uses D1 as the active library and treats legacy SQLite as import-only", async () => {
@@ -187,7 +223,12 @@ test("uses D1 as the active library and treats legacy SQLite as import-only", as
   assert.match(bootstrap, /SELECT COUNT\(\*\) AS count FROM papers/);
   assert.match(config, /paLocalFiles/);
   assert.doesNotMatch(config, /local-papercli|papercliLocal/);
-  assert.doesNotMatch(localFiles, /UPDATE papers|INSERT INTO papers|DELETE FROM papers/);
+  assert.match(localFiles, /DatabaseSync/);
+  assert.match(localFiles, /BEGIN IMMEDIATE/);
+  assert.match(localFiles, /operation === "repair"/);
+  assert.match(localFiles, /if \(\(clean \|\| repair\) && !payload\.confirmed\)/);
+  assert.match(localFiles, /response\.body\.getReader\(\)/);
+  assert.match(localFiles, /containsPath\(source, target\) \|\| containsPath\(target, source\)/);
 });
 
 test("backs up a D1 SQLite snapshot without replacing the live source", async () => {

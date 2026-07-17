@@ -1,14 +1,18 @@
 "use client";
 
 import {
+  ArrowRightLeft,
   Bot,
   Check,
   Cloud,
   CloudCog,
   ChevronDown,
   DatabaseBackup,
+  FileWarning,
   FolderOpen,
   FolderSync,
+  HardDrive,
+  Info,
   KeyRound,
   LoaderCircle,
   MessageSquareText,
@@ -16,8 +20,11 @@ import {
   Palette,
   RefreshCw,
   Save,
+  ScanSearch,
   ShieldCheck,
   Sun,
+  Trash2,
+  Wrench,
 } from "lucide-react";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,8 +34,10 @@ import {
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
+import { ActionButton, ActionLink, SelectCard, TabButton } from "@/app/components/ui/controls";
+import type { Paper } from "@/app/lib/types";
 
-type SettingsTab = "appearance" | "model" | "prompts" | "sync" | "integrations";
+type SettingsTab = "appearance" | "model" | "prompts" | "storage" | "sync" | "integrations" | "about";
 type ThemeMode = "dark" | "light";
 
 interface SyncResult {
@@ -47,6 +56,7 @@ interface SettingsSnapshot {
     region: string;
     maxTokens: number;
     temperature: number;
+    pdfPages: number;
   };
   integrations: Record<string, boolean>;
   prompts: {
@@ -63,6 +73,8 @@ interface SettingsSnapshot {
     lastSyncAt: string | null;
     lastResult: SyncResult | null;
     sourceExists: boolean;
+    available?: boolean;
+    unavailableReason?: string;
   };
 }
 
@@ -81,6 +93,83 @@ interface ModelAccessResult {
   region?: string;
 }
 
+interface VersionInfo {
+  currentVersion: string;
+  checked: boolean;
+  latestVersion?: string | null;
+  updateAvailable?: boolean;
+  releaseName?: string;
+  releaseUrl?: string | null;
+  publishedAt?: string | null;
+  message?: string;
+}
+
+interface StorageReport {
+  mode?: "local" | "hosted";
+  capabilities?: {
+    databaseChecks: boolean;
+    fileChecks: boolean;
+    repairs: string[];
+    folderMove: boolean;
+  };
+  libraryRoot: string;
+  libraryExists: boolean;
+  databasePresent: boolean;
+  settingsPresent: boolean;
+  paperRecords: number;
+  referencedPdfFiles: number;
+  presentPdfFiles: number;
+  missingPdfFiles: number;
+  missingPdfPaths: string[];
+  invalidPdfPaths: string[];
+  referencedHtmlFiles: number;
+  presentHtmlFiles: number;
+  missingHtmlFiles: number;
+  missingHtmlPaths: string[];
+  invalidHtmlPaths: string[];
+  invalidReferences: number;
+  papersWithoutLocalAsset: number;
+  paperIdsWithoutLocalAsset: string[];
+  storedPdfFiles: number;
+  storedPdfBytes: number;
+  storedHtmlFiles: number;
+  storedHtmlBytes: number;
+  totalFiles: number;
+  totalBytes: number;
+  orphanedFiles: number;
+  orphanedBytes: number;
+  protectedOrphanedFiles?: number;
+  removedFiles: number;
+  removedBytes: number;
+  databaseHealth?: {
+    integrityOk: boolean;
+    integrityMessages: string[];
+    foreignKeyEnforced: boolean;
+    foreignKeyViolations: number;
+    tableCounts: Record<string, number>;
+    orphanedAssociations: {
+      paperAuthors: number;
+      paperCollections: number;
+      paperTags: number;
+    };
+    absolutePdfPaths: string[];
+    absoluteHtmlPaths: string[];
+    repairSummary?: {
+      orphanedAssociations: number;
+      portablePaths: number;
+      renamedPdfs: number;
+      skippedRepairs: number;
+      migratedLegacyFiles?: number;
+    };
+  };
+  systemHealth?: {
+    runtime: string;
+    database: string;
+    filesystemAvailable: boolean;
+    freeBytes?: number;
+  };
+}
+
 interface PromptVariableDefinition {
   token: string;
   description: string;
@@ -96,6 +185,7 @@ const defaultSettings: SettingsSnapshot = {
     region: "us-east-1",
     maxTokens: 1200,
     temperature: 0.25,
+    pdfPages: 10,
   },
   integrations: {},
   prompts: {
@@ -111,7 +201,8 @@ const defaultSettings: SettingsSnapshot = {
     running: false,
     lastSyncAt: null,
     lastResult: null,
-    sourceExists: false,
+      sourceExists: false,
+      available: true,
   },
 };
 
@@ -178,6 +269,16 @@ function timeLabel(value: string | null): string {
   }).format(new Date(value));
 }
 
+function byteLabel(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / (1024 ** unit);
+  return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+}
+
 async function errorMessage(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as { error?: string };
@@ -187,12 +288,13 @@ async function errorMessage(response: Response): Promise<string> {
   }
 }
 
-export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibraryNameChange }: {
+export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibraryNameChange, papers }: {
   notify: (message: string, tone?: "success" | "error" | "info") => void;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   libraryName: string;
   onLibraryNameChange: (name: string) => void;
+  papers: Paper[];
 }) {
   const { runTask } = useBackgroundTasks();
   const [tab, setTab] = useState<SettingsTab>("appearance");
@@ -201,12 +303,21 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [checkingStorage, setCheckingStorage] = useState(false);
+  const [cleaningStorage, setCleaningStorage] = useState(false);
+  const [repairingStorage, setRepairingStorage] = useState(false);
+  const [movingStorage, setMovingStorage] = useState(false);
+  const [selectingStorageDirectory, setSelectingStorageDirectory] = useState(false);
+  const [storageTarget, setStorageTarget] = useState("");
+  const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
   const [endpoint, setEndpoint] = useState("/api/local-settings");
   const [models, setModels] = useState<BedrockModelOption[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [testingModel, setTestingModel] = useState(false);
   const [modelAccess, setModelAccess] = useState<ModelAccessResult | null>(null);
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const [checkingVersion, setCheckingVersion] = useState(false);
   const promptEditors = useRef<Record<PromptKey, HTMLTextAreaElement | null>>({
     chatSystem: null,
     summarySystem: null,
@@ -326,6 +437,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function chooseDirectory() {
+    if (!settings.local) {
+      notify(settings.sync.unavailableReason ?? "OneDrive folder sync is available only in local mode.", "info");
+      return;
+    }
     setSelectingDirectory(true);
     try {
       const response = await fetch("/api/local-directory-picker", {
@@ -347,12 +462,39 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
   }
 
+  async function chooseStorageDirectory() {
+    if (storageReport?.capabilities?.folderMove === false) {
+      notify("Moving a local library folder requires PA's local filesystem companion.", "info");
+      return;
+    }
+    setSelectingStorageDirectory(true);
+    try {
+      const response = await fetch("/api/local-directory-picker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "storage" }),
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response));
+      }
+      const payload = await response.json() as { path: string | null };
+      if (payload.path) {
+        setStorageTarget(payload.path);
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The library destination could not be selected.", "error");
+    } finally {
+      setSelectingStorageDirectory(false);
+    }
+  }
+
   function settingsData() {
     return {
       modelId: settings.ai.modelId,
       region: settings.ai.region,
       maxTokens: settings.ai.maxTokens,
       temperature: settings.ai.temperature,
+      pdfPages: settings.ai.pdfPages,
       chatSystemPrompt: settings.prompts.chatSystem,
       extractionSystemPrompt: settings.prompts.extractionSystem,
       summarySystemPrompt: settings.prompts.summarySystem,
@@ -375,9 +517,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       if (!response.ok) {
         throw new Error(await errorMessage(response));
       }
-      setSettings((await response.json()) as SettingsSnapshot);
+      const saved = (await response.json()) as SettingsSnapshot;
+      setSettings(saved);
       setSecrets({});
-      notify("Settings saved to PA’s protected local settings file.");
+      notify(saved.local ? "Settings saved to PA’s protected local settings file." : "Settings saved to PA’s application database.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Settings could not be saved.", "error");
     } finally {
@@ -386,6 +529,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function syncNow() {
+    if (!settings.local || settings.sync.available === false) {
+      notify(settings.sync.unavailableReason ?? "OneDrive folder sync is available only in local mode.", "info");
+      return;
+    }
     if (!settings.sync.remotePath.trim()) {
       notify("Choose a OneDrive directory before syncing.", "error");
       return;
@@ -413,16 +560,211 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
   }
 
+  const checkVersion = useCallback(async () => {
+    setCheckingVersion(true);
+    try {
+      const response = await fetch("/api/version?check=1", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response));
+      }
+      setVersionInfo(await response.json() as VersionInfo);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "PA could not check for updates.", "error");
+    } finally {
+      setCheckingVersion(false);
+    }
+  }, [notify]);
+
+  const inspectStorage = useCallback(async (showToast = false) => {
+    setCheckingStorage(true);
+    try {
+      const response = await fetch("/api/storage-management", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "inspect",
+          papers: papers.map((paper) => ({
+            id: paper.id,
+            localPath: paper.localPath,
+            htmlSnapshotPath: paper.htmlSnapshotPath,
+          })),
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response));
+      }
+      const report = await response.json() as StorageReport;
+      setStorageReport(report);
+      if (showToast) {
+        notify(`Doctor checked ${report.paperRecords} papers and ${report.totalFiles} managed files.`, report.missingPdfFiles || report.missingHtmlFiles || report.invalidReferences ? "info" : "success");
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Library Doctor could not inspect PA storage.", "error");
+    } finally {
+      setCheckingStorage(false);
+    }
+  }, [notify, papers]);
+
+  async function cleanStorage() {
+    if (!storageReport?.orphanedFiles) {
+      notify("Doctor did not find any unlinked PA-managed assets.", "info");
+      return;
+    }
+    const summary = `${storageReport.orphanedFiles} unlinked file${storageReport.orphanedFiles === 1 ? "" : "s"} (${byteLabel(storageReport.orphanedBytes)})`;
+    if (!window.confirm(`Remove ${summary} from the active PA library? Referenced files will not be touched.`)) {
+      return;
+    }
+    if (!window.confirm(`Final confirmation: permanently delete ${summary}? This cannot be undone.`)) {
+      return;
+    }
+    setCleaningStorage(true);
+    try {
+      const response = await fetch("/api/storage-management", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "clean",
+          confirmed: true,
+          papers: papers.map((paper) => ({
+            id: paper.id,
+            localPath: paper.localPath,
+            htmlSnapshotPath: paper.htmlSnapshotPath,
+          })),
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response));
+      }
+      const report = await response.json() as StorageReport;
+      notify(`Removed ${report.removedFiles} unlinked file${report.removedFiles === 1 ? "" : "s"} and reclaimed ${byteLabel(report.removedBytes)}.`, "success");
+      await inspectStorage(false);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Unlinked assets could not be removed.", "error");
+    } finally {
+      setCleaningStorage(false);
+    }
+  }
+
+  async function repairStorage() {
+    const localRepair = storageReport?.mode !== "hosted";
+    const description = localRepair
+      ? "remove orphaned association rows, convert safe absolute references to portable filenames, and normalize linked PDF filenames"
+      : "remove orphaned association rows from the hosted D1 database";
+    if (!window.confirm(`Repair PA now? Doctor will ${description}. Missing or ambiguous files will be left unchanged.`)) {
+      return;
+    }
+    if (!window.confirm("Final confirmation: apply these database and managed-file repairs?")) {
+      return;
+    }
+    setRepairingStorage(true);
+    try {
+      const report = await runTask("Repair PA library", async () => {
+        const response = await fetch("/api/storage-management", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            operation: "repair",
+            confirmed: true,
+            papers: papers.map((paper) => ({
+              id: paper.id,
+              localPath: paper.localPath,
+              htmlSnapshotPath: paper.htmlSnapshotPath,
+            })),
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await errorMessage(response));
+        }
+        return response.json() as Promise<StorageReport>;
+      });
+      setStorageReport(report);
+      const summary = report.databaseHealth?.repairSummary;
+      notify(summary
+        ? `Repair complete: ${summary.orphanedAssociations} associations removed, ${summary.portablePaths} paths fixed, ${summary.renamedPdfs} PDFs renamed, and ${summary.migratedLegacyFiles ?? 0} legacy files copied into this library.`
+        : "Database repair completed.", "success");
+      if (localRepair && summary && (summary.portablePaths || summary.renamedPdfs)) {
+        window.setTimeout(() => window.location.reload(), 900);
+      } else {
+        await inspectStorage(false);
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "PA could not complete the repair.", "error");
+    } finally {
+      setRepairingStorage(false);
+    }
+  }
+
+  async function moveLibrary() {
+    const targetPath = storageTarget.trim();
+    if (!targetPath) {
+      notify("Choose a destination for the PA library first.", "info");
+      return;
+    }
+    const sourcePath = storageReport?.libraryRoot ?? "the active PA library";
+    if (!window.confirm(`Move the complete PA library from ${sourcePath} to ${targetPath}?`)) {
+      return;
+    }
+    if (!window.confirm("Final confirmation: copy PA’s managed PDFs and HTML snapshots to the new location, switch local file storage to it, and remove the old managed-file folder?")) {
+      return;
+    }
+    setMovingStorage(true);
+    try {
+      const response = await fetch("/api/storage-management", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "move",
+          targetDirectory: targetPath,
+          confirmed: true,
+          papers: papers.map((paper) => ({
+            id: paper.id,
+            localPath: paper.localPath,
+            htmlSnapshotPath: paper.htmlSnapshotPath,
+          })),
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response));
+      }
+      const report = await response.json() as StorageReport;
+      setStorageReport(report);
+      setStorageTarget("");
+      notify(`PA now uses ${report.libraryRoot}.`, "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The PA library could not be moved.", "error");
+    } finally {
+      setMovingStorage(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab !== "storage" || storageReport || checkingStorage) {
+      return;
+    }
+    const timer = window.setTimeout(() => void inspectStorage(false), 0);
+    return () => window.clearTimeout(timer);
+  }, [checkingStorage, inspectStorage, storageReport, tab]);
+
+  useEffect(() => {
+    if (tab !== "about" || versionInfo || checkingVersion) {
+      return;
+    }
+    const timer = window.setTimeout(() => void checkVersion(), 0);
+    return () => window.clearTimeout(timer);
+  }, [checkVersion, checkingVersion, tab, versionInfo]);
+
   return (
     <div className="settings-layout">
       <aside className="settings-nav" aria-label="Settings sections">
         <p>Configuration</p>
-        <button className={tab === "appearance" ? "is-active" : ""} onClick={() => setTab("appearance")}><Palette size={16} /><span><strong>Appearance</strong><small>Library name and theme</small></span></button>
-        <button className={tab === "model" ? "is-active" : ""} onClick={() => setTab("model")}><Bot size={16} /><span><strong>AI model</strong><small>Bedrock and generation</small></span></button>
-        <button className={tab === "prompts" ? "is-active" : ""} onClick={() => setTab("prompts")}><MessageSquareText size={16} /><span><strong>Prompt templates</strong><small>Discussion, summaries, extraction</small></span></button>
-        <button className={tab === "sync" ? "is-active" : ""} onClick={() => setTab("sync")}><CloudCog size={16} /><span><strong>OneDrive sync</strong><small>Library backup and local files</small></span></button>
-        <button className={tab === "integrations" ? "is-active" : ""} onClick={() => setTab("integrations")}><KeyRound size={16} /><span><strong>Integrations</strong><small>Discovery and extraction</small></span></button>
-        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>{settings.local ? "Stored locally" : "Deployment managed"}</strong><small>{settings.local ? "Protected structured file; secrets are never displayed" : "Use deployment environment variables"}</small></span></div>
+        <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Discussion, summaries, extraction</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "about"} onClick={() => setTab("about")} icon={<Info />}><span><strong>About &amp; updates</strong><small>Version and release status</small></span></TabButton>
+        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>{settings.local ? "Stored locally" : "Stored in PA"}</strong><small>{settings.local ? "Protected structured file; secrets are never displayed" : "Preferences use D1; secrets stay in deployment variables"}</small></span></div>
       </aside>
 
       <div className="settings-content">
@@ -434,7 +776,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card">
               <div className="settings-form-grid">
                 <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /><small>Shown in the lower-left library status. The product name remains Paper Assistant.</small></label>
-                <div className="theme-choice-field span-2"><span>Color theme</span><div className="theme-choice-grid"><button type="button" className={theme === "dark" ? "is-active" : ""} onClick={() => onThemeChange("dark")}><Moon size={18} /><span><strong>Dark</strong><small>Low-glare research workspace</small></span>{theme === "dark" ? <Check size={15} /> : null}</button><button type="button" className={theme === "light" ? "is-active" : ""} onClick={() => onThemeChange("light")}><Sun size={18} /><span><strong>Light</strong><small>Bright, paper-like workspace</small></span>{theme === "light" ? <Check size={15} /> : null}</button></div><small>Appearance is saved automatically in this browser.</small></div>
+                <div className="theme-choice-field span-2"><span>Color theme</span><div className="theme-choice-grid"><SelectCard selected={theme === "dark"} onClick={() => onThemeChange("dark")} icon={<Moon />} title="Dark" description="Low-glare research workspace" trailing={theme === "dark" ? <Check /> : null} /><SelectCard selected={theme === "light"} onClick={() => onThemeChange("light")} icon={<Sun />} title="Light" description="Bright, paper-like workspace" trailing={theme === "light" ? <Check /> : null} /></div><small>Appearance is saved automatically in this browser.</small></div>
               </div>
             </div>
           </section>
@@ -448,9 +790,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
               <div className="settings-form-grid">
                 <label className="span-2"><span>Model</span><select value={knownModel ? settings.ai.modelId : "custom"} onChange={(event) => updateAi("modelId", event.target.value === "custom" ? "" : event.target.value)}>{modelOptions.map((model) => <option value={model.id} key={model.id}>{model.label}</option>)}<option value="custom">Custom Bedrock model ID…</option></select><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Base Anthropic IDs use Bedrock Mantle; geo, global, and inference-profile IDs use Bedrock Runtime.</small></label> : null}
-                <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><button type="button" onClick={() => void loadModels(true)} disabled={loadingModels}>{loadingModels ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />} Refresh models</button><button type="button" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()}>{testingModel ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} Test access</button></div>
+                <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>PA sends this value to the selected model without imposing an artificial upper limit; the model’s own output limit still applies.</small></label>
+                <label><span>PDF grounding pages</span><input type="number" min="1" max="20" step="1" value={settings.ai.pdfPages} onChange={(event) => updateAi("pdfPages", Number(event.target.value))} /><small>Ask PA extracts this many opening pages from each attached PDF, up to a safe 20-page limit.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
             </div>
@@ -464,19 +807,76 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card prompt-settings-card">
               <details className="prompt-template-section">
                 <summary><span><strong>Discussion system prompt</strong><small>Ask PA with up to eight selected papers.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="chatSystem" value={settings.prompts.chatSystem} onChange={(value) => updatePrompt("chatSystem", value)} /><small>PA numbers discussion context as Paper 1, Paper 2, and so on. Insert a placeholder wherever that context should appear.</small><PromptVariables variables={discussionVariables} onInsert={(variable) => insertPromptVariable("chatSystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("chatSystem", DEFAULT_CHAT_SYSTEM_PROMPT)}>Restore discussion default</button></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="chatSystem" value={settings.prompts.chatSystem} onChange={(value) => updatePrompt("chatSystem", value)} /><small>PA numbers discussion context as Paper 1, Paper 2, and so on. Insert a placeholder wherever that context should appear.</small><PromptVariables variables={discussionVariables} onInsert={(variable) => insertPromptVariable("chatSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("chatSystem", DEFAULT_CHAT_SYSTEM_PROMPT)}>Restore discussion default</ActionButton></div>
               </details>
               <details className="prompt-template-section">
                 <summary><span><strong>Summary system prompt</strong><small>Create the reusable PA summary stored with a paper.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Summary placeholders are replaced with the selected paper’s current metadata and extracted content.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</button></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Summary placeholders are replaced with the selected paper’s current metadata and extracted content.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</ActionButton></div>
               </details>
               <details className="prompt-template-section">
                 <summary><span><strong>PDF extraction system prompt</strong><small>Extract structured metadata from local PDF text.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the first pages, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><button type="button" className="inline-reset" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</button></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the first pages, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
               </details>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
+        ) : null}
+
+        {!loading && tab === "storage" ? (
+          <section className="settings-storage-section">
+            <SettingsHeading icon={<HardDrive size={19} />} title="Storage & Doctor" detail="Manage PA’s independent library location and verify every local asset." />
+            <div className="settings-card storage-location-card">
+              <div className="storage-location-heading">
+                <span className="storage-doctor-icon"><HardDrive size={18} /></span>
+                <div><strong>PA library location</strong><small>Managed PDFs and HTML snapshots live here; the local D1 database remains under PA’s runtime storage.</small></div>
+              </div>
+              <div className="storage-root-summary">
+                <span>Active library</span>
+                <code>{storageReport?.libraryRoot ?? "Inspecting…"}</code>
+                <small>{storageReport?.libraryExists ? "Folder available" : "Folder has not been created yet"}</small>
+              </div>
+              <label className="storage-move-field">
+                <span>Move library to</span>
+                <div className="path-picker-control">
+                  <input disabled={storageReport?.capabilities?.folderMove === false} value={storageTarget} onChange={(event) => setStorageTarget(event.target.value)} placeholder="/Users/…/PaperAssistant" />
+                  <ActionButton variant="secondary" onClick={() => void chooseStorageDirectory()} disabled={storageReport?.capabilities?.folderMove === false || selectingStorageDirectory || movingStorage} icon={selectingStorageDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Browse</ActionButton>
+                  <ActionButton variant="secondary" onClick={() => void moveLibrary()} disabled={storageReport?.capabilities?.folderMove === false || movingStorage || !storageTarget.trim()} icon={movingStorage ? <LoaderCircle className="spin" size={15} /> : <ArrowRightLeft size={15} />}>Move</ActionButton>
+                </div>
+                <small>Moves PA-managed files, switches local file storage to the new location, and removes the old managed-file folder only after two confirmations.</small>
+              </label>
+            </div>
+            <div className="settings-card storage-doctor-card">
+              <div className="storage-doctor-heading">
+                <span className="storage-doctor-icon"><ScanSearch size={18} /></span>
+                <div><strong>Library Doctor</strong><small>Checks database records against PDFs, HTML snapshots, invalid paths, and unlinked PA-managed assets.</small></div>
+                <ActionButton variant="secondary" onClick={() => void inspectStorage(true)} disabled={checkingStorage} icon={checkingStorage ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>Check now</ActionButton>
+              </div>
+              {storageReport ? (
+                <>
+                  <div className="storage-doctor-grid">
+                    <DoctorMetric icon={<DatabaseBackup size={17} />} label="Library database" value={storageReport.databaseHealth ? storageReport.databaseHealth.integrityOk && !storageReport.databaseHealth.foreignKeyViolations ? "Healthy" : "Needs attention" : storageReport.databasePresent ? "Available" : "Missing"} detail={`${storageReport.paperRecords} papers · ${storageReport.databaseHealth?.foreignKeyViolations ?? 0} FK violations`} tone={storageReport.databaseHealth ? storageReport.databaseHealth.integrityOk && !storageReport.databaseHealth.foreignKeyViolations ? "good" : "bad" : storageReport.databasePresent ? "good" : "bad"} />
+                    <DoctorMetric icon={<DatabaseBackup size={17} />} label="Associations" value={`${storageReport.databaseHealth ? Object.values(storageReport.databaseHealth.orphanedAssociations).reduce((sum, count) => sum + count, 0) : 0} orphaned`} detail={storageReport.databaseHealth?.foreignKeyEnforced ? "Foreign keys are enforced" : "Foreign-key enforcement unavailable"} tone={storageReport.databaseHealth && (storageReport.databaseHealth.foreignKeyViolations || Object.values(storageReport.databaseHealth.orphanedAssociations).some(Boolean)) ? "bad" : "good"} />
+                    <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedPdfFiles} referenced` : `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}`} tone={storageReport.missingPdfFiles ? "bad" : "good"} />
+                    <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedHtmlFiles} referenced` : `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}`} tone={storageReport.missingHtmlFiles ? "bad" : "good"} />
+                    <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} papers`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} />
+                    <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="Stored paths that do not satisfy PA’s portable-path rules" tone={storageReport.invalidReferences ? "bad" : "good"} />
+                    <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} files`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} />
+                  </div>
+                  <DoctorPaths label="Missing PDF references" paths={storageReport.missingPdfPaths} />
+                  <DoctorPaths label="Missing HTML references" paths={storageReport.missingHtmlPaths} />
+                  <DoctorPaths label="Invalid PDF paths" paths={storageReport.invalidPdfPaths} />
+                  <DoctorPaths label="Invalid HTML paths" paths={storageReport.invalidHtmlPaths} />
+                  <div className="storage-doctor-actions">
+                    <p>{storageReport.capabilities?.fileChecks === false ? "Hosted Doctor checks D1 integrity, foreign keys, table counts, and orphaned associations. Local mode adds disk, PDF, and HTML checks." : "Cleanup deletes only unlinked files from PA’s managed pdfs/ and html_snapshots/ folders. It requires two confirmations and never deletes linked assets."}</p>
+                    <div className="storage-doctor-action-buttons">
+                      <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage || !storageReport.capabilities?.repairs.length} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>{storageReport.mode === "hosted" ? "Repair database" : "Repair paths & filenames"}</ActionButton>
+                      <ActionButton variant="danger" onClick={() => void cleanStorage()} disabled={cleaningStorage || !storageReport.orphanedFiles} icon={cleaningStorage ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}>Clean unlinked assets</ActionButton>
+                    </div>
+                  </div>
+                </>
+              ) : <div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Inspecting PA storage…</span></div>}
+            </div>
+          </section>
         ) : null}
 
         {!loading && tab === "sync" ? (
@@ -484,15 +884,15 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up PA’s library database, PDFs, and HTML snapshots." />
             <div className="sync-status-card">
               <span className={`sync-status-icon ${settings.sync.lastResult?.ok ? "is-success" : ""}`}><FolderSync size={20} /></span>
-              <div><strong>{settings.sync.lastResult?.summary ?? "Ready to connect OneDrive"}</strong><small>{timeLabel(settings.sync.lastSyncAt)}</small></div>
-              <button type="button" className="primary-action" onClick={() => void syncNow()} disabled={syncing || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.sync.sourceExists ? "PA’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"}>{syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} {syncing ? "Syncing…" : "Sync now"}</button>
+              <div><strong>{settings.sync.lastResult?.summary ?? (settings.local ? "Ready to connect OneDrive" : "Local companion required")}</strong><small>{settings.local ? timeLabel(settings.sync.lastSyncAt) : settings.sync.unavailableReason}</small></div>
+              <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "PA’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Syncing…" : "Sync now"}</ActionButton>
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive remote directory</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PA" /><button type="button" onClick={() => void chooseDirectory()} disabled={selectingDirectory}>{selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />} Choose</button></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PA`} key={path} />)}</datalist><small>PA stores a consistent library backup plus pdfs/ and html_snapshots/ here.</small></label>
-                <label><span>Auto-sync interval</span><div className="unit-input"><input type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
+                <label className="span-2"><span>OneDrive remote directory</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PA" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PA`} key={path} />)}</datalist><small>{settings.local ? "PA stores a consistent library backup plus pdfs/ and html_snapshots/ here." : "A hosted Worker cannot access a folder on this computer. Run PA locally to enable folder sync."}</small></label>
+                <label><span>Auto-sync interval</span><div className="unit-input"><input disabled={!settings.local} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
-              <label className="settings-toggle"><input type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-sync after live PA changes</strong><small>Uses local-wins conflict handling for background synchronization.</small></div></label>
+              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-sync after live PA changes</strong><small>Uses local-wins conflict handling for background synchronization.</small></div></label>
               <div className="sync-caution"><ShieldCheck size={16} /><p><strong>The local library remains authoritative.</strong> Sync writes a consistent backup to OneDrive and never replaces the database used by the running PA server.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
@@ -511,6 +911,25 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
         ) : null}
+
+        {!loading && tab === "about" ? (
+          <section>
+            <SettingsHeading icon={<Info size={19} />} title="About & updates" detail="See the running version and check official GitHub releases." />
+            <div className="settings-card version-status-card">
+              <div>
+                <span>Installed version</span>
+                <strong>{versionInfo?.currentVersion ? `Paper Assistant ${versionInfo.currentVersion}` : "Paper Assistant"}</strong>
+                <small>{versionInfo?.message ?? "Checking release status…"}</small>
+              </div>
+              <span className={`version-status-pill ${versionInfo?.updateAvailable ? "is-update" : ""}`}>{versionInfo?.updateAvailable ? "Update available" : versionInfo?.checked ? "Current" : "Checking"}</span>
+              <div className="version-status-actions">
+                <ActionButton variant="secondary" onClick={() => void checkVersion()} disabled={checkingVersion} icon={checkingVersion ? <LoaderCircle className="spin" /> : <RefreshCw />}>{checkingVersion ? "Checking…" : "Check again"}</ActionButton>
+                {versionInfo?.releaseUrl ? <ActionLink variant="primary" href={versionInfo.releaseUrl} target="_blank" rel="noreferrer">View release</ActionLink> : null}
+              </div>
+            </div>
+            <p className="version-update-note">Local installs update from the Git repository, followed by <code>npm install</code>. Hosted installs update when the latest commit is redeployed; PA never modifies its own source tree automatically.</p>
+          </section>
+        ) : null}
       </div>
     </div>
   );
@@ -518,6 +937,23 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
 function SettingsHeading({ icon, title, detail }: { icon: ReactNode; title: string; detail: string }) {
   return <div className="settings-heading"><span>{icon}</span><div><h2>{title}</h2><p>{detail}</p></div></div>;
+}
+
+function DoctorMetric({ icon, label, value, detail, tone }: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "good" | "warn" | "bad";
+}) {
+  return <div className={`storage-doctor-metric is-${tone}`}><span>{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></div>;
+}
+
+function DoctorPaths({ label, paths }: { label: string; paths: string[] }) {
+  if (!paths.length) {
+    return null;
+  }
+  return <details className="storage-doctor-paths"><summary>{label} <span>{paths.length}</span></summary><ul>{paths.map((path) => <li key={path}><code>{path}</code></li>)}</ul></details>;
 }
 
 function PromptEditor({ inputRef, promptKey, value, onChange }: {
@@ -579,5 +1015,5 @@ function PromptVariables({ variables, onInsert }: { variables: PromptVariableDef
 }
 
 function SettingsFooter({ saving, onRefresh }: { saving: boolean; onRefresh: () => void }) {
-  return <div className="settings-footer"><button type="button" className="secondary-action" onClick={onRefresh}><RefreshCw size={14} /> Reset</button><button className="primary-action" disabled={saving}>{saving ? <LoaderCircle size={14} className="spin" /> : <Save size={14} />} {saving ? "Saving…" : "Save settings"}</button></div>;
+  return <div className="settings-footer"><ActionButton variant="secondary" onClick={onRefresh} icon={<RefreshCw size={14} />}>Reset</ActionButton><ActionButton type="submit" variant="primary" disabled={saving} icon={saving ? <LoaderCircle size={14} className="spin" /> : <Save size={14} />}>{saving ? "Saving…" : "Save settings"}</ActionButton></div>;
 }

@@ -8,6 +8,7 @@ import {
   invokeBedrockMessages,
 } from "@/app/lib/bedrock";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { groundedDocumentText } from "@/app/lib/document-grounding";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,12 @@ interface ChatRequest {
     authors?: string[];
     venue?: string;
     year?: number | null;
+    pdfUrl?: string | null;
+    htmlUrl?: string | null;
   };
   papers?: Array<NonNullable<ChatRequest["paper"]>>;
+  pdfStartPage?: number;
+  pdfEndPage?: number;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -50,15 +55,43 @@ export async function POST(request: Request): Promise<Response> {
     const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
     const model = runtimeValue(runtime, "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6");
     const papers = (body.papers?.length ? body.papers : body.paper ? [body.paper] : []).slice(0, 8);
-    const paperContexts = papers.map((paper, index) => [
-          `Paper ${index + 1}`,
-          `Title: ${paper.title ?? "Unknown"}`,
-          `Authors: ${(paper.authors ?? []).join(", ") || "Unknown"}`,
-          `Venue: ${paper.venue ?? "Unknown"} (${paper.year ?? "n.d."})`,
-          `Abstract: ${paper.abstract ?? "Not available"}`,
-          `Library summary: ${paper.summary ?? "Not available"}`,
-          `Researcher notes: ${paper.notes ?? "None"}`,
-        ].join("\n"));
+    const configuredPdfPages = Math.min(20, Math.max(1, Number(runtimeValue(runtime, "PA_PDF_PAGES", "10")) || 10));
+    const pdfStartPage = Math.min(20, Math.max(1, Math.floor(Number(body.pdfStartPage) || 1)));
+    const pdfEndPage = Math.min(20, Math.max(pdfStartPage, Math.floor(Number(body.pdfEndPage) || (pdfStartPage + configuredPdfPages - 1))));
+    let remainingDocumentCharacters = 60_000;
+    let groundedPapers = 0;
+    const paperContexts: string[] = [];
+    for (const [index, paper] of papers.entries()) {
+      let documentContext: Awaited<ReturnType<typeof groundedDocumentText>> = null;
+      if (remainingDocumentCharacters > 0) {
+        try {
+          documentContext = await groundedDocumentText({
+            requestUrl: request.url,
+            pdfUrl: paper.pdfUrl,
+            htmlUrl: paper.htmlUrl,
+            startPage: pdfStartPage,
+            endPage: pdfEndPage,
+          });
+        } catch {
+          // Metadata still provides useful context when a source is unavailable or image-only.
+        }
+      }
+      const attachedText = documentContext?.text.slice(0, remainingDocumentCharacters) ?? "";
+      remainingDocumentCharacters -= attachedText.length;
+      if (attachedText) {
+        groundedPapers += 1;
+      }
+      paperContexts.push([
+        `Paper ${index + 1}`,
+        `Title: ${paper.title ?? "Unknown"}`,
+        `Authors: ${(paper.authors ?? []).join(", ") || "Unknown"}`,
+        `Venue: ${paper.venue ?? "Unknown"} (${paper.year ?? "n.d."})`,
+        `Abstract: ${paper.abstract ?? "Not available"}`,
+        `Library summary: ${paper.summary ?? "Not available"}`,
+        `Researcher notes: ${paper.notes ?? "None"}`,
+        ...(attachedText ? [`${documentContext?.label}:\n${attachedText}`] : []),
+      ].join("\n"));
+    }
     const paperContext = paperContexts.length
       ? paperContexts.join("\n\n---\n\n")
       : "No paper is selected. Help with the research library as a whole.";
@@ -88,6 +121,12 @@ export async function POST(request: Request): Promise<Response> {
       model,
       endpoint: result.endpoint,
       usage: result.usage,
+      grounding: {
+        paperCount: papers.length,
+        groundedPapers,
+        pdfStartPage,
+        pdfEndPage,
+      },
     });
   } catch (error) {
     if (error instanceof BedrockInvocationError) {

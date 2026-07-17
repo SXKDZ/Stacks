@@ -338,6 +338,11 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
     )
     .run();
   await attachAuthors(database, id, data.authors);
+  if (Array.isArray(data.collectionNames)) {
+    await syncPaperCollectionsByName(database, id, data.collectionNames);
+  } else {
+    await syncPaperCollections(database, id, data.collectionIds);
+  }
 }
 
 const entityConfigurations = {
@@ -449,6 +454,64 @@ async function syncCollectionPapers(
   }
 }
 
+async function syncPaperCollections(
+  database: D1Database,
+  paperId: string,
+  collectionIds: unknown,
+): Promise<void> {
+  if (!Array.isArray(collectionIds)) {
+    return;
+  }
+  const normalizedIds = Array.from(new Set(collectionIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))));
+  const existingResult = await database
+    .prepare("SELECT collection_id FROM paper_collections WHERE paper_id = ?")
+    .bind(paperId)
+    .all<{ collection_id: string }>();
+  const existingIds = new Set(existingResult.results.map((row) => row.collection_id));
+  const desiredIds = new Set(normalizedIds);
+  const statements = [
+    ...normalizedIds
+      .filter((collectionId) => !existingIds.has(collectionId))
+      .map((collectionId) => database
+        .prepare("INSERT OR IGNORE INTO paper_collections (paper_id, collection_id) VALUES (?, ?)")
+        .bind(paperId, collectionId)),
+    ...Array.from(existingIds)
+      .filter((collectionId) => !desiredIds.has(collectionId))
+      .map((collectionId) => database
+        .prepare("DELETE FROM paper_collections WHERE paper_id = ? AND collection_id = ?")
+        .bind(paperId, collectionId)),
+  ];
+  if (statements.length) {
+    await database.batch(statements);
+  }
+}
+
+async function syncPaperCollectionsByName(
+  database: D1Database,
+  paperId: string,
+  collectionNames: unknown,
+): Promise<void> {
+  if (!Array.isArray(collectionNames)) {
+    return;
+  }
+  const names = Array.from(new Set(collectionNames.map(cleanString).filter((name): name is string => Boolean(name))));
+  const collectionIds: string[] = [];
+  for (const name of names) {
+    const existing = await database
+      .prepare("SELECT id FROM collections WHERE lower(name) = lower(?) LIMIT 1")
+      .bind(name)
+      .first<{ id: string }>();
+    if (existing) {
+      collectionIds.push(existing.id);
+      continue;
+    }
+    const collectionId = createId("collection");
+    await database.prepare("INSERT INTO collections (id, name) VALUES (?, ?)").bind(collectionId, name).run();
+    collectionIds.push(collectionId);
+  }
+  await syncPaperCollections(database, paperId, collectionIds);
+}
+
 async function updateEntities(
   entity: "author" | "venue" | "collection",
   ids: string[],
@@ -548,6 +611,11 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   if (Array.isArray(data.authors)) {
     await database.prepare("DELETE FROM paper_authors WHERE paper_id = ?").bind(id).run();
     await attachAuthors(database, id, data.authors);
+  }
+  if (Array.isArray(data.collectionNames)) {
+    await syncPaperCollectionsByName(database, id, data.collectionNames);
+  } else {
+    await syncPaperCollections(database, id, data.collectionIds);
   }
 }
 

@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readApplicationStyles } from "./read-application-styles.mjs";
 
 test("ships the Paper Assistant application shell and product metadata", async () => {
-  const [page, layout, application, settings, markdown, styles] = await Promise.all([
+  const [page, layout, application, reader, settings, markdown, controls, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(
       new URL("../app/components/PaperAssistant.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/components/ReaderWorkspace.tsx", import.meta.url),
       "utf8",
     ),
     readFile(
@@ -18,7 +23,11 @@ test("ships the Paper Assistant application shell and product metadata", async (
       new URL("../app/components/MarkdownContent.tsx", import.meta.url),
       "utf8",
     ),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/components/ui/controls.tsx", import.meta.url),
+      "utf8",
+    ),
+    readApplicationStyles(),
   ]);
 
   assert.match(page, /<PaperAssistant \/>/);
@@ -45,15 +54,17 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.match(application, /ChatDrawer/);
   assert.match(application, /PaperEditModal/);
   assert.doesNotMatch(application, /Read inside PA/);
-  assert.match(application, /> Read<\/button>/);
-  assert.match(application, /> Source<\/a>/);
+  assert.match(application, /<ActionButton[\s\S]*?Read[\s\S]*?<\/ActionButton>/);
+  assert.match(application, /<ActionLink[\s\S]*?Source[\s\S]*?<\/ActionLink>/);
+  assert.match(controls, /class-variance-authority/);
+  assert.match(controls, /tailwind-merge/);
   assert.match(application, /MarkdownContent/);
   assert.match(application, /abstract-copy/);
   assert.match(application, /summary-copy/);
-  assert.match(application, /reader-summary-scroll/);
-  assert.match(application, /reader-notes-editor/);
-  assert.match(application, /aria-label="My notes"/);
-  assert.match(application, /"Notes saved\."/);
+  assert.match(reader, /reader-summary-scroll/);
+  assert.match(reader, /reader-notes-editor/);
+  assert.match(reader, /aria-label="My notes"/);
+  assert.match(reader, /setNoteState\("saved"\)/);
   assert.match(application, /const \[filterBuilderOpen, setFilterBuilderOpen\] = useState\(false\)/);
   assert.match(application, /filterBuilderOpen \? "is-open"/);
   assert.match(application, /aria-pressed=\{filterBuilderOpen\}/);
@@ -75,5 +86,94 @@ test("ships the Paper Assistant application shell and product metadata", async (
   assert.match(styles, /AIScientist-aligned application skin/);
   assert.match(styles, /\.markdown-content \.katex-display/);
   assert.match(styles, /@media \(max-width: 560px\)/);
+  assert.doesNotMatch(styles, /\.ui-action(?:--|\b)|\.ui-status(?:--|\b)/);
   assert.doesNotMatch(page + layout + application, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
+});
+
+test("every referenced CSS custom property is defined (no ghost tokens)", async () => {
+  const styles = await readApplicationStyles();
+  // Tokens defined anywhere (:root, [data-theme], etc.).
+  const defined = new Set(
+    Array.from(styles.matchAll(/(--[a-z0-9-]+)\s*:/g), (match) => match[1]),
+  );
+  // Tokens injected via inline style in components rather than CSS.
+  const injectedAtRuntime = new Set(["--progress"]);
+  // A var() reference is safe if it is defined, injected, or has a fallback
+  // (the second argument to var()).
+  const missing = new Set();
+  for (const match of styles.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/g)) {
+    const token = match[1];
+    const hasFallback = Boolean(match[2]);
+    if (defined.has(token) || injectedAtRuntime.has(token) || hasFallback) {
+      continue;
+    }
+    missing.add(token);
+  }
+  assert.deepEqual(
+    [...missing],
+    [],
+    `Undefined CSS custom properties referenced without a fallback: ${[...missing].join(", ")}`,
+  );
+});
+
+test("button archetypes route through shared primitives, not hand-written CSS", async () => {
+  const styles = await readApplicationStyles();
+  const [controls, settings] = await Promise.all([
+    readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
+  ]);
+
+  // The expanded primitive set must exist so components have a home for every
+  // button archetype instead of re-declaring styles in CSS.
+  for (const primitive of ["ActionButton", "TabButton", "Chip", "TextButton", "SelectCard", "Scrim", "PaginationButton"]) {
+    assert.match(controls, new RegExp(`export function ${primitive}\\b`), `missing primitive ${primitive}`);
+  }
+
+  // Tailwind v4 treats an untyped arbitrary var() text value as a color. Font-size tokens
+  // must use the explicit length hint or controls silently fall back to 14px.
+  assert.doesNotMatch(controls, /text-\[var\(--type-/);
+  assert.match(controls, /text-\[length:var\(--type-control\)\]/);
+  assert.match(controls, /light:\s*\[[\s\S]*?border-\[rgba\(16,19,26,0\.14\)\]/);
+  assert.doesNotMatch(controls, /light:\s*\[[\s\S]{0,80}?border-0/);
+
+  // CVA emits both base and selected-state utilities. Every variant result
+  // must pass through twMerge so active borders/backgrounds win consistently.
+  assert.match(controls, /return cx\(actionVariants\(/);
+  assert.match(controls, /className=\{cx\(statusVariants\(/);
+  assert.match(controls, /className=\{cx\(tabVariants\(/);
+
+  // The browser reset must stay in Tailwind's base layer. An unlayered
+  // `button { border: 0 }` overrides the shared utility-layer borders.
+  assert.match(styles, /@layer base\s*\{[\s\S]*?button\s*\{[\s\S]*?border:\s*0/);
+  assert.match(styles, /--canvas:\s*#070912/);
+  assert.match(styles, /--brand-cta:\s*#168dec/);
+  assert.doesNotMatch(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?rgba\(124,\s*156,\s*255/);
+  assert.match(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?var\(--brand-blue\) 10%/);
+
+  // Storage & Doctor uses deliberately sectioned settings cards. Losing these
+  // rules makes the headings, path summary, form, and metrics collapse into a
+  // single unpadded white surface.
+  assert.match(styles, /\.storage-location-heading\s*\{[\s\S]*?padding:\s*14px 16px/);
+  assert.match(styles, /\.storage-root-summary\s*\{[\s\S]*?background:\s*transparent[\s\S]*?border:\s*0/);
+  assert.match(styles, /\.storage-move-field\s*\{[\s\S]*?padding:\s*12px 16px 16px/);
+  assert.match(settings, /body:\s*JSON\.stringify\(\{ target: "storage" \}\)/);
+  assert.match(settings, />Browse<\/ActionButton>/);
+  assert.doesNotMatch(settings, /variant="ghost"[\s\S]{0,120}>Restore (?:discussion|summary|extraction) default/);
+  assert.match(settings, /variant="secondary" size="small" className="mt-0\.5 justify-self-start"[\s\S]{0,160}>Restore summary default/);
+
+  // These descendant-button rules were migrated to primitives; if they come
+  // back they will override the primitive's classes (CSS here is unlayered).
+  const forbiddenSelectors = [
+    /\.filter-tabs button/, /\.source-row button/, /\.provider-switch button/,
+    /\.modal-tabs button/, /\.status-selector button/, /\.settings-nav > button/,
+    /\.export-format-tabs button/, /\.identifier-source-grid > button/,
+    /\.theme-choice-grid > button/, /\.discovery-capabilities > button/,
+    /\.chat-prompts button/, /\.prompt-suggestions button/,
+    /\.pagination-pages > button/, /\.transfer-pagination nav > button/,
+    /\.transfer-actions button/, /\.source-url-control > button/,
+    /\.theme-toggle\b/, /\.new-chat-button\b/, /\.reader-chat-button\b/,
+    /\.text-button\b/, /\.collection-edit-tag\b/, /\.modal-scrim\b/,
+  ];
+  const regressed = forbiddenSelectors.filter((pattern) => pattern.test(styles)).map((pattern) => pattern.source);
+  assert.deepEqual(regressed, [], `Migrated button CSS reappeared: ${regressed.join(", ")}`);
 });

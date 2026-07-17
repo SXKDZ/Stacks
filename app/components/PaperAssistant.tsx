@@ -7,6 +7,7 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  Clipboard,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -14,16 +15,15 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CircleDot,
-  Clock3,
   Command,
   Compass,
   Database,
+  Download,
   ExternalLink,
   FileText,
   FileSearch,
   FolderOpen,
   Home,
-  Inbox,
   Library,
   Link2,
   ListFilter,
@@ -53,6 +53,13 @@ import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
+import { ActionButton, ActionLink, Chip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
+import {
+  downloadReferences,
+  exportReferences,
+  referenceExportFormats,
+  type ReferenceExportFormat,
+} from "@/app/lib/reference-export";
 import type {
   Author,
   ChatMessage,
@@ -254,6 +261,7 @@ const navigation: Array<{
 type ModalState =
   | { kind: "add-paper" }
   | { kind: "edit-paper"; paper: Paper }
+  | { kind: "export"; papers: Paper[] }
   | { kind: "entity"; entity: "author" | "venue" | "collection"; record?: Author | Venue | Collection }
   | { kind: "bulk"; entity: "author" | "venue"; ids: string[] }
   | null;
@@ -334,7 +342,7 @@ function fullAuthorLine(paper: Paper): string {
   return paper.authors.map((author) => author.displayName).join(", ");
 }
 
-function ExpandableAuthorNames({ paper, limit = 3 }: { paper: Paper; limit?: number }) {
+function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: number }) {
   const [expanded, setExpanded] = useState(false);
   const authors = paper.authors.map((author) => author.displayName);
   const hiddenCount = Math.max(0, authors.length - limit);
@@ -484,6 +492,141 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
+interface SourceAcquisitionResult {
+  kind: "pdf" | "html";
+  storedPath: string;
+  fileUrl: string;
+  sourceUrl: string;
+}
+
+interface SourceAssetStatus {
+  localPath: string | null;
+  htmlSnapshotPath: string | null;
+  pdfExists: boolean;
+  htmlExists: boolean;
+}
+
+function paperValue(data: Record<string, unknown>, key: string): string {
+  const value = data[key];
+  return typeof value === "string" ? value.trim() : value === null || value === undefined ? "" : String(value).trim();
+}
+
+function validatePaperWrite(data: Record<string, unknown>): string | null {
+  const currentYear = new Date().getFullYear();
+  const title = paperValue(data, "title");
+  if (!title) {
+    return "A paper title is required.";
+  }
+  if (title.length > 1000) {
+    return "The paper title must be 1,000 characters or fewer.";
+  }
+  const yearValue = paperValue(data, "year");
+  if (yearValue) {
+    const year = Number(yearValue);
+    if (!Number.isInteger(year) || year < 1500 || year > currentYear + 1) {
+      return `Year must be a whole number between 1500 and ${currentYear + 1}.`;
+    }
+  }
+  for (const [field, label] of [["url", "Source URL"], ["pdfUrl", "PDF URL"]] as const) {
+    const value = paperValue(data, field);
+    if (value) {
+      try {
+        const url = new URL(value);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          return `${label} must use http:// or https://.`;
+        }
+      } catch {
+        return `${label} must be a complete http:// or https:// URL.`;
+      }
+    }
+  }
+  const doi = paperValue(data, "doi");
+  if (doi && !/^10\.\d{4,9}\/\S+$/i.test(doi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, ""))) {
+    return "DOI must look like 10.1234/example.";
+  }
+  for (const [field, extension, label] of [
+    ["localPath", /\.pdf$/i, "Local PDF path"],
+    ["htmlSnapshotPath", /\.html?$/i, "Local HTML path"],
+  ] as const) {
+    const value = paperValue(data, field);
+    if (value && (value.includes("/") || value.includes("\\") || value === "." || value === ".." || !extension.test(value))) {
+      return `${label} must be a portable filename${field === "localPath" ? " ending in .pdf" : " ending in .html or .htm"}, without folders.`;
+    }
+  }
+  const boundedFields = ["volume", "issue", "pages", "category", "preprintId", "venueName", "venueAcronym"];
+  for (const field of boundedFields) {
+    const value = paperValue(data, field);
+    if (value.length > 300 || /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(value)) {
+      return `${field.replace(/([A-Z])/g, " $1")} contains invalid or excessive text.`;
+    }
+  }
+  const authors = Array.isArray(data.authors) ? data.authors : [];
+  if (authors.some((author) => typeof author !== "string" || !author.trim() || author.trim().length > 300)) {
+    return "Each author must have a non-empty name of 300 characters or fewer.";
+  }
+  const collectionNames = Array.isArray(data.collectionNames) ? data.collectionNames : [];
+  if (collectionNames.some((name) => typeof name !== "string" || !name.trim() || name.trim().length > 200)) {
+    return "Each collection must have a non-empty name of 200 characters or fewer.";
+  }
+  return null;
+}
+
+function acquisitionPayload(data: Record<string, unknown>, preferred: "auto" | "pdf" | "html" = "auto") {
+  const pdfUrl = paperValue(data, "pdfUrl");
+  return {
+    operation: "acquire" as const,
+    preferred,
+    title: paperValue(data, "title"),
+    sourceUrl: paperValue(data, "url"),
+    pdfUrl: /^https?:\/\//i.test(pdfUrl) ? pdfUrl : "",
+    preprintId: paperValue(data, "preprintId") || paperValue(data, "arxivId"),
+    localPath: paperValue(data, "localPath"),
+    htmlSnapshotPath: paperValue(data, "htmlSnapshotPath"),
+  };
+}
+
+function hasAcquirableSource(data: Record<string, unknown>): boolean {
+  const payload = acquisitionPayload(data);
+  return Boolean(payload.sourceUrl || payload.pdfUrl || payload.preprintId);
+}
+
+async function acquirePaperSource(
+  data: Record<string, unknown>,
+  preferred: "auto" | "pdf" | "html" = "auto",
+): Promise<SourceAcquisitionResult> {
+  const response = await fetch("/api/source-acquisition", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(acquisitionPayload(data, preferred)),
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+  return response.json() as Promise<SourceAcquisitionResult>;
+}
+
+async function checkPaperAssets(data: Record<string, unknown>): Promise<SourceAssetStatus> {
+  const response = await fetch("/api/source-acquisition", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      operation: "check",
+      localPath: paperValue(data, "localPath"),
+      htmlSnapshotPath: paperValue(data, "htmlSnapshotPath"),
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+  return response.json() as Promise<SourceAssetStatus>;
+}
+
+function withAcquiredSource(data: Record<string, unknown>, result: SourceAcquisitionResult): Record<string, unknown> {
+  return result.kind === "pdf"
+    ? { ...data, localPath: result.storedPath }
+    : { ...data, htmlSnapshotPath: result.storedPath };
+}
+
 async function extractPdfMetadata(file: Blob, filename: string): Promise<PdfExtractionResponse> {
   const response = await fetch("/api/extract-pdf", {
     method: "POST",
@@ -497,16 +640,6 @@ async function extractPdfMetadata(file: Blob, filename: string): Promise<PdfExtr
     throw new Error(await readError(response));
   }
   return response.json() as Promise<PdfExtractionResponse>;
-}
-
-function StatusPill({ status, compact = false }: { status: string; compact?: boolean }) {
-  const Icon = status === "complete" ? CheckCircle2 : status === "reading" ? Clock3 : Inbox;
-  return (
-    <span className={`status-pill status-${status} ${compact ? "is-compact" : ""}`} aria-label={statusLabel(status)} title={compact ? statusLabel(status) : undefined}>
-      <Icon size={13} strokeWidth={2} />
-      {compact ? null : statusLabel(status)}
-    </span>
-  );
 }
 
 function SelectionBox({ checked }: { checked: boolean }) {
@@ -541,8 +674,6 @@ function PaperAssistantWorkspace() {
   const [mobileNav, setMobileNav] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
-  const [chatPaper, setChatPaper] = useState<Paper | null>(null);
-  const [readerPaper, setReaderPaper] = useState<Paper | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [selectedPapers, setSelectedPapers] = useState<string[]>([]);
   const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
@@ -610,12 +741,6 @@ function PaperAssistantWorkspace() {
         }
         return nextSnapshot.papers.find((paper) => paper.id === current.id) ?? null;
       });
-      setReaderPaper((current) => {
-        if (!current) {
-          return null;
-        }
-        return nextSnapshot.papers.find((paper) => paper.id === current.id) ?? null;
-      });
       setDemoMode(false);
       notify(successMessage);
       return true;
@@ -675,8 +800,6 @@ function PaperAssistantWorkspace() {
         setModal(null);
         setCommandOpen(false);
         setSelectedPaper(null);
-        setChatPaper(null);
-        setReaderPaper(null);
         return;
       }
       if (!inField && event.key.toLowerCase() === "n") {
@@ -694,6 +817,15 @@ function PaperAssistantWorkspace() {
     setLibraryFilters([]);
     setMobileNav(false);
     setSelectedPaper(null);
+  }
+
+  function openChatWorkspace(paper?: Paper | null) {
+    const target = paper ? `/chat?paper=${encodeURIComponent(paper.id)}` : "/chat";
+    window.open(target, "_blank", "noopener,noreferrer");
+  }
+
+  function openReaderWorkspace(paper: Paper) {
+    window.open(`/reader?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer");
   }
 
   async function deleteRecords(entity: MutationBody["entity"], ids: string[]) {
@@ -753,9 +885,7 @@ function PaperAssistantWorkspace() {
               <span className="brand-slogan">Read deeper. Connect further.</span>
             </span>
           </button>
-          <button className="icon-button mobile-close" onClick={() => setMobileNav(false)} aria-label="Close navigation">
-            <X size={18} />
-          </button>
+          <ActionButton variant="ghost" size="icon" className="mobile-close" onClick={() => setMobileNav(false)} aria-label="Close navigation" icon={<X />} />
         </div>
 
         <button className="new-paper-button" onClick={() => setModal({ kind: "add-paper" })}>
@@ -795,7 +925,7 @@ function PaperAssistantWorkspace() {
 
         <BackgroundTaskDock />
 
-        <button className="assistant-card" onClick={() => setChatPaper(currentPaper ?? null)}>
+        <button className="assistant-card" onClick={() => openChatWorkspace(currentPaper)}>
           <span className="assistant-orb">
             <Sparkles size={17} />
           </span>
@@ -811,33 +941,30 @@ function PaperAssistantWorkspace() {
             <strong>{demoMode ? "Preview library" : libraryName.trim() || "My Paper Library"}</strong>
             <small>{demoMode ? "Loading library" : `${snapshot.stats.papers} papers · Local library`}</small>
           </span>
-          <button className="icon-button" onClick={() => void loadLibrary(true)} aria-label="Refresh library">
-            <RefreshCw size={14} className={syncing ? "spin" : ""} />
-          </button>
+          <ActionButton variant="ghost" size="icon" onClick={() => void loadLibrary(true)} aria-label="Refresh library" icon={<RefreshCw className={syncing ? "spin" : ""} />} />
         </div>
       </aside>
 
-      {mobileNav ? <button className="mobile-scrim" onClick={() => setMobileNav(false)} aria-label="Close navigation" /> : null}
+      {mobileNav ? <Scrim fixed onClick={() => setMobileNav(false)} label="Close navigation" className="z-[70] md:hidden" /> : null}
 
       <main className="app-main">
         <header className="topbar">
-          <button className="icon-button mobile-menu" onClick={() => setMobileNav(true)} aria-label="Open navigation">
-            <Menu size={20} />
-          </button>
+          <ActionButton variant="ghost" size="icon" className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Open navigation" icon={<Menu />} />
+
           <button className="global-search" onClick={() => setCommandOpen(true)}>
             <Search size={17} />
             <span>Search papers, people, venues…</span>
             <span className="shortcut"><Command size={12} /> K</span>
           </button>
           <div className="topbar-actions">
-            <button
-              className="theme-toggle"
+            <ActionButton
+              variant="secondary"
+              size="icon"
               onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
               aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
               title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-            >
-              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
+              icon={theme === "dark" ? <Sun /> : <Moon />}
+            />
           </div>
         </header>
 
@@ -850,7 +977,7 @@ function PaperAssistantWorkspace() {
               currentPaper={currentPaper}
               openPaper={setSelectedPaper}
               setView={changeView}
-              openChat={setChatPaper}
+              openChat={openChatWorkspace}
             />
           ) : view === "library" ? (
             <LibraryView
@@ -862,7 +989,17 @@ function PaperAssistantWorkspace() {
               selected={selectedPapers}
               setSelected={setSelectedPapers}
               openPaper={setSelectedPaper}
+              editSelected={() => {
+                const paper = snapshot.papers.find((candidate) => candidate.id === selectedPapers[0]);
+                if (paper) {
+                  setModal({ kind: "edit-paper", paper });
+                }
+              }}
               deleteSelected={() => void deleteRecords("paper", selectedPapers)}
+              exportSelected={() => {
+                const selectedIds = new Set(selectedPapers);
+                setModal({ kind: "export", papers: snapshot.papers.filter((paper) => selectedIds.has(paper.id)) });
+              }}
               updatePaper={updatePaper}
             />
           ) : view === "authors" ? (
@@ -923,7 +1060,7 @@ function PaperAssistantWorkspace() {
               onSearchLibrary={() => setCommandOpen(true)}
             />
           ) : (
-            <SettingsView notify={notify} theme={theme} onThemeChange={setTheme} libraryName={libraryName} onLibraryNameChange={setLibraryName} />
+            <SettingsView notify={notify} theme={theme} onThemeChange={setTheme} libraryName={libraryName} onLibraryNameChange={setLibraryName} papers={snapshot.papers} />
           )}
         </section>
       </main>
@@ -931,11 +1068,28 @@ function PaperAssistantWorkspace() {
       {selectedPaper ? (
         <PaperDetail
           paper={selectedPaper}
+          suspendAutoClose={Boolean(modal)}
           onClose={() => setSelectedPaper(null)}
           onUpdate={updatePaper}
-          onChat={() => setChatPaper(selectedPaper)}
-          onRead={() => setReaderPaper(selectedPaper)}
+          onChat={() => openChatWorkspace(selectedPaper)}
+          onRead={() => openReaderWorkspace(selectedPaper)}
           onEdit={() => setModal({ kind: "edit-paper", paper: selectedPaper })}
+          onExport={() => setModal({ kind: "export", papers: [selectedPaper] })}
+          onRevealFile={async (kind, path) => {
+            try {
+              const response = await fetch("/api/reveal-local-file", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ kind, path }),
+              });
+              if (!response.ok) {
+                throw new Error(await errorMessage(response));
+              }
+              notify("Opened the enclosing folder.", "success");
+            } catch (error) {
+              notify(error instanceof Error ? error.message : "The enclosing folder could not be opened.", "error");
+            }
+          }}
           onDelete={() => void deleteRecords("paper", [selectedPaper.id])}
           onOpenAuthor={(authorName) => {
             const author = selectedPaper.authors.find((candidate) => candidate.displayName === authorName);
@@ -959,17 +1113,6 @@ function PaperAssistantWorkspace() {
         />
       ) : null}
 
-      {readerPaper ? (
-        <ReaderDrawer
-          paper={readerPaper}
-          onClose={() => setReaderPaper(null)}
-          onChat={() => setChatPaper(readerPaper)}
-          onUpdate={updatePaper}
-        />
-      ) : null}
-
-      {chatPaper ? <ChatDrawer paper={chatPaper} papers={snapshot.papers} onClose={() => setChatPaper(null)} /> : null}
-
       {modal?.kind === "add-paper" ? (
         <AddPaperModal
           authors={snapshot.authors}
@@ -985,10 +1128,15 @@ function PaperAssistantWorkspace() {
           paper={modal.paper}
           authors={snapshot.authors}
           venues={snapshot.venues}
+          collections={snapshot.collections}
           onClose={() => setModal(null)}
           mutateLibrary={mutateLibrary}
           notify={notify}
         />
+      ) : null}
+
+      {modal?.kind === "export" ? (
+        <ExportReferencesModal papers={modal.papers} onClose={() => setModal(null)} />
       ) : null}
 
       {modal?.kind === "entity" ? (
@@ -1066,7 +1214,7 @@ function Dashboard({
     <div className="dashboard-grid">
       <div className="stat-strip">
         <button className="stat-card" onClick={() => setView("library")}>
-          <span className="stat-icon violet"><Library size={18} /></span>
+          <span className="stat-icon blue"><Library size={18} /></span>
           <span><strong>{snapshot.stats.papers}</strong><small>Papers</small></span>
           <ArrowUpRight size={15} />
         </button>
@@ -1094,12 +1242,8 @@ function Dashboard({
               <span>{venueLine(currentPaper)} · {currentPaper.year}</span>
             </div>
             <div className="continue-actions">
-              <button className="light-action" onClick={() => openPaper(currentPaper)}>
-                Open paper <ArrowRight size={16} />
-              </button>
-              <button className="ghost-light" onClick={() => openChat(currentPaper)}>
-                <Sparkles size={15} /> Ask PA
-              </button>
+              <ActionButton variant="light" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
+              <ActionButton variant="brand-ghost" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Ask PA</ActionButton>
             </div>
           </div>
           <div className="continue-visual" aria-hidden="true">
@@ -1132,7 +1276,7 @@ function Dashboard({
           <div><span>Active</span><i><b className="bar-cyan" style={{ width: `${Math.max(8, (snapshot.stats.active / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.active}</strong></div>
           <div><span>Inbox</span><i><b className="bar-amber" style={{ width: `${Math.max(8, (snapshot.stats.unread / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.unread}</strong></div>
         </div>
-        <button className="text-button" onClick={() => setView("library")}>Review reading queue <ArrowRight size={14} /></button>
+        <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>Review reading queue</TextButton>
       </aside>
 
       <section className="recent-panel">
@@ -1141,7 +1285,7 @@ function Dashboard({
             <p className="eyebrow">Recently added</p>
             <h3>Fresh in your library</h3>
           </div>
-          <button className="text-button" onClick={() => setView("library")}>View all <ArrowRight size={14} /></button>
+          <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>View all</TextButton>
         </div>
         <div className="recent-list">
           {recentPapers.map((paper) => (
@@ -1151,7 +1295,7 @@ function Dashboard({
                 <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
                 <span className="recent-meta"><ExpandableAuthorNames paper={paper} /><span>{venueLine(paper)} {paper.year}</span></span>
               </span>
-              <StatusPill status={paper.readingStatus} />
+              <StatusPill className="recent-row-status" status={paper.readingStatus} />
             </article>
           ))}
         </div>
@@ -1170,7 +1314,9 @@ function LibraryView({
   selected,
   setSelected,
   openPaper,
+  editSelected,
   deleteSelected,
+  exportSelected,
   updatePaper,
 }: {
   papers: Paper[];
@@ -1181,7 +1327,9 @@ function LibraryView({
   selected: string[];
   setSelected: (value: string[]) => void;
   openPaper: (paper: Paper) => void;
+  editSelected: () => void;
   deleteSelected: () => void;
+  exportSelected: () => void;
   updatePaper: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
 }) {
   const [status, setStatus] = useState("all");
@@ -1194,9 +1342,12 @@ function LibraryView({
   const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
-    if (filters.length > 0) {
-      setFilterBuilderOpen(true);
-    }
+    const frame = window.requestAnimationFrame(() => {
+      if (filters.length > 0) {
+        setFilterBuilderOpen(true);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [filters.length]);
 
   useEffect(() => {
@@ -1366,16 +1517,18 @@ function LibraryView({
         <button type="button" className={`filter-builder-toggle ${filterBuilderOpen ? "is-open" : ""} ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} aria-pressed={filterBuilderOpen} title={filterBuilderOpen ? "Close library filters" : "Build library filters"}><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
         <div className="filter-tabs">
           {["all", "inbox", "reading", "complete", "favorite"].map((item) => (
-            <button key={item} className={status === item ? "is-active" : ""} onClick={() => { setStatus(item); setPage(1); }}>
+            <TabButton key={item} variant="pill" active={status === item} onClick={() => { setStatus(item); setPage(1); }}>
               {item === "all" ? "All" : item === "favorite" ? "Starred" : statusLabel(item)}
-            </button>
+            </TabButton>
           ))}
         </div>
         {selected.length ? (
           <div className="library-selection-actions">
             <span><CheckCircle2 size={15} /> {selected.length} selected</span>
-            <button className="selection-icon-button" onClick={() => setSelected([])}><X size={15} /><span>Clear</span></button>
-            <button className="selection-icon-button is-danger" onClick={deleteSelected}><Trash2 size={15} /><span>Delete</span></button>
+            {selected.length === 1 ? <ActionButton variant="ghost" size="small" onClick={editSelected} icon={<Pencil />}>Edit</ActionButton> : null}
+            <ActionButton variant="ghost" size="small" onClick={exportSelected} icon={<Download />}>Export</ActionButton>
+            <ActionButton variant="ghost" size="small" onClick={() => setSelected([])} icon={<X />}>Clear</ActionButton>
+            <ActionButton variant="danger" size="small" onClick={deleteSelected} icon={<Trash2 />}>Delete</ActionButton>
           </div>
         ) : null}
       </div>
@@ -1443,10 +1596,10 @@ function LibraryView({
           <table className="paper-table research-grid">
             <colgroup>
               <col className="paper-column-check" />
+              <col className="paper-column-status" />
               <col style={{ width: `${(effectivePaperColumnWidths.title / resizablePaperColumnTotal) * 100}%` }} />
               <col style={{ width: `${(effectivePaperColumnWidths.venue / resizablePaperColumnTotal) * 100}%` }} />
               <col className="paper-column-year" />
-              <col className="paper-column-status" />
             </colgroup>
             <thead>
               <tr>
@@ -1455,10 +1608,10 @@ function LibraryView({
                     <SelectionBox checked={Boolean(pagedPapers.length) && pagedPapers.every((paper) => selected.includes(paper.id))} />
                   </button>
                 </th>
+                <SortablePaperHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
                 <SortablePaperHeader label="Paper" sortKey="title" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
                 <SortablePaperHeader label="Venue" sortKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
                 <SortablePaperHeader label="Year" sortKey="year" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
-                <SortablePaperHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
               </tr>
             </thead>
             <tbody>
@@ -1483,6 +1636,7 @@ function LibraryView({
                       <SelectionBox checked={selected.includes(paper.id)} />
                     </button>
                   </td>
+                  <td className="status-cell"><StatusPill status={paper.readingStatus} compact /></td>
                   <td className="paper-main-column">
                     <div className="paper-title-cell">
                       <button
@@ -1502,7 +1656,7 @@ function LibraryView({
                         </span>
                         {paper.collections.length ? (
                           <span className="paper-collection-line" aria-label="Collections">
-                            {paper.collections.slice(0, 3).map((collection) => <i key={collection.id} className="collection-chip">{collection.name}</i>)}
+                            {paper.collections.slice(0, 3).map((collection) => <Chip key={collection.id} size="small">{collection.name}</Chip>)}
                           </span>
                         ) : null}
                       </span>
@@ -1510,7 +1664,6 @@ function LibraryView({
                   </td>
                   <td><span className="venue-cell"><b>{paper.venueAcronym || paper.venueName || "—"}</b><small>{paper.paperType}</small></span></td>
                   <td className="muted-cell year-cell">{paper.year ?? "—"}</td>
-                  <td className="status-cell"><StatusPill status={paper.readingStatus} compact /></td>
                 </tr>
               ))}
             </tbody>
@@ -1672,7 +1825,7 @@ function AuthorsView({
                 </td>
                 <td className="entity-number-cell">{author.paperCount}</td>
                 <td className="entity-number-cell">{author.latestYear ?? "—"}</td>
-                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(author)}><Pencil size={15} /><span>Edit</span></button></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="small" onClick={() => onEdit(author)} icon={<Pencil />}>Edit</ActionButton></td>
               </tr>
             ))}
           </tbody>
@@ -1809,7 +1962,7 @@ function VenuesView({
                 <td className="entity-meta-cell">{venue.publisher || "—"}</td>
                 <td className="entity-number-cell">{venue.paperCount}</td>
                 <td className="entity-number-cell">{venue.latestYear ?? "—"}</td>
-                <td className="actions-cell"><button className="row-icon-button" onClick={() => onEdit(venue)}><Pencil size={15} /><span>Edit</span></button></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="small" onClick={() => onEdit(venue)} icon={<Pencil />}>Edit</ActionButton></td>
               </tr>
             ))}
           </tbody>
@@ -1923,8 +2076,8 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
           <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
         </button>
         <div className="collection-actions">
-          <button type="button" className="row-icon-button" onClick={onEdit}><Pencil size={15} /><span>Edit</span></button>
-          <button type="button" className="row-icon-button is-danger" onClick={onDelete}><Trash2 size={15} /><span>Delete</span></button>
+          <ActionButton variant="ghost" size="small" onClick={onEdit} icon={<Pencil />}>Edit</ActionButton>
+          <ActionButton variant="danger" size="small" onClick={onDelete} icon={<Trash2 />}>Delete</ActionButton>
         </div>
       </header>
       <div className="collection-papers" aria-label={`Papers in ${collection.name}`}>
@@ -1934,11 +2087,14 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
       {papers.length > pageSize ? (
         <div className="collection-card-pagination">
           <span>{start}–{end} of {papers.length}</span>
-          <nav aria-label={`${collection.name} paper pages`}>
-            <button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1} aria-label="Previous papers"><ChevronLeft size={13} /></button>
-            <span>{currentPage} / {pageCount}</span>
-            <button type="button" onClick={() => setPage(Math.min(pageCount, currentPage + 1))} disabled={currentPage >= pageCount} aria-label="Next papers"><ChevronRight size={13} /></button>
-          </nav>
+          <PaginationPageNav
+            page={currentPage}
+            pageCount={pageCount}
+            onPageChange={setPage}
+            label={`${collection.name} paper pages`}
+            className="collection-card-page-nav"
+            iconSize={13}
+          />
         </div>
       ) : null}
     </article>
@@ -2001,9 +2157,9 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
       {selected ? (
         <div className="selection-actions">
           <span>{selected} selected</span>
-          <button className="selection-icon-button" onClick={onBulk}><Pencil size={15} /><span>Edit</span></button>
-          <button className="selection-icon-button is-danger" onClick={onDelete}><Trash2 size={15} /><span>Delete</span></button>
-          <button className="selection-icon-button" onClick={onClear}><X size={15} /><span>Clear</span></button>
+          <ActionButton variant="ghost" size="small" onClick={onBulk} icon={<Pencil />}>Edit</ActionButton>
+          <ActionButton variant="danger" size="small" onClick={onDelete} icon={<Trash2 />}>Delete</ActionButton>
+          <ActionButton variant="ghost" size="small" onClick={onClear} icon={<X />}>Clear</ActionButton>
         </div>
       ) : null}
       <ToolbarCreateButton label={createLabel} onClick={onCreate} />
@@ -2012,7 +2168,7 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
 }
 
 function ToolbarCreateButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button type="button" className="toolbar-create-button" onClick={onClick} aria-label={label} title={label}><Plus size={17} /><span>Add</span></button>;
+  return <ActionButton variant="primary" size="icon" className="toolbar-add-action ml-auto" onClick={onClick} aria-label={label} title={label} icon={<Plus />} />;
 }
 
 function PageSearch({ value, onChange, placeholder }: {
@@ -2137,6 +2293,47 @@ function FilterValueCombobox({ kind, options, valueId, fallbackLabel = "", ariaL
   );
 }
 
+function buildPageWindow(page: number, pageCount: number, windowSize = 5) {
+  const normalizedCount = Math.max(1, pageCount);
+  const normalizedPage = Math.min(normalizedCount, Math.max(1, page));
+  const visibleCount = Math.min(Math.max(1, windowSize), normalizedCount);
+  const centeredStart = normalizedPage - Math.floor(visibleCount / 2);
+  const start = Math.max(1, Math.min(centeredStart, normalizedCount - visibleCount + 1));
+  return Array.from({ length: visibleCount }, (_, index) => start + index);
+}
+
+function PaginationPageNav({ page, pageCount, onPageChange, label, className, windowSize = 5, iconSize = 15 }: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+  label: string;
+  className?: string;
+  windowSize?: number;
+  iconSize?: number;
+}) {
+  const normalizedCount = Math.max(1, pageCount);
+  const currentPage = Math.min(normalizedCount, Math.max(1, page));
+  const visiblePages = buildPageWindow(currentPage, normalizedCount, windowSize);
+  const compact = iconSize <= 13;
+  return (
+    <nav className={cx("flex items-center gap-1", className)} aria-label={label}>
+      <PaginationButton compact={compact} onClick={() => onPageChange(1)} disabled={currentPage <= 1} aria-label="First page" title="First page"><ChevronsLeft size={iconSize} /></PaginationButton>
+      {visiblePages.map((visiblePage) => (
+        <PaginationButton
+          compact={compact}
+          current={visiblePage === currentPage}
+          aria-current={visiblePage === currentPage ? "page" : undefined}
+          onClick={() => onPageChange(visiblePage)}
+          key={visiblePage}
+        >
+          {visiblePage}
+        </PaginationButton>
+      ))}
+      <PaginationButton compact={compact} onClick={() => onPageChange(normalizedCount)} disabled={currentPage >= normalizedCount} aria-label="Last page" title="Last page"><ChevronsRight size={iconSize} /></PaginationButton>
+    </nav>
+  );
+}
+
 function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [10, 25, 50], pageSizeLabel = "Rows", onPageChange, onPageSizeChange }: {
   page: number;
   pageSize: number;
@@ -2148,21 +2345,9 @@ function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [
   onPageSizeChange: (pageSize: number) => void;
 }) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const start = total ? (page - 1) * pageSize + 1 : 0;
-  const end = Math.min(page * pageSize, total);
-  const nearbyPages = pageCount <= 7
-    ? Array.from({ length: pageCount }, (_, index) => index + 1)
-    : Array.from(new Set([1, page - 1, page, page + 1, pageCount]))
-      .filter((candidate) => candidate >= 1 && candidate <= pageCount)
-      .sort((left, right) => left - right);
-  const pageItems: Array<number | string> = [];
-  nearbyPages.forEach((candidate, index) => {
-    const previous = nearbyPages[index - 1];
-    if (previous && candidate - previous > 1) {
-      pageItems.push(`ellipsis-${previous}`);
-    }
-    pageItems.push(candidate);
-  });
+  const currentPage = Math.min(pageCount, Math.max(1, page));
+  const start = total ? (currentPage - 1) * pageSize + 1 : 0;
+  const end = Math.min(currentPage * pageSize, total);
   function jump(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -2173,20 +2358,34 @@ function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [
     <div className="table-pagination">
       <span>Showing {start}–{end} of {total} {itemLabel}</span>
       <div className="table-pagination-controls">
-        <label>{pageSizeLabel} <select aria-label={`${pageSizeLabel} per page for ${itemLabel}`} value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>{pageSizeOptions.map((size) => <option value={size} key={size}>{size}</option>)}</select></label>
-        <nav className="pagination-pages" aria-label={`${itemLabel} pages`}>
-          <button type="button" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label="First page" title="First page"><ChevronsLeft size={15} /></button>
-          <button type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1} aria-label="Previous page" title="Previous page"><ChevronLeft size={15} /></button>
-          {pageItems.map((item) => typeof item === "number"
-            ? <button type="button" className={item === page ? "is-current" : ""} aria-current={item === page ? "page" : undefined} onClick={() => onPageChange(item)} key={item}>{item}</button>
-            : <span className="pagination-ellipsis" key={item}>…</span>)}
-          <button type="button" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} aria-label="Next page" title="Next page"><ChevronRight size={15} /></button>
-          <button type="button" onClick={() => onPageChange(pageCount)} disabled={page >= pageCount} aria-label="Last page" title="Last page"><ChevronsRight size={15} /></button>
-        </nav>
+        <div className="page-size-control">
+          <span>{pageSizeLabel}</span>
+          <details className="page-size-picker">
+            <summary aria-label={`${pageSizeLabel} per page for ${itemLabel}`}><span>{pageSize}</span><ChevronDown size={15} /></summary>
+            <div className="page-size-menu" role="menu">
+              {pageSizeOptions.map((size) => (
+                <button
+                  type="button"
+                  className={size === pageSize ? "is-selected" : ""}
+                  role="menuitemradio"
+                  aria-checked={size === pageSize}
+                  onClick={(event) => {
+                    onPageSizeChange(size);
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                  key={size}
+                >
+                  <span>{size}</span>{size === pageSize ? <Check size={14} /> : null}
+                </button>
+              ))}
+            </div>
+          </details>
+        </div>
+        <PaginationPageNav page={currentPage} pageCount={pageCount} onPageChange={onPageChange} label={`${itemLabel} pages`} className="pagination-pages" />
         <form className="pagination-jump" onSubmit={jump}>
-          <input key={page} name="page" type="number" min="1" max={pageCount} defaultValue={page} aria-label={`Go to ${itemLabel} page`} />
-          <span>of {pageCount} pages</span>
-          <button type="submit">Go</button>
+          <span>Pages: {currentPage}/{pageCount}</span>
+          <input key={currentPage} name="page" type="number" min="1" max={pageCount} defaultValue={currentPage} aria-label={`Go to ${itemLabel} page`} />
+          <PaginationButton type="submit">Go</PaginationButton>
         </form>
       </div>
     </div>
@@ -2236,8 +2435,16 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
   }
 
   async function addResult(result: DiscoveryResult) {
+    let paperData: Record<string, unknown> = { ...result };
+    if (hasAcquirableSource(paperData)) {
+      try {
+        paperData = withAcquiredSource(paperData, await acquirePaperSource(paperData));
+      } catch (error) {
+        notify(`The paper metadata can be saved, but its source could not be stored locally: ${error instanceof Error ? error.message : "download failed"}`, "info");
+      }
+    }
     const succeeded = await mutateLibrary(
-      { entity: "paper", action: "create", data: { ...result } },
+      { entity: "paper", action: "create", data: paperData },
       "Paper added to your library.",
     );
     if (succeeded) {
@@ -2255,14 +2462,14 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
         <div className="provider-switch">
           <span>Search in</span>
           {discoveryProviders.map((item) => (
-            <button
-              type="button"
-              className={provider === item.id ? "is-active" : ""}
+            <TabButton
+              variant="pill"
+              active={provider === item.id}
               onClick={() => { setProvider(item.id); setPage(1); }}
               key={item.id}
             >
               {item.label}
-            </button>
+            </TabButton>
           ))}
         </div>
         <div className="discover-search-box">
@@ -2279,12 +2486,12 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
           <p>PA queries academic sources, preserves identifiers and author order, and normalizes new records as they enter your workspace.</p>
           <div className="prompt-suggestions">
             {["long-context retrieval agents", "human AI literature review", "scholarly knowledge graphs"].map((suggestion) => (
-              <button key={suggestion} onClick={() => setQuery(suggestion)}><WandSparkles size={14} />{suggestion}</button>
+              <Chip key={suggestion} tone="neutral" onClick={() => setQuery(suggestion)} icon={<WandSparkles />}>{suggestion}</Chip>
             ))}
           </div>
           <div className="discovery-capabilities">
-            <button type="button" onClick={onSearchLibrary}><Search size={17} /><span><strong>Search your library</strong><small>Title, abstract, author, venue, notes, filters, and fuzzy matching.</small></span><ArrowRight size={15} /></button>
-            <button type="button" onClick={onImport}><Database size={17} /><span><strong>Import by source</strong><small>arXiv, DOI, DBLP, OpenReview, URL/PDF, or manual metadata.</small></span><ArrowRight size={15} /></button>
+            <SelectCard onClick={onSearchLibrary} icon={<Search />} title="Search your library" description="Title, abstract, author, venue, notes, filters, and fuzzy matching." trailing={<ArrowRight />} />
+            <SelectCard onClick={onImport} icon={<Database />} title="Import by source" description="arXiv, DOI, DBLP, OpenReview, URL/PDF, or manual metadata." trailing={<ArrowRight />} />
           </div>
         </div>
       ) : null}
@@ -2316,9 +2523,9 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
                   <MarkdownContent content={result.abstract || "No abstract is available for this result."} className="result-abstract markdown-compact" />
                   <div className="result-tags"><span>{result.venueName || "Venue unknown"}</span>{result.doi ? <span>DOI {result.doi}</span> : null}{result.pdfUrl ? <span>Open PDF</span> : null}</div>
                 </div>
-                <button className={isAdded ? "added-button" : "result-add"} disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} title={isAdded ? "Added to library" : "Add to library"}>
-                  {isAdded ? <><Check size={16} /><span>Added</span></> : <><Plus size={16} /><span>Add</span></>}
-                </button>
+                <ActionButton variant={isAdded ? "success" : "primary"} size="small" className="self-start" disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} title={isAdded ? "Added to library" : "Add to library"} icon={isAdded ? <Check /> : <Plus />}>
+                  {isAdded ? "Added" : "Add"}
+                </ActionButton>
               </article>
             );
           })}
@@ -2337,29 +2544,53 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
   );
 }
 
-function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onDelete, onOpenAuthor, onOpenVenue, onOpenCollection }: {
+function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRead, onEdit, onExport, onRevealFile, onDelete, onOpenAuthor, onOpenVenue, onOpenCollection }: {
   paper: Paper;
+  suspendAutoClose: boolean;
   onClose: () => void;
   onUpdate: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
   onChat: () => void;
   onRead: () => void;
   onEdit: () => void;
+  onExport: () => void;
+  onRevealFile: (kind: "pdf" | "html", path: string) => Promise<void>;
   onDelete: () => void;
   onOpenAuthor: (authorName: string) => void;
   onOpenVenue: () => void;
   onOpenCollection: (collectionId: string, collectionName: string) => void;
 }) {
   const hasViewer = Boolean(paper.pdfUrl || paper.htmlUrl);
+  const detailPanelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (suspendAutoClose) {
+      return;
+    }
+    function closeWhenInteractionLeavesPanel(event: PointerEvent | FocusEvent) {
+      const target = event.target;
+      if (target instanceof Node && !detailPanelRef.current?.contains(target)) {
+        onClose();
+      }
+    }
+
+    document.addEventListener("pointerdown", closeWhenInteractionLeavesPanel, true);
+    document.addEventListener("focusin", closeWhenInteractionLeavesPanel, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeWhenInteractionLeavesPanel, true);
+      document.removeEventListener("focusin", closeWhenInteractionLeavesPanel, true);
+    };
+  }, [onClose, suspendAutoClose]);
+
   return (
     <div className="drawer-layer">
       <button className="drawer-scrim" onClick={onClose} aria-label="Close paper details" />
-      <aside className="detail-drawer" aria-label="Paper details">
+      <aside ref={detailPanelRef} className="detail-drawer" aria-label="Paper details">
         <div className="drawer-header is-minimal">
-          <button className="icon-button" onClick={onClose} aria-label="Close"><PanelRightClose size={19} /></button>
+          <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<PanelRightClose />} />
         </div>
         <div className="drawer-content">
           <div className="detail-actions-top">
-            <StatusPill status={paper.readingStatus} />
+            <StatusPill className="detail-status" status={paper.readingStatus} />
             <button className={`star-button ${paper.favorite ? "is-starred" : ""}`} onClick={() => void onUpdate(paper, { favorite: !paper.favorite }, paper.favorite ? "Removed from starred papers." : "Paper starred.")}>
               <Star size={16} fill={paper.favorite ? "currentColor" : "none"} />
             </button>
@@ -2368,30 +2599,31 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onDelet
           <div className="detail-authors" aria-label="Paper authors">
             <ExpandableAuthorButtons paper={paper} onOpenAuthor={onOpenAuthor} />
           </div>
-          <div className="detail-meta-grid">
-            <span><small>Venue</small><button type="button" className="detail-entity-link" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</button></span>
-            <span><small>Year</small><strong>{paper.year ?? "—"}</strong></span>
-            <span><small>Type</small><strong>{paper.paperType}</strong></span>
-          </div>
-          <div className="detail-quick-section">
-            <div>
-              <p className="eyebrow">Reading status</p>
+          <div className="detail-control-stack">
+            <div className="detail-meta-grid" aria-label="Publication facts">
+              <span><small>Venue</small><TextButton link className="detail-meta-value max-w-full truncate capitalize text-[var(--ink)]" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></span>
+              <span><small>Year</small><strong>{paper.year ?? "—"}</strong></span>
+              <span><small>Type</small><strong>{paper.paperType}</strong></span>
+            </div>
+            <div className="detail-control-row">
+              <p className="detail-control-label">Reading status</p>
               <div className="status-selector">
                 {["inbox", "reading", "complete"].map((status) => (
-                  <button key={status} className={paper.readingStatus === status ? "is-active" : ""} onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}>{statusLabel(status)}</button>
+                  <TabButton key={status} variant="segmented" active={paper.readingStatus === status} onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}>{statusLabel(status)}</TabButton>
                 ))}
               </div>
             </div>
-            <div>
-              <p className="eyebrow">Collections</p>
-              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <button type="button" key={collection.id} className="collection-chip" onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</button>) : <span className="row-muted">No collections yet</span>}</div>
+            <div className="detail-control-row detail-collections-row">
+              <p className="detail-control-label">Collections</p>
+              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <Chip key={collection.id} onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</Chip>) : <span className="row-muted detail-empty-value">No collections yet</span>}</div>
             </div>
           </div>
           <div className="drawer-cta-row">
-            {hasViewer ? <button className="primary-action" onClick={onRead}><BookOpen size={16} /> Read</button> : null}
-            {paper.url ? <a className="secondary-action" href={paper.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Source</a> : null}
-            <button className="secondary-action" onClick={onChat}><Sparkles size={16} /> Ask PA</button>
-            <button className="secondary-action" onClick={onEdit}><Pencil size={15} /> Edit</button>
+            {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />}>Read</ActionButton> : null}
+            {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>Source</ActionLink> : null}
+            <ActionButton variant="secondary" onClick={onChat} icon={<Sparkles />}>Ask PA</ActionButton>
+            <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />}>Edit</ActionButton>
+            <ActionButton variant="secondary" onClick={onExport} icon={<Download />}>Export</ActionButton>
           </div>
           <div className="detail-section summary-section">
             <p className="eyebrow">PA summary</p>
@@ -2423,80 +2655,19 @@ function PaperDetail({ paper, onClose, onUpdate, onChat, onRead, onEdit, onDelet
                 {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
                 {paper.doi ? <span><b>DOI</b>{paper.doi}</span> : null}
                 {paper.preprintId || paper.arxivId ? <span><b>Preprint</b>{paper.preprintId || paper.arxivId}</span> : null}
-                {paper.localPath ? <span><b>File</b>{paper.localPath}</span> : null}
-                {paper.htmlSnapshotPath ? <span><b>HTML</b>{paper.htmlSnapshotPath}</span> : null}
+                {paper.localPath ? <span className="publication-file-row"><b>File</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("pdf", paper.localPath!)} title={`${paper.localPath} — show the stored PDF in its folder`}>{paper.localPath}</TextButton></span> : null}
+                {paper.htmlSnapshotPath ? <span className="publication-file-row"><b>HTML</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("html", paper.htmlSnapshotPath!)} title={`${paper.htmlSnapshotPath} — show the stored HTML snapshot in its folder`}>{paper.htmlSnapshotPath}</TextButton></span> : null}
               </div>
             </div>
           ) : null}
         </div>
-        <div className="drawer-footer"><span>Added {formatDate(paper.addedAt)}</span><button className="danger-text" onClick={onDelete}><Trash2 size={14} /> Delete paper</button></div>
+        <div className="drawer-footer"><span>Added {formatDate(paper.addedAt)}</span><TextButton tone="danger" onClick={onDelete} icon={<Trash2 />}>Delete paper</TextButton></div>
       </aside>
     </div>
   );
 }
 
-function ReaderDrawer({ paper, onClose, onChat, onUpdate }: {
-  paper: Paper;
-  onClose: () => void;
-  onChat: () => void;
-  onUpdate: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
-}) {
-  const viewerUrl = paper.htmlUrl || paper.pdfUrl;
-  const isHtml = Boolean(paper.htmlUrl);
-  return (
-    <div className="reader-layer">
-      <header className="reader-header">
-        <div className="reader-brand"><span className="brand-mark">PA</span><span><small>{isHtml ? "HTML snapshot" : "PDF reader"}</small><strong>{paper.title}</strong></span></div>
-        <div className="reader-actions">
-          <button onClick={onChat}><Sparkles size={15} /> Ask PA</button>
-          {paper.url ? <a href={paper.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Source</a> : null}
-          <button className="reader-close" onClick={onClose} aria-label="Close reader"><X size={18} /></button>
-        </div>
-      </header>
-      <div className="reader-workspace">
-        <main className="reader-document">
-          {viewerUrl ? (
-            isHtml ? (
-              <iframe src={viewerUrl} title={`HTML snapshot of ${paper.title}`} sandbox="" />
-            ) : (
-              <iframe src={viewerUrl} title={`PDF of ${paper.title}`} />
-            )
-          ) : (
-            <EmptyState icon={<FileText size={24} />} title="No local document" detail="This record does not have a stored PDF or HTML snapshot." />
-          )}
-        </main>
-        <aside className="reader-notes">
-          <div className="reader-paper-meta"><StatusPill status={paper.readingStatus} /><span>{venueLine(paper)} · {paper.year ?? "n.d."}</span></div>
-          <h2>{paper.title}</h2>
-          <p className="reader-authors">
-            <ExpandableAuthorNames paper={paper} limit={3} />
-          </p>
-          <div className="reader-summary reader-summary-scroll">
-            <p className="eyebrow">Summary</p>
-            <MarkdownContent content={paper.summary || paper.abstract || "No summary is available for this paper yet."} />
-          </div>
-          <div className="reader-summary reader-notes-section">
-            <p className="eyebrow">My notes</p>
-            <textarea
-              className="reader-notes-editor"
-              defaultValue={paper.notes}
-              placeholder="Add an observation, question, or connection…"
-              aria-label="My notes"
-              onBlur={(event) => {
-                if (event.target.value !== paper.notes) {
-                  void onUpdate(paper, { notes: event.target.value }, "Notes saved.");
-                }
-              }}
-            />
-          </div>
-          <button className="reader-chat-button" onClick={onChat}><Sparkles size={15} /> Discuss this paper with PA</button>
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[]; onClose: () => void }) {
+export function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[]; onClose: () => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: "welcome", role: "assistant", content: `I’m ready to think through “${paper.title}” with you. Ask about the argument, methods, connections, or next steps.` },
   ]);
@@ -2505,9 +2676,12 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
   const [paperPickerOpen, setPaperPickerOpen] = useState(false);
   const [paperQuery, setPaperQuery] = useState("");
   const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([paper.id]);
+  const [pdfStartPage, setPdfStartPage] = useState(1);
+  const [pdfEndPage, setPdfEndPage] = useState<number | null>(null);
+  const [historyReady, setHistoryReady] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState(460);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const { runTask } = useBackgroundTasks();
+  const chatStorageKey = `pa-chat-history-v1:${paper.id}`;
 
   const selectedDiscussionPapers = papers.filter((item) => selectedPaperIds.includes(item.id));
   const availableDiscussionPapers = papers.filter((item) => matchesSearch([
@@ -2516,6 +2690,44 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
     venueLine(item),
     item.year,
   ], paperQuery));
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const stored = window.localStorage.getItem(chatStorageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored) as { messages?: ChatMessage[]; selectedPaperIds?: string[]; pdfStartPage?: number; pdfEndPage?: number | null };
+          if (Array.isArray(parsed.messages) && parsed.messages.length) {
+            setMessages(parsed.messages);
+          }
+          if (Array.isArray(parsed.selectedPaperIds) && parsed.selectedPaperIds.length) {
+            const availableIds = new Set(papers.map((item) => item.id));
+            const restoredIds = parsed.selectedPaperIds.filter((id) => availableIds.has(id)).slice(0, 8);
+            setSelectedPaperIds(restoredIds.length ? restoredIds : [paper.id]);
+          }
+          const start = Math.min(20, Math.max(1, Number(parsed.pdfStartPage) || 1));
+          setPdfStartPage(start);
+          setPdfEndPage(parsed.pdfEndPage == null ? null : Math.min(20, Math.max(start, Number(parsed.pdfEndPage) || start)));
+        }
+      } catch {
+        window.localStorage.removeItem(chatStorageKey);
+      } finally {
+        setHistoryReady(true);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [chatStorageKey, paper.id, papers]);
+
+  useEffect(() => {
+    if (!historyReady) {
+      return;
+    }
+    window.localStorage.setItem(chatStorageKey, JSON.stringify({ messages, selectedPaperIds, pdfStartPage, pdfEndPage }));
+  }, [chatStorageKey, historyReady, messages, pdfEndPage, pdfStartPage, selectedPaperIds]);
+
+  function persistChatHistory(nextMessages: ChatMessage[], paperIds = selectedPaperIds) {
+    window.localStorage.setItem(chatStorageKey, JSON.stringify({ messages: nextMessages, selectedPaperIds: paperIds, pdfStartPage, pdfEndPage }));
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2539,34 +2751,41 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: "user", content };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
+    persistChatHistory(nextMessages);
     setInput("");
     setLoading(true);
     try {
-      const payload = await runTask(`Ask PA · ${selectedDiscussionPapers.length} ${selectedDiscussionPapers.length === 1 ? "paper" : "papers"}`, async () => {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: nextMessages.filter((message) => message.id !== "welcome").map(({ role, content: messageContent }) => ({ role, content: messageContent })),
-            papers: selectedDiscussionPapers.map((selected) => ({
-              title: selected.title,
-              abstract: selected.abstract,
-              summary: selected.summary,
-              notes: selected.notes,
-              authors: selected.authors.map((author) => author.displayName),
-              venue: venueLine(selected),
-              year: selected.year,
-            })),
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(await readError(response));
-        }
-        return response.json() as Promise<{ content: string }>;
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: nextMessages.filter((message) => message.id !== "welcome").map(({ role, content: messageContent }) => ({ role, content: messageContent })),
+          pdfStartPage,
+          ...(pdfEndPage == null ? {} : { pdfEndPage }),
+          papers: selectedDiscussionPapers.map((selected) => ({
+            title: selected.title,
+            abstract: selected.abstract,
+            summary: selected.summary,
+            notes: selected.notes,
+            authors: selected.authors.map((author) => author.displayName),
+            venue: venueLine(selected),
+            year: selected.year,
+            pdfUrl: selected.pdfUrl,
+            htmlUrl: selected.htmlUrl,
+          })),
+        }),
       });
-      setMessages([...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: payload.content }]);
+      if (!response.ok) {
+        throw new Error(await readError(response));
+      }
+      const payload = await response.json() as { content: string };
+      const completedMessages: ChatMessage[] = [...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: payload.content }];
+      setMessages(completedMessages);
+      persistChatHistory(completedMessages);
     } catch (error) {
-      setMessages([...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: error instanceof Error ? `I couldn’t complete that request: ${error.message}` : "I couldn’t complete that request." }]);
+      const failedMessages: ChatMessage[] = [...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: error instanceof Error ? `I couldn’t complete that request: ${error.message}` : "I couldn’t complete that request." }];
+      setMessages(failedMessages);
+      persistChatHistory(failedMessages);
     } finally {
       setLoading(false);
     }
@@ -2618,13 +2837,13 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
         <div className="chat-header">
           <span className="assistant-orb large"><Sparkles size={19} /></span>
           <span><strong>Ask PA</strong><small>Grounded in the selected paper</small></span>
-          <button className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+          <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<X />} />
         </div>
         <div className="chat-context-wrap">
           <div className="chat-context">
             <FileText size={15} />
             <span><small>Discussing {selectedDiscussionPapers.length} {selectedDiscussionPapers.length === 1 ? "paper" : "papers"}</small><strong>{selectedDiscussionPapers.map((selected) => selected.title).join(" · ")}</strong></span>
-            <button type="button" className="chat-context-add" onClick={() => setPaperPickerOpen((current) => !current)} aria-expanded={paperPickerOpen}><Plus size={13} /> Select papers</button>
+            <ActionButton variant="ghost" size="small" onClick={() => setPaperPickerOpen((current) => !current)} aria-expanded={paperPickerOpen} icon={<Plus />}>Select papers</ActionButton>
           </div>
           {paperPickerOpen ? (
             <div className="chat-paper-picker">
@@ -2639,6 +2858,31 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
               <div className="chat-paper-picker-footer"><span>Up to 8 papers can ground one discussion.</span><button type="button" onClick={() => setPaperPickerOpen(false)}>Done</button></div>
             </div>
           ) : null}
+          <label className="chat-grounding-pages drawer-grounding-pages">
+            <span>Attach PDF pages</span>
+            <input
+              type="number"
+              min="1"
+              max="20"
+              value={pdfStartPage}
+              aria-label="First PDF page attached to chat"
+              onChange={(event) => {
+                const start = Math.min(20, Math.max(1, Number(event.target.value) || 1));
+                setPdfStartPage(start);
+                setPdfEndPage((current) => current == null ? null : Math.max(start, current));
+              }}
+            />
+            <i>to</i>
+            <input
+              type="number"
+              min={pdfStartPage}
+              max="20"
+              value={pdfEndPage ?? ""}
+              placeholder="Default"
+              aria-label="Last PDF page attached to chat"
+              onChange={(event) => setPdfEndPage(event.target.value === "" ? null : Math.min(20, Math.max(pdfStartPage, Number(event.target.value) || pdfStartPage)))}
+            />
+          </label>
         </div>
         <div className="chat-messages">
           {messages.map((message) => (
@@ -2651,11 +2895,11 @@ function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[];
           <div ref={bottomRef} />
         </div>
         <div className="chat-prompts">
-          {["Summarize the contribution", "Challenge the methods", "Connect to my notes"].map((prompt) => <button key={prompt} onClick={() => setInput(prompt)}>{prompt}</button>)}
+          {["Summarize the contribution", "Challenge the methods", "Connect to my notes"].map((prompt) => <Chip key={prompt} tone="neutral" onClick={() => setInput(prompt)}>{prompt}</Chip>)}
         </div>
         <form className="chat-composer" onSubmit={sendMessage}>
           <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onComposerKeyDown} placeholder="Ask about this paper…" rows={2} />
-          <button type="submit" disabled={!input.trim() || loading} aria-label="Send message"><Send size={17} /></button>
+          <ActionButton type="submit" variant="primary" size="icon" className="h-auto w-auto self-stretch" disabled={!input.trim() || loading} aria-label="Send message" icon={<Send />} />
           <small>Enter to send · Shift + Enter for a new line</small>
         </form>
       </aside>
@@ -2672,13 +2916,125 @@ function ModalFrame({ title, subtitle, onClose, children, className = "" }: {
 }) {
   return (
     <div className="modal-layer">
-      <button className="modal-scrim" onClick={onClose} aria-label="Close dialog" />
+      <Scrim onClick={onClose} label="Close dialog" />
       <section className={`modal-card ${className}`} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="modal-header"><div><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
+        <div className="modal-header"><div><h2>{title}</h2><p>{subtitle}</p></div><ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<X />} /></div>
         {children}
       </section>
     </div>
   );
+}
+
+function ExportReferencesModal({ papers, onClose }: {
+  papers: Paper[];
+  onClose: () => void;
+}) {
+  const [format, setFormat] = useState<ReferenceExportFormat>("bibtex");
+  const [copied, setCopied] = useState(false);
+  const preview = useMemo(() => exportReferences(papers, format), [papers, format]);
+  const formatMetadata = referenceExportFormats.find((candidate) => candidate.id === format) ?? referenceExportFormats[0];
+
+  async function copyPreview() {
+    try {
+      await navigator.clipboard.writeText(preview);
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = preview;
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand("copy");
+      field.remove();
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  return (
+    <ModalFrame
+      title="Export references"
+      subtitle={`${papers.length} selected ${papers.length === 1 ? "paper" : "papers"}. Preview the exact selection before copying or downloading.`}
+      onClose={onClose}
+      className="export-modal"
+    >
+      <div className="export-modal-body">
+        <div className="export-format-tabs" role="tablist" aria-label="Reference format">
+          {referenceExportFormats.map((candidate) => (
+            <TabButton
+              variant="pill"
+              role="tab"
+              aria-selected={format === candidate.id}
+              active={format === candidate.id}
+              key={candidate.id}
+              onClick={() => setFormat(candidate.id)}
+            >
+              {candidate.label}
+            </TabButton>
+          ))}
+        </div>
+        <section className="export-preview-panel" aria-label={`${formatMetadata.label} export preview`}>
+          <header><strong>Preview</strong><span>{formatMetadata.label}</span></header>
+          <pre className={`export-preview export-preview-${format}`}><code><ExportSyntaxPreview value={preview} format={format} /></code></pre>
+        </section>
+      </div>
+      <div className="export-modal-actions">
+        <ActionButton variant="secondary" icon={copied ? <Check size={17} /> : <Clipboard size={17} />} onClick={() => void copyPreview()} disabled={!preview}>{copied ? "Copied" : "Copy"}</ActionButton>
+        <ActionButton variant="primary" icon={<Download size={17} />} onClick={() => downloadReferences(papers, format)} disabled={!papers.length}>Download .{formatMetadata.extension}</ActionButton>
+      </div>
+    </ModalFrame>
+  );
+}
+
+function ExportSyntaxPreview({ value, format }: {
+  value: string;
+  format: ReferenceExportFormat;
+}) {
+  return value.split("\n").map((line, lineIndex) => (
+    <span className="export-code-line" key={`${lineIndex}-${line}`}>
+      {highlightExportLine(line, format)}
+    </span>
+  ));
+}
+
+function highlightExportLine(line: string, format: ReferenceExportFormat): ReactNode[] {
+  const patterns: Record<ReferenceExportFormat, RegExp> = {
+    bibtex: /(@[A-Za-z]+)|(^\s*[A-Za-z][\w-]*(?=\s*=))|(\{[^{}\n]*\})|(\b\d{4}\b)/g,
+    ieee: /(^\[\d+\])|(“[^”]+”)|(doi:\s*\S+)|(\b(?:19|20)\d{2}\b)/gi,
+    markdown: /(\*\*[^*]+\*\*)|(\[[^\]]+\]\([^)]+\))|(\*[^*]+\*)|(^-\s+)/g,
+    html: /(<\/?[A-Za-z][^>]*>)|(&[A-Za-z#0-9]+;)/g,
+    json: /("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|(-?\b\d+(?:\.\d+)?\b)|(\b(?:true|false|null)\b)/g,
+  };
+  const pattern = patterns[format];
+  const highlighted: ReactNode[] = [];
+  let cursor = 0;
+  let tokenIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(line)) !== null) {
+    if (match.index > cursor) {
+      highlighted.push(line.slice(cursor, match.index));
+    }
+    const tokenClass = match[1]
+      ? "keyword"
+      : match[2]
+        ? "field"
+        : match[3]
+          ? "string"
+          : "number";
+    highlighted.push(
+      <span className={`export-token export-token-${tokenClass}`} key={`${tokenIndex}-${match.index}`}>
+        {match[0]}
+      </span>,
+    );
+    cursor = pattern.lastIndex;
+    tokenIndex += 1;
+  }
+
+  if (cursor < line.length) {
+    highlighted.push(line.slice(cursor));
+  }
+  return highlighted.length ? highlighted : [line || "\u00a0"];
 }
 
 function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
@@ -2732,9 +3088,7 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
       <span>{label}</span>
       <div className="local-file-control">
         <input ref={pathInput} name={name} defaultValue={defaultValue} placeholder={kind === "pdf" ? "paper.pdf" : "paper.html"} />
-        <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} aria-label={`Choose local ${kind === "pdf" ? "PDF" : "HTML"} file`} title="Choose from local files">
-          {uploading ? <LoaderCircle size={17} className="spin" /> : <FolderOpen size={17} />}
-        </button>
+        <ActionButton type="button" variant="secondary" size="icon" className="h-auto w-[42px] self-stretch" onClick={() => fileInput.current?.click()} disabled={uploading} aria-label={`Choose local ${kind === "pdf" ? "PDF" : "HTML"} file`} title="Choose from local files" icon={uploading ? <LoaderCircle className="spin" /> : <FolderOpen />} />
         <input
           ref={fileInput}
           className="local-file-picker"
@@ -2768,33 +3122,99 @@ function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; d
     <label className="field-span-2 autocomplete-field">
       <span>Authors</span>
       <input name="authors" value={value} onChange={(event) => { setValue(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
-      {open && matches.length ? <div className="metadata-autocomplete-options" id={listboxId} role="listbox">{matches.map((author) => <button type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</div> : null}
+      {open && matches.length ? <div className="metadata-autocomplete-options" id={listboxId} role="listbox">{matches.map((author) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</div> : null}
       <small>Separate names with commas. Choose a match to reuse its canonical author record.</small>
     </label>
   );
 }
 
-function VenueNameField({ venues, label, defaultValue = "", placeholder }: { venues: Venue[]; label: string; defaultValue?: string; placeholder: string }) {
+function VenueFields({ venues, label, defaultName = "", defaultAcronym = "", placeholder, showAcronym, span = true }: { venues: Venue[]; label: string; defaultName?: string; defaultAcronym?: string; placeholder: string; showAcronym: boolean; span?: boolean }) {
   const listboxId = useId();
-  const [value, setValue] = useState(defaultValue);
+  const [name, setName] = useState(defaultName);
+  const [acronym, setAcronym] = useState(defaultAcronym);
   const [open, setOpen] = useState(false);
-  const query = value.trim().toLowerCase();
+  const [activeField, setActiveField] = useState<"name" | "acronym">("name");
+  const query = (activeField === "name" ? name : acronym).trim().toLowerCase();
   const matches = query ? venues.filter((venue) => `${venue.name} ${venue.acronym ?? ""}`.toLowerCase().includes(query)).slice(0, 8) : [];
-  function choose(venue: Venue, button: HTMLButtonElement) {
-    setValue(venue.name);
-    const form = button.closest("form");
-    const acronym = form?.elements.namedItem("venueAcronym");
-    if (acronym instanceof HTMLInputElement) {
-      acronym.value = venue.acronym ?? "";
-    }
+  function choose(venue: Venue) {
+    setName(venue.name);
+    setAcronym(venue.acronym ?? "");
     setOpen(false);
   }
   return (
-    <label className="autocomplete-field">
-      <span>{label}</span>
-      <input name="venueName" value={value} onChange={(event) => { setValue(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder={placeholder} />
-      {open && matches.length ? <div className="metadata-autocomplete-options" id={listboxId} role="listbox">{matches.map((venue) => <button type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={(event) => choose(venue, event.currentTarget)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</div> : null}
-    </label>
+    <div className={`venue-field-pair ${span ? "field-span-2" : ""} ${showAcronym ? "has-acronym" : ""}`}>
+      <label className="autocomplete-field">
+        <span>{label}</span>
+        <input name="venueName" value={name} onChange={(event) => { setName(event.target.value); setActiveField("name"); setOpen(true); }} onFocus={() => { setActiveField("name"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "name" && Boolean(matches.length)} aria-controls={listboxId} placeholder={placeholder} />
+      </label>
+      {showAcronym ? (
+        <label className="autocomplete-field">
+          <span>Venue acronym</span>
+          <input name="venueAcronym" value={acronym} onChange={(event) => { setAcronym(event.target.value); setActiveField("acronym"); setOpen(true); }} onFocus={() => { setActiveField("acronym"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "acronym" && Boolean(matches.length)} aria-controls={listboxId} placeholder="NeurIPS" />
+        </label>
+      ) : null}
+      {open && matches.length ? <div className="metadata-autocomplete-options venue-autocomplete-options" id={listboxId} role="listbox">{matches.map((venue) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(venue)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</div> : null}
+    </div>
+  );
+}
+
+function CollectionNamesField({ collections, value, onChange }: { collections: Collection[]; value: string[]; onChange: (value: string[]) => void }) {
+  const listboxId = useId();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const selectedNames = new Set(value.map((name) => name.toLowerCase()));
+  const matches = query.trim() ? collections
+    .filter((collection) => collection.name.toLowerCase().includes(query.trim().toLowerCase()) && !selectedNames.has(collection.name.toLowerCase()))
+    .slice(0, 8) : [];
+
+  function addName(name: string) {
+    const cleaned = name.trim();
+    if (!cleaned || selectedNames.has(cleaned.toLowerCase())) {
+      setQuery("");
+      return;
+    }
+    onChange([...value, cleaned]);
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="paper-collection-field field-span-2">
+      <span className="paper-collection-label">Collections</span>
+      <div className="collection-tag-editor">
+        {value.map((name) => (
+          <Chip key={name} onRemove={() => onChange(value.filter((candidate) => candidate !== name))} removeIcon={<X />} removeLabel={`Remove ${name}`}>
+            {name}
+          </Chip>
+        ))}
+        <input
+          value={query}
+          onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => { addName(query); setOpen(false); }, 120)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === ",") {
+              event.preventDefault();
+              addName(query);
+            }
+            if (event.key === "Backspace" && !query && value.length) {
+              onChange(value.slice(0, -1));
+            }
+          }}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open && Boolean(matches.length)}
+          aria-controls={listboxId}
+          placeholder={value.length ? "Add another…" : "Add or create a collection…"}
+        />
+      </div>
+      {open && matches.length ? (
+        <div className="metadata-autocomplete-options collection-autocomplete-options" id={listboxId} role="listbox">
+          {matches.map((collection) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => addName(collection.name)} key={collection.id}><FolderOpen size={14} /><span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}
+        </div>
+      ) : null}
+      <small>Choose an existing collection or type a new name and press Enter.</small>
+    </div>
   );
 }
 
@@ -2806,17 +3226,48 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
 }) {
   const visible = metadataVisibility(paperType);
   const venueLabel = paperType === "preprint" ? "Website / archive" : "Full venue name";
+  const [downloading, setDownloading] = useState(false);
+  const { runTask } = useBackgroundTasks();
+
+  async function downloadSource(event: ReactMouseEvent<HTMLButtonElement>) {
+    const form = event.currentTarget.form;
+    if (!form) {
+      return;
+    }
+    const data = Object.fromEntries(new FormData(form).entries()) as Record<string, unknown>;
+    data.paperType = paperType;
+    data.pdfUrl = paper?.pdfUrl ?? "";
+    if (!hasAcquirableSource(data)) {
+      notify("Enter a Source URL or preprint identifier before downloading.", "error");
+      return;
+    }
+    setDownloading(true);
+    try {
+      const result = await runTask(`Acquire local source · ${paperValue(data, "title") || "paper"}`, () => acquirePaperSource(data));
+      const fieldName = result.kind === "pdf" ? "localPath" : "htmlSnapshotPath";
+      const field = form.elements.namedItem(fieldName);
+      if (field instanceof HTMLInputElement) {
+        field.value = result.storedPath;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      notify(`${result.kind === "pdf" ? "PDF" : "HTML snapshot"} downloaded into PA storage.`, "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The source could not be downloaded.", "error");
+    } finally {
+      setDownloading(false);
+    }
+  }
   return (
     <>
-      {visible.venueName ? <VenueNameField venues={venues} label={venueLabel} defaultValue={paper?.venueName ?? ""} placeholder={paperType === "preprint" ? "arXiv" : "Neural Information Processing Systems"} /> : null}
-      {visible.venueAcronym ? <label><span>Venue acronym</span><input name="venueAcronym" defaultValue={paper?.venueAcronym ?? ""} placeholder="NeurIPS" /></label> : null}
+      {visible.venueName ? <VenueFields venues={venues} label={venueLabel} defaultName={paper?.venueName ?? ""} defaultAcronym={paper?.venueAcronym ?? ""} placeholder={paperType === "preprint" ? "arXiv" : "Neural Information Processing Systems"} showAcronym={visible.venueAcronym} span={paperType !== "preprint"} /> : null}
       {visible.volumeIssue ? <label><span>Volume</span><input name="volume" defaultValue={paper?.volume ?? ""} placeholder="42" /></label> : null}
       {visible.volumeIssue ? <label><span>Issue</span><input name="issue" defaultValue={paper?.issue ?? ""} placeholder="3" /></label> : null}
       {visible.pages ? <label><span>Pages</span><input name="pages" defaultValue={paper?.pages ?? ""} placeholder="101–118" /></label> : null}
       {visible.preprint ? <label><span>Category</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
       {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? paper?.arxivId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
-      {visible.url ? <label className="field-span-2"><span>Source URL</span><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /></label> : null}
+      {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div><small>PA downloads a PDF when one is available; otherwise it stores a local HTML snapshot.</small></label> : null}
       {visible.pdf ? <LocalFileField name="localPath" label="Local PDF path" kind="pdf" defaultValue={paper?.localPath ?? ""} notify={notify} /> : null}
       {visible.html ? <LocalFileField name="htmlSnapshotPath" label="Local HTML snapshot path" kind="html" defaultValue={paper?.htmlSnapshotPath ?? ""} notify={notify} /> : null}
     </>
@@ -2844,6 +3295,18 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   const [manualPaperType, setManualPaperType] = useState<EditablePaperType>("conference");
   const { runTask } = useBackgroundTasks();
 
+  async function acquireImportSource(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (!hasAcquirableSource(data)) {
+      return data;
+    }
+    try {
+      return withAcquiredSource(data, await acquirePaperSource(data));
+    } catch (error) {
+      notify(`Metadata will still be imported, but PA could not store a local source: ${error instanceof Error ? error.message : "download failed"}`, "info");
+      return data;
+    }
+  }
+
   async function searchPapers(event: FormEvent) {
     event.preventDefault();
     if (!query.trim()) {
@@ -2867,7 +3330,8 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   }
 
   async function addResult(result: DiscoveryResult) {
-    const succeeded = await mutateLibrary({ entity: "paper", action: "create", data: { ...result } }, "Paper added to your library.");
+    const data = await runTask(`Store source · ${result.title}`, () => acquireImportSource({ ...result }));
+    const succeeded = await mutateLibrary({ entity: "paper", action: "create", data }, "Paper added to your library.");
     if (succeeded) {
       setAdded([...added, result.sourceId || result.title]);
     }
@@ -2883,7 +3347,8 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
           throw new Error(await readError(response));
         }
         const result = (await response.json()) as Record<string, unknown>;
-        const imported = await mutateLibrary({ entity: "paper", action: "create", data: { ...result, authors: [] } }, "Page imported with Jina Reader.");
+        const paperData = await acquireImportSource({ ...result, authors: [] });
+        const imported = await mutateLibrary({ entity: "paper", action: "create", data: paperData }, "Page imported and stored locally.");
         if (!imported) {
           throw new Error("The imported source could not be saved.");
         }
@@ -2917,8 +3382,9 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
           throw new Error(await readError(response));
         }
         const payload = await response.json() as { paper: DiscoveryResult };
+        const paperData = await acquireImportSource({ ...payload.paper });
         const imported = await mutateLibrary(
-          { entity: "paper", action: "create", data: { ...payload.paper } },
+          { entity: "paper", action: "create", data: paperData },
           `${sourceLabel} paper imported.`,
         );
         if (!imported) {
@@ -2955,8 +3421,9 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
           throw new Error(await readError(response));
         }
         const payload = await response.json() as { papers: Array<Record<string, unknown>> };
+        const papers = await Promise.all(payload.papers.map((paper) => acquireImportSource(paper)));
         const imported = await mutateLibrary(
-          { entity: "paper", action: "bulk-create", data: { papers: payload.papers } },
+          { entity: "paper", action: "bulk-create", data: { papers } },
           `${payload.papers.length} ${format === "bibtex" ? "BibTeX" : "RIS"} ${payload.papers.length === 1 ? "record" : "records"} imported.`,
         );
         if (!imported) {
@@ -3017,29 +3484,41 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const visible = metadataVisibility(manualPaperType);
+    let data: Record<string, unknown> = {
+      title: form.get("title"),
+      authors: String(form.get("authors") ?? "").split(",").map((name) => name.trim()).filter(Boolean),
+      year: form.get("year"),
+      paperType: manualPaperType,
+      ...(visible.venueName ? { venueName: form.get("venueName") } : {}),
+      ...(visible.venueAcronym ? { venueAcronym: form.get("venueAcronym") } : {}),
+      ...(visible.volumeIssue ? { volume: form.get("volume"), issue: form.get("issue") } : {}),
+      ...(visible.pages ? { pages: form.get("pages") } : {}),
+      ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId") } : {}),
+      ...(visible.doi ? { doi: form.get("doi") } : {}),
+      ...(visible.url ? { url: form.get("url") } : {}),
+      ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
+      ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
+      abstract: form.get("abstract"),
+      summary: form.get("summary"),
+      notes: form.get("notes"),
+      readingStatus: "inbox",
+    };
+    const validationError = validatePaperWrite(data);
+    if (validationError) {
+      notify(validationError, "error");
+      return;
+    }
+    const assetStatus = await checkPaperAssets(data);
+    if ((assetStatus.localPath && !assetStatus.pdfExists) || (assetStatus.htmlSnapshotPath && !assetStatus.htmlExists)) {
+      notify("The local file path does not exist in PA storage. Choose a file or clear the invalid path.", "error");
+      return;
+    }
+    data = await runTask(`Store source · ${paperValue(data, "title")}`, () => acquireImportSource(data));
     const succeeded = await mutateLibrary(
       {
         entity: "paper",
         action: "create",
-        data: {
-          title: form.get("title"),
-          authors: String(form.get("authors") ?? "").split(",").map((name) => name.trim()).filter(Boolean),
-          year: form.get("year"),
-          paperType: manualPaperType,
-          ...(visible.venueName ? { venueName: form.get("venueName") } : {}),
-          ...(visible.venueAcronym ? { venueAcronym: form.get("venueAcronym") } : {}),
-          ...(visible.volumeIssue ? { volume: form.get("volume"), issue: form.get("issue") } : {}),
-          ...(visible.pages ? { pages: form.get("pages") } : {}),
-          ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId") } : {}),
-          ...(visible.doi ? { doi: form.get("doi") } : {}),
-          ...(visible.url ? { url: form.get("url") } : {}),
-          ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
-          ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
-          abstract: form.get("abstract"),
-          summary: form.get("summary"),
-          notes: form.get("notes"),
-          readingStatus: "inbox",
-        },
+        data,
       },
       "Paper added to your library.",
     );
@@ -3051,22 +3530,22 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   return (
     <ModalFrame title="Add to Paper Assistant" subtitle="Search academic sources, import bibliography files, or enter metadata yourself." onClose={onClose} className="add-modal">
       <div className="modal-tabs">
-        <button aria-pressed={tab === "search"} className={tab === "search" ? "is-active" : ""} onClick={() => setTab("search")}><Search size={15} /> Academic search</button>
-        <button aria-pressed={tab === "identifier"} className={tab === "identifier" ? "is-active" : ""} onClick={() => setTab("identifier")}><Database size={15} /> Identifier</button>
-        <button aria-pressed={tab === "bibliography"} className={tab === "bibliography" ? "is-active" : ""} onClick={() => setTab("bibliography")}><Upload size={15} /> BibTeX / RIS</button>
-        <button aria-pressed={tab === "pdf"} className={tab === "pdf" ? "is-active" : ""} onClick={() => setTab("pdf")}><FileSearch size={15} /> Local PDF</button>
-        <button aria-pressed={tab === "url"} className={tab === "url" ? "is-active" : ""} onClick={() => setTab("url")}><Link2 size={15} /> URL / PDF link</button>
-        <button aria-pressed={tab === "manual"} className={tab === "manual" ? "is-active" : ""} onClick={() => setTab("manual")}><Pencil size={15} /> Manual</button>
+        <TabButton variant="underline" active={tab === "search"} onClick={() => setTab("search")} icon={<Search />}>Academic search</TabButton>
+        <TabButton variant="underline" active={tab === "identifier"} onClick={() => setTab("identifier")} icon={<Database />}>Identifier</TabButton>
+        <TabButton variant="underline" active={tab === "bibliography"} onClick={() => setTab("bibliography")} icon={<Upload />}>BibTeX / RIS</TabButton>
+        <TabButton variant="underline" active={tab === "pdf"} onClick={() => setTab("pdf")} icon={<FileSearch />}>Local PDF</TabButton>
+        <TabButton variant="underline" active={tab === "url"} onClick={() => setTab("url")} icon={<Link2 />}>URL / PDF link</TabButton>
+        <TabButton variant="underline" active={tab === "manual"} onClick={() => setTab("manual")} icon={<Pencil />}>Manual</TabButton>
       </div>
       {tab === "search" ? (
         <div className="modal-body">
           <form className="modal-search-row" onSubmit={searchPapers}>
             <label><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Paper title, DOI, author, or topic" autoFocus /></label>
-            <button className="primary-action" disabled={loading || !query.trim()}>{loading ? <LoaderCircle size={16} className="spin" /> : <Search size={16} />} Search</button>
+            <ActionButton type="submit" variant="primary" icon={loading ? <LoaderCircle size={16} className="spin" /> : <Search size={16} />} disabled={loading || !query.trim()}>Search</ActionButton>
           </form>
           <div className="source-row">
             <span>Search in</span>
-            {discoveryProviders.map((item) => <button type="button" className={provider === item.id ? "is-active" : ""} onClick={() => setProvider(item.id)} key={item.id}>{item.label}</button>)}
+            {discoveryProviders.map((item) => <TabButton variant="pill" active={provider === item.id} onClick={() => setProvider(item.id)} key={item.id}>{item.label}</TabButton>)}
           </div>
           {!results.length && !loading ? <div className="modal-placeholder"><span><Compass size={22} /></span><h3>Find a paper anywhere.</h3><p>PA will preserve authors, identifiers, venue metadata, and open-access links.</p></div> : null}
           <div className="modal-results">
@@ -3081,11 +3560,15 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
         <form className="modal-body identifier-import-form" onSubmit={importByIdentifier}>
           <div className="identifier-source-grid">
             {identifierSources.map((source) => (
-              <button type="button" aria-pressed={identifierSource === source.id} className={identifierSource === source.id ? "is-active" : ""} onClick={() => { setIdentifierSource(source.id); setIdentifier(""); }} key={source.id}>
-                <Database size={16} />
-                <span><strong>{source.label}</strong><small>{source.hint}</small></span>
-                {identifierSource === source.id ? <Check className="selected-option-check" size={15} /> : null}
-              </button>
+              <SelectCard
+                key={source.id}
+                selected={identifierSource === source.id}
+                onClick={() => { setIdentifierSource(source.id); setIdentifier(""); }}
+                icon={<Database />}
+                title={source.label}
+                description={source.hint}
+                trailing={identifierSource === source.id ? <Check /> : null}
+              />
             ))}
           </div>
           <label className="large-field">
@@ -3098,7 +3581,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
               autoFocus
             />
           </label>
-          <button className="primary-action full-action" disabled={loading || !identifier.trim()}>{loading ? <LoaderCircle size={16} className="spin" /> : <ArrowRight size={16} />} Resolve and import</button>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <ArrowRight size={16} />} disabled={loading || !identifier.trim()}>Resolve and import</ActionButton>
           <p className="identifier-footnote">Identifier imports resolve one canonical record. Use BibTeX / RIS for batch bibliography files.</p>
         </form>
       ) : tab === "bibliography" ? (
@@ -3116,7 +3599,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             <div><strong>BibTeX</strong><small>Imports title, ordered authors, year, venue, DOI, URL, volume, issue, pages, and ePrint ID.</small></div>
             <div><strong>RIS</strong><small>Imports journal or conference metadata, ordered authors, DOI, URL, and page range.</small></div>
           </div>
-          <button className="primary-action full-action" disabled={loading || !bibliographyFile}>{loading ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />} Import bibliography</button>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />} disabled={loading || !bibliographyFile}>Import bibliography</ActionButton>
           <p className="identifier-footnote">Every valid record is normalized into PA’s library with linked author and venue records.</p>
         </form>
       ) : tab === "pdf" ? (
@@ -3126,7 +3609,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             <span><strong>{pdfFile?.name ?? "Choose a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : "PA copies the file locally and extracts metadata from its first pages."}</small></span>
             <input type="file" accept=".pdf,application/pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setPdfFile(event.target.files?.[0] ?? null)} />
           </label>
-          <button className="primary-action full-action" disabled={loading || !pdfFile}>{loading ? <LoaderCircle size={16} className="spin" /> : <FileSearch size={16} />} Import and extract PDF</button>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <FileSearch size={16} />} disabled={loading || !pdfFile}>Import and extract PDF</ActionButton>
           <p className="identifier-footnote">Extracted fields remain editable after import. The PDF is served from PA’s local storage.</p>
         </form>
       ) : tab === "url" ? (
@@ -3135,7 +3618,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
           <h3>Import from the web</h3>
           <p>Paste a public article, arXiv, publisher, or PDF URL. Jina Reader extracts clean content and metadata for PA.</p>
           <label className="large-field"><Link2 size={17} /><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://arxiv.org/abs/…" required autoFocus /></label>
-          <button className="primary-action full-action" disabled={loading || !url.trim()}>{loading ? <LoaderCircle size={16} className="spin" /> : <WandSparkles size={16} />} Read and import</button>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <WandSparkles size={16} />} disabled={loading || !url.trim()}>Read and import</ActionButton>
           <small className="privacy-note">Only the URL is sent to Jina Reader. Your local notes stay in PA.</small>
         </form>
       ) : (
@@ -3148,17 +3631,18 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
           <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} placeholder="What this paper contributes…" /></label>
           <label className="field-span-2"><span>Summary</span><textarea name="summary" rows={4} placeholder="A compact synthesis for your library…" /></label>
           <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={3} placeholder="Observations, questions, and connections…" /></label>
-          <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button><button className="primary-action"><Plus size={17} /><span>Add paper</span></button></div>
+          <div className="form-actions field-span-2"><ActionButton variant="secondary" icon={<X size={17} />} onClick={onClose}>Cancel</ActionButton><ActionButton type="submit" variant="primary" icon={<Plus size={17} />}>Add paper</ActionButton></div>
         </form>
       )}
     </ModalFrame>
   );
 }
 
-function PaperEditModal({ paper, authors, venues, onClose, mutateLibrary, notify }: {
+function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLibrary, notify }: {
   paper: Paper;
   authors: Author[];
   venues: Venue[];
+  collections: Collection[];
   onClose: () => void;
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
   notify: (message: string, tone?: ToastState["tone"]) => void;
@@ -3167,6 +3651,9 @@ function PaperEditModal({ paper, authors, venues, onClose, mutateLibrary, notify
   const [summary, setSummary] = useState(paper.summary);
   const [summarizing, setSummarizing] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingSave, setPendingSave] = useState<Record<string, unknown> | null>(null);
+  const [collectionNames, setCollectionNames] = useState<string[]>(() => paper.collections.map((collection) => collection.name));
   const formRef = useRef<HTMLFormElement | null>(null);
   const { runTask } = useBackgroundTasks();
 
@@ -3194,8 +3681,11 @@ function PaperEditModal({ paper, authors, venues, onClose, mutateLibrary, notify
         }
         return response.json() as Promise<{ summary: string }>;
       });
+      await mutateLibrary(
+        { entity: "paper", action: "update", id: paper.id, data: { summary: payload.summary } },
+        "Summary generated and saved.",
+      );
       setSummary(payload.summary);
-      notify("Summary generated. Save the paper to keep it.", "success");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Summary generation failed.", "error");
     } finally {
@@ -3261,58 +3751,135 @@ function PaperEditModal({ paper, authors, venues, onClose, mutateLibrary, notify
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const visible = metadataVisibility(paperType);
+    const data: Record<string, unknown> = {
+      title: form.get("title"),
+      authors: String(form.get("authors") ?? "").split(",").map((name) => name.trim()).filter(Boolean),
+      year: form.get("year"),
+      paperType,
+      ...(visible.venueName ? { venueName: form.get("venueName") } : {}),
+      ...(visible.venueAcronym ? { venueAcronym: form.get("venueAcronym") } : {}),
+      ...(visible.volumeIssue ? { volume: form.get("volume"), issue: form.get("issue") } : {}),
+      ...(visible.pages ? { pages: form.get("pages") } : {}),
+      ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId"), arxivId: paper.arxivId } : {}),
+      ...(visible.doi ? { doi: form.get("doi") } : {}),
+      ...(visible.url ? { url: form.get("url"), pdfUrl: paper.pdfUrl } : {}),
+      ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
+      ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
+      abstract: form.get("abstract"),
+      summary,
+      notes: form.get("notes"),
+      collectionNames,
+    };
+    const validationError = validatePaperWrite(data);
+    if (validationError) {
+      notify(validationError, "error");
+      return;
+    }
+    try {
+      const assets = await checkPaperAssets(data);
+      const missingNamedPdf = Boolean(assets.localPath) && !assets.pdfExists;
+      const missingNamedHtml = Boolean(assets.htmlSnapshotPath) && !assets.htmlExists;
+      const hasStoredSource = assets.pdfExists || assets.htmlExists;
+      if (missingNamedPdf || missingNamedHtml || (!hasStoredSource && hasAcquirableSource(data))) {
+        setPendingSave(data);
+        return;
+      }
+      await savePaper(data);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The local source could not be validated.", "error");
+    }
+  }
+
+  async function savePaper(data: Record<string, unknown>) {
+    setSaving(true);
     const succeeded = await mutateLibrary(
       {
         entity: "paper",
         action: "update",
         id: paper.id,
-        data: {
-          title: form.get("title"),
-          authors: String(form.get("authors") ?? "").split(",").map((name) => name.trim()).filter(Boolean),
-          year: form.get("year"),
-          paperType,
-          ...(visible.venueName ? { venueName: form.get("venueName") } : {}),
-          ...(visible.venueAcronym ? { venueAcronym: form.get("venueAcronym") } : {}),
-          ...(visible.volumeIssue ? { volume: form.get("volume"), issue: form.get("issue") } : {}),
-          ...(visible.pages ? { pages: form.get("pages") } : {}),
-          ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId") } : {}),
-          ...(visible.doi ? { doi: form.get("doi") } : {}),
-          ...(visible.url ? { url: form.get("url") } : {}),
-          ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
-          ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
-          abstract: form.get("abstract"),
-          summary,
-          notes: form.get("notes"),
-        },
+        data,
       },
       "Paper metadata updated across the library.",
     );
+    setSaving(false);
     if (succeeded) {
+      setPendingSave(null);
       onClose();
     }
   }
 
+  async function acquireThenSave(preferred: "pdf" | "html") {
+    if (!pendingSave) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await runTask(`Store ${preferred.toUpperCase()} · ${paperValue(pendingSave, "title")}`, () => acquirePaperSource(pendingSave, preferred));
+      await savePaper(withAcquiredSource({ ...pendingSave, localPath: preferred === "pdf" ? "" : paperValue(pendingSave, "localPath"), htmlSnapshotPath: preferred === "html" ? "" : paperValue(pendingSave, "htmlSnapshotPath") }, result));
+    } catch (error) {
+      setSaving(false);
+      notify(error instanceof Error ? error.message : "The source could not be stored locally.", "error");
+    }
+  }
+
+  async function saveWithoutLocalCopy() {
+    if (!pendingSave) {
+      return;
+    }
+    await savePaper({ ...pendingSave, localPath: "", htmlSnapshotPath: "" });
+  }
+
   return (
-    <ModalFrame title="Edit paper" subtitle="Update the complete PA record, linked authors, venue, files, summary, and notes." onClose={onClose} className="add-modal">
-      <form ref={formRef} className="modal-body entity-form" onSubmit={submit}>
+    <ModalFrame title="Edit paper" subtitle="Update the complete PA record, linked authors, venue, files, summary, and notes." onClose={onClose} className="add-modal edit-paper-modal">
+      <form ref={formRef} className="edit-paper-modal-form" onSubmit={submit}>
+        <div className="modal-body entity-form edit-paper-fields">
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
         <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
         <label><span>Paper type</span><select name="paperType" value={paperType} onChange={(event) => setPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
         <AuthorNamesField authors={authors} defaultValue={paper.authors.map((author) => author.displayName).join(", ")} />
         <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} />
+        <CollectionNamesField collections={collections} value={collectionNames} onChange={setCollectionNames} />
         <label className="field-span-2 summary-field"><span className="field-label-action"><span>PA summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><textarea name="summary" rows={5} value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
         <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} defaultValue={paper.abstract} /></label>
         <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={4} defaultValue={paper.notes} /></label>
-        <div className="form-actions field-span-2 edit-paper-form-actions">
-          <button type="button" className="secondary-action extraction-footer-action" onClick={() => void extractFromStoredPdf()} disabled={extracting} title="Extract metadata from the stored PDF">
-            {extracting ? <LoaderCircle size={17} className="spin" /> : <FileSearch size={17} />}
-            <span>{extracting ? "Extracting" : "Extracted Metadata"}</span>
-          </button>
+        </div>
+        <div className="form-actions edit-paper-form-actions">
+          <ActionButton
+            variant="secondary"
+            className="extraction-footer-action"
+            onClick={() => void extractFromStoredPdf()}
+            disabled={extracting}
+            title="Extract metadata from the stored PDF"
+            icon={extracting ? <LoaderCircle className="spin" /> : <FileSearch />}
+          >
+            {extracting ? "Extracting" : "Extract metadata"}
+          </ActionButton>
           <span className="form-actions-spacer" />
-          <button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button>
-          <button className="primary-action"><Save size={17} /><span>Save paper</span></button>
+          <ActionButton variant="secondary" onClick={onClose} icon={<X />}>Cancel</ActionButton>
+          <ActionButton type="submit" variant="primary" disabled={saving} icon={saving ? <LoaderCircle className="spin" /> : <Save />}>
+            {saving ? "Saving" : "Save paper"}
+          </ActionButton>
         </div>
       </form>
+      {pendingSave ? (
+        <div className="asset-acquisition-layer" role="presentation">
+          <section className="asset-acquisition-dialog" role="alertdialog" aria-modal="true" aria-labelledby="asset-acquisition-title" aria-describedby="asset-acquisition-description">
+            <div className="asset-acquisition-icon"><Download size={22} /></div>
+            <div>
+              <h3 id="asset-acquisition-title">No local source is available</h3>
+              <p id="asset-acquisition-description">The saved PDF or HTML filename is missing from PA storage. Store a fresh local copy before saving this record?</p>
+            </div>
+            <div className="asset-acquisition-actions">
+              <ActionButton variant="secondary" onClick={() => setPendingSave(null)} disabled={saving} icon={<X />}>Cancel</ActionButton>
+              <ActionButton variant="secondary" onClick={() => void saveWithoutLocalCopy()} disabled={saving} icon={<Save />}>Save without file</ActionButton>
+              <ActionButton variant="secondary" onClick={() => void acquireThenSave("html")} disabled={saving || !paperValue(pendingSave, "url")} icon={<FileText />}>Save HTML</ActionButton>
+              <ActionButton variant="primary" onClick={() => void acquireThenSave("pdf")} disabled={saving || !hasAcquirableSource(pendingSave)} icon={saving ? <LoaderCircle className="spin" /> : <Download />}>
+                Download PDF
+              </ActionButton>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </ModalFrame>
   );
 }
@@ -3424,8 +3991,8 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
                 <TransferPagination page={currentCollectionPage} total={papersInCollection.length} pageSize={transferPageSize} onPageChange={setCollectionPaperPage} label="collection papers" />
               </div>
               <div className="transfer-actions" aria-label="Move papers">
-                <button type="button" onClick={addSelectedPaperToCollection} disabled={!selectedAvailablePaperId} aria-label="Add selected paper to collection" title="Add to collection"><ChevronLeft size={17} /></button>
-                <button type="button" onClick={removeSelectedPaperFromCollection} disabled={!selectedCollectionPaperId} aria-label="Remove selected paper from collection" title="Remove from collection"><ChevronRight size={17} /></button>
+                <ActionButton variant="secondary" size="icon" onClick={addSelectedPaperToCollection} disabled={!selectedAvailablePaperId} aria-label="Add selected paper to collection" title="Add to collection" icon={<ChevronLeft />} />
+                <ActionButton variant="secondary" size="icon" onClick={removeSelectedPaperFromCollection} disabled={!selectedCollectionPaperId} aria-label="Remove selected paper from collection" title="Remove from collection" icon={<ChevronRight />} />
               </div>
               <div className="transfer-column">
                 <header><strong>All remaining papers</strong><small>{papers.length - collectionPaperIds.length}</small></header>
@@ -3442,7 +4009,12 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
             </div>
           </section>
         </>}
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button><button className="primary-action">{editing ? <Save size={17} /> : <Plus size={17} />}<span>{editing ? `Save ${entity}` : `Create ${entity}`}</span></button></div>
+        <div className="form-actions field-span-2">
+          <ActionButton variant="secondary" onClick={onClose} icon={<X />}>Cancel</ActionButton>
+          <ActionButton type="submit" variant="primary" icon={editing ? <Save /> : <Plus />}>
+            {editing ? `Save ${entity}` : `Create ${entity}`}
+          </ActionButton>
+        </div>
       </form>
     </ModalFrame>
   );
@@ -3456,18 +4028,20 @@ function TransferPagination({ page, total, pageSize, onPageChange, label }: {
   label: string;
 }) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const start = total ? (page - 1) * pageSize + 1 : 0;
-  const end = Math.min(page * pageSize, total);
+  const currentPage = Math.min(pageCount, Math.max(1, page));
+  const start = total ? (currentPage - 1) * pageSize + 1 : 0;
+  const end = Math.min(currentPage * pageSize, total);
   return (
     <div className="transfer-pagination">
       <span>{start}–{end} of {total}</span>
-      <nav aria-label={`${label} pages`}>
-        <button type="button" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label={`First ${label} page`}><ChevronsLeft size={13} /></button>
-        <button type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1} aria-label={`Previous ${label} page`}><ChevronLeft size={13} /></button>
-        <span>{page} / {pageCount}</span>
-        <button type="button" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} aria-label={`Next ${label} page`}><ChevronRight size={13} /></button>
-        <button type="button" onClick={() => onPageChange(pageCount)} disabled={page >= pageCount} aria-label={`Last ${label} page`}><ChevronsRight size={13} /></button>
-      </nav>
+      <PaginationPageNav
+        page={currentPage}
+        pageCount={pageCount}
+        onPageChange={onPageChange}
+        label={`${label} pages`}
+        className="transfer-page-nav"
+        iconSize={13}
+      />
     </div>
   );
 }
@@ -3505,7 +4079,10 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </>}
         <div className="bulk-warning field-span-2"><Database size={16} /><span><strong>Linked data stays intact.</strong> These changes will be visible immediately on every related paper.</span></div>
-        <div className="form-actions field-span-2"><button type="button" className="secondary-action" onClick={onClose}><X size={17} /><span>Cancel</span></button><button className="primary-action"><Save size={17} /><span>Apply changes</span></button></div>
+        <div className="form-actions field-span-2">
+          <ActionButton variant="secondary" onClick={onClose} icon={<X />}>Cancel</ActionButton>
+          <ActionButton type="submit" variant="primary" icon={<Save />}>Apply changes</ActionButton>
+        </div>
       </form>
     </ModalFrame>
   );
@@ -3523,7 +4100,7 @@ function CommandPalette({ snapshot, onClose, setView, openPaper, addPaper }: {
   const actions = navigation.filter((item) => matchesSearch([item.label], query));
   return (
     <div className="command-layer">
-      <button className="modal-scrim" onClick={onClose} aria-label="Close search" />
+      <Scrim onClick={onClose} label="Close search" />
       <section className="command-card" role="dialog" aria-modal="true" aria-label="Search Paper Assistant">
         <label className="command-input"><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search or jump to…" autoFocus /><kbd>ESC</kbd></label>
         <div className="command-results">

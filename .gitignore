@@ -49,3 +49,4 @@ next-env.d.ts
 /data/settings.json
 /data/settings.json.tmp
 /data/legacy-import.sql
+/public/color-audit.html

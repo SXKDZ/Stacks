@@ -4,6 +4,7 @@ const runtimeKeys = [
   "BEDROCK_MODEL_ID",
   "JINA_API_KEY",
   "PA_MAX_TOKENS",
+  "PA_PDF_PAGES",
   "PA_CHAT_SYSTEM_PROMPT",
   "PA_EXTRACTION_SYSTEM_PROMPT",
   "PA_SUMMARY_SYSTEM_PROMPT",
@@ -29,6 +30,12 @@ function isLocalRequest(request: Request): boolean {
 
 export async function resolveRuntimeValues(request: Request): Promise<RuntimeValues> {
   const values = environmentValues();
+  try {
+    const { storedRuntimeValues } = await import("@/app/lib/settings-store");
+    Object.assign(values, await storedRuntimeValues());
+  } catch {
+    // A database-free runtime can still use deployment environment values.
+  }
   if (!isLocalRequest(request)) {
     return values;
   }

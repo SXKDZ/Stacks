@@ -209,13 +209,15 @@ def sync_database(local_database, remote_database, policy, result):
     result["details"]["papers_updated"].append("Local database applied remotely")
 
 
-def asset_files(directory, suffix):
+def asset_files(directory, suffixes):
     if not directory.exists():
         return {}
+    if isinstance(suffixes, str):
+        suffixes = (suffixes,)
     return {
         path.name: path
         for path in directory.iterdir()
-        if path.is_file() and path.suffix.lower() == suffix
+        if path.is_file() and path.suffix.lower() in suffixes
     }
 
 
@@ -323,7 +325,7 @@ def main():
         sync_assets(
             local_directory / "html_snapshots",
             remote_directory / "html_snapshots",
-            ".html",
+            (".html", ".htm"),
             "HTML snapshot",
             policy,
             result,
