@@ -1,4 +1,5 @@
 import { ensureDatabase } from "@/db/bootstrap";
+import type { LibraryDatabase, LibraryStatement } from "@/db/sqlite-d1";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,19 @@ function createId(prefix: string): string {
 
 function jsonError(message: string, status = 400): Response {
   return Response.json({ error: message }, { status });
+}
+
+/** Turn raw SQLite/D1 errors into user-facing messages, hiding internal detail. */
+function describeDbError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (/UNIQUE constraint failed/i.test(raw)) {
+    if (/papers\.doi/i.test(raw)) return "A paper with this DOI is already in your library.";
+    return "This record already exists in your library.";
+  }
+  if (/FOREIGN KEY constraint failed/i.test(raw)) {
+    return "A linked record (venue, author, or collection) could not be resolved.";
+  }
+  return raw;
 }
 
 function cleanString(value: unknown): string | null {
@@ -145,7 +159,6 @@ async function readSnapshot() {
         id: String(link.id),
         name: String(link.name),
       }));
-
     return {
       id: paper.id,
       title: paper.title,
@@ -211,6 +224,7 @@ async function readSnapshot() {
     }),
   );
 
+
   const thisYear = new Date().getFullYear();
   return {
     papers,
@@ -229,7 +243,7 @@ async function readSnapshot() {
 }
 
 async function findOrCreateVenue(
-  database: D1Database,
+  database: LibraryDatabase,
   data: Record<string, unknown>,
 ): Promise<string | null> {
   const venueId = cleanString(data.venueId);
@@ -257,42 +271,140 @@ async function findOrCreateVenue(
   return id;
 }
 
-async function attachAuthors(
-  database: D1Database,
+/**
+ * Build the INSERT statements linking a paper to its authors. Existing authors
+ * are resolved with a single batched `IN (...)` lookup (not one query per name),
+ * duplicate names within the same paper collapse to one row, and real
+ * corresponding-author data is preserved when provided. Returns statements so the
+ * caller can commit them atomically alongside the paper insert.
+ */
+async function authorStatements(
+  database: LibraryDatabase,
   paperId: string,
   value: unknown,
-): Promise<void> {
-  const names = Array.isArray(value)
-    ? value.map(cleanString).filter((name): name is string => Boolean(name))
-    : [];
+  correspondingValue?: unknown,
+): Promise<LibraryStatement[]> {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(value)) {
+    for (const raw of value) {
+      const name = cleanString(raw);
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      names.push(name);
+    }
+  }
   if (!names.length) {
-    return;
+    return [];
   }
 
-  const statements: D1PreparedStatement[] = [];
-  for (let index = 0; index < names.length; index += 1) {
-    const name = names[index];
-    const existing = await database
-      .prepare("SELECT id FROM authors WHERE lower(display_name) = lower(?) LIMIT 1")
-      .bind(name)
-      .first<{ id: string }>();
-    const authorId = existing?.id ?? createId("author");
-    if (!existing) {
+  const correspondingNames = new Set(
+    (Array.isArray(correspondingValue) ? correspondingValue : [])
+      .map(cleanString)
+      .filter((name): name is string => Boolean(name))
+      .map((name) => name.toLowerCase()),
+  );
+
+  // One query resolves every already-known author id, replacing the previous
+  // per-name N+1 lookups.
+  const placeholders = names.map(() => "lower(?)").join(", ");
+  const existingResult = await database
+    .prepare(`SELECT id, lower(display_name) AS key FROM authors WHERE lower(display_name) IN (${placeholders})`)
+    .bind(...names)
+    .all<{ id: string; key: string }>();
+  const existingByKey = new Map(
+    (existingResult.results ?? []).map((row) => [String(row.key), String(row.id)]),
+  );
+
+  const statements: LibraryStatement[] = [];
+  names.forEach((name, index) => {
+    const key = name.toLowerCase();
+    let authorId = existingByKey.get(key);
+    if (!authorId) {
+      authorId = createId("author");
+      existingByKey.set(key, authorId);
       statements.push(
-        database
-          .prepare("INSERT INTO authors (id, display_name) VALUES (?, ?)")
-          .bind(authorId, name),
+        database.prepare("INSERT INTO authors (id, display_name) VALUES (?, ?)").bind(authorId, name),
       );
     }
+    const corresponding = correspondingNames.size
+      ? correspondingNames.has(key)
+      : index === 0;
     statements.push(
       database
         .prepare(
           "INSERT OR REPLACE INTO paper_authors (paper_id, author_id, author_order, corresponding) VALUES (?, ?, ?, ?)",
         )
-        .bind(paperId, authorId, index, index === 0 ? 1 : 0),
+        .bind(paperId, authorId, index, corresponding ? 1 : 0),
     );
+  });
+  return statements;
+}
+
+/**
+ * Resolve collection names to ids, returning INSERT statements for any that must
+ * be created plus the full id list. Lets a new paper's collection links join the
+ * same atomic batch as the paper insert.
+ */
+async function resolveCollectionIdsByName(
+  database: LibraryDatabase,
+  collectionNames: unknown,
+): Promise<{ statements: LibraryStatement[]; ids: string[] }> {
+  const names = Array.from(new Set(
+    (Array.isArray(collectionNames) ? collectionNames : []).map(cleanString).filter((name): name is string => Boolean(name)),
+  ));
+  if (!names.length) {
+    return { statements: [], ids: [] };
   }
-  await database.batch(statements);
+  const placeholders = names.map(() => "lower(?)").join(", ");
+  const existingResult = await database
+    .prepare(`SELECT id, lower(name) AS key FROM collections WHERE lower(name) IN (${placeholders})`)
+    .bind(...names)
+    .all<{ id: string; key: string }>();
+  const existingByKey = new Map((existingResult.results ?? []).map((row) => [String(row.key), String(row.id)]));
+  const statements: LibraryStatement[] = [];
+  const ids: string[] = [];
+  for (const name of names) {
+    const key = name.toLowerCase();
+    let id = existingByKey.get(key);
+    if (!id) {
+      id = createId("collection");
+      existingByKey.set(key, id);
+      statements.push(database.prepare("INSERT INTO collections (id, name) VALUES (?, ?)").bind(id, name));
+    }
+    ids.push(id);
+  }
+  return { statements, ids };
+}
+
+/**
+ * Return the id of an existing paper that matches this record by a strong
+ * identifier (DOI, arXiv id, or Semantic Scholar id), used to skip duplicates on
+ * import. Title is intentionally not matched here — it is too noisy for dedup.
+ */
+async function findDuplicatePaper(
+  database: LibraryDatabase,
+  data: Record<string, unknown>,
+): Promise<string | null> {
+  const checks: Array<[string, string]> = [];
+  const doi = cleanString(data.doi);
+  const arxivId = cleanString(data.arxivId);
+  const semanticScholarId = cleanString(data.semanticScholarId);
+  if (doi) checks.push(["doi", doi]);
+  if (arxivId) checks.push(["arxiv_id", arxivId]);
+  if (semanticScholarId) checks.push(["semantic_scholar_id", semanticScholarId]);
+  for (const [column, value] of checks) {
+    const existing = await database
+      .prepare(`SELECT id FROM papers WHERE ${column} = ? LIMIT 1`)
+      .bind(value)
+      .first<{ id: string }>();
+    if (existing) {
+      return existing.id;
+    }
+  }
+  return null;
 }
 
 async function createPaper(data: Record<string, unknown>): Promise<void> {
@@ -302,47 +414,55 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
   }
   const database = await ensureDatabase();
   const id = createId("paper");
+  // Resolve/create venue and collections first so their inserts can lead the
+  // atomic batch (statements run sequentially in one D1 transaction).
   const venueId = await findOrCreateVenue(database, data);
-  await database
-    .prepare(
-      `INSERT INTO papers (
-        id, title, abstract, year, paper_type, volume, issue, pages, category,
-        doi, arxiv_id, preprint_id, semantic_scholar_id, url, pdf_url,
-        local_path, html_snapshot_path, summary, notes, reading_status,
-        favorite, venue_id, added_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    )
-    .bind(
-      id,
-      title,
-      cleanString(data.abstract) ?? "",
-      cleanNumber(data.year),
-      cleanString(data.paperType) ?? "article",
-      cleanString(data.volume),
-      cleanString(data.issue),
-      cleanString(data.pages),
-      cleanString(data.category),
-      cleanString(data.doi),
-      cleanString(data.arxivId),
-      cleanString(data.preprintId),
-      cleanString(data.semanticScholarId),
-      cleanString(data.url),
-      cleanString(data.pdfUrl),
-      cleanString(data.localPath),
-      cleanString(data.htmlSnapshotPath),
-      cleanString(data.summary) ?? "",
-      cleanString(data.notes) ?? "",
-      cleanString(data.readingStatus) ?? "inbox",
-      data.favorite ? 1 : 0,
-      venueId,
-    )
-    .run();
-  await attachAuthors(database, id, data.authors);
-  if (Array.isArray(data.collectionNames)) {
-    await syncPaperCollectionsByName(database, id, data.collectionNames);
-  } else {
-    await syncPaperCollections(database, id, data.collectionIds);
-  }
+  const authors = await authorStatements(database, id, data.authors, data.correspondingAuthors);
+  const collectionIds = Array.isArray(data.collectionNames)
+    ? await resolveCollectionIdsByName(database, data.collectionNames)
+    : { statements: [], ids: (Array.isArray(data.collectionIds) ? data.collectionIds : []).filter((value): value is string => typeof value === "string" && Boolean(value.trim())) };
+
+  const statements: LibraryStatement[] = [
+    ...collectionIds.statements,
+    database
+      .prepare(
+        `INSERT INTO papers (
+          id, title, abstract, year, paper_type, volume, issue, pages, category,
+          doi, arxiv_id, preprint_id, semantic_scholar_id, url, pdf_url,
+          local_path, html_snapshot_path, summary, notes, reading_status,
+          favorite, venue_id, added_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      )
+      .bind(
+        id,
+        title,
+        cleanString(data.abstract) ?? "",
+        cleanNumber(data.year),
+        cleanString(data.paperType) ?? "article",
+        cleanString(data.volume),
+        cleanString(data.issue),
+        cleanString(data.pages),
+        cleanString(data.category),
+        cleanString(data.doi),
+        cleanString(data.arxivId),
+        cleanString(data.preprintId),
+        cleanString(data.semanticScholarId),
+        cleanString(data.url),
+        cleanString(data.pdfUrl),
+        cleanString(data.localPath),
+        cleanString(data.htmlSnapshotPath),
+        cleanString(data.summary) ?? "",
+        cleanString(data.notes) ?? "",
+        cleanString(data.readingStatus) ?? "inbox",
+        data.favorite ? 1 : 0,
+        venueId,
+      ),
+    ...authors,
+    ...collectionIds.ids.map((collectionId) => database
+      .prepare("INSERT OR IGNORE INTO paper_collections (paper_id, collection_id) VALUES (?, ?)")
+      .bind(id, collectionId)),
+  ];
+  await database.batch(statements);
 }
 
 const entityConfigurations = {
@@ -423,7 +543,7 @@ async function createEntity(
 }
 
 async function syncCollectionPapers(
-  database: D1Database,
+  database: LibraryDatabase,
   collectionId: string,
   paperIds: unknown,
 ): Promise<void> {
@@ -455,7 +575,7 @@ async function syncCollectionPapers(
 }
 
 async function syncPaperCollections(
-  database: D1Database,
+  database: LibraryDatabase,
   paperId: string,
   collectionIds: unknown,
 ): Promise<void> {
@@ -487,7 +607,7 @@ async function syncPaperCollections(
 }
 
 async function syncPaperCollectionsByName(
-  database: D1Database,
+  database: LibraryDatabase,
   paperId: string,
   collectionNames: unknown,
 ): Promise<void> {
@@ -609,8 +729,13 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
       .run();
   }
   if (Array.isArray(data.authors)) {
-    await database.prepare("DELETE FROM paper_authors WHERE paper_id = ?").bind(id).run();
-    await attachAuthors(database, id, data.authors);
+    // Replace authorship atomically so a mid-flight failure can't leave the
+    // paper with no authors.
+    const inserts = await authorStatements(database, id, data.authors, data.correspondingAuthors);
+    await database.batch([
+      database.prepare("DELETE FROM paper_authors WHERE paper_id = ?").bind(id),
+      ...inserts,
+    ]);
   }
   if (Array.isArray(data.collectionNames)) {
     await syncPaperCollectionsByName(database, id, data.collectionNames);
@@ -659,6 +784,10 @@ export async function POST(request: Request): Promise<Response> {
 
     if (body.action === "create") {
       if (body.entity === "paper") {
+        const database = await ensureDatabase();
+        if (await findDuplicatePaper(database, data)) {
+          return jsonError("This paper is already in your library.", 409);
+        }
         await createPaper(data);
       } else {
         await createEntity(body.entity, data);
@@ -670,11 +799,31 @@ export async function POST(request: Request): Promise<Response> {
       if (data.papers.length > 500) {
         return jsonError("Import no more than 500 papers at a time.");
       }
+      const database = await ensureDatabase();
+      let added = 0;
+      let skipped = 0;
+      const failed: Array<{ title: string; reason: string }> = [];
       for (const paper of data.papers) {
-        if (paper && typeof paper === "object" && !Array.isArray(paper)) {
-          await createPaper(paper as Record<string, unknown>);
+        if (!paper || typeof paper !== "object" || Array.isArray(paper)) {
+          continue;
+        }
+        const record = paper as Record<string, unknown>;
+        try {
+          if (await findDuplicatePaper(database, record)) {
+            skipped += 1;
+            continue;
+          }
+          await createPaper(record);
+          added += 1;
+        } catch (error) {
+          // Isolate per-record failures so one bad entry doesn't abort the import.
+          failed.push({
+            title: cleanString(record.title) ?? "Untitled",
+            reason: describeDbError(error),
+          });
         }
       }
+      return Response.json({ ...(await readSnapshot()), importSummary: { added, skipped, failed } });
     } else if (body.action === "update" || body.action === "bulk-update") {
       if (body.entity === "paper") {
         if (!ids[0]) {
@@ -690,7 +839,8 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json(await readSnapshot());
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The library change failed.";
-    return jsonError(message, 500);
+    const raw = error instanceof Error ? error.message : "";
+    const status = /UNIQUE constraint failed/i.test(raw) ? 409 : 500;
+    return jsonError(describeDbError(error) || "The library change failed.", status);
   }
 }

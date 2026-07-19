@@ -15,7 +15,7 @@ export function cx(...values: Array<string | false | null | undefined>) {
 const actionVariants = cva(
   [
     "inline-flex shrink-0 select-none items-center justify-center gap-2",
-    "rounded-[var(--radius-control)] border font-semibold leading-none no-underline",
+    "rounded-[var(--radius-control)] border font-semibold leading-[1.25] no-underline",
     "transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out",
     "hover:-translate-y-px active:translate-y-0 active:scale-[0.98]",
     "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--brand-blue-soft)]",
@@ -138,7 +138,7 @@ export function readingStatusLabel(status: ReadingStatus) {
 }
 
 const statusVariants = cva(
-  "status-pill inline-flex w-max items-center justify-center gap-1 rounded-[var(--radius-sm)] border-0 font-semibold leading-none [&_svg]:size-[13px] [&_svg]:stroke-2",
+  "status-pill inline-flex w-max items-center justify-center gap-1 rounded-[var(--radius-sm)] border-0 font-semibold leading-[1.25] [&_svg]:size-[13px] [&_svg]:stroke-2",
   {
     variants: {
       status: {
@@ -189,7 +189,7 @@ export type TabVariant = "pill" | "underline" | "segmented" | "nav";
 
 const tabVariants = cva(
   [
-    "inline-flex shrink-0 select-none items-center gap-1.5 border font-semibold leading-none",
+    "inline-flex shrink-0 select-none items-center gap-1.5 border font-semibold leading-[1.25]",
     "transition-[background-color,border-color,color,box-shadow] duration-150 ease-out",
     "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--brand-blue-soft)]",
     "disabled:pointer-events-none disabled:opacity-50",
@@ -261,7 +261,7 @@ export function TabButton({
 
 /* --- Chip: small pill tag, optionally removable, optionally interactive --- */
 const chipVariants = cva(
-  "inline-flex w-max items-center gap-1 rounded-[var(--radius-sm)] border font-semibold leading-none [&_svg]:size-[13px] [&_svg]:stroke-2",
+  "inline-flex w-max items-center gap-1 rounded-[var(--radius-sm)] border font-semibold leading-[1.25] [&_svg]:size-[13px] [&_svg]:stroke-2",
   {
     variants: {
       tone: {
@@ -330,7 +330,7 @@ export function Chip({ tone = "brand", size = "medium", icon, onRemove, removeIc
 /* --- TextButton: borderless inline text action, optional link underline --- */
 const textButtonVariants = cva(
   [
-    "inline-flex items-center gap-1 border-0 bg-transparent p-0 font-bold leading-none",
+    "inline-flex items-center gap-1 border-0 bg-transparent p-0 font-bold leading-[1.25]",
     "transition-colors duration-150 ease-out",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue-soft)] focus-visible:ring-offset-2",
     "disabled:pointer-events-none disabled:opacity-50",
@@ -438,7 +438,7 @@ export function Scrim({
 /* --- PaginationButton: dense pager control (prev/next/page-number) --- */
 const paginationVariants = cva(
   [
-    "inline-flex shrink-0 select-none items-center justify-center border font-semibold leading-none",
+    "inline-flex shrink-0 select-none items-center justify-center border font-semibold leading-[1.25]",
     "transition-[background-color,border-color,color] duration-150 ease-out",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue-soft)]",
     "disabled:pointer-events-none disabled:opacity-40",

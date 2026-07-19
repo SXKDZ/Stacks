@@ -36,7 +36,6 @@ import {
   RefreshCw,
   Save,
   Search,
-  Send,
   Settings2,
   Sparkles,
   Star,
@@ -48,7 +47,7 @@ import {
   X,
 } from "lucide-react";
 import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -62,7 +61,6 @@ import {
 } from "@/app/lib/reference-export";
 import type {
   Author,
-  ChatMessage,
   Collection,
   DiscoveryResult,
   DiscoveryProvider,
@@ -812,9 +810,16 @@ function PaperAssistantWorkspace() {
   }, []);
 
   function changeView(nextView: ViewId) {
-    setView(nextView);
-    setQuery("");
-    setLibraryFilters([]);
+    setView((current) => {
+      // The search box text is interpreted differently per view (author names
+      // vs venue names vs titles), so reset it only when the view actually
+      // changes. The library's structured filter expression is preserved so it
+      // survives a round-trip through other views.
+      if (current !== nextView) {
+        setQuery("");
+      }
+      return nextView;
+    });
     setMobileNav(false);
     setSelectedPaper(null);
   }
@@ -1083,7 +1088,7 @@ function PaperAssistantWorkspace() {
                 body: JSON.stringify({ kind, path }),
               });
               if (!response.ok) {
-                throw new Error(await errorMessage(response));
+                throw new Error(await readError(response));
               }
               notify("Opened the enclosing folder.", "success");
             } catch (error) {
@@ -1650,7 +1655,13 @@ function LibraryView({
                         <Star size={15} fill={paper.favorite ? "currentColor" : "none"} />
                       </button>
                       <span>
-                        <strong>{paper.title}</strong>
+                        <button
+                          type="button"
+                          className="paper-title-open"
+                          onClick={(event) => { event.stopPropagation(); openPaper(paper); }}
+                        >
+                          <strong>{paper.title}</strong>
+                        </button>
                         <span className="paper-secondary-line">
                           <ExpandableAuthorNames paper={paper} />
                         </span>
@@ -2662,246 +2673,6 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           ) : null}
         </div>
         <div className="drawer-footer"><span>Added {formatDate(paper.addedAt)}</span><TextButton tone="danger" onClick={onDelete} icon={<Trash2 />}>Delete paper</TextButton></div>
-      </aside>
-    </div>
-  );
-}
-
-export function ChatDrawer({ paper, papers, onClose }: { paper: Paper; papers: Paper[]; onClose: () => void }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: "welcome", role: "assistant", content: `I’m ready to think through “${paper.title}” with you. Ask about the argument, methods, connections, or next steps.` },
-  ]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [paperPickerOpen, setPaperPickerOpen] = useState(false);
-  const [paperQuery, setPaperQuery] = useState("");
-  const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([paper.id]);
-  const [pdfStartPage, setPdfStartPage] = useState(1);
-  const [pdfEndPage, setPdfEndPage] = useState<number | null>(null);
-  const [historyReady, setHistoryReady] = useState(false);
-  const [drawerWidth, setDrawerWidth] = useState(460);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  const chatStorageKey = `pa-chat-history-v1:${paper.id}`;
-
-  const selectedDiscussionPapers = papers.filter((item) => selectedPaperIds.includes(item.id));
-  const availableDiscussionPapers = papers.filter((item) => matchesSearch([
-    item.title,
-    authorLine(item),
-    venueLine(item),
-    item.year,
-  ], paperQuery));
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      try {
-        const stored = window.localStorage.getItem(chatStorageKey);
-        if (stored) {
-          const parsed = JSON.parse(stored) as { messages?: ChatMessage[]; selectedPaperIds?: string[]; pdfStartPage?: number; pdfEndPage?: number | null };
-          if (Array.isArray(parsed.messages) && parsed.messages.length) {
-            setMessages(parsed.messages);
-          }
-          if (Array.isArray(parsed.selectedPaperIds) && parsed.selectedPaperIds.length) {
-            const availableIds = new Set(papers.map((item) => item.id));
-            const restoredIds = parsed.selectedPaperIds.filter((id) => availableIds.has(id)).slice(0, 8);
-            setSelectedPaperIds(restoredIds.length ? restoredIds : [paper.id]);
-          }
-          const start = Math.min(20, Math.max(1, Number(parsed.pdfStartPage) || 1));
-          setPdfStartPage(start);
-          setPdfEndPage(parsed.pdfEndPage == null ? null : Math.min(20, Math.max(start, Number(parsed.pdfEndPage) || start)));
-        }
-      } catch {
-        window.localStorage.removeItem(chatStorageKey);
-      } finally {
-        setHistoryReady(true);
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [chatStorageKey, paper.id, papers]);
-
-  useEffect(() => {
-    if (!historyReady) {
-      return;
-    }
-    window.localStorage.setItem(chatStorageKey, JSON.stringify({ messages, selectedPaperIds, pdfStartPage, pdfEndPage }));
-  }, [chatStorageKey, historyReady, messages, pdfEndPage, pdfStartPage, selectedPaperIds]);
-
-  function persistChatHistory(nextMessages: ChatMessage[], paperIds = selectedPaperIds) {
-    window.localStorage.setItem(chatStorageKey, JSON.stringify({ messages: nextMessages, selectedPaperIds: paperIds, pdfStartPage, pdfEndPage }));
-  }
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  function toggleDiscussionPaper(paperId: string) {
-    setSelectedPaperIds((current) => {
-      if (current.includes(paperId)) {
-        return current.length === 1 ? current : current.filter((id) => id !== paperId);
-      }
-      return [...current, paperId].slice(-8);
-    });
-  }
-
-  async function sendMessage(event?: FormEvent) {
-    event?.preventDefault();
-    const content = input.trim();
-    if (!content || loading) {
-      return;
-    }
-    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: "user", content };
-    const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages);
-    persistChatHistory(nextMessages);
-    setInput("");
-    setLoading(true);
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMessages.filter((message) => message.id !== "welcome").map(({ role, content: messageContent }) => ({ role, content: messageContent })),
-          pdfStartPage,
-          ...(pdfEndPage == null ? {} : { pdfEndPage }),
-          papers: selectedDiscussionPapers.map((selected) => ({
-            title: selected.title,
-            abstract: selected.abstract,
-            summary: selected.summary,
-            notes: selected.notes,
-            authors: selected.authors.map((author) => author.displayName),
-            venue: venueLine(selected),
-            year: selected.year,
-            pdfUrl: selected.pdfUrl,
-            htmlUrl: selected.htmlUrl,
-          })),
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await readError(response));
-      }
-      const payload = await response.json() as { content: string };
-      const completedMessages: ChatMessage[] = [...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: payload.content }];
-      setMessages(completedMessages);
-      persistChatHistory(completedMessages);
-    } catch (error) {
-      const failedMessages: ChatMessage[] = [...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: error instanceof Error ? `I couldn’t complete that request: ${error.message}` : "I couldn’t complete that request." }];
-      setMessages(failedMessages);
-      persistChatHistory(failedMessages);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void sendMessage();
-    }
-  }
-
-  function resizeChat(event: ReactPointerEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = drawerWidth;
-    const maximum = Math.max(380, Math.min(860, window.innerWidth - 278));
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      setDrawerWidth(Math.min(maximum, Math.max(380, startWidth + startX - moveEvent.clientX)));
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      document.body.classList.remove("is-resizing-chat");
-    };
-    document.body.classList.add("is-resizing-chat");
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-  }
-
-  return (
-    <div className="drawer-layer chat-layer">
-      <button className="drawer-scrim" onClick={onClose} aria-label="Close assistant" />
-      <aside className="chat-drawer" style={{ width: `${drawerWidth}px` }}>
-        <button
-          type="button"
-          className="chat-resize-handle"
-          aria-label="Resize Ask PA panel"
-          title="Drag to resize"
-          onPointerDown={resizeChat}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-              event.preventDefault();
-              const delta = event.key === "ArrowLeft" ? 24 : -24;
-              setDrawerWidth((current) => Math.min(860, Math.max(380, current + delta)));
-            }
-          }}
-        />
-        <div className="chat-header">
-          <span className="assistant-orb large"><Sparkles size={19} /></span>
-          <span><strong>Ask PA</strong><small>Grounded in the selected paper</small></span>
-          <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<X />} />
-        </div>
-        <div className="chat-context-wrap">
-          <div className="chat-context">
-            <FileText size={15} />
-            <span><small>Discussing {selectedDiscussionPapers.length} {selectedDiscussionPapers.length === 1 ? "paper" : "papers"}</small><strong>{selectedDiscussionPapers.map((selected) => selected.title).join(" · ")}</strong></span>
-            <ActionButton variant="ghost" size="small" onClick={() => setPaperPickerOpen((current) => !current)} aria-expanded={paperPickerOpen} icon={<Plus />}>Select papers</ActionButton>
-          </div>
-          {paperPickerOpen ? (
-            <div className="chat-paper-picker">
-              <label><Search size={14} /><input value={paperQuery} onChange={(event) => setPaperQuery(event.target.value)} placeholder="Find a paper in your library" autoFocus /></label>
-              <div className="chat-paper-options">
-                {availableDiscussionPapers.map((item) => {
-                  const selected = selectedPaperIds.includes(item.id);
-                  const onlySelected = selected && selectedPaperIds.length === 1;
-                  return <button type="button" className={selected ? "is-selected" : ""} onClick={() => toggleDiscussionPaper(item.id)} disabled={onlySelected} key={item.id}><span className="selection-box">{selected ? <Check size={11} /> : null}</span><span><strong>{item.title}</strong><small>{fullAuthorLine(item)} · {item.year ?? "n.d."}</small></span></button>;
-                })}
-              </div>
-              <div className="chat-paper-picker-footer"><span>Up to 8 papers can ground one discussion.</span><button type="button" onClick={() => setPaperPickerOpen(false)}>Done</button></div>
-            </div>
-          ) : null}
-          <label className="chat-grounding-pages drawer-grounding-pages">
-            <span>Attach PDF pages</span>
-            <input
-              type="number"
-              min="1"
-              max="20"
-              value={pdfStartPage}
-              aria-label="First PDF page attached to chat"
-              onChange={(event) => {
-                const start = Math.min(20, Math.max(1, Number(event.target.value) || 1));
-                setPdfStartPage(start);
-                setPdfEndPage((current) => current == null ? null : Math.max(start, current));
-              }}
-            />
-            <i>to</i>
-            <input
-              type="number"
-              min={pdfStartPage}
-              max="20"
-              value={pdfEndPage ?? ""}
-              placeholder="Default"
-              aria-label="Last PDF page attached to chat"
-              onChange={(event) => setPdfEndPage(event.target.value === "" ? null : Math.min(20, Math.max(pdfStartPage, Number(event.target.value) || pdfStartPage)))}
-            />
-          </label>
-        </div>
-        <div className="chat-messages">
-          {messages.map((message) => (
-            <div className={`chat-message message-${message.role}`} key={message.id}>
-              {message.role === "assistant" ? <span className="message-avatar"><Sparkles size={13} /></span> : null}
-              <MarkdownContent content={message.content} className="chat-bubble" />
-            </div>
-          ))}
-          {loading ? <div className="chat-message message-assistant"><span className="message-avatar"><Sparkles size={13} /></span><p className="typing"><i /><i /><i /></p></div> : null}
-          <div ref={bottomRef} />
-        </div>
-        <div className="chat-prompts">
-          {["Summarize the contribution", "Challenge the methods", "Connect to my notes"].map((prompt) => <Chip key={prompt} tone="neutral" onClick={() => setInput(prompt)}>{prompt}</Chip>)}
-        </div>
-        <form className="chat-composer" onSubmit={sendMessage}>
-          <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onComposerKeyDown} placeholder="Ask about this paper…" rows={2} />
-          <ActionButton type="submit" variant="primary" size="icon" className="h-auto w-auto self-stretch" disabled={!input.trim() || loading} aria-label="Send message" icon={<Send />} />
-          <small>Enter to send · Shift + Enter for a new line</small>
-        </form>
       </aside>
     </div>
   );
@@ -4088,6 +3859,16 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
   );
 }
 
+interface CommandItem {
+  id: string;
+  group: string;
+  title: string;
+  detail: string;
+  icon: ReactNode;
+  trailing?: ReactNode;
+  run: () => void;
+}
+
 function CommandPalette({ snapshot, onClose, setView, openPaper, addPaper }: {
   snapshot: LibrarySnapshot;
   onClose: () => void;
@@ -4096,22 +3877,113 @@ function CommandPalette({ snapshot, onClose, setView, openPaper, addPaper }: {
   addPaper: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const matches = snapshot.papers.filter((paper) => matchesSearch([paper.title, authorLine(paper), venueLine(paper)], query)).slice(0, 5);
-  const actions = navigation.filter((item) => matchesSearch([item.label], query));
+  const [activeIndex, setActiveIndex] = useState(0);
+  const listboxId = useId();
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  const items = useMemo<CommandItem[]>(() => {
+    const result: CommandItem[] = [];
+    if (matchesSearch(["Add a new paper", "add", "new"], query)) {
+      result.push({ id: "action-add", group: "Quick actions", title: "Add a new paper", detail: "Search, URL, or manual entry", icon: <Plus size={16} />, trailing: <kbd>N</kbd>, run: addPaper });
+    }
+    for (const item of navigation) {
+      if (!matchesSearch([item.label], query)) continue;
+      const Icon = item.icon;
+      result.push({ id: `view-${item.id}`, group: "Go to", title: item.label, detail: `Open the ${item.label.toLowerCase()} view`, icon: <Icon size={16} />, trailing: <ArrowRight size={15} />, run: () => setView(item.id) });
+    }
+    for (const paper of snapshot.papers) {
+      if (result.length >= 40) break;
+      if (!matchesSearch([paper.title, authorLine(paper), venueLine(paper)], query)) continue;
+      result.push({ id: `paper-${paper.id}`, group: "Papers", title: paper.title, detail: `${fullAuthorLine(paper)} · ${paper.year ?? "—"}`, icon: <FileText size={16} />, trailing: <ArrowRight size={15} />, run: () => openPaper(paper) });
+    }
+    if (query.trim()) {
+      for (const author of snapshot.authors) {
+        if (result.length >= 60) break;
+        if (!matchesSearch([author.displayName], query)) continue;
+        result.push({ id: `author-${author.id}`, group: "Authors", title: author.displayName, detail: `${author.paperCount} ${author.paperCount === 1 ? "paper" : "papers"}`, icon: <UsersRound size={16} />, trailing: <ArrowRight size={15} />, run: () => setView("authors") });
+      }
+      for (const venue of snapshot.venues) {
+        if (result.length >= 70) break;
+        if (!matchesSearch([venue.name, venue.acronym ?? ""], query)) continue;
+        result.push({ id: `venue-${venue.id}`, group: "Venues", title: venue.acronym || venue.name, detail: venue.name, icon: <Building2 size={16} />, trailing: <ArrowRight size={15} />, run: () => setView("venues") });
+      }
+      for (const collection of snapshot.collections) {
+        if (result.length >= 80) break;
+        if (!matchesSearch([collection.name], query)) continue;
+        result.push({ id: `collection-${collection.id}`, group: "Collections", title: collection.name, detail: `${collection.paperCount} ${collection.paperCount === 1 ? "paper" : "papers"}`, icon: <FolderOpen size={16} />, trailing: <ArrowRight size={15} />, run: () => setView("collections") });
+      }
+    }
+    return result;
+  }, [addPaper, openPaper, query, setView, snapshot]);
+
+  const clampedActive = items.length ? Math.min(activeIndex, items.length - 1) : 0;
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [clampedActive]);
+
+  const runItem = (item: CommandItem | undefined) => {
+    if (!item) return;
+    item.run();
+    onClose();
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((current) => (items.length ? (current + 1) % items.length : 0));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((current) => (items.length ? (current - 1 + items.length) % items.length : 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      runItem(items[clampedActive]);
+    }
+  };
+
+  let lastGroup = "";
   return (
     <div className="command-layer">
       <Scrim onClick={onClose} label="Close search" />
-      <section className="command-card" role="dialog" aria-modal="true" aria-label="Search Paper Assistant">
-        <label className="command-input"><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search or jump to…" autoFocus /><kbd>ESC</kbd></label>
-        <div className="command-results">
-          <p>Quick actions</p>
-          <button onClick={() => { addPaper(); onClose(); }}><span className="command-icon"><Plus size={16} /></span><span><strong>Add a new paper</strong><small>Search, URL, or manual entry</small></span><kbd>N</kbd></button>
-          {actions.map((action) => {
-            const Icon = action.icon;
-            return <button key={action.id} onClick={() => { setView(action.id); onClose(); }}><span className="command-icon"><Icon size={16} /></span><span><strong>Go to {action.label}</strong><small>Open the {action.label.toLowerCase()} view</small></span><ArrowRight size={15} /></button>;
-          })}
-          {matches.length ? <p>Papers</p> : null}
-          {matches.map((paper) => <button key={paper.id} onClick={() => { openPaper(paper); onClose(); }}><span className="command-icon"><FileText size={16} /></span><span><strong>{paper.title}</strong><small>{fullAuthorLine(paper)} · {paper.year}</small></span><ArrowRight size={15} /></button>)}
+      <section className="command-card" role="dialog" aria-modal="true" aria-label="Search Paper Assistant" onKeyDown={onKeyDown}>
+        <label className="command-input">
+          <Search size={19} />
+          <input
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
+            placeholder="Search papers, authors, venues, collections…"
+            autoFocus
+            role="combobox"
+            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-activedescendant={items.length ? `${listboxId}-${clampedActive}` : undefined}
+          />
+          <kbd>ESC</kbd>
+        </label>
+        <div className="command-results" role="listbox" id={listboxId} aria-label="Search results">
+          {items.length ? items.map((item, index) => {
+            const showGroup = item.group !== lastGroup;
+            lastGroup = item.group;
+            const isActive = index === clampedActive;
+            return (
+              <Fragment key={item.id}>
+                {showGroup ? <p>{item.group}</p> : null}
+                <button
+                  id={`${listboxId}-${index}`}
+                  role="option"
+                  aria-selected={isActive}
+                  ref={isActive ? activeRef : undefined}
+                  className={isActive ? "is-active" : ""}
+                  onClick={() => runItem(item)}
+                  onMouseMove={() => setActiveIndex(index)}
+                >
+                  <span className="command-icon">{item.icon}</span>
+                  <span><strong>{item.title}</strong><small>{item.detail}</small></span>
+                  {item.trailing}
+                </button>
+              </Fragment>
+            );
+          }) : <p className="command-empty">No matches for “{query}”.</p>}
         </div>
         <div className="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>↵</kbd> Open</span><span>PA command palette</span></div>
       </section>

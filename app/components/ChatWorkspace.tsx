@@ -2,15 +2,19 @@
 
 import {
   Check,
+  FileCheck2,
   FileText,
   Home,
   Menu,
   MessageSquarePlus,
+  PanelLeftClose,
   PanelRight,
+  PanelRightClose,
   Pencil,
   Search,
   Send,
   Sparkles,
+  Square,
   Trash2,
   X,
 } from "lucide-react";
@@ -18,7 +22,31 @@ import Link from "next/link";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { ActionButton, Chip } from "@/app/components/ui/controls";
-import type { ChatMessage, LibrarySnapshot, Paper } from "@/app/lib/types";
+import type { ChatGrounding, ChatMessage, LibrarySnapshot, Paper } from "@/app/lib/types";
+
+function GroundingReceipt({ grounding }: { grounding?: ChatGrounding }) {
+  if (!grounding || !grounding.sources.length) {
+    return null;
+  }
+  const { groundedPapers, paperCount, pdfStartPage, pdfEndPage, sources } = grounding;
+  const summary = groundedPapers === 0
+    ? "Answered from metadata only"
+    : `Grounded in ${groundedPapers} of ${paperCount} ${paperCount === 1 ? "paper" : "papers"} · PDF pp. ${pdfStartPage}–${pdfEndPage}`;
+  return (
+    <details className="grounding-receipt">
+      <summary><FileCheck2 size={13} /> {summary}</summary>
+      <ul>
+        {sources.map((source, index) => (
+          <li key={`${source.title}-${index}`} className={source.grounded ? "is-grounded" : "is-metadata"}>
+            {source.grounded ? <Check size={12} /> : <FileText size={12} />}
+            <span>{source.title}</span>
+            <small>{source.source}</small>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 const CHAT_HISTORY_KEY = "pa-chat-sessions-v2";
 const LEGACY_CHAT_PREFIX = "pa-chat-history-v1:";
@@ -138,6 +166,7 @@ export default function ChatWorkspace() {
   const [titleDraft, setTitleDraft] = useState("");
   const [ready, setReady] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const activeSession = sessions.find((session) => session.id === activeId) || null;
   const selectedPapers = useMemo(() => {
@@ -210,6 +239,17 @@ export default function ChatWorkspace() {
             // Leave malformed legacy state untouched so the main library remains unaffected.
           }
         });
+        const availablePaperIds = new Set(snapshot.papers.map((paper) => paper.id));
+        for (let index = 0; index < migrated.length; index += 1) {
+          const session = migrated[index];
+          const paperIds = session.paperIds.filter((paperId) => availablePaperIds.has(paperId)).slice(0, 8);
+          const selected = snapshot.papers.filter((paper) => paperIds.includes(paper.id));
+          migrated[index] = {
+            ...session,
+            paperIds,
+            title: session.titleMode === "auto" ? automaticTitle(selected) : session.title,
+          };
+        }
         const params = new URLSearchParams(window.location.search);
         const requestedSession = params.get("session");
         const requestedPaper = params.get("paper");
@@ -330,52 +370,151 @@ export default function ChatWorkspace() {
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: "user", content };
     const nextMessages = [...activeSession.messages, userMessage];
     const requestPapers = [...selectedPapers];
+    const assistantId = crypto.randomUUID();
     updateSession(sessionId, (session) => ({ ...session, messages: nextMessages, updatedAt: new Date().toISOString() }));
     setInput("");
     setLoading(true);
-    try {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    // Accumulate locally so we don't rebuild the whole message array from a stale
+    // closure on every token — updateSession writes the running string each frame.
+    let assistantContent = "";
+    let grounding: ChatMessage["grounding"];
+    let started = false;
+    const writeAssistant = () => {
+      updateSession(sessionId, (session) => {
+        const withoutDraft = session.messages.filter((message) => message.id !== assistantId);
+        return {
+          ...session,
+          messages: [...withoutDraft, { id: assistantId, role: "assistant", content: assistantContent, grounding }],
+          updatedAt: new Date().toISOString(),
+        };
+      });
+    };
+    const requestBody = JSON.stringify({
+      messages: nextMessages.map(({ role, content: messageContent }) => ({ role, content: messageContent })),
+      pdfStartPage: activeSession.pdfStartPage,
+      ...(activeSession.pdfEndPage == null ? {} : { pdfEndPage: activeSession.pdfEndPage }),
+      papers: requestPapers.map((paper) => ({
+        title: paper.title,
+        abstract: paper.abstract,
+        summary: paper.summary,
+        notes: paper.notes,
+        authors: paper.authors.map((author) => author.displayName),
+        venue: venue(paper),
+        year: paper.year,
+        pdfUrl: paper.pdfUrl,
+        htmlUrl: paper.htmlUrl,
+      })),
+    });
+
+    // Buffered fallback for environments (preview proxies, some hosts) that
+    // cannot forward a streaming response — the browser reports those as a bare
+    // "Failed to fetch". We ask for a single JSON reply and render it at once.
+    const runBuffered = async () => {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMessages.map(({ role, content: messageContent }) => ({ role, content: messageContent })),
-          pdfStartPage: activeSession.pdfStartPage,
-          ...(activeSession.pdfEndPage == null ? {} : { pdfEndPage: activeSession.pdfEndPage }),
-          papers: requestPapers.map((paper) => ({
-            title: paper.title,
-            abstract: paper.abstract,
-            summary: paper.summary,
-            notes: paper.notes,
-            authors: paper.authors.map((author) => author.displayName),
-            venue: venue(paper),
-            year: paper.year,
-            pdfUrl: paper.pdfUrl,
-            htmlUrl: paper.htmlUrl,
-          })),
-        }),
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        signal: controller.signal,
+        body: requestBody,
       });
       if (!response.ok) {
         throw new Error(await readError(response));
       }
-      const payload = await response.json() as { content: string };
-      updateSession(sessionId, (session) => ({
-        ...session,
-        messages: [...nextMessages, { id: crypto.randomUUID(), role: "assistant", content: payload.content }],
-        updatedAt: new Date().toISOString(),
-      }));
+      const payload = await response.json() as { content?: string; grounding?: ChatMessage["grounding"] };
+      grounding = payload.grounding;
+      assistantContent = payload.content || "I could not produce a response for that question.";
+      writeAssistant();
+    };
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        signal: controller.signal,
+        body: requestBody,
+      });
+      if (!response.ok) {
+        throw new Error(await readError(response));
+      }
+      if (!response.body || !(response.headers.get("content-type") ?? "").includes("text/event-stream")) {
+        // The server (or a proxy) did not return a stream — read it as buffered JSON.
+        const payload = await response.json().catch(() => null) as { content?: string; grounding?: ChatMessage["grounding"] } | null;
+        grounding = payload?.grounding;
+        assistantContent = payload?.content || "I could not produce a response for that question.";
+        writeAssistant();
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(0), { stream: !done });
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary !== -1) {
+          const rawEvent = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          boundary = buffer.indexOf("\n\n");
+          let eventName = "message";
+          let dataLine = "";
+          for (const line of rawEvent.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+          }
+          if (!dataLine) continue;
+          const payload = JSON.parse(dataLine) as {
+            text?: string;
+            grounding?: ChatMessage["grounding"];
+            message?: string;
+          };
+          if (eventName === "meta") {
+            grounding = payload.grounding;
+          } else if (eventName === "delta" && payload.text) {
+            assistantContent += payload.text;
+            if (!started) { started = true; }
+            writeAssistant();
+          } else if (eventName === "error") {
+            throw new Error(payload.message || "The assistant request failed.");
+          }
+        }
+        if (done) break;
+      }
+      if (!assistantContent) {
+        assistantContent = "I could not produce a response for that question.";
+        writeAssistant();
+      }
     } catch (error) {
-      updateSession(sessionId, (session) => ({
-        ...session,
-        messages: [...nextMessages, {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: error instanceof Error ? `I couldn’t complete that request: ${error.message}` : "I couldn’t complete that request.",
-        }],
-        updatedAt: new Date().toISOString(),
-      }));
+      if (controller.signal.aborted) {
+        // User stopped generation: keep whatever text streamed in, with a marker.
+        assistantContent = assistantContent ? `${assistantContent}\n\n_(stopped)_` : "_(stopped)_";
+        writeAssistant();
+      } else if (!started && (error instanceof TypeError || (error instanceof Error && /fetch/i.test(error.message)))) {
+        // The streaming request never delivered a token (likely a proxy that
+        // can't forward event-streams). Retry once in buffered mode before
+        // surfacing an error to the user.
+        try {
+          await runBuffered();
+        } catch (fallbackError) {
+          if (!controller.signal.aborted) {
+            assistantContent = fallbackError instanceof Error ? `I couldn’t complete that request: ${fallbackError.message}` : "I couldn’t complete that request.";
+            grounding = undefined;
+            writeAssistant();
+          }
+        }
+      } else {
+        assistantContent = error instanceof Error ? `I couldn’t complete that request: ${error.message}` : "I couldn’t complete that request.";
+        grounding = undefined;
+        writeAssistant();
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
   }
 
   function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -425,7 +564,7 @@ export default function ChatWorkspace() {
       <aside className="chat-history-panel">
         <header>
           <Link href="/" aria-label="Return to Paper Assistant"><span className="brand-mark compact">PA</span><span><strong>Paper Assistant</strong><small>Chat history</small></span></Link>
-          <ActionButton variant="on-dark" size="icon-large" className="chat-history-close" onClick={() => setHistoryOpen(false)} aria-label="Close chat history" icon={<X />} />
+          <ActionButton variant="ghost" size="icon" className="chat-history-close" onClick={() => setHistoryOpen(false)} aria-label="Close chat history" icon={<PanelLeftClose />} />
         </header>
         <ActionButton variant="primary" className="my-3 w-full" onClick={createNewSession} icon={<MessageSquarePlus />}>New discussion</ActionButton>
         <div className="chat-session-list">
@@ -443,7 +582,7 @@ export default function ChatWorkspace() {
 
       <section className="chat-workspace-main">
         <header className="chat-workspace-header">
-          <ActionButton variant="on-dark" size="icon-large" className="history-open-button" onClick={() => setHistoryOpen((current) => !current)} aria-label={historyOpen ? "Collapse chat history" : "Open chat history"} icon={<Menu />} />
+          <ActionButton variant="secondary" size="icon-large" className="history-open-button" onClick={() => setHistoryOpen((current) => !current)} aria-label={historyOpen ? "Collapse chat history" : "Open chat history"} icon={<Menu />} />
           {titleEditing ? (
             <div className="chat-title-editing">
               <label className="chat-title-field">
@@ -465,7 +604,7 @@ export default function ChatWorkspace() {
                 />
               </label>
               <ActionButton variant="primary" size="icon-large" onClick={commitTitleEdit} aria-label="Save discussion title" title="Save title" icon={<Check />} />
-              <ActionButton variant="on-dark" size="icon-large" onClick={cancelTitleEdit} aria-label="Cancel title edit" title="Cancel" icon={<X />} />
+              <ActionButton variant="secondary" size="icon-large" onClick={cancelTitleEdit} aria-label="Cancel title edit" title="Cancel" icon={<X />} />
             </div>
           ) : (
             <div className="chat-title-summary">
@@ -474,9 +613,9 @@ export default function ChatWorkspace() {
             </div>
           )}
           {!titleEditing ? (
-            <ActionButton variant="on-dark" size="large" onClick={beginTitleEdit} aria-label="Rename discussion" title="Rename discussion" icon={<Pencil />}>Rename</ActionButton>
+            <ActionButton variant="secondary" size="large" onClick={beginTitleEdit} aria-label="Rename discussion" title="Rename discussion" icon={<Pencil />}>Rename</ActionButton>
           ) : null}
-          <ActionButton variant="on-dark" size="large" className="context-toggle" onClick={() => setContextOpen((current) => !current)} aria-label={contextOpen ? "Close paper context" : "Open paper context"} title="Paper context" icon={<PanelRight />}>Papers</ActionButton>
+          <ActionButton variant="secondary" size="large" className="context-toggle" onClick={() => setContextOpen((current) => !current)} aria-label={contextOpen ? "Collapse paper context" : "Open paper context"} title="Paper context" icon={<PanelRight />}>Papers</ActionButton>
         </header>
 
         <div className="chat-workspace-messages">
@@ -489,10 +628,15 @@ export default function ChatWorkspace() {
           {activeSession.messages.map((message) => (
             <div className={`chat-workspace-message message-${message.role}`} key={message.id}>
               {message.role === "assistant" ? <span className="message-avatar"><Sparkles size={26} /></span> : null}
-              <MarkdownContent content={message.content} className="chat-workspace-bubble" />
+              <div className="chat-workspace-bubble-wrap">
+                {message.content
+                  ? <MarkdownContent content={message.content} className="chat-workspace-bubble" />
+                  : <div className="typing chat-workspace-typing" role="status" aria-label="Paper Assistant is responding"><i /><i /><i /></div>}
+                {message.role === "assistant" ? <GroundingReceipt grounding={message.grounding} /> : null}
+              </div>
             </div>
           ))}
-          {loading ? (
+          {loading && activeSession.messages[activeSession.messages.length - 1]?.role !== "assistant" ? (
             <div className="chat-workspace-message message-assistant">
               <span className="message-avatar"><Sparkles size={26} /></span>
               <div className="typing chat-workspace-typing" role="status" aria-label="Paper Assistant is responding">
@@ -511,7 +655,9 @@ export default function ChatWorkspace() {
           </div>
           <form className="chat-workspace-composer" onSubmit={sendMessage}>
             <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={onComposerKeyDown} placeholder={selectedPapers.length ? "Ask about the selected papers…" : "Select at least one paper to begin…"} rows={2} disabled={!selectedPapers.length} />
-            <ActionButton type="submit" variant="primary" size="icon" className="h-auto w-auto self-stretch" disabled={!input.trim() || loading || !selectedPapers.length} aria-label="Send message" icon={<Send />} />
+            {loading
+              ? <ActionButton type="button" variant="secondary" size="icon" className="h-auto w-auto self-stretch" onClick={stopGeneration} aria-label="Stop generating" title="Stop generating" icon={<Square />} />
+              : <ActionButton type="submit" variant="primary" size="icon" className="h-auto w-auto self-stretch" disabled={!input.trim() || !selectedPapers.length} aria-label="Send message" icon={<Send />} />}
             <small>Enter to send · Shift + Enter for a new line</small>
           </form>
         </div>
@@ -520,7 +666,7 @@ export default function ChatWorkspace() {
       <aside className="chat-context-panel">
         <header>
           <span><strong>Paper context</strong><small>Choose up to eight papers</small></span>
-          <ActionButton variant="on-dark" size="icon-large" className="chat-context-close" onClick={() => setContextOpen(false)} aria-label="Close paper context" icon={<X />} />
+          <ActionButton variant="ghost" size="icon" className="chat-context-close" onClick={() => setContextOpen(false)} aria-label="Close paper context" icon={<PanelRightClose />} />
         </header>
         <label className="chat-context-search"><Search size={15} /><input value={paperQuery} onChange={(event) => setPaperQuery(event.target.value)} placeholder="Search your library" /></label>
         <div className="chat-context-list">
