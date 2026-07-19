@@ -1,4 +1,5 @@
-import { env } from "cloudflare:workers";
+import { databasePath, ensureLibraryDirectories } from "./library-paths";
+import { getSqliteD1, type SqliteD1Database } from "./sqlite-d1";
 
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS venues (
@@ -179,11 +180,9 @@ const seedStatements = [
 
 let initializationPromise: Promise<void> | null = null;
 
-function getDatabase(): D1Database {
-  if (!env.DB) {
-    throw new Error("Paper Assistant requires the D1 binding named DB.");
-  }
-  return env.DB;
+function getDatabase(): SqliteD1Database {
+  ensureLibraryDirectories();
+  return getSqliteD1(databasePath());
 }
 
 async function initializeDatabase(): Promise<void> {
@@ -241,7 +240,7 @@ async function initializeDatabase(): Promise<void> {
   }
 }
 
-export async function ensureDatabase(): Promise<D1Database> {
+export async function ensureDatabase(): Promise<SqliteD1Database> {
   if (!initializationPromise) {
     initializationPromise = initializeDatabase().catch((error) => {
       initializationPromise = null;

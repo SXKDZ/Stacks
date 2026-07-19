@@ -1,13 +1,15 @@
-import { env } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { databasePath, ensureLibraryDirectories } from "./library-paths";
+import { getSqliteD1 } from "./sqlite-d1";
 import * as schema from "./schema";
 
+/**
+ * Drizzle handle over the local SQLite library file. Most of the app talks to
+ * the database through the raw D1-style adapter in db/bootstrap.ts; this
+ * Drizzle export is available for typed query building if needed.
+ */
 export function getDb() {
-  if (!env.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
-    );
-  }
-
-  return drizzle(env.DB, { schema });
+  ensureLibraryDirectories();
+  const adapter = getSqliteD1(databasePath());
+  return drizzle(adapter.raw(), { schema });
 }
