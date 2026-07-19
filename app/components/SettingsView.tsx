@@ -646,10 +646,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function repairStorage() {
-    const localRepair = storageReport?.mode !== "hosted";
-    const description = localRepair
-      ? "remove orphaned association rows, convert safe absolute references to portable filenames, and normalize linked PDF filenames"
-      : "remove orphaned association rows from the hosted D1 database";
+    const description = "remove orphaned association rows and delete unlinked files from the managed pdfs/ and html_snapshots/ folders";
     if (!window.confirm(`Repair PA now? Doctor will ${description}. Missing or ambiguous files will be left unchanged.`)) {
       return;
     }
@@ -682,7 +679,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       notify(summary
         ? `Repair complete: ${summary.orphanedAssociations} associations removed, ${summary.portablePaths} paths fixed, ${summary.renamedPdfs} PDFs renamed, and ${summary.migratedLegacyFiles ?? 0} legacy files copied into this library.`
         : "Database repair completed.", "success");
-      if (localRepair && summary && (summary.portablePaths || summary.renamedPdfs)) {
+      if (summary && (summary.portablePaths || summary.renamedPdfs)) {
         window.setTimeout(() => window.location.reload(), 900);
       } else {
         await inspectStorage(false);
@@ -764,7 +761,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
         <TabButton variant="nav" active={tab === "about"} onClick={() => setTab("about")} icon={<Info />}><span><strong>About &amp; updates</strong><small>Version and release status</small></span></TabButton>
-        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>{settings.local ? "Stored locally" : "Stored in PA"}</strong><small>{settings.local ? "Protected structured file; secrets are never displayed" : "Preferences use D1; secrets stay in deployment variables"}</small></span></div>
+        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>Stored locally</strong><small>Settings and secrets live in the library folder&rsquo;s settings.json; keys are never displayed after saving.</small></span></div>
       </aside>
 
       <div className="settings-content">
@@ -828,7 +825,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card storage-location-card">
               <div className="storage-location-heading">
                 <span className="storage-doctor-icon"><HardDrive size={18} /></span>
-                <div><strong>PA library location</strong><small>Managed PDFs and HTML snapshots live here; the local D1 database remains under PA’s runtime storage.</small></div>
+                <div><strong>PA library location</strong><small>The library.db database, settings, and managed PDFs and HTML snapshots all live in this folder.</small></div>
               </div>
               <div className="storage-root-summary">
                 <span>Active library</span>

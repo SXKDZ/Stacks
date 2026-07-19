@@ -1,6 +1,9 @@
+import { basename } from "node:path";
 import { ensureDatabase } from "@/db/bootstrap";
+import { inspectStorage } from "@/app/lib/local-files";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 interface StorageManagementRequest {
   operation?: "inspect" | "clean" | "repair" | "move";
@@ -85,65 +88,77 @@ export async function POST(request: Request): Promise<Response> {
     const body = await request.json() as StorageManagementRequest;
     if (body.operation === "move") {
       return Response.json(
-        { error: "Moving a local library folder requires PA's local filesystem companion." },
+        { error: "Move the library folder from the filesystem, then update ~/.paperassistant/storage.json." },
         { status: 409 },
       );
     }
     const clean = body.operation === "clean" || body.operation === "repair";
     if (clean && !body.confirmed) {
-      return Response.json({ error: "Database repair requires explicit confirmation." }, { status: 400 });
+      return Response.json({ error: "Cleanup requires explicit confirmation." }, { status: 400 });
     }
     const databaseHealth = await databaseDiagnostic(clean);
     const paperRecords = databaseHealth.tableCounts.papers ?? 0;
-    const referencedPdfFiles = await (await ensureDatabase())
-      .prepare("SELECT COUNT(*) AS count FROM papers WHERE local_path IS NOT NULL AND trim(local_path) <> ''")
-      .first<{ count: number }>();
-    const referencedHtmlFiles = await (await ensureDatabase())
-      .prepare("SELECT COUNT(*) AS count FROM papers WHERE html_snapshot_path IS NOT NULL AND trim(html_snapshot_path) <> ''")
-      .first<{ count: number }>();
+
+    // The library is a local SQLite file with real PDF/HTML assets on disk;
+    // inspect them against the paths the database references.
+    const database = await ensureDatabase();
+    const assetRows = await database
+      .prepare("SELECT local_path, html_snapshot_path FROM papers")
+      .all<{ local_path: string | null; html_snapshot_path: string | null }>();
+    const referencedPdf = assetRows.results
+      .map((row) => (row.local_path ? basename(row.local_path) : null))
+      .filter((name): name is string => Boolean(name));
+    const referencedHtml = assetRows.results
+      .map((row) => (row.html_snapshot_path ? basename(row.html_snapshot_path) : null))
+      .filter((name): name is string => Boolean(name));
+    const papersWithoutLocalAsset = assetRows.results.filter(
+      (row) => !row.local_path?.trim() && !row.html_snapshot_path?.trim(),
+    ).length;
+    const storage = inspectStorage(referencedPdf, referencedHtml, clean);
+
     return Response.json({
-      mode: "hosted",
+      mode: "local",
       capabilities: {
         databaseChecks: true,
-        fileChecks: false,
-        repairs: ["orphaned-associations"],
+        fileChecks: true,
+        repairs: ["orphaned-associations", "orphaned-files"],
         folderMove: false,
       },
-      libraryRoot: "D1 database",
+      libraryRoot: storage.libraryRoot,
       libraryExists: true,
-      databasePresent: true,
+      databasePresent: storage.databaseExists,
       settingsPresent: true,
       databaseHealth,
       systemHealth: {
-        runtime: "Cloudflare Workers",
-        database: "D1",
-        filesystemAvailable: false,
+        runtime: "Node.js",
+        database: "SQLite (library.db)",
+        filesystemAvailable: true,
       },
       assets: [],
       paperRecords,
-      referencedPdfFiles: Number(referencedPdfFiles?.count ?? 0),
-      presentPdfFiles: 0,
-      missingPdfFiles: 0,
-      missingPdfPaths: [],
-      referencedHtmlFiles: Number(referencedHtmlFiles?.count ?? 0),
-      presentHtmlFiles: 0,
-      missingHtmlFiles: 0,
-      missingHtmlPaths: [],
+      referencedPdfFiles: referencedPdf.length,
+      presentPdfFiles: storage.pdf.present,
+      missingPdfFiles: storage.pdf.missing,
+      missingPdfPaths: storage.pdf.missingPaths,
+      referencedHtmlFiles: referencedHtml.length,
+      presentHtmlFiles: storage.html.present,
+      missingHtmlFiles: storage.html.missing,
+      missingHtmlPaths: storage.html.missingPaths,
       invalidPdfPaths: databaseHealth.absolutePdfPaths,
       invalidHtmlPaths: databaseHealth.absoluteHtmlPaths,
       invalidReferences: databaseHealth.absolutePdfPaths.length + databaseHealth.absoluteHtmlPaths.length,
-      papersWithoutLocalAsset: 0,
+      papersWithoutLocalAsset,
       paperIdsWithoutLocalAsset: [],
-      storedPdfFiles: 0,
-      storedPdfBytes: 0,
-      storedHtmlFiles: 0,
-      storedHtmlBytes: 0,
-      totalFiles: 0,
-      totalBytes: 0,
-      orphanedFiles: 0,
-      orphanedBytes: 0,
-      removedFiles: 0,
-      removedBytes: 0,
+      storedPdfFiles: storage.pdf.storedFiles,
+      storedPdfBytes: storage.pdf.storedBytes,
+      storedHtmlFiles: storage.html.storedFiles,
+      storedHtmlBytes: storage.html.storedBytes,
+      totalFiles: storage.totalFiles,
+      totalBytes: storage.totalBytes,
+      orphanedFiles: storage.orphanedFiles,
+      orphanedBytes: storage.orphanedBytes,
+      removedFiles: storage.removedFiles,
+      removedBytes: storage.removedBytes,
     });
   } catch (error) {
     return Response.json(
