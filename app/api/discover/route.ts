@@ -15,7 +15,7 @@ function errorResponse(message: string, status = 400): Response {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const runtime = await resolveRuntimeValues(request);
+    const runtime = await resolveRuntimeValues();
     const body = await request.json() as DiscoverRequest;
     const query = body.query?.trim();
     if (!query) {

@@ -141,7 +141,7 @@ export async function POST(request: Request): Promise<Response> {
     const embedded = await getMeta(document).catch(() => ({ info: {}, metadata: null }));
     const info = embedded.info ?? {};
     const fallback = fallbackMetadata(sourceText, info, filename);
-    const runtime = await resolveRuntimeValues(request);
+    const runtime = await resolveRuntimeValues();
     const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
     if (!token) {
       return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning: "Bedrock is not configured; PA used embedded PDF metadata and text heuristics." });
