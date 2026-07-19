@@ -200,7 +200,7 @@ export async function chooseDirectory(target: "local" | "remote" | "storage"): P
   return selected.replace(/[\\/]+$/, "");
 }
 
-function settingsFromCurrentValues(): StructuredSettingsFile {
+function settingsFromCurrentValues(existing: StructuredSettingsFile | null): StructuredSettingsFile {
   return {
     version: 1,
     updatedAt: new Date().toISOString(),
@@ -221,12 +221,19 @@ function settingsFromCurrentValues(): StructuredSettingsFile {
       autoSync: envValue("PA_AUTO_SYNC", "false"),
       autoSyncInterval: envValue("PA_AUTO_SYNC_INTERVAL", "5"),
     },
-    secrets: Object.fromEntries(secretKeys.map((key) => [key, envValue(key)])),
+    // Seed the secret baseline from the persisted settings file ONLY (no env
+    // fallback). Otherwise a secret supplied purely through the environment
+    // would be silently materialized into plaintext settings.json the first
+    // time any unrelated setting is saved. Secrets are persisted only when the
+    // user enters them in the UI (they then arrive via the request payload).
+    secrets: Object.fromEntries(
+      secretKeys.map((key) => [key, existing?.secrets?.[key]?.trim() ?? ""]),
+    ),
   };
 }
 
 function saveStructuredSettings(updates: Record<string, string>): void {
-  const next = settingsFromCurrentValues();
+  const next = settingsFromCurrentValues(readStructuredSettings());
   const setValue = (key: string, value: string) => {
     switch (key) {
       case "BEDROCK_MODEL_ID": next.ai.modelId = value; break;
@@ -344,10 +351,6 @@ export function persistSettings(data: SettingsPayload): void {
   saveStructuredSettings(sanitizeSettings(data));
 }
 
-export function runtimeValues(): Record<string, string> {
-  return Object.fromEntries([...environmentKeys].map((key) => [key, envValue(key)]));
-}
-
 function pythonExecutable(): string {
   const virtualEnvironmentPython = process.platform === "win32"
     ? join(repositoryRoot, ".venv", "Scripts", "python.exe")
@@ -394,6 +397,13 @@ export async function runSync(auto = false): Promise<SyncResult> {
       });
       let output = "";
       let errorOutput = "";
+      let timedOut = false;
+      // Never let a stuck bridge (network stall, lock contention) hang the sync
+      // request forever; SIGKILL after 5 minutes and surface a clear error.
+      const killTimer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGKILL");
+      }, 5 * 60 * 1000);
       child.stdout.on("data", (chunk) => {
         output += String(chunk);
         if (output.length > 2_000_000) {
@@ -403,8 +413,16 @@ export async function runSync(auto = false): Promise<SyncResult> {
       child.stderr.on("data", (chunk) => {
         errorOutput += String(chunk);
       });
-      child.on("error", rejectResult);
+      child.on("error", (error) => {
+        clearTimeout(killTimer);
+        rejectResult(error);
+      });
       child.on("close", () => {
+        clearTimeout(killTimer);
+        if (timedOut) {
+          rejectResult(new Error("PA sync timed out after 5 minutes."));
+          return;
+        }
         try {
           const lines = output.trim().split(/\r?\n/).filter(Boolean);
           const parsed = JSON.parse(lines.at(-1) ?? "{}") as SyncResult;
@@ -423,8 +441,4 @@ export async function runSync(auto = false): Promise<SyncResult> {
   } finally {
     syncRunning = false;
   }
-}
-
-export function isBrowserRequest(request: Request): boolean {
-  return Boolean(request.headers.get("origin") || request.headers.get("sec-fetch-site"));
 }

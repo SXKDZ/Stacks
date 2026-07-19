@@ -7,9 +7,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --hostname 127.0.0.1",
     "test": "npm run build && node --test tests/rendered-html.test.mjs tests/schema.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "audit:colors": "node scripts/generate-color-audit.mjs",

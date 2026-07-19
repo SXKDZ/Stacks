@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
-import { libraryRoot } from "@/db/library-paths";
+import { databasePath, libraryRoot } from "@/db/library-paths";
+import { safeFetch } from "@/app/lib/url-safety";
 
 /**
  * Local filesystem companion for PA's self-contained library folder. All PDF
@@ -44,6 +45,91 @@ export function storedFileExists(kind: AcquisitionKind, name: string | null): bo
   return existsSync(join(storedDirectory(kind), name));
 }
 
+interface AssetInspection {
+  storedFiles: number;
+  storedBytes: number;
+  present: number;
+  missing: number;
+  missingPaths: string[];
+  orphanedNames: string[];
+  orphanedBytes: number;
+}
+
+function inspectAssets(kind: AcquisitionKind, referenced: string[]): AssetInspection {
+  const directory = storedDirectory(kind);
+  const referencedSet = new Set(referenced.filter(Boolean));
+  let storedFiles = 0;
+  let storedBytes = 0;
+  let orphanedBytes = 0;
+  const onDisk = new Set<string>();
+  const orphanedNames: string[] = [];
+  if (existsSync(directory)) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isFile() || entry.name.startsWith(".")) continue;
+      onDisk.add(entry.name);
+      const bytes = statSync(join(directory, entry.name)).size;
+      storedFiles += 1;
+      storedBytes += bytes;
+      if (!referencedSet.has(entry.name)) {
+        orphanedNames.push(entry.name);
+        orphanedBytes += bytes;
+      }
+    }
+  }
+  const missingPaths = [...referencedSet].filter((name) => !onDisk.has(name));
+  return {
+    storedFiles,
+    storedBytes,
+    present: referencedSet.size - missingPaths.length,
+    missing: missingPaths.length,
+    missingPaths,
+    orphanedNames,
+    orphanedBytes,
+  };
+}
+
+/**
+ * Inspect the on-disk PDF/HTML assets in the library folder against the paths
+ * referenced by the database. When `clean` is set, delete only orphaned
+ * (unreferenced) files. Returns the counts/sizes the settings Doctor UI reads.
+ */
+export function inspectStorage(
+  referencedPdfNames: string[],
+  referencedHtmlNames: string[],
+  clean = false,
+) {
+  const pdf = inspectAssets("pdf", referencedPdfNames);
+  const html = inspectAssets("html", referencedHtmlNames);
+  let removedFiles = 0;
+  let removedBytes = 0;
+  if (clean) {
+    for (const [kind, names] of [["pdf", pdf.orphanedNames], ["html", html.orphanedNames]] as const) {
+      for (const name of names) {
+        try {
+          const path = join(storedDirectory(kind), name);
+          removedBytes += statSync(path).size;
+          unlinkSync(path);
+          removedFiles += 1;
+        } catch {
+          // Skip files that vanished or can't be removed.
+        }
+      }
+    }
+  }
+  return {
+    libraryRoot: libraryRoot(),
+    databaseExists: existsSync(databasePath()),
+    pdf,
+    html,
+    orphanedFiles: pdf.orphanedNames.length + html.orphanedNames.length,
+    orphanedBytes: pdf.orphanedBytes + html.orphanedBytes,
+    totalFiles: pdf.storedFiles + html.storedFiles,
+    totalBytes: pdf.storedBytes + html.storedBytes,
+    removedFiles,
+    removedBytes,
+  };
+}
+
 export function portableStoredName(value: string | undefined, kind: AcquisitionKind): string | null {
   const name = value?.trim();
   if (!name) {
@@ -77,18 +163,40 @@ function safeStoredName(originalName: string, targetDirectory: string, allowedEx
 }
 
 async function readRequestBytes(request: Request, maxBytes: number): Promise<Buffer> {
+  const tooLarge = () =>
+    new Error(`The selected file exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB limit.`);
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
   if (declaredLength > maxBytes) {
-    throw new Error(`The selected file exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB limit.`);
+    throw tooLarge();
   }
-  const buffer = Buffer.from(await request.arrayBuffer());
-  if (buffer.length > maxBytes) {
-    throw new Error(`The selected file exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB limit.`);
-  }
-  if (!buffer.length) {
+  // Stream and cap incrementally: a missing or dishonest Content-Length must not
+  // let an oversized (or unbounded) body be buffered into memory.
+  if (!request.body) {
     throw new Error("The selected file is empty.");
   }
-  return buffer;
+  const reader = request.body.getReader();
+  const chunks: Buffer[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel();
+        throw tooLarge();
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (!received) {
+    throw new Error("The selected file is empty.");
+  }
+  return Buffer.concat(chunks, received);
 }
 
 export async function importLocalFile(request: Request): Promise<{ storedPath: string; fileUrl: string }> {
@@ -173,51 +281,44 @@ async function fetchWithLimit(
   maxBytes: number,
   extraHeaders: Record<string, string> = {},
 ): Promise<{ contents: Buffer; contentType: string }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 40_000);
-  try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: { "User-Agent": "PaperAssistant/1.0 (+local research library)", ...extraHeaders },
-    });
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`.trim());
-    }
-    const declaredLength = Number(response.headers.get("content-length") ?? 0);
-    if (declaredLength > maxBytes) {
-      throw new Error("The remote file exceeds PA’s storage limit.");
-    }
-    if (!response.body) {
-      throw new Error("The remote source returned an empty response.");
-    }
-    const reader = response.body.getReader();
-    const chunks: Buffer[] = [];
-    let received = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        received += value.byteLength;
-        if (received > maxBytes) {
-          await reader.cancel();
-          throw new Error("The remote file exceeds PA’s storage limit.");
-        }
-        chunks.push(Buffer.from(value));
-      }
-    } finally {
-      reader.releaseLock();
-    }
-    const contents = Buffer.concat(chunks, received);
-    if (!contents.length) {
-      throw new Error("The remote source returned an empty file.");
-    }
-    return { contents, contentType: response.headers.get("content-type") ?? "" };
-  } finally {
-    clearTimeout(timeout);
+  // safeFetch enforces https-only + private-address blocking + per-hop redirect
+  // revalidation, so a user-supplied source URL cannot be used to reach internal
+  // or cloud-metadata endpoints (SSRF).
+  const response = await safeFetch(url, { headers: extraHeaders });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`.trim());
   }
+  const declaredLength = Number(response.headers.get("content-length") ?? 0);
+  if (declaredLength > maxBytes) {
+    throw new Error("The remote file exceeds PA’s storage limit.");
+  }
+  if (!response.body) {
+    throw new Error("The remote source returned an empty response.");
+  }
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel();
+        throw new Error("The remote file exceeds PA’s storage limit.");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const contents = Buffer.concat(chunks, received);
+  if (!contents.length) {
+    throw new Error("The remote source returned an empty file.");
+  }
+  return { contents, contentType: response.headers.get("content-type") ?? "" };
 }
 
 function acquisitionFilename(title: string | undefined, source: URL, extension: ".pdf" | ".html"): string {
@@ -377,11 +478,27 @@ export async function servePdfFile(filePath: string, rangeHeader: string | null)
     "Cache-Control": "private, max-age=60",
   });
   if (rangeHeader) {
-    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-    if (match) {
-      const start = Number(match[1]);
-      const end = match[2] ? Number(match[2]) : fileStat.size - 1;
-      headers.set("Content-Range", `bytes ${start}-${end}/${fileStat.size}`);
+    const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+    if (match && (match[1] || match[2])) {
+      const size = fileStat.size;
+      // Support `start-`, `start-end`, and suffix `-lastN` forms; clamp to the
+      // file bounds and reject anything unsatisfiable with a 416 so a crafted
+      // header can never produce a negative Content-Length or an invalid read.
+      let start: number;
+      let end: number;
+      if (match[1]) {
+        start = Number(match[1]);
+        end = match[2] ? Number(match[2]) : size - 1;
+      } else {
+        const suffixLength = Number(match[2]);
+        start = Math.max(0, size - suffixLength);
+        end = size - 1;
+      }
+      end = Math.min(end, size - 1);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size || size === 0) {
+        return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+      }
+      headers.set("Content-Range", `bytes ${start}-${end}/${size}`);
       headers.set("Content-Length", String(end - start + 1));
       const stream = Readable.toWeb(createReadStream(filePath, { start, end })) as unknown as ReadableStream<Uint8Array>;
       return new Response(stream, { status: 206, headers });

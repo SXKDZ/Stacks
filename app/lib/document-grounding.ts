@@ -1,4 +1,5 @@
 import { getDocumentProxy } from "unpdf";
+import { privateHostname, publicHttpsUrl } from "@/app/lib/url-safety";
 
 const MAX_DOCUMENT_BYTES = 35 * 1024 * 1024;
 const MAX_PAPER_CHARACTERS = 20_000;
@@ -10,30 +11,6 @@ interface CacheEntry {
 }
 
 const contextCache = new Map<string, CacheEntry>();
-
-function privateHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalized === "localhost" || normalized.endsWith(".local") || normalized === "::1"
-    || (normalized.includes(":") && (/^f[cd]/.test(normalized) || normalized.startsWith("fe80:")))) {
-    return true;
-  }
-  const match = normalized.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!match) {
-    return false;
-  }
-  const [, firstValue, secondValue] = match;
-  const first = Number(firstValue);
-  const second = Number(secondValue);
-  return first === 10
-    || first === 127
-    || (first === 169 && second === 254)
-    || (first === 172 && second >= 16 && second <= 31)
-    || (first === 192 && second === 168);
-}
-
-function publicHttpsUrl(url: URL): boolean {
-  return url.protocol === "https:" && !url.username && !url.password && !privateHostname(url.hostname);
-}
 
 function documentUrl(value: string | null | undefined, requestUrl: string, kind: "pdf" | "html"): URL | null {
   const candidate = value?.trim();

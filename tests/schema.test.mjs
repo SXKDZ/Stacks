@@ -39,10 +39,10 @@ test("keeps API credentials out of tracked examples", async () => {
 });
 
 test("persists local settings atomically and backs up the normalized library", async () => {
-  const [settings, routeSettings, routeRuntime, routeSync, routePicker, bridge, example, ignore] = await Promise.all([
+  const [settings, routeSettings, proxy, routeSync, routePicker, bridge, example, ignore] = await Promise.all([
     readFile(new URL("../app/lib/local-settings.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/local-settings/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/local-runtime-settings/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/local-sync/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/local-directory-picker/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../scripts/pa_sync_bridge.py", import.meta.url), "utf8"),
@@ -52,7 +52,9 @@ test("persists local settings atomically and backs up the normalized library", a
   // Local settings are served by real Next routes (Node runtime), backed by the
   // self-contained library folder via db/library-paths.
   assert.match(routeSettings, /export const runtime = "nodejs"/);
-  assert.match(routeRuntime, /x-pa-internal-runtime/);
+  // Mutating API requests are CSRF-guarded by the same-origin proxy.
+  assert.match(proxy, /sec-fetch-site/);
+  assert.match(proxy, /matcher: \["\/api\/:path\*"\]/);
   assert.match(routeSync, /export async function POST/);
   assert.match(routePicker, /chooseDirectory/);
   assert.match(settings, /settingsPath\(\)/);
@@ -103,7 +105,17 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(chat, /PA_PDF_PAGES/);
   assert.match(chat, /pdfStartPage/);
   assert.match(grounding, /getDocumentProxy/);
-  assert.match(grounding, /redirect: "manual"/);
+  // SSRF guards live in the shared url-safety module and are used on every
+  // server-side fetch of a user-supplied URL (grounding + source acquisition).
+  const [urlSafety, localFiles] = await Promise.all([
+    readFile(new URL("../app/lib/url-safety.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(urlSafety, /redirect: "manual"/);
+  assert.match(urlSafety, /publicHttpsUrl/);
+  assert.match(grounding, /from "@\/app\/lib\/url-safety"/);
+  assert.match(localFiles, /safeFetch/);
+  assert.doesNotMatch(localFiles, /redirect: "follow"/);
   assert.match(settingsView, /PDF grounding pages/);
   assert.match(settingsView, /About & updates/);
   assert.match(version, /releases\/latest/);
