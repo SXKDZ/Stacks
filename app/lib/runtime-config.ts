@@ -19,42 +19,19 @@ function environmentValues(): RuntimeValues {
   return Object.fromEntries(runtimeKeys.map((key) => [key, process.env[key]?.trim() ?? ""]));
 }
 
-function isLocalRequest(request: Request): boolean {
-  try {
-    const hostname = new URL(request.url).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  } catch {
-    return false;
-  }
-}
-
-export async function resolveRuntimeValues(request: Request): Promise<RuntimeValues> {
+export async function resolveRuntimeValues(): Promise<RuntimeValues> {
+  // Note: no longer takes a Request — runtime values resolve from env + the
+  // library settings.json regardless of the incoming request.
+  // Start from process.env, then layer the self-contained library settings
+  // (AI config, prompts, and secrets from settings.json) on top. Running on a
+  // single Node process, this resolves everything from the library folder with
+  // no host/localhost gating — the AI routes get the token wherever they run.
   const values = environmentValues();
   try {
     const { storedRuntimeValues } = await import("@/app/lib/settings-store");
     Object.assign(values, await storedRuntimeValues());
   } catch {
-    // A database-free runtime can still use deployment environment values.
-  }
-  if (!isLocalRequest(request)) {
-    return values;
-  }
-  try {
-    const response = await fetch(new URL("/api/local-runtime-settings", request.url), {
-      headers: { "x-pa-internal-runtime": "pa-runtime-v1" },
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      return values;
-    }
-    const payload = await response.json() as { values?: RuntimeValues };
-    for (const key of runtimeKeys) {
-      if (typeof payload.values?.[key] === "string") {
-        values[key] = payload.values[key];
-      }
-    }
-  } catch {
-    // Hosted deployments and isolated runtimes continue using deployment variables.
+    // A settings-free runtime can still use deployment environment values.
   }
   return values;
 }

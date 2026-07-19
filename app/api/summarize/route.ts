@@ -45,7 +45,7 @@ async function readSource(url: string, jinaKey: string): Promise<string> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const runtime = await resolveRuntimeValues(request);
+    const runtime = await resolveRuntimeValues();
     const body = (await request.json()) as SummaryRequest;
     const paper = body.paper;
     if (!paper?.title) {
