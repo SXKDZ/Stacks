@@ -9,6 +9,7 @@ import {
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 interface SummaryRequest {
   paper?: {

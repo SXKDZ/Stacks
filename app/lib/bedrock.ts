@@ -11,6 +11,7 @@ interface BedrockInvocationOptions {
   messages: BedrockMessage[];
   maxTokens: number;
   temperature: number;
+  signal?: AbortSignal;
 }
 
 interface RuntimeResponse {
@@ -80,16 +81,56 @@ export type BedrockStreamEvent =
   | { type: "text"; text: string }
   | { type: "usage"; usage: Record<string, unknown> };
 
+interface EventStreamFrame {
+  messageType: string;
+  eventType: string;
+  exceptionType: string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Decode the header block of an eventstream frame into a name→string map. Each
+ * header is: [1B nameLen][name][1B valueType][...value]. We only need the string
+ * headers (:message-type, :event-type, :exception-type), which use value type 7
+ * ([2B len][utf8]); other value types are skipped by their fixed/typed length.
+ */
+function decodeFrameHeaders(bytes: Uint8Array, decoder: TextDecoder): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+  while (offset < bytes.length) {
+    const nameLen = view.getUint8(offset);
+    offset += 1;
+    const name = decoder.decode(bytes.subarray(offset, offset + nameLen));
+    offset += nameLen;
+    const valueType = view.getUint8(offset);
+    offset += 1;
+    if (valueType === 7) {
+      const valueLen = view.getUint16(offset);
+      offset += 2;
+      headers[name] = decoder.decode(bytes.subarray(offset, offset + valueLen));
+      offset += valueLen;
+    } else {
+      // Non-string header value; advance by its typed width. Bedrock only uses
+      // string headers for the fields we read, so treat the rest as opaque.
+      const widths: Record<number, number> = { 0: 0, 1: 0, 2: 1, 3: 2, 4: 4, 5: 8, 6: view.getUint16(offset) + 2, 8: 8, 9: 16 };
+      offset += widths[valueType] ?? bytes.length;
+    }
+  }
+  return headers;
+}
+
 /**
  * Parse an AWS `application/vnd.amazon.eventstream` byte stream (returned by the
- * Bedrock Runtime `converse-stream` endpoint) and yield the JSON payload of each
- * frame. Each frame is: [4B totalLen][4B headersLen][4B preludeCrc][headers][payload][4B msgCrc].
- * We only need the payload boundaries, not the header semantics, so the payload
- * JSON is parsed directly (contentBlockDelta → delta.text, metadata → usage).
+ * Bedrock Runtime `converse-stream` endpoint) and yield each frame's type and
+ * JSON payload. Each frame is: [4B totalLen][4B headersLen][4B preludeCrc][headers][payload][4B msgCrc].
+ * The header block carries `:message-type` (`event` vs `exception`) and, for
+ * errors, `:exception-type`; we surface those so mid-stream failures are not
+ * silently dropped.
  */
 async function* parseEventStream(
   body: ReadableStream<Uint8Array>,
-): AsyncGenerator<Record<string, unknown>> {
+): AsyncGenerator<EventStreamFrame> {
   const reader = body.getReader();
   let buffer = new Uint8Array(0);
   const decoder = new TextDecoder();
@@ -114,16 +155,25 @@ async function* parseEventStream(
           break;
         }
         const headersLen = view.getUint32(4);
+        const headerBytes = buffer.subarray(12, 12 + headersLen);
+        const frameHeaders = decodeFrameHeaders(headerBytes, decoder);
         const payloadStart = 12 + headersLen;
         const payloadEnd = totalLen - 4;
         if (payloadStart <= payloadEnd) {
           const payloadBytes = buffer.subarray(payloadStart, payloadEnd);
           const text = decoder.decode(payloadBytes);
+          let payload: Record<string, unknown> = {};
           try {
-            yield JSON.parse(text) as Record<string, unknown>;
+            payload = JSON.parse(text) as Record<string, unknown>;
           } catch {
-            // Non-JSON frame (e.g. a ping); ignore.
+            // Non-JSON frame (e.g. a ping); yield with empty payload.
           }
+          yield {
+            messageType: frameHeaders[":message-type"] ?? "event",
+            eventType: frameHeaders[":event-type"] ?? "",
+            exceptionType: frameHeaders[":exception-type"] ?? "",
+            payload,
+          };
         }
         buffer = buffer.subarray(totalLen);
       }
@@ -153,6 +203,7 @@ export async function* streamBedrockMessages(
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
+        signal: options.signal,
         body: JSON.stringify({
           model,
           max_tokens: options.maxTokens,
@@ -187,7 +238,16 @@ export async function* streamBedrockMessages(
               delta?: { text?: string };
               usage?: Record<string, unknown>;
               message?: { usage?: Record<string, unknown> };
+              error?: { message?: string; type?: string };
             };
+            if (parsed.type === "error" || parsed.error) {
+              // Mantle/Anthropic emits a mid-stream `error` event on throttling or
+              // an overloaded model; surface it instead of ending silently.
+              throw new BedrockInvocationError(
+                parsed.error?.message ?? "The model stream returned an error.",
+                502,
+              );
+            }
             if (parsed.delta?.text) {
               yield { type: "text", text: parsed.delta.text };
             }
@@ -195,7 +255,10 @@ export async function* streamBedrockMessages(
             if (usage) {
               yield { type: "usage", usage };
             }
-          } catch {
+          } catch (error) {
+            if (error instanceof BedrockInvocationError) {
+              throw error;
+            }
             // Ignore malformed SSE payloads.
           }
         }
@@ -216,6 +279,7 @@ export async function* streamBedrockMessages(
           Authorization: `Bearer ${options.token}`,
           "Content-Type": "application/json",
         },
+        signal: options.signal,
         body: JSON.stringify({
           system: [{ text: options.system }],
           messages: options.messages.map((message) => ({
@@ -238,11 +302,20 @@ export async function* streamBedrockMessages(
       throw lastError;
     }
     for await (const frame of parseEventStream(response.body)) {
-      const delta = frame.delta as { text?: string } | undefined;
+      if (frame.messageType === "exception" || frame.exceptionType) {
+        // A mid-stream exception frame (throttling, model timeout) — surface it
+        // rather than truncating the reply with no explanation.
+        const detail = typeof frame.payload.message === "string" ? frame.payload.message : "";
+        throw new BedrockInvocationError(
+          `${frame.exceptionType || "Model stream error"}${detail ? `: ${detail}` : ""}`,
+          502,
+        );
+      }
+      const delta = frame.payload.delta as { text?: string } | undefined;
       if (delta?.text) {
         yield { type: "text", text: delta.text };
       }
-      const metadata = frame.usage as Record<string, unknown> | undefined;
+      const metadata = frame.payload.usage as Record<string, unknown> | undefined;
       if (metadata) {
         yield { type: "usage", usage: metadata };
       }
@@ -269,6 +342,7 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
           "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
+        signal: options.signal,
         body: JSON.stringify({
           model,
           max_tokens: options.maxTokens,
@@ -301,6 +375,7 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
         Authorization: `Bearer ${options.token}`,
         "Content-Type": "application/json",
       },
+      signal: options.signal,
       body: JSON.stringify({
         system: [{ text: options.system }],
         messages: options.messages.map((message) => ({

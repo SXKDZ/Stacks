@@ -10,6 +10,7 @@ import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { getDocumentProxy, getMeta } from "unpdf";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 interface ExtractedMetadata {
   title: string;

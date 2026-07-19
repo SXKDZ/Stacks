@@ -11,6 +11,7 @@ import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { groundedDocumentText } from "@/app/lib/document-grounding";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -58,25 +59,26 @@ export async function POST(request: Request): Promise<Response> {
     const configuredPdfPages = Math.min(20, Math.max(1, Number(runtimeValue(runtime, "PA_PDF_PAGES", "10")) || 10));
     const pdfStartPage = Math.min(20, Math.max(1, Math.floor(Number(body.pdfStartPage) || 1)));
     const pdfEndPage = Math.min(20, Math.max(pdfStartPage, Math.floor(Number(body.pdfEndPage) || (pdfStartPage + configuredPdfPages - 1))));
+    // Fetch every paper's document text concurrently (each can take seconds),
+    // then apply the shared character budget deterministically in paper order so
+    // the result is stable regardless of which fetch finishes first.
+    const documentContexts = await Promise.all(
+      papers.map((paper) =>
+        groundedDocumentText({
+          requestUrl: request.url,
+          pdfUrl: paper.pdfUrl,
+          htmlUrl: paper.htmlUrl,
+          startPage: pdfStartPage,
+          endPage: pdfEndPage,
+        }).catch(() => null),
+      ),
+    );
     let remainingDocumentCharacters = 60_000;
     let groundedPapers = 0;
     const paperContexts: string[] = [];
     const groundingSources: Array<{ title: string; grounded: boolean; source: string }> = [];
     for (const [index, paper] of papers.entries()) {
-      let documentContext: Awaited<ReturnType<typeof groundedDocumentText>> = null;
-      if (remainingDocumentCharacters > 0) {
-        try {
-          documentContext = await groundedDocumentText({
-            requestUrl: request.url,
-            pdfUrl: paper.pdfUrl,
-            htmlUrl: paper.htmlUrl,
-            startPage: pdfStartPage,
-            endPage: pdfEndPage,
-          });
-        } catch {
-          // Metadata still provides useful context when a source is unavailable or image-only.
-        }
-      }
+      const documentContext = documentContexts[index];
       const attachedText = documentContext?.text.slice(0, remainingDocumentCharacters) ?? "";
       remainingDocumentCharacters -= attachedText.length;
       if (attachedText) {
@@ -128,6 +130,9 @@ export async function POST(request: Request): Promise<Response> {
       messages,
       maxTokens: Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1200"))),
       temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "PA_TEMPERATURE", "0.25")))),
+      // Forward the client's abort so stopping generation cancels the upstream
+      // Bedrock request rather than letting it run (and bill) to completion.
+      signal: request.signal,
     };
 
     // Buffered fallback: some preview proxies and hosts cannot forward a

@@ -82,6 +82,17 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(bedrock, /\/converse/);
   assert.match(prompts, /\{\{papers\}\}/);
   assert.match(prompts, /\{\{paper1\}\}/);
+  // Streaming robustness: mid-stream exception frames/events surface as errors
+  // (both parsers) and the client abort is forwarded to Bedrock.
+  assert.match(bedrock, /messageType === "exception"/);
+  assert.match(bedrock, /parsed\.type === "error" \|\| parsed\.error/);
+  assert.match(bedrock, /signal: options\.signal/);
+  // AI routes pin the Node runtime.
+  const chatRoute = await readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8");
+  assert.match(chatRoute, /export const runtime = "nodejs"/);
+  assert.match(chatRoute, /signal: request\.signal/);
+  // Grounding is fetched concurrently, not in a sequential await loop.
+  assert.match(chatRoute, /Promise\.all\(\s*papers\.map/);
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {

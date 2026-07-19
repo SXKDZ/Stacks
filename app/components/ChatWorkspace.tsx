@@ -167,6 +167,7 @@ export default function ChatWorkspace() {
   const [ready, setReady] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const flushFrameRef = useRef<number | null>(null);
 
   const activeSession = sessions.find((session) => session.id === activeId) || null;
   const selectedPapers = useMemo(() => {
@@ -282,12 +283,19 @@ export default function ChatWorkspace() {
 
   useEffect(() => {
     function onStorage(event: StorageEvent) {
-      if (event.key === CHAT_HISTORY_KEY) {
+      // Don't let another tab's write clobber an in-progress stream in this tab.
+      if (event.key === CHAT_HISTORY_KEY && !loading) {
         setSessions(readSessions());
       }
     }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
+  }, [loading]);
+
+  useEffect(() => () => {
+    if (flushFrameRef.current !== null) {
+      cancelAnimationFrame(flushFrameRef.current);
+    }
   }, []);
 
   useEffect(() => {
@@ -377,18 +385,42 @@ export default function ChatWorkspace() {
     const controller = new AbortController();
     abortRef.current = controller;
     // Accumulate locally so we don't rebuild the whole message array from a stale
-    // closure on every token — updateSession writes the running string each frame.
+    // closure on every token. React state updates every token (cheap), but the
+    // localStorage write is coalesced to one per animation frame — serializing
+    // the whole session list on every token was the streaming hot-path cost.
     let assistantContent = "";
     let grounding: ChatMessage["grounding"];
     let started = false;
-    const writeAssistant = () => {
-      updateSession(sessionId, (session) => {
-        const withoutDraft = session.messages.filter((message) => message.id !== assistantId);
-        return {
-          ...session,
-          messages: [...withoutDraft, { id: assistantId, role: "assistant", content: assistantContent, grounding }],
-          updatedAt: new Date().toISOString(),
-        };
+    const applyAssistant = (session: ChatSession): ChatSession => {
+      const withoutDraft = session.messages.filter((message) => message.id !== assistantId);
+      return {
+        ...session,
+        messages: [...withoutDraft, { id: assistantId, role: "assistant", content: assistantContent, grounding }],
+        updatedAt: new Date().toISOString(),
+      };
+    };
+    const writeAssistant = (persist = false) => {
+      setSessions((current) => {
+        const next = current
+          .map((session) => (session.id === sessionId ? applyAssistant(session) : session))
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+        if (persist) {
+          if (flushFrameRef.current !== null) {
+            cancelAnimationFrame(flushFrameRef.current);
+            flushFrameRef.current = null;
+          }
+          persistSessions(next);
+        } else if (flushFrameRef.current === null) {
+          // Coalesce writes: persist the latest committed state next frame.
+          flushFrameRef.current = requestAnimationFrame(() => {
+            flushFrameRef.current = null;
+            setSessions((latest) => {
+              persistSessions(latest);
+              return latest;
+            });
+          });
+        }
+        return next;
       });
     };
     const requestBody = JSON.stringify({
@@ -424,7 +456,7 @@ export default function ChatWorkspace() {
       const payload = await response.json() as { content?: string; grounding?: ChatMessage["grounding"] };
       grounding = payload.grounding;
       assistantContent = payload.content || "I could not produce a response for that question.";
-      writeAssistant();
+      writeAssistant(true);
     };
 
     try {
@@ -442,7 +474,7 @@ export default function ChatWorkspace() {
         const payload = await response.json().catch(() => null) as { content?: string; grounding?: ChatMessage["grounding"] } | null;
         grounding = payload?.grounding;
         assistantContent = payload?.content || "I could not produce a response for that question.";
-        writeAssistant();
+        writeAssistant(true);
         return;
       }
       const reader = response.body.getReader();
@@ -482,13 +514,13 @@ export default function ChatWorkspace() {
       }
       if (!assistantContent) {
         assistantContent = "I could not produce a response for that question.";
-        writeAssistant();
       }
+      writeAssistant(true);
     } catch (error) {
       if (controller.signal.aborted) {
         // User stopped generation: keep whatever text streamed in, with a marker.
         assistantContent = assistantContent ? `${assistantContent}\n\n_(stopped)_` : "_(stopped)_";
-        writeAssistant();
+        writeAssistant(true);
       } else if (!started && (error instanceof TypeError || (error instanceof Error && /fetch/i.test(error.message)))) {
         // The streaming request never delivered a token (likely a proxy that
         // can't forward event-streams). Retry once in buffered mode before
@@ -499,13 +531,17 @@ export default function ChatWorkspace() {
           if (!controller.signal.aborted) {
             assistantContent = fallbackError instanceof Error ? `I couldn’t complete that request: ${fallbackError.message}` : "I couldn’t complete that request.";
             grounding = undefined;
-            writeAssistant();
+            writeAssistant(true);
           }
         }
       } else {
-        assistantContent = error instanceof Error ? `I couldn’t complete that request: ${error.message}` : "I couldn’t complete that request.";
-        grounding = undefined;
-        writeAssistant();
+        // Mid-stream failure after some text arrived: keep the partial answer and
+        // its grounding receipt, and append the error rather than discarding both.
+        const detail = error instanceof Error ? error.message : "The assistant request failed.";
+        assistantContent = assistantContent
+          ? `${assistantContent}\n\n_(interrupted: ${detail})_`
+          : `I couldn’t complete that request: ${detail}`;
+        writeAssistant(true);
       }
     } finally {
       abortRef.current = null;
