@@ -1,15 +1,13 @@
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { databasePath, ensureLibraryDirectories } from "./library-paths";
-import { getSqliteD1 } from "./sqlite-d1";
-import * as schema from "./schema";
+import { getLibraryDb, type LibraryDb } from "./client";
 
 /**
- * Drizzle handle over the local SQLite library file. Most of the app talks to
- * the database through the raw D1-style adapter in db/bootstrap.ts; this
- * Drizzle export is available for typed query building if needed.
+ * Convenience accessor for the typed Drizzle handle over the local SQLite
+ * library file. Most code obtains the handle through `ensureDatabase()` in
+ * db/bootstrap.ts (which also runs schema init); use this when you only need a
+ * handle and initialization has already happened.
  */
-export function getDb() {
+export function getDb(): LibraryDb {
   ensureLibraryDirectories();
-  const adapter = getSqliteD1(databasePath());
-  return drizzle(adapter.raw(), { schema });
+  return getLibraryDb(databasePath());
 }

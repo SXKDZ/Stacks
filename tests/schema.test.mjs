@@ -98,7 +98,8 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS app_settings/);
   assert.match(settingsRoute, /saveStoredSettings/);
   assert.doesNotMatch(settingsRoute, /501|Not implemented/i);
-  assert.match(settingsStore, /Preferences use D1|app_settings/);
+  // Preferences persist to the app_settings table through the Drizzle ORM.
+  assert.match(settingsStore, /appSettings/);
   assert.match(doctor, /PRAGMA quick_check/);
   assert.match(doctor, /PRAGMA foreign_key_check/);
   assert.match(doctor, /orphanedAssociations/);
@@ -165,9 +166,10 @@ test("persists collection membership through the paper-collection composite key"
     readFile(new URL("../drizzle/0005_lyrical_victor_mancha.sql", import.meta.url), "utf8"),
   ]);
   assert.match(schema, /primaryKey\(\{ columns: \[table\.paperId, table\.collectionId\] \}\)/);
-  assert.match(library, /INSERT OR IGNORE INTO paper_collections \(paper_id, collection_id\)/);
-  assert.match(library, /DELETE FROM paper_collections WHERE paper_id = \? AND collection_id = \?/);
-  assert.match(library, /createPaper[\s\S]*?if \(Array\.isArray\(data\.collectionNames\)\)[\s\S]*?syncPaperCollectionsByName\(database, id, data\.collectionNames\)/);
+  // Membership is reconciled through Drizzle: idempotent inserts + composite-key deletes.
+  assert.match(library, /\.insert\(paperCollections\)[\s\S]*?\.onConflictDoNothing\(\)/);
+  assert.match(library, /\.delete\(paperCollections\)[\s\S]*?eq\(paperCollections\.paperId[\s\S]*?eq\(paperCollections\.collectionId/);
+  assert.match(library, /resolveCollectionIdsByName\(tx, data\.collectionNames\)/);
   assert.match(application, /Papers in collection/);
   assert.match(application, /All remaining papers/);
   assert.match(application, /aria-label="Remove selected paper from collection"/);
@@ -234,24 +236,30 @@ test("tracks long-running work while persisting chat as separate discussions", a
 });
 
 test("runs the library on a local SQLite file in the self-contained library folder", async () => {
-  const [library, bootstrap, dbIndex, adapter, paths, localFiles] = await Promise.all([
+  const [library, bootstrap, dbIndex, client, paths, localFiles] = await Promise.all([
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../db/sqlite-d1.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/client.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/library-paths.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
   ]);
-  // The database is a plain SQLite file (better-sqlite3), not Cloudflare D1.
+  // The database is a plain SQLite file (better-sqlite3) queried through the
+  // Drizzle ORM — there is no Cloudflare D1 or D1-compatible adapter left.
   assert.match(library, /ensureDatabase/);
+  assert.match(library, /from "drizzle-orm"/);
+  assert.match(library, /from "@\/db\/schema"/);
   assert.match(bootstrap, /SELECT COUNT\(\*\) AS count FROM papers/);
   assert.doesNotMatch(bootstrap, /cloudflare:workers/);
   assert.doesNotMatch(dbIndex, /drizzle-orm\/d1|cloudflare:workers/);
-  assert.match(adapter, /import Database from "better-sqlite3"/);
+  assert.match(client, /import Database from "better-sqlite3"/);
+  assert.match(client, /drizzle-orm\/better-sqlite3/);
+  // Reopen when the resolved library path changes (folder move at runtime).
+  assert.match(client, /connection\.file !== file/);
   // Non-WAL journal: the library folder is cloud-synced, where a WAL sidecar
   // could be clobbered mid-write.
-  assert.match(adapter, /journal_mode = TRUNCATE/);
-  assert.doesNotMatch(adapter, /journal_mode = WAL/);
+  assert.match(client, /journal_mode = TRUNCATE/);
+  assert.doesNotMatch(client, /journal_mode = WAL/);
   // The library folder is the single self-contained location.
   assert.match(paths, /library\.db/);
   assert.match(paths, /settings\.json/);

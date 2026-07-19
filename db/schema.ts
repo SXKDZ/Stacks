@@ -156,6 +156,12 @@ export const paperTags = sqliteTable(
   (table) => [primaryKey({ columns: [table.paperId, table.tagId] })],
 );
 
+export const appSettings = sqliteTable("app_settings", {
+  id: text("id").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export type PaperRecord = typeof papers.$inferSelect;
 export type AuthorRecord = typeof authors.$inferSelect;
 export type VenueRecord = typeof venues.$inferSelect;

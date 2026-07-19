@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { eq, sql } from "drizzle-orm";
 import {
   DEFAULT_CHAT_SYSTEM_PROMPT,
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
@@ -6,6 +7,7 @@ import {
 } from "@/app/lib/ai-prompts";
 import { ensureDatabase } from "@/db/bootstrap";
 import { settingsPath } from "@/db/library-paths";
+import { appSettings } from "@/db/schema";
 
 const SECRET_KEYS = ["AWS_BEARER_TOKEN_BEDROCK", "JINA_API_KEY", "SEMANTIC_SCHOLAR_API_KEY", "SERPAPI_KEY"] as const;
 
@@ -138,10 +140,11 @@ function normalizeStoredSettings(value: unknown): StoredSettings {
 
 export async function readStoredSettings(): Promise<StoredSettings> {
   const database = await ensureDatabase();
-  const row = await database
-    .prepare("SELECT value FROM app_settings WHERE id = ?")
-    .bind(SETTINGS_ID)
-    .first<{ value: string }>();
+  const row = database
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.id, SETTINGS_ID))
+    .get();
   if (!row?.value) {
     return environmentDefaults();
   }
@@ -175,10 +178,13 @@ export async function saveStoredSettings(input: SettingsInput): Promise<StoredSe
     },
   });
   const database = await ensureDatabase();
-  await database
-    .prepare(`INSERT INTO app_settings (id, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`)
-    .bind(SETTINGS_ID, JSON.stringify(next))
+  database
+    .insert(appSettings)
+    .values({ id: SETTINGS_ID, value: JSON.stringify(next) })
+    .onConflictDoUpdate({
+      target: appSettings.id,
+      set: { value: sql`excluded.value`, updatedAt: sql`CURRENT_TIMESTAMP` },
+    })
     .run();
   return next;
 }
