@@ -363,7 +363,7 @@ function pythonExecutable(): string {
 
 export async function runSync(auto = false): Promise<SyncResult> {
   if (syncRunning) {
-    throw new Error("A PA sync is already running.");
+    throw new Error("A PA backup is already running.");
   }
   const localDatabase = databaseSource();
   const remoteDirectory = envValue("PA_ONEDRIVE_PATH");
@@ -371,7 +371,17 @@ export async function runSync(auto = false): Promise<SyncResult> {
     throw new Error("The local PA database is not available yet.");
   }
   if (!remoteDirectory) {
-    throw new Error("Choose a OneDrive remote directory before syncing.");
+    throw new Error("Choose a OneDrive backup folder first.");
+  }
+  // The backup destination must be an existing directory the user picked, and
+  // must never be the live library folder itself (which would overwrite the
+  // source it is meant to back up).
+  const resolvedRemote = resolve(remoteDirectory);
+  if (!existsSync(resolvedRemote)) {
+    throw new Error("The OneDrive backup folder does not exist. Choose an existing folder.");
+  }
+  if (resolvedRemote === resolve(libraryRoot())) {
+    throw new Error("The backup folder must be different from the live library folder.");
   }
   syncRunning = true;
   try {
@@ -383,9 +393,7 @@ export async function runSync(auto = false): Promise<SyncResult> {
         "--database",
         localDatabase,
         "--remote",
-        remoteDirectory,
-        "--policy",
-        "local",
+        resolvedRemote,
       ];
       if (auto) {
         args.push("--auto");

@@ -1,8 +1,12 @@
 """Dependency-free OneDrive backup bridge for Paper Assistant.
 
-The live normalized D1 database is the only library source. This bridge creates
-a consistent SQLite backup in OneDrive and mirrors PA-managed PDFs and HTML
-snapshots without ever replacing the database used by the running server.
+The live library is a local SQLite file and its PDF/HTML assets. This bridge
+writes a one-way, consistent backup of that library into a OneDrive folder: a
+transactionally-consistent copy of `library.db` plus mirrored PDFs and HTML
+snapshots. It never reads from or writes to the live library beyond taking the
+snapshot, and it never modifies the OneDrive copy's contents back onto the
+local library. Restoring from a backup is an explicit, manual, offline
+operation.
 """
 
 import argparse
@@ -21,24 +25,14 @@ from pathlib import Path
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Back up a PA library")
+    parser = argparse.ArgumentParser(description="Back up a PA library to OneDrive")
     parser.add_argument("--local", required=True)
     parser.add_argument("--database", required=True)
     parser.add_argument("--remote", required=True)
-    parser.add_argument(
-        "--policy",
-        choices=("local", "remote", "keep_both"),
-        default="keep_both",
-    )
+    # Accepted for backward compatibility; this bridge is always a one-way backup.
+    parser.add_argument("--policy", choices=("local",), default="local")
     parser.add_argument("--auto", action="store_true")
     return parser.parse_args()
-
-
-def database_target(value):
-    path = Path(value).expanduser().resolve()
-    if path.suffix.lower() in (".db", ".sqlite"):
-        return path.parent, path
-    return path, path / "papers.db"
 
 
 def file_hash(path):
@@ -75,7 +69,7 @@ def copy_file(source, destination):
 
 
 def copy_database(source, destination):
-    """Use SQLite backup so a source database is copied consistently."""
+    """Use SQLite backup so the source database is copied consistently."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(
         ".{}.{}.syncing".format(destination.name, uuid.uuid4().hex)
@@ -125,7 +119,7 @@ def clear_stale_lock(path):
     except Exception:
         path.unlink()
         return
-    raise RuntimeError("Another PA sync is already running.")
+    raise RuntimeError("Another PA backup is already running.")
 
 
 @contextmanager
@@ -157,56 +151,23 @@ def sync_locks(local_directory, remote_directory):
                 pass
 
 
-def conflict_name(path, label):
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return path.with_name("{}.{}-{}{}".format(path.stem, label, stamp, path.suffix))
-
-
-def sync_database(local_database, remote_database, policy, result):
-    result["progress"].append({"message": "Comparing PA D1 backups"})
-    if not remote_database.exists():
-        copy_database(local_database, remote_database)
-        count = paper_count(local_database)
+def backup_database(local_database, remote_database, result):
+    """Write a consistent copy of the live database to the backup folder."""
+    result["progress"].append({"message": "Backing up the PA database"})
+    if remote_database.exists() and database_hash(local_database) == database_hash(remote_database):
+        return
+    copy_database(local_database, remote_database)
+    count = paper_count(local_database)
+    if remote_database.exists():
+        result["changes"]["papers_updated"] += count
+        result["details"]["papers_updated"].append(
+            "Backed up database with {} papers".format(count)
+        )
+    else:
         result["changes"]["papers_added"] += count
         result["details"]["papers_added"].append(
-            "Initialized remote database with {} papers".format(count)
+            "Initialized backup with {} papers".format(count)
         )
-        return
-    if database_hash(local_database) == database_hash(remote_database):
-        return
-
-    count = max(paper_count(local_database), paper_count(remote_database))
-    if policy == "remote":
-        copy_database(remote_database, local_database)
-        result["changes"]["papers_updated"] += count
-        result["details"]["papers_updated"].append("Remote database applied locally")
-        return
-    if policy == "keep_both":
-        local_backup = conflict_name(local_database, "remote")
-        remote_backup = conflict_name(remote_database, "local")
-        copy_database(remote_database, local_backup)
-        copy_database(local_database, remote_backup)
-        result["changes"]["conflict_backups"] += 2
-        result["details"]["conflict_backups"].extend(
-            [local_backup.name, remote_backup.name]
-        )
-        result["conflicts"] += 1
-        if remote_database.stat().st_mtime > local_database.stat().st_mtime:
-            copy_database(remote_database, local_database)
-            result["details"]["papers_updated"].append(
-                "Newest remote database applied; both originals were backed up"
-            )
-        else:
-            copy_database(local_database, remote_database)
-            result["details"]["papers_updated"].append(
-                "Newest local database applied; both originals were backed up"
-            )
-        result["changes"]["papers_updated"] += count
-        return
-
-    copy_database(local_database, remote_database)
-    result["changes"]["papers_updated"] += count
-    result["details"]["papers_updated"].append("Local database applied remotely")
 
 
 def asset_files(directory, suffixes):
@@ -221,77 +182,37 @@ def asset_files(directory, suffixes):
     }
 
 
-def remote_variant(name, existing):
-    path = Path(name)
-    candidate = "{}_remote{}".format(path.stem, path.suffix)
-    index = 2
-    while candidate in existing:
-        candidate = "{}_remote_{}{}".format(path.stem, index, path.suffix)
-        index += 1
-    return candidate
-
-
-def sync_assets(local_directory, remote_directory, suffix, kind, policy, result):
+def backup_assets(local_directory, remote_directory, suffix, kind, result):
+    """Copy any new or changed local assets into the backup (one-way)."""
     local_directory.mkdir(parents=True, exist_ok=True)
     remote_directory.mkdir(parents=True, exist_ok=True)
     local_files = asset_files(local_directory, suffix)
     remote_files = asset_files(remote_directory, suffix)
-    result["progress"].append({"message": "Synchronizing {} files".format(kind)})
+    result["progress"].append({"message": "Backing up {} files".format(kind)})
     copied_key = "pdfs_copied" if kind == "PDF" else "html_snapshots_copied"
 
-    for name in sorted(set(local_files) | set(remote_files)):
-        local_path = local_files.get(name)
+    for name, local_path in sorted(local_files.items()):
         remote_path = remote_files.get(name)
-        if local_path is None and remote_path is not None:
-            copy_file(remote_path, local_directory / name)
-            result["changes"][copied_key] += 1
-            result["details"][copied_key].append("{} from remote".format(name))
+        if remote_path is not None and file_hash(local_path) == file_hash(remote_path):
             continue
-        if remote_path is None and local_path is not None:
-            copy_file(local_path, remote_directory / name)
-            result["changes"][copied_key] += 1
-            result["details"][copied_key].append("{} to remote".format(name))
-            continue
-        if local_path is None or remote_path is None:
-            continue
-        if file_hash(local_path) == file_hash(remote_path):
-            continue
-
-        result["conflicts"] += 1
-        if policy == "remote":
-            copy_file(remote_path, local_path)
-            result["changes"][copied_key] += 1
-            result["details"][copied_key].append("{} resolved from remote".format(name))
-        elif policy == "keep_both":
-            variant = remote_variant(name, set(local_files) | set(remote_files))
-            copy_file(remote_path, local_directory / variant)
-            copy_file(remote_path, remote_directory / variant)
-            copy_file(local_path, remote_path)
-            result["changes"][copied_key] += 2
-            result["details"][copied_key].append(
-                "{} kept with remote variant {}".format(name, variant)
-            )
-        else:
-            copy_file(local_path, remote_path)
-            result["changes"][copied_key] += 1
-            result["details"][copied_key].append("{} resolved from local".format(name))
+        copy_file(local_path, remote_directory / name)
+        result["changes"][copied_key] += 1
+        result["details"][copied_key].append("{} backed up".format(name))
 
 
 def main():
     args = parse_args()
     local_directory = Path(args.local).expanduser().resolve()
     local_database = Path(args.database).expanduser().resolve()
-    remote_directory, remote_database = database_target(args.remote)
+    remote_directory = Path(args.remote).expanduser().resolve()
+    remote_database = remote_directory / "library.db"
     if not local_database.exists():
         raise FileNotFoundError(
-            "PA D1 database not found at {}".format(local_database)
+            "PA library database not found at {}".format(local_database)
         )
     if local_directory == remote_directory:
-        raise ValueError("Local and remote PA directories must be different.")
+        raise ValueError("The backup folder must be different from the live library.")
 
-    # D1 is authoritative while PA is running. OneDrive receives a consistent
-    # backup; restoring a remote snapshot is an explicit offline operation.
-    policy = "local"
     detail_keys = (
         "papers_added",
         "papers_updated",
@@ -313,35 +234,31 @@ def main():
 
     started = time.time()
     with sync_locks(local_directory, remote_directory):
-        sync_database(local_database, remote_database, policy, result)
-        sync_assets(
+        backup_database(local_database, remote_database, result)
+        backup_assets(
             local_directory / "pdfs",
             remote_directory / "pdfs",
             ".pdf",
             "PDF",
-            policy,
             result,
         )
-        sync_assets(
+        backup_assets(
             local_directory / "html_snapshots",
             remote_directory / "html_snapshots",
             (".html", ".htm"),
             "HTML snapshot",
-            policy,
             result,
         )
 
     total = sum(result["changes"].values())
     if total:
-        result["summary"] = "Sync completed with {} changes".format(total)
+        result["summary"] = "Backup completed with {} changes".format(total)
     else:
-        result["summary"] = "Local and OneDrive libraries are already in sync"
+        result["summary"] = "The OneDrive backup is already up to date"
     result["logs"].append(
         {
-            "action": "sync_complete",
-            "details": "{} in {:.2f}s using {} policy".format(
-                result["summary"], time.time() - started, policy
-            ),
+            "action": "backup_complete",
+            "details": "{} in {:.2f}s".format(result["summary"], time.time() - started),
         }
     )
     print(json.dumps(result, default=str))
@@ -355,7 +272,7 @@ if __name__ == "__main__":
             json.dumps(
                 {
                     "ok": False,
-                    "summary": "Sync failed",
+                    "summary": "Backup failed",
                     "changes": {},
                     "details": {},
                     "conflicts": 0,

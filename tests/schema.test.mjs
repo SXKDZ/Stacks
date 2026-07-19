@@ -264,16 +264,18 @@ test("runs the library on a local SQLite file in the self-contained library fold
   assert.match(paths, /library\.db/);
   assert.match(paths, /settings\.json/);
   assert.match(paths, /export function libraryRoot/);
+  // The live library defaults to a local path; OneDrive is only a backup target.
+  assert.match(paths, /\.paperassistant", "library"/);
   // Stored PDFs/HTML are served by a real Node helper with a traversal guard.
   assert.match(localFiles, /application\/pdf/);
   assert.match(localFiles, /basename/);
 });
 
-test("backs up the SQLite library snapshot without replacing the live source", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pa-sync-test-"));
+test("backs up the local library one-way to OneDrive without replacing the live source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pa-backup-test-"));
   const local = join(root, "local");
   const remote = join(root, "remote");
-  const databasePath = join(root, "live-d1.sqlite");
+  const databasePath = join(local, "library.db");
   try {
     await mkdir(join(local, "pdfs"), { recursive: true });
     await mkdir(join(local, "html_snapshots"), { recursive: true });
@@ -285,15 +287,21 @@ test("backs up the SQLite library snapshot without replacing the live source", a
     database.close();
 
     const bridgePath = fileURLToPath(new URL("../scripts/pa_sync_bridge.py", import.meta.url));
-    const { stdout } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote, "--policy", "local"]);
+    const { stdout } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
     const result = JSON.parse(stdout.trim());
     assert.equal(result.ok, true);
 
-    const backup = new DatabaseSync(join(remote, "papers.db"), { readOnly: true });
+    // The backup copy mirrors the live database name (library.db), consistently.
+    const backup = new DatabaseSync(join(remote, "library.db"), { readOnly: true });
     assert.equal(backup.prepare("SELECT COUNT(*) AS count FROM papers").get().count, 1);
     backup.close();
     assert.equal(await readFile(join(remote, "pdfs", "paper.pdf"), "utf8"), "pdf fixture");
     assert.equal(await readFile(join(remote, "html_snapshots", "paper.html"), "utf8"), "<p>fixture</p>");
+
+    // A second run is idempotent: nothing changes when the backup is current.
+    const { stdout: second } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
+    const secondResult = JSON.parse(second.trim());
+    assert.equal(Object.values(secondResult.changes).reduce((a, b) => a + b, 0), 0);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

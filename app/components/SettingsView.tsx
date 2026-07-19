@@ -261,7 +261,7 @@ const extractionVariables: PromptVariableDefinition[] = [
 
 function timeLabel(value: string | null): string {
   if (!value) {
-    return "Never synced in this session";
+    return "Never backed up in this session";
   }
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
@@ -534,7 +534,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       return;
     }
     if (!settings.sync.remotePath.trim()) {
-      notify("Choose a OneDrive directory before syncing.", "error");
+      notify("Choose a OneDrive backup folder first.", "error");
       return;
     }
     setSyncing(true);
@@ -553,7 +553,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       setSettings((current) => ({ ...current, sync: payload.sync }));
       notify(payload.result.summary);
     } catch (error) {
-      notify(error instanceof Error ? error.message : "OneDrive sync failed.", "error");
+      notify(error instanceof Error ? error.message : "OneDrive backup failed.", "error");
       await loadSettings();
     } finally {
       setSyncing(false);
@@ -864,7 +864,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                   <DoctorPaths label="Invalid PDF paths" paths={storageReport.invalidPdfPaths} />
                   <DoctorPaths label="Invalid HTML paths" paths={storageReport.invalidHtmlPaths} />
                   <div className="storage-doctor-actions">
-                    <p>{storageReport.capabilities?.fileChecks === false ? "Hosted Doctor checks D1 integrity, foreign keys, table counts, and orphaned associations. Local mode adds disk, PDF, and HTML checks." : "Cleanup deletes only unlinked files from PA’s managed pdfs/ and html_snapshots/ folders. It requires two confirmations and never deletes linked assets."}</p>
+                    <p>Cleanup deletes only unlinked files from PA’s managed pdfs/ and html_snapshots/ folders. It requires two confirmations and never deletes linked assets.</p>
                     <div className="storage-doctor-action-buttons">
                       <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage || !storageReport.capabilities?.repairs.length} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>{storageReport.mode === "hosted" ? "Repair database" : "Repair paths & filenames"}</ActionButton>
                       <ActionButton variant="danger" onClick={() => void cleanStorage()} disabled={cleaningStorage || !storageReport.orphanedFiles} icon={cleaningStorage ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}>Clean unlinked assets</ActionButton>
@@ -882,15 +882,15 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="sync-status-card">
               <span className={`sync-status-icon ${settings.sync.lastResult?.ok ? "is-success" : ""}`}><FolderSync size={20} /></span>
               <div><strong>{settings.sync.lastResult?.summary ?? (settings.local ? "Ready to connect OneDrive" : "Local companion required")}</strong><small>{settings.local ? timeLabel(settings.sync.lastSyncAt) : settings.sync.unavailableReason}</small></div>
-              <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "PA’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Syncing…" : "Sync now"}</ActionButton>
+              <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "PA’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive remote directory</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PA" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PA`} key={path} />)}</datalist><small>{settings.local ? "PA stores a consistent library backup plus pdfs/ and html_snapshots/ here." : "A hosted Worker cannot access a folder on this computer. Run PA locally to enable folder sync."}</small></label>
+                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PaperAssistant-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PaperAssistant-Backup`} key={path} />)}</datalist><small>{settings.local ? "PA writes a consistent library.db backup plus pdfs/ and html_snapshots/ here. Must differ from the live library folder." : "A hosted Worker cannot access a folder on this computer. Run PA locally to enable backups."}</small></label>
                 <label><span>Auto-sync interval</span><div className="unit-input"><input disabled={!settings.local} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
-              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-sync after live PA changes</strong><small>Uses local-wins conflict handling for background synchronization.</small></div></label>
-              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>The local library remains authoritative.</strong> Sync writes a consistent backup to OneDrive and never replaces the database used by the running PA server.</p></div>
+              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live PA changes</strong><small>Writes a fresh one-way backup to OneDrive in the background.</small></div></label>
+              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>The local library is authoritative.</strong> Backup writes a consistent one-way copy to OneDrive; it never reads the OneDrive copy back onto the live library. Restoring a backup is a manual step.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
