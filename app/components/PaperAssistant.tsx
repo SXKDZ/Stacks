@@ -3056,6 +3056,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   const [identifierSource, setIdentifierSource] = useState<IdentifierSource>("arxiv");
   const [identifier, setIdentifier] = useState("");
   const [bibliographyFile, setBibliographyFile] = useState<File | null>(null);
+  const [bibDragActive, setBibDragActive] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfDragActive, setPdfDragActive] = useState(false);
   const [results, setResults] = useState<DiscoveryResult[]>([]);
@@ -3073,6 +3074,17 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
       return;
     }
     setPdfFile(file);
+  }
+
+  function acceptDroppedBibliography(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+    if (!/\.(bib|bibtex|ris|txt)$/i.test(file.name)) {
+      notify("Drop a .bib, .bibtex, .ris, or .txt file to import.", "error");
+      return;
+    }
+    setBibliographyFile(file);
   }
 
   async function acquireImportSource(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -3366,9 +3378,14 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
         </form>
       ) : tab === "bibliography" ? (
         <form className="modal-body bibliography-import-form" onSubmit={importBibliography}>
-          <label className={`bibliography-dropzone ${bibliographyFile ? "has-file" : ""}`}>
+          <label
+            className={`bibliography-dropzone ${bibliographyFile ? "has-file" : ""} ${bibDragActive ? "is-dragging" : ""}`}
+            onDragOver={(event) => { event.preventDefault(); setBibDragActive(true); }}
+            onDragLeave={(event) => { event.preventDefault(); setBibDragActive(false); }}
+            onDrop={(event) => { event.preventDefault(); setBibDragActive(false); acceptDroppedBibliography(event.dataTransfer.files?.[0]); }}
+          >
             <span className="bibliography-upload-icon">{bibliographyFile ? <Check size={23} /> : <Upload size={23} />}</span>
-            <span><strong>{bibliographyFile?.name ?? "Choose a BibTeX or RIS file"}</strong><small>{bibliographyFile ? `${Math.max(1, Math.round(bibliographyFile.size / 1024))} KB · ready to import` : ".bib, .bibtex, .ris, or RIS-formatted .txt · up to 5 MB"}</small></span>
+            <span><strong>{bibliographyFile?.name ?? "Choose or drop a BibTeX or RIS file"}</strong><small>{bibliographyFile ? `${Math.max(1, Math.round(bibliographyFile.size / 1024))} KB · ready to import` : "Drag a file here or click to browse. .bib, .bibtex, .ris, or RIS-formatted .txt · up to 5 MB"}</small></span>
             <input
               type="file"
               accept=".bib,.bibtex,.ris,.txt,application/x-bibtex,application/x-research-info-systems"
