@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, CircleAlert, Home, LoaderCircle, Rss, Send, Square, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, Home, LoaderCircle, Rss, Send, Square, Wrench, X } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { ActionButton } from "@/app/components/ui/controls";
 
@@ -65,6 +65,7 @@ export default function FeedWorkspace() {
   const [replying, setReplying] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [streamNonce, setStreamNonce] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const eventsRef = useRef<EventSource | null>(null);
 
   const loadSnippets = useCallback(async () => {
@@ -97,6 +98,7 @@ export default function FeedWorkspace() {
     setMessages([]);
     setProposals([]);
     setReply("");
+    setError(null);
   }, [activeId]);
 
   // Self-correct if any snippet is showing as running: refresh the list on an
@@ -170,6 +172,7 @@ export default function FeedWorkspace() {
       return;
     }
     setReplying(true);
+    setError(null);
     try {
       const response = await fetch(`/api/feed/snippets/${activeId}/reply`, {
         method: "POST",
@@ -181,7 +184,12 @@ export default function FeedWorkspace() {
         // Re-open the event stream to follow the resumed turn.
         setStreamNonce((nonce) => nonce + 1);
         void loadSnippets();
+      } else {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        setError(payload.error ?? `Reply failed (${response.status}).`);
       }
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Reply failed.");
     } finally {
       setReplying(false);
     }
@@ -272,17 +280,57 @@ export default function FeedWorkspace() {
               ) : null}
               {(() => {
                 const final = finalResult(messages);
-                return messages.map((message) => (
-                  <div key={message.id} className={`feed-message feed-message-${message.kind}`}>
-                    {message.kind === "tool_use" ? (
-                      <code className="feed-tool">{message.content}</code>
-                    ) : message.kind === "error" ? (
-                      <div className="feed-error"><CircleAlert size={14} /> <span>{message.content}</span></div>
-                    ) : (
+                const nodes: ReactNode[] = [];
+                for (let i = 0; i < messages.length; i += 1) {
+                  const message = messages[i];
+                  if (message.kind === "tool_use") {
+                    // Fold the following tool_result (if any) into the same block.
+                    const next = messages[i + 1];
+                    const resultMessage = next && next.kind === "tool_result" ? next : null;
+                    if (resultMessage) {
+                      i += 1;
+                    }
+                    const space = message.content.indexOf(" ");
+                    const toolName = space === -1 ? message.content : message.content.slice(0, space);
+                    const toolInput = space === -1 ? "" : message.content.slice(space + 1);
+                    nodes.push(
+                      <details key={message.id} className="feed-tool-call">
+                        <summary><Wrench size={12} /> <span>{toolName}</span></summary>
+                        <div className="feed-tool-io">
+                          {toolInput ? <code className="feed-tool-block">{toolInput}</code> : null}
+                          {resultMessage ? <code className="feed-tool-block feed-tool-result">{resultMessage.content}</code> : null}
+                        </div>
+                      </details>,
+                    );
+                    continue;
+                  }
+                  if (message.kind === "tool_result") {
+                    // An orphan result (no preceding tool_use in view).
+                    nodes.push(
+                      <details key={message.id} className="feed-tool-call">
+                        <summary><ArrowLeft size={12} /> <span>tool result</span></summary>
+                        <div className="feed-tool-io"><code className="feed-tool-block feed-tool-result">{message.content}</code></div>
+                      </details>,
+                    );
+                    continue;
+                  }
+                  if (message.kind === "error") {
+                    nodes.push(
+                      <div key={message.id} className="feed-message feed-message-error">
+                        <div className="feed-error"><CircleAlert size={14} /> <span>{message.content}</span></div>
+                      </div>,
+                    );
+                    continue;
+                  }
+                  // User vs assistant turns get distinct alignment/styling.
+                  nodes.push(
+                    <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
+                      <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
                       <MarkdownContent content={message.content} className={`feed-bubble ${message.id === final?.id ? "is-final" : ""}`} />
-                    )}
-                  </div>
-                ));
+                    </div>,
+                  );
+                }
+                return nodes;
               })()}
               {proposals.length ? (
                 <div className="feed-proposals">
@@ -304,6 +352,7 @@ export default function FeedWorkspace() {
                 </div>
               ) : null}
             </div>
+            {error ? <div className="feed-error feed-error-banner"><CircleAlert size={14} /> <span>{error}</span></div> : null}
             {active.status !== "running" ? (
               <form className="feed-reply" onSubmit={sendReply}>
                 <textarea

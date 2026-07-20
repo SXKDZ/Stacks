@@ -380,28 +380,37 @@ body {
   color: var(--brand-blue);
 }
 
-/* AI feed gets a distinct accented treatment so it reads as its own workspace,
-   not another library view. Tinted surface + brand border + a beta badge. */
-.nav-item-feed {
-  background: var(--brand-blue-soft);
-  border: 1px solid color-mix(in srgb, var(--brand-blue) 26%, transparent);
-  color: var(--brand-blue-strong);
-  margin-top: 6px;
+/* AI feed reads as its own workspace: a solid brand-blue button with clear
+   white text (override the muted .nav-item color on the label and icon). */
+.nav-item-feed,
+.nav-item-feed span,
+.nav-item-feed svg {
+  color: #fff;
 }
 
-.nav-item-feed svg {
-  color: var(--brand-blue-strong);
+.nav-item-feed,
+.nav-item-feed:hover {
+  background: var(--brand-cta);
+  border: 1px solid var(--brand-cta-border);
+  box-shadow: 0 4px 12px var(--brand-cta-shadow);
+  color: #fff;
+  font-weight: 650;
+  margin-top: 8px;
 }
 
 .nav-item-feed:hover {
-  background: color-mix(in srgb, var(--brand-blue) 16%, transparent);
-  color: var(--brand-blue-strong);
+  background: var(--brand-cta-hover);
+  transform: translateY(-1px);
+}
+
+.nav-item-feed:hover span,
+.nav-item-feed:hover svg {
+  color: #fff;
 }
 
 .nav-item-badge {
-  background: color-mix(in srgb, var(--brand-blue) 22%, transparent);
+  background: color-mix(in srgb, #fff 20%, transparent);
   border-radius: var(--radius-pill);
-  color: var(--brand-blue-strong);
   font-size: var(--type-micro);
   font-weight: 800;
   letter-spacing: 0.06em;

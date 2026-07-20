@@ -1,10 +1,42 @@
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, statSync } from "node:fs";
+import { arch, platform, release } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { ensureDatabase } from "@/db/bootstrap";
 import { getRawConnection } from "@/db/client";
 import { databasePath, ensureLibraryDirectories, libraryRoot, setLibraryRoot, settingsPath } from "@/db/library-paths";
 import { papers } from "@/db/schema";
 import { inspectStorage } from "@/app/lib/local-files";
+
+const PLATFORM_LABELS: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
+
+/** Backend/runtime facts shown in the Doctor's System card. */
+function systemInfo() {
+  let sqliteVersion = "";
+  try {
+    const row = getRawConnection(databasePath()).prepare("select sqlite_version() as v").get() as { v?: string };
+    sqliteVersion = row?.v ?? "";
+  } catch {
+    // Non-fatal; leave blank.
+  }
+  // The AI feed drives a local `claude` CLI; report whether it's available.
+  let claudeVersion = "";
+  try {
+    claudeVersion = execFileSync(process.env.PA_CLAUDE_BIN?.trim() || "claude", ["--version"], {
+      timeout: 4000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+  } catch {
+    // CLI not installed / not on PATH.
+  }
+  return {
+    runtime: `Node.js ${process.version}`,
+    database: sqliteVersion ? `SQLite ${sqliteVersion} (better-sqlite3)` : "SQLite (better-sqlite3)",
+    platform: `${PLATFORM_LABELS[platform()] ?? platform()} ${release()} · ${arch()}`,
+    filesystemAvailable: true,
+    claudeCli: claudeVersion || null,
+  };
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -223,11 +255,7 @@ export async function POST(request: Request): Promise<Response> {
       databasePresent: storage.databaseExists,
       settingsPresent: true,
       databaseHealth,
-      systemHealth: {
-        runtime: "Node.js",
-        database: "SQLite (library.db)",
-        filesystemAvailable: true,
-      },
+      systemHealth: systemInfo(),
       assets: [],
       paperRecords,
       referencedPdfFiles: referencedPdf.length,

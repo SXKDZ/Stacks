@@ -5,6 +5,7 @@ import {
   Bot,
   Check,
   Cloud,
+  Cpu,
   CloudCog,
   ChevronDown,
   DatabaseBackup,
@@ -174,6 +175,8 @@ interface StorageReport {
     database: string;
     filesystemAvailable: boolean;
     freeBytes?: number;
+    platform?: string;
+    claudeCli?: string | null;
   };
 }
 
@@ -876,6 +879,13 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                     <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} papers`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} />
                     <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="Stored paths that do not satisfy PA’s portable-path rules" tone={storageReport.invalidReferences ? "bad" : "good"} />
                     <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} files`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} />
+                    {storageReport.systemHealth ? (
+                      <>
+                        <DoctorMetric icon={<Cpu size={17} />} label="Runtime" value={storageReport.systemHealth.runtime} detail={storageReport.systemHealth.platform ?? "Local server"} tone="good" />
+                        <DoctorMetric icon={<DatabaseBackup size={17} />} label="Database engine" value={storageReport.systemHealth.database} detail="Local SQLite file — no external database" tone="good" />
+                        <DoctorMetric icon={<Bot size={17} />} label="Claude CLI (AI feed)" value={storageReport.systemHealth.claudeCli ?? "Not found"} detail={storageReport.systemHealth.claudeCli ? "Available for headless feed agents" : "Install the claude CLI to use the AI feed"} tone={storageReport.systemHealth.claudeCli ? "good" : "warn"} />
+                      </>
+                    ) : null}
                   </div>
                   <DoctorPaths label="Missing PDF references" paths={storageReport.missingPdfPaths} />
                   <DoctorPaths label="Missing HTML references" paths={storageReport.missingHtmlPaths} />

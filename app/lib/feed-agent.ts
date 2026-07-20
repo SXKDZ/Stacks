@@ -42,6 +42,21 @@ export function feedWorkingDir(snippetId: string): string {
   return join(libraryRoot(), "feed", snippetId);
 }
 
+/** Flatten a tool_result content field (string, or array of text blocks) to text. */
+function toolResultText(content: unknown): string {
+  if (typeof content === "string") {
+    return content.slice(0, 4000);
+  }
+  if (Array.isArray(content)) {
+    const text = content
+      .map((block) => (block && typeof block === "object" && "text" in block ? String((block as { text: unknown }).text) : ""))
+      .filter(Boolean)
+      .join("\n");
+    return text.slice(0, 4000);
+  }
+  return "";
+}
+
 export function isFeedRunning(snippetId: string): boolean {
   return runs.has(snippetId);
 }
@@ -181,6 +196,8 @@ export async function runFeedAgent(options: {
   let buffer = "";
   let stderr = "";
   let sessionCaptured = resume;
+  let lastAssistantText = "";
+  let lastAssistantId: string | null = null;
 
   const handleLine = async (line: string) => {
     const trimmed = line.trim();
@@ -203,10 +220,25 @@ export async function runFeedAgent(options: {
       const message = event.message as { content?: Array<Record<string, unknown>> } | undefined;
       for (const block of message?.content ?? []) {
         if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
-          emit(snippetId, await persistMessage(snippetId, "assistant", "text", block.text));
+          const persisted = await persistMessage(snippetId, "assistant", "text", block.text);
+          lastAssistantText = block.text.trim();
+          if (persisted.type === "message") {
+            lastAssistantId = persisted.id;
+          }
+          emit(snippetId, persisted);
         } else if (block.type === "tool_use") {
-          const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {}).slice(0, 400)}`;
+          const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {}).slice(0, 800)}`;
           emit(snippetId, await persistMessage(snippetId, "assistant", "tool_use", summary));
+        }
+      }
+      return;
+    }
+    if (event.type === "user") {
+      // Tool results come back as a user-role message with tool_result blocks.
+      const message = event.message as { content?: Array<Record<string, unknown>> } | undefined;
+      for (const block of message?.content ?? []) {
+        if (block.type === "tool_result") {
+          emit(snippetId, await persistMessage(snippetId, "tool", "tool_result", toolResultText(block.content)));
         }
       }
       return;
@@ -214,8 +246,11 @@ export async function runFeedAgent(options: {
     if (event.type === "result") {
       const isError = Boolean(event.is_error);
       const text = typeof event.result === "string" ? event.result : "";
-      let resultMessageId: string | null = null;
-      if (text.trim()) {
+      // The result event repeats the final assistant text. Only persist it when
+      // it differs from the last assistant message (else the reply shows twice);
+      // otherwise reuse that message as the anchor for parsed proposals.
+      let resultMessageId: string | null = lastAssistantId;
+      if (text.trim() && text.trim() !== lastAssistantText) {
         const message = await persistMessage(snippetId, "assistant", "result", text);
         if (message.type === "message") {
           resultMessageId = message.id;
