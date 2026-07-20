@@ -151,7 +151,7 @@ const statusVariants = cva(
         inbox: "bg-[var(--status-inbox-soft)] text-[var(--status-inbox)]",
       },
       compact: {
-        true: "size-7 rounded-[var(--radius-pill)] border border-current p-0 text-[length:var(--type-caption)] opacity-[0.82] [&_svg]:size-[15px]",
+        true: "size-7 rounded-[var(--radius-pill)] border border-current p-0 text-[length:var(--type-caption)] [&_svg]:size-[15px]",
         false: "h-7 px-2 text-[length:var(--type-caption)]",
       },
     },

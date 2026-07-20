@@ -45,12 +45,15 @@
   --green-soft: rgba(86, 224, 160, 0.12);
   --rose: #ff7a85;
   --rose-soft: rgba(255, 122, 133, 0.12);
-  /* Preserve the original semantic status palette. */
-  --status-reading: #148895;
+  /* Semantic status palette. In dark mode these use the bright accent tokens
+     (--cyan/--amber) rather than the dark hex tuned for light backgrounds, so
+     the reading/inbox badges read clearly on the dark canvas. The light theme
+     overrides them back to darker, higher-contrast shades. */
+  --status-reading: var(--cyan);
   --status-reading-soft: var(--cyan-soft);
   --status-complete: var(--green);
   --status-complete-soft: var(--green-soft);
-  --status-inbox: #a86d15;
+  --status-inbox: var(--amber);
   --status-inbox-soft: var(--amber-soft);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16), 0 10px 28px rgba(0, 0, 0, 0.12);
   --shadow-md: 0 28px 80px rgba(0, 0, 0, 0.42), 0 3px 14px rgba(0, 0, 0, 0.24);
