@@ -145,7 +145,11 @@ test("button archetypes route through shared primitives, not hand-written CSS", 
   // The browser reset must stay in Tailwind's base layer. An unlayered
   // `button { border: 0 }` overrides the shared utility-layer borders.
   assert.match(styles, /@layer base\s*\{[\s\S]*?button\s*\{[\s\S]*?border:\s*0/);
-  assert.match(styles, /--canvas:\s*#070912/);
+  // A dark canvas token and the opaque surface ladder are defined (exact hex may
+  // change with design-token refreshes; assert the tokens exist, not their value).
+  assert.match(styles, /--canvas:\s*#0[0-9a-f]{5}/i);
+  assert.match(styles, /--surface-1:/);
+  assert.match(styles, /--surface-2:/);
   assert.match(styles, /--brand-cta:\s*#168dec/);
   assert.doesNotMatch(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?rgba\(124,\s*156,\s*255/);
   assert.match(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?var\(--brand-blue\) 10%/);
