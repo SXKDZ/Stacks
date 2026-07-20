@@ -900,10 +900,10 @@ function PaperAssistantWorkspace() {
 
       <aside className={`sidebar ${mobileNav ? "is-open" : ""}`}>
         <div className="brand-row">
-          <button className="brand" onClick={() => changeView("home")} aria-label="Paper Assistant home">
-            <span className="brand-mark">PA</span>
+          <button className="brand" onClick={() => changeView("home")} aria-label="Stacks home">
+            <img src="/favicon.svg" alt="" className="brand-logo" width={34} height={34} />
             <span className="brand-copy">
-              <strong>Paper Assistant</strong>
+              <strong>Stacks</strong>
               <span className="brand-slogan">Read deeper. Connect further.</span>
             </span>
           </button>
@@ -3347,7 +3347,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   }
 
   return (
-    <ModalFrame title="Add to Paper Assistant" subtitle="Search academic sources, import bibliography files, or enter metadata yourself." onClose={onClose} className="add-modal">
+    <ModalFrame title="Add to Stacks" subtitle="Search academic sources, import bibliography files, or enter metadata yourself." onClose={onClose} className="add-modal">
       <div className="modal-tabs">
         <TabButton variant="underline" active={tab === "search"} onClick={() => setTab("search")} icon={<Search />}>Academic search</TabButton>
         <TabButton variant="underline" active={tab === "identifier"} onClick={() => setTab("identifier")} icon={<Database />}>Identifier</TabButton>
@@ -4003,7 +4003,7 @@ function CommandPalette({ snapshot, onClose, setView, openPaper, addPaper }: {
   return (
     <div className="command-layer">
       <Scrim onClick={onClose} label="Close search" />
-      <section className="command-card" role="dialog" aria-modal="true" aria-label="Search Paper Assistant" onKeyDown={onKeyDown}>
+      <section className="command-card" role="dialog" aria-modal="true" aria-label="Search Stacks" onKeyDown={onKeyDown}>
         <label className="command-input">
           <Search size={19} />
           <input

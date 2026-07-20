@@ -1,8 +1,8 @@
 /**
  * Builds the prompt sent to the headless feed agent and parses the library
  * changes it proposes. The agent has no Bash and no API access, so it can never
- * mutate PA directly. Instead, when a task implies library changes, it emits a
- * fenced ```pa-proposals JSON block; PA parses that into proposals the user
+ * mutate the Stacks library directly. Instead, when a task implies library changes, it emits a
+ * fenced ```pa-proposals JSON block; Stacks parses that into proposals the user
  * approves or rejects. Approved proposals are applied through the library route.
  */
 
@@ -15,21 +15,21 @@ export interface ProposalOperation {
 }
 
 const PROPOSAL_INSTRUCTIONS = `
-You can query and edit the user's Paper Assistant library through a local HTTP
+You can query and edit the user's Stacks library through a local HTTP
 API, using the Bash tool with curl. The base URL and an auth token are in your
-environment as $PA_FEED_BASE_URL and $PA_FEED_TOKEN.
+environment as $STACKS_FEED_BASE_URL and $STACKS_FEED_TOKEN.
 
 READ (runs immediately — use this to answer questions like "is this already in
 my library?", to look up ids, counts, collections, etc.):
-  curl -s -H "Authorization: Bearer $PA_FEED_TOKEN" "$PA_FEED_BASE_URL/api/feed/library"
+  curl -s -H "Authorization: Bearer $STACKS_FEED_TOKEN" "$STACKS_FEED_BASE_URL/api/feed/library"
 Returns JSON: { papers[], authors[], venues[], collections[], stats }. Each
 paper has id, title, doi, arxivId, year, authors[], collections[], etc.
 
 WRITE (does NOT apply immediately — it QUEUES a proposal the user must approve):
-  curl -s -X POST -H "Authorization: Bearer $PA_FEED_TOKEN" \\
+  curl -s -X POST -H "Authorization: Bearer $STACKS_FEED_TOKEN" \\
     -H "Content-Type: application/json" \\
     -d '{"operation":{"entity":"paper","action":"create","data":{...},"summary":"..."}}' \\
-    "$PA_FEED_BASE_URL/api/feed/library"
+    "$STACKS_FEED_BASE_URL/api/feed/library"
 Or send several at once: {"proposals":[{...},{...}]}. Each operation:
   { "entity": "paper"|"author"|"venue"|"collection",
     "action": "create"|"update"|"delete",
@@ -45,11 +45,11 @@ RULES:
 - Only propose changes the user actually asked for.
 - If curl is unavailable for any reason, fall back to emitting one fenced
   pa-proposals block (a JSON array of the operations above) at the end of your
-  reply, and PA will pick it up.`;
+  reply, and Stacks will pick it up.`;
 
 export function buildSnippetPrompt(input: { instruction: string; freeText: string }): string {
   const parts: string[] = [
-    "You are PA Feed, a research assistant working inside Paper Assistant.",
+    "You are the Stacks AI feed agent, working inside the Stacks research library app.",
     "The user captured the following into their feed. Do what they ask, concisely.",
     PROPOSAL_INSTRUCTIONS,
     "",

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { readApplicationStyles } from "./read-application-styles.mjs";
 
-test("ships the Paper Assistant application shell and product metadata", async () => {
+test("ships the Stacks application shell and product metadata", async () => {
   const [page, layout, application, reader, settings, markdown, controls, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
@@ -31,7 +31,7 @@ test("ships the Paper Assistant application shell and product metadata", async (
   ]);
 
   assert.match(page, /<PaperAssistant \/>/);
-  assert.match(layout, /title: "Paper Assistant"/);
+  assert.match(layout, /title: "Stacks"/);
   assert.match(layout, /@fontsource-variable\/inter/);
   assert.match(layout, /@fontsource-variable\/jetbrains-mono/);
   assert.match(layout, /katex\/dist\/katex\.min\.css/);

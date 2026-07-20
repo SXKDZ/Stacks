@@ -192,7 +192,7 @@ export default function ReaderWorkspace() {
     <main className="reader-layer reader-page">
       <header className="reader-header">
         <div className="reader-brand">
-          <Link className="brand-mark" href="/" aria-label="Return to Paper Assistant">PA</Link>
+          <Link className="brand-logo-link" href="/" aria-label="Return to Stacks"><img src="/favicon.svg" alt="" className="brand-logo compact" width={30} height={30} /></Link>
           <span className="reader-file-identity">
             <small>{documentSource.kind}</small>
             <strong title={documentSource.value}>{documentSource.value}</strong>

@@ -72,16 +72,16 @@ const environmentKeys = new Set([
   "AWS_BEARER_TOKEN_BEDROCK",
   "AWS_REGION",
   "BEDROCK_MODEL_ID",
-  "PA_MAX_TOKENS",
-  "PA_PDF_PAGES",
-  "PA_CHAT_SYSTEM_PROMPT",
-  "PA_EXTRACTION_SYSTEM_PROMPT",
-  "PA_SUMMARY_SYSTEM_PROMPT",
-  "PA_TEMPERATURE",
-  "PA_AUTO_SYNC",
-  "PA_AUTO_SYNC_INTERVAL",
-  "PA_ONEDRIVE_PATH",
-  "PA_FEED_ENABLED",
+  "STACKS_MAX_TOKENS",
+  "STACKS_PDF_PAGES",
+  "STACKS_CHAT_SYSTEM_PROMPT",
+  "STACKS_EXTRACTION_SYSTEM_PROMPT",
+  "STACKS_SUMMARY_SYSTEM_PROMPT",
+  "STACKS_TEMPERATURE",
+  "STACKS_AUTO_SYNC",
+  "STACKS_AUTO_SYNC_INTERVAL",
+  "STACKS_ONEDRIVE_PATH",
+  "STACKS_FEED_ENABLED",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
 ]);
@@ -120,16 +120,16 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     AWS_BEARER_TOKEN_BEDROCK: settings.secrets.AWS_BEARER_TOKEN_BEDROCK,
     AWS_REGION: settings.ai.region,
     BEDROCK_MODEL_ID: settings.ai.modelId,
-    PA_MAX_TOKENS: settings.ai.maxTokens,
-    PA_PDF_PAGES: settings.ai.pdfPages,
-    PA_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
-    PA_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
-    PA_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
-    PA_TEMPERATURE: settings.ai.temperature,
-    PA_AUTO_SYNC: settings.sync.autoSync,
-    PA_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
-    PA_ONEDRIVE_PATH: settings.sync.remotePath,
-    PA_FEED_ENABLED: settings.feedEnabled,
+    STACKS_MAX_TOKENS: settings.ai.maxTokens,
+    STACKS_PDF_PAGES: settings.ai.pdfPages,
+    STACKS_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
+    STACKS_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
+    STACKS_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
+    STACKS_TEMPERATURE: settings.ai.temperature,
+    STACKS_AUTO_SYNC: settings.sync.autoSync,
+    STACKS_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
+    STACKS_ONEDRIVE_PATH: settings.sync.remotePath,
+    STACKS_FEED_ENABLED: settings.feedEnabled,
     SEMANTIC_SCHOLAR_API_KEY: settings.secrets.SEMANTIC_SCHOLAR_API_KEY,
     SERPAPI_KEY: settings.secrets.SERPAPI_KEY,
   };
@@ -208,21 +208,21 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
     ai: {
       modelId: envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
       region: envValue("AWS_REGION", "us-east-1"),
-      maxTokens: envValue("PA_MAX_TOKENS", "1200"),
-      temperature: envValue("PA_TEMPERATURE", "0.25"),
-      pdfPages: envValue("PA_PDF_PAGES", "10"),
+      maxTokens: envValue("STACKS_MAX_TOKENS", "1200"),
+      temperature: envValue("STACKS_TEMPERATURE", "0.25"),
+      pdfPages: envValue("STACKS_PDF_PAGES", "10"),
     },
     prompts: {
-      chatSystem: envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
-      extractionSystem: envValue("PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
-      summarySystem: envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
+      chatSystem: envValue("STACKS_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
+      extractionSystem: envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
+      summarySystem: envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
     sync: {
-      remotePath: envValue("PA_ONEDRIVE_PATH"),
-      autoSync: envValue("PA_AUTO_SYNC", "false"),
-      autoSyncInterval: envValue("PA_AUTO_SYNC_INTERVAL", "5"),
+      remotePath: envValue("STACKS_ONEDRIVE_PATH"),
+      autoSync: envValue("STACKS_AUTO_SYNC", "false"),
+      autoSyncInterval: envValue("STACKS_AUTO_SYNC_INTERVAL", "5"),
     },
-    feedEnabled: envValue("PA_FEED_ENABLED", "false"),
+    feedEnabled: envValue("STACKS_FEED_ENABLED", "false"),
     // Seed the secret baseline from the persisted settings file ONLY (no env
     // fallback). Otherwise a secret supplied purely through the environment
     // would be silently materialized into plaintext settings.json the first
@@ -240,16 +240,16 @@ function saveStructuredSettings(updates: Record<string, string>): void {
     switch (key) {
       case "BEDROCK_MODEL_ID": next.ai.modelId = value; break;
       case "AWS_REGION": next.ai.region = value; break;
-      case "PA_MAX_TOKENS": next.ai.maxTokens = value; break;
-      case "PA_TEMPERATURE": next.ai.temperature = value; break;
-      case "PA_PDF_PAGES": next.ai.pdfPages = value; break;
-      case "PA_CHAT_SYSTEM_PROMPT": next.prompts.chatSystem = value; break;
-      case "PA_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
-      case "PA_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
-      case "PA_ONEDRIVE_PATH": next.sync.remotePath = value; break;
-      case "PA_AUTO_SYNC": next.sync.autoSync = value; break;
-      case "PA_AUTO_SYNC_INTERVAL": next.sync.autoSyncInterval = value; break;
-      case "PA_FEED_ENABLED": next.feedEnabled = value; break;
+      case "STACKS_MAX_TOKENS": next.ai.maxTokens = value; break;
+      case "STACKS_TEMPERATURE": next.ai.temperature = value; break;
+      case "STACKS_PDF_PAGES": next.ai.pdfPages = value; break;
+      case "STACKS_CHAT_SYSTEM_PROMPT": next.prompts.chatSystem = value; break;
+      case "STACKS_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
+      case "STACKS_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
+      case "STACKS_ONEDRIVE_PATH": next.sync.remotePath = value; break;
+      case "STACKS_AUTO_SYNC": next.sync.autoSync = value; break;
+      case "STACKS_AUTO_SYNC_INTERVAL": next.sync.autoSyncInterval = value; break;
+      case "STACKS_FEED_ENABLED": next.feedEnabled = value; break;
       default:
         if (secretKeys.includes(key as typeof secretKeys[number])) {
           next.secrets[key] = value;
@@ -302,29 +302,29 @@ export function currentSettings() {
       provider: "bedrock",
       modelId: envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
       region: envValue("AWS_REGION", "us-east-1"),
-      maxTokens: Number(envValue("PA_MAX_TOKENS", "1200")) || 1200,
-      temperature: Number(envValue("PA_TEMPERATURE", "0.25")) || 0,
-      pdfPages: Math.min(20, Math.max(1, Number(envValue("PA_PDF_PAGES", "10")) || 10)),
+      maxTokens: Number(envValue("STACKS_MAX_TOKENS", "1200")) || 1200,
+      temperature: Number(envValue("STACKS_TEMPERATURE", "0.25")) || 0,
+      pdfPages: Math.min(20, Math.max(1, Number(envValue("STACKS_PDF_PAGES", "10")) || 10)),
     },
     integrations: Object.fromEntries(
       secretKeys.map((key) => [key, Boolean(envValue(key))]),
     ),
     prompts: {
-      chatSystem: envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
-      extractionSystem: envValue("PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
-      summarySystem: envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
+      chatSystem: envValue("STACKS_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
+      extractionSystem: envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
+      summarySystem: envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
     sync: {
-      remotePath: envValue("PA_ONEDRIVE_PATH"),
-      autoSync: truthy(envValue("PA_AUTO_SYNC", "false")),
-      autoSyncInterval: Number(envValue("PA_AUTO_SYNC_INTERVAL", "5")) || 5,
+      remotePath: envValue("STACKS_ONEDRIVE_PATH"),
+      autoSync: truthy(envValue("STACKS_AUTO_SYNC", "false")),
+      autoSyncInterval: Number(envValue("STACKS_AUTO_SYNC_INTERVAL", "5")) || 5,
       detectedPaths: detectOneDrivePaths(),
       running: syncRunning,
       lastSyncAt,
       lastResult: lastSyncResult,
       sourceExists: Boolean(databaseSource()),
     },
-    feedEnabled: truthy(envValue("PA_FEED_ENABLED", "false")),
+    feedEnabled: truthy(envValue("STACKS_FEED_ENABLED", "false")),
   };
 }
 
@@ -332,18 +332,18 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
   const updates: Record<string, string> = {
     BEDROCK_MODEL_ID: String(data.modelId ?? envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")).trim(),
     AWS_REGION: String(data.region ?? envValue("AWS_REGION", "us-east-1")).trim(),
-    PA_MAX_TOKENS: String(Math.max(128, Number(data.maxTokens) || 1200)),
-    PA_PDF_PAGES: String(Math.min(20, Math.max(1, Number(data.pdfPages) || 10))),
-    PA_CHAT_SYSTEM_PROMPT: String(data.chatSystemPrompt ?? envValue("PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT)).trim(),
-    PA_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
-    PA_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
-    PA_TEMPERATURE: String(Math.min(1, Math.max(0, Number(data.temperature) || 0))),
-    PA_ONEDRIVE_PATH: String(data.remotePath ?? envValue("PA_ONEDRIVE_PATH")).trim(),
-    PA_AUTO_SYNC: data.autoSync ? "true" : "false",
-    PA_AUTO_SYNC_INTERVAL: String(Math.min(3600, Math.max(5, Number(data.autoSyncInterval) || 5))),
-    PA_FEED_ENABLED: typeof data.feedEnabled === "boolean"
+    STACKS_MAX_TOKENS: String(Math.max(128, Number(data.maxTokens) || 1200)),
+    STACKS_PDF_PAGES: String(Math.min(20, Math.max(1, Number(data.pdfPages) || 10))),
+    STACKS_CHAT_SYSTEM_PROMPT: String(data.chatSystemPrompt ?? envValue("STACKS_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT)).trim(),
+    STACKS_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
+    STACKS_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
+    STACKS_TEMPERATURE: String(Math.min(1, Math.max(0, Number(data.temperature) || 0))),
+    STACKS_ONEDRIVE_PATH: String(data.remotePath ?? envValue("STACKS_ONEDRIVE_PATH")).trim(),
+    STACKS_AUTO_SYNC: data.autoSync ? "true" : "false",
+    STACKS_AUTO_SYNC_INTERVAL: String(Math.min(3600, Math.max(5, Number(data.autoSyncInterval) || 5))),
+    STACKS_FEED_ENABLED: typeof data.feedEnabled === "boolean"
       ? (data.feedEnabled ? "true" : "false")
-      : envValue("PA_FEED_ENABLED", "false"),
+      : envValue("STACKS_FEED_ENABLED", "false"),
   };
   for (const key of secretKeys) {
     const replacement = data.secrets?.[key]?.trim();
@@ -373,7 +373,7 @@ export async function runSync(auto = false): Promise<SyncResult> {
     throw new Error("A PA backup is already running.");
   }
   const localDatabase = databaseSource();
-  const remoteDirectory = envValue("PA_ONEDRIVE_PATH");
+  const remoteDirectory = envValue("STACKS_ONEDRIVE_PATH");
   if (!localDatabase) {
     throw new Error("The local PA database is not available yet.");
   }

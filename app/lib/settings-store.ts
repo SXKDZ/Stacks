@@ -93,19 +93,19 @@ function environmentDefaults(): StoredSettings {
     ai: {
       modelId: process.env.BEDROCK_MODEL_ID?.trim() || "us.anthropic.claude-sonnet-4-6",
       region: process.env.AWS_REGION?.trim() || "us-east-1",
-      maxTokens: number(process.env.PA_MAX_TOKENS, 1200, 128, 32_000),
-      temperature: number(process.env.PA_TEMPERATURE, 0.25, 0, 1),
-      pdfPages: number(process.env.PA_PDF_PAGES, 10, 1, 20),
+      maxTokens: number(process.env.STACKS_MAX_TOKENS, 1200, 128, 32_000),
+      temperature: number(process.env.STACKS_TEMPERATURE, 0.25, 0, 1),
+      pdfPages: number(process.env.STACKS_PDF_PAGES, 10, 1, 20),
     },
     prompts: {
-      chatSystem: process.env.PA_CHAT_SYSTEM_PROMPT?.trim() || DEFAULT_CHAT_SYSTEM_PROMPT,
-      extractionSystem: process.env.PA_EXTRACTION_SYSTEM_PROMPT?.trim() || DEFAULT_EXTRACTION_SYSTEM_PROMPT,
-      summarySystem: process.env.PA_SUMMARY_SYSTEM_PROMPT?.trim() || DEFAULT_SUMMARY_SYSTEM_PROMPT,
+      chatSystem: process.env.STACKS_CHAT_SYSTEM_PROMPT?.trim() || DEFAULT_CHAT_SYSTEM_PROMPT,
+      extractionSystem: process.env.STACKS_EXTRACTION_SYSTEM_PROMPT?.trim() || DEFAULT_EXTRACTION_SYSTEM_PROMPT,
+      summarySystem: process.env.STACKS_SUMMARY_SYSTEM_PROMPT?.trim() || DEFAULT_SUMMARY_SYSTEM_PROMPT,
     },
     sync: {
-      remotePath: process.env.PA_ONEDRIVE_PATH?.trim() || "",
-      autoSync: ["1", "true", "yes", "on"].includes((process.env.PA_AUTO_SYNC ?? "").toLowerCase()),
-      autoSyncInterval: number(process.env.PA_AUTO_SYNC_INTERVAL, 5, 5, 3600),
+      remotePath: process.env.STACKS_ONEDRIVE_PATH?.trim() || "",
+      autoSync: ["1", "true", "yes", "on"].includes((process.env.STACKS_AUTO_SYNC ?? "").toLowerCase()),
+      autoSyncInterval: number(process.env.STACKS_AUTO_SYNC_INTERVAL, 5, 5, 3600),
     },
   };
 }
@@ -220,12 +220,12 @@ export async function storedRuntimeValues(): Promise<Record<string, string>> {
   const values: Record<string, string> = {
     AWS_REGION: settings.ai.region,
     BEDROCK_MODEL_ID: settings.ai.modelId,
-    PA_MAX_TOKENS: String(settings.ai.maxTokens),
-    PA_TEMPERATURE: String(settings.ai.temperature),
-    PA_PDF_PAGES: String(settings.ai.pdfPages),
-    PA_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
-    PA_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
-    PA_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
+    STACKS_MAX_TOKENS: String(settings.ai.maxTokens),
+    STACKS_TEMPERATURE: String(settings.ai.temperature),
+    STACKS_PDF_PAGES: String(settings.ai.pdfPages),
+    STACKS_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
+    STACKS_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
+    STACKS_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
   };
   // Secrets come from the library settings.json (or env); include only the ones
   // that resolve to a value so callers can fall back to process.env otherwise.

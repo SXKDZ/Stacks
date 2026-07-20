@@ -70,8 +70,11 @@ test("persists local settings atomically and backs up the normalized library", a
   assert.match(settings, /mkdirSync\(resolvedRemote/);
   assert.match(settings, /must be outside the live library folder/);
   assert.doesNotMatch(settings, /Choose an existing folder/);
-  assert.match(example, /PA_ONEDRIVE_PATH/);
-  assert.match(example, /PA_MAX_TOKENS/);
+  // App config lives in settings.json now; the env template only seeds secrets
+  // and the library-dir bootstrap.
+  assert.match(example, /AWS_BEARER_TOKEN_BEDROCK/);
+  assert.match(example, /STACKS_LIBRARY_DIR/);
+  assert.doesNotMatch(example, /STACKS_MAX_TOKENS|STACKS_TEMPERATURE|STACKS_ONEDRIVE_PATH/);
   assert.match(ignore, /data\/settings\.json/);
 });
 
@@ -129,7 +132,7 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(doctor, /setLibraryRoot\(target\)/);
   assert.match(doctor, /folderMove: true/);
   assert.doesNotMatch(doctor, /Move the library folder from the filesystem/);
-  assert.match(chat, /PA_PDF_PAGES/);
+  assert.match(chat, /STACKS_PDF_PAGES/);
   assert.match(chat, /pdfStartPage/);
   assert.match(grounding, /getDocumentProxy/);
   // SSRF guards live in the shared url-safety module and are used on every
@@ -274,7 +277,7 @@ test("tracks long-running work while persisting chat as separate discussions", a
   assert.match(tasks, /pa-activity-log-v1/);
   assert.match(application, /Generate summary ·/);
   assert.match(application, /Copy \$\{file\.name\} into PA storage/);
-  assert.match(settings, /Back up PA library to OneDrive/);
+  assert.match(settings, /Back up Stacks library to OneDrive/);
   assert.match(chatWorkspace, /pa-chat-sessions-v2/);
   assert.match(chatWorkspace, /persistSessions/);
   assert.match(chatWorkspace, /Discussion title/);
@@ -321,7 +324,9 @@ test("runs the library on a local SQLite file in the self-contained library fold
   assert.match(paths, /settings\.json/);
   assert.match(paths, /export function libraryRoot/);
   // The live library defaults to a local path; OneDrive is only a backup target.
-  assert.match(paths, /\.paperassistant", "library"/);
+  // The live library defaults to a local path under ~/.stacks; OneDrive is only a backup target.
+  assert.match(paths, /"\.stacks"/);
+  assert.match(paths, /defaultLibraryRoot = join\(configDir, "library"\)/);
   // Stored PDFs/HTML are served by a real Node helper with a traversal guard.
   assert.match(localFiles, /application\/pdf/);
   assert.match(localFiles, /basename/);

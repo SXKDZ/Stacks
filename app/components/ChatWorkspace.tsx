@@ -592,14 +592,14 @@ export default function ChatWorkspace() {
   }
 
   if (!library || !activeSession) {
-    return <main className="chat-workspace-loading"><p>Paper Assistant could not load the local library.</p><Link href="/"><Home size={16} /> Return to library</Link></main>;
+    return <main className="chat-workspace-loading"><p>Stacks could not load the local library.</p><Link href="/"><Home size={16} /> Return to library</Link></main>;
   }
 
   return (
     <main className={`chat-workspace-page ${historyOpen ? "history-is-open" : ""} ${contextOpen ? "context-is-open" : ""}`}>
       <aside className="chat-history-panel">
         <header>
-          <Link href="/" aria-label="Return to Paper Assistant"><span className="brand-mark compact">PA</span><span><strong>Paper Assistant</strong><small>Chat history</small></span></Link>
+          <Link href="/" aria-label="Return to Stacks"><img src="/favicon.svg" alt="" className="brand-logo compact" width={30} height={30} /><span><strong>Stacks</strong><small>Chat history</small></span></Link>
           <ActionButton variant="ghost" size="icon" className="chat-history-close" onClick={() => setHistoryOpen(false)} aria-label="Close chat history" icon={<PanelLeftClose />} />
         </header>
         <ActionButton variant="primary" className="my-3 w-full" onClick={createNewSession} icon={<MessageSquarePlus />}>New discussion</ActionButton>
@@ -667,7 +667,7 @@ export default function ChatWorkspace() {
               <div className="chat-workspace-bubble-wrap">
                 {message.content
                   ? <MarkdownContent content={message.content} className="chat-workspace-bubble" />
-                  : <div className="typing chat-workspace-typing" role="status" aria-label="Paper Assistant is responding"><i /><i /><i /></div>}
+                  : <div className="typing chat-workspace-typing" role="status" aria-label="Stacks is responding"><i /><i /><i /></div>}
                 {message.role === "assistant" ? <GroundingReceipt grounding={message.grounding} /> : null}
               </div>
             </div>
@@ -675,7 +675,7 @@ export default function ChatWorkspace() {
           {loading && activeSession.messages[activeSession.messages.length - 1]?.role !== "assistant" ? (
             <div className="chat-workspace-message message-assistant">
               <span className="message-avatar"><Sparkles size={26} /></span>
-              <div className="typing chat-workspace-typing" role="status" aria-label="Paper Assistant is responding">
+              <div className="typing chat-workspace-typing" role="status" aria-label="Stacks is responding">
                 <i />
                 <i />
                 <i />

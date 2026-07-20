@@ -228,7 +228,7 @@ async function searchArxiv(query: string, idOnly = false): Promise<DiscoveryResu
     url.searchParams.set("max_results", "8");
     url.searchParams.set("sortBy", "relevance");
   }
-  const response = await fetch(url, { headers: { "User-Agent": "PaperAssistant/0.1" } });
+  const response = await fetch(url, { headers: { "User-Agent": "Stacks/0.1" } });
   if (!response.ok) {
     throw new Error(`arXiv returned ${response.status}.`);
   }
@@ -313,7 +313,7 @@ async function searchCrossref(query: string): Promise<DiscoveryResult[]> {
   url.searchParams.set("query", query);
   url.searchParams.set("rows", "8");
   url.searchParams.set("select", "DOI,title,abstract,author,published,created,container-title,type,URL,link");
-  const response = await fetch(url, { headers: { "User-Agent": "PaperAssistant/0.1 (mailto:paperassistant@localhost)" } });
+  const response = await fetch(url, { headers: { "User-Agent": "Stacks/0.1 (mailto:stacks@localhost)" } });
   if (!response.ok) {
     throw new Error(`Crossref returned ${response.status}.`);
   }
@@ -324,7 +324,7 @@ async function searchCrossref(query: string): Promise<DiscoveryResult[]> {
 async function importDoi(identifier: string): Promise<DiscoveryResult> {
   const doi = identifier.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").replace(/^doi:\s*/i, "").trim();
   const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`, {
-    headers: { "User-Agent": "PaperAssistant/0.1 (mailto:paperassistant@localhost)" },
+    headers: { "User-Agent": "Stacks/0.1 (mailto:stacks@localhost)" },
   });
   if (!response.ok) {
     throw new Error(`Crossref could not resolve that DOI (${response.status}).`);
@@ -387,7 +387,7 @@ async function importOpenReview(identifier: string): Promise<DiscoveryResult> {
   let payload: UnknownRecord = {};
   let lastStatus = 0;
   for (const url of urls) {
-    const response = await fetch(url, { headers: { "User-Agent": "PaperAssistant/0.1", Accept: "application/json" } });
+    const response = await fetch(url, { headers: { "User-Agent": "Stacks/0.1", Accept: "application/json" } });
     lastStatus = response.status;
     if (response.ok) {
       payload = asRecord(await response.json());

@@ -1,7 +1,7 @@
 import ReaderWorkspace from "@/app/components/ReaderWorkspace";
 
 export const metadata = {
-  title: "Reader — Paper Assistant",
+  title: "Reader — Stacks",
 };
 
 export default function ReaderPage() {

@@ -148,7 +148,7 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning: "Bedrock is not configured; PA used embedded PDF metadata and text heuristics." });
     }
 
-    const template = runtimeValue(runtime, "PA_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT);
+    const template = runtimeValue(runtime, "STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT);
     const prompt = renderPromptTemplate(template, {
       filename,
       embedded_metadata: JSON.stringify(info),

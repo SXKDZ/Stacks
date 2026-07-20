@@ -22,7 +22,7 @@ function systemInfo() {
   // The AI feed drives a local `claude` CLI; report whether it's available.
   let claudeVersion = "";
   try {
-    claudeVersion = execFileSync(process.env.PA_CLAUDE_BIN?.trim() || "claude", ["--version"], {
+    claudeVersion = execFileSync(process.env.STACKS_CLAUDE_BIN?.trim() || "claude", ["--version"], {
       timeout: 4000,
       stdio: ["ignore", "pipe", "ignore"],
     }).toString().trim();

@@ -12,7 +12,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Paper Assistant crashed:", error);
+    console.error("Stacks crashed:", error);
   }, [error]);
 
   return (

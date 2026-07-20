@@ -244,6 +244,25 @@ body {
   width: 33px;
 }
 
+/* The Stacks logo (public/favicon.svg) is a self-contained tiled mark, so it
+   needs no background box — just size and round it. Used in place of a glyph. */
+.brand-logo {
+  border-radius: 8px;
+  display: block;
+  flex-shrink: 0;
+  height: 34px;
+  width: 34px;
+}
+
+.brand-logo.compact {
+  height: 30px;
+  width: 30px;
+}
+
+.brand-logo-link {
+  display: inline-flex;
+}
+
 .brand-mark::after {
   background: var(--brand-blue);
   border: 2px solid var(--ink);

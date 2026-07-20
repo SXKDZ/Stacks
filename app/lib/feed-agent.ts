@@ -26,7 +26,7 @@ type FeedEvent =
   | { type: "done"; status: string };
 
 const MAX_TURNS = "40";
-const CLAUDE_BIN = process.env.PA_CLAUDE_BIN?.trim() || "claude";
+const CLAUDE_BIN = process.env.STACKS_CLAUDE_BIN?.trim() || "claude";
 
 interface RunHandle {
   child: ChildProcess;
@@ -142,7 +142,7 @@ function emit(snippetId: string, event: FeedEvent): void {
 }
 
 function feedBaseUrl(): string {
-  return process.env.PA_FEED_BASE_URL?.trim() || `http://127.0.0.1:${process.env.PORT?.trim() || "3000"}`;
+  return process.env.STACKS_FEED_BASE_URL?.trim() || `http://127.0.0.1:${process.env.PORT?.trim() || "3000"}`;
 }
 
 async function agentEnv(feedToken: string): Promise<NodeJS.ProcessEnv> {
@@ -153,8 +153,8 @@ async function agentEnv(feedToken: string): Promise<NodeJS.ProcessEnv> {
     ...process.env,
     ...(token ? { CLAUDE_CODE_USE_BEDROCK: "1", AWS_BEARER_TOKEN_BEDROCK: token, AWS_REGION: region } : {}),
     // The agent uses these (via Bash + curl) to query and edit the library.
-    PA_FEED_BASE_URL: feedBaseUrl(),
-    PA_FEED_TOKEN: feedToken,
+    STACKS_FEED_BASE_URL: feedBaseUrl(),
+    STACKS_FEED_TOKEN: feedToken,
   };
 }
 

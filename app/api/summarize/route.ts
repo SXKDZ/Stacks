@@ -68,7 +68,7 @@ export async function POST(request: Request): Promise<Response> {
     ].filter(Boolean).join("\n\n");
     const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
     const model = runtimeValue(runtime, "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6");
-    const configuredPrompt = runtimeValue(runtime, "PA_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT);
+    const configuredPrompt = runtimeValue(runtime, "STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT);
     const templatedPrompt = renderPromptTemplate(configuredPrompt, {
       paper: context,
       paper1: context,
@@ -90,8 +90,8 @@ export async function POST(request: Request): Promise<Response> {
         role: "user",
         content: "Write the structured academic review defined by the system prompt. Cover every requested section, explicitly marking material that is not described or not applicable.",
       }],
-      maxTokens: Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1400"))),
-      temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "PA_TEMPERATURE", "0.2")))),
+      maxTokens: Math.max(128, Number(runtimeValue(runtime, "STACKS_MAX_TOKENS", "1400"))),
+      temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "STACKS_TEMPERATURE", "0.2")))),
     });
     const summary = result.content;
     if (!summary) {

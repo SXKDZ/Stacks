@@ -58,7 +58,7 @@ export async function safeFetch(url: URL, options: SafeFetchOptions = {}): Promi
       const response = await fetch(current, {
         redirect: "manual",
         signal: controller.signal,
-        headers: { "User-Agent": "PaperAssistant/1.0 (+local research library)", ...headers },
+        headers: { "User-Agent": "Stacks/1.0 (+local research library)", ...headers },
       });
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");

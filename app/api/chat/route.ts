@@ -56,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
     const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
     const model = runtimeValue(runtime, "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6");
     const papers = (body.papers?.length ? body.papers : body.paper ? [body.paper] : []).slice(0, 8);
-    const configuredPdfPages = Math.min(20, Math.max(1, Number(runtimeValue(runtime, "PA_PDF_PAGES", "10")) || 10));
+    const configuredPdfPages = Math.min(20, Math.max(1, Number(runtimeValue(runtime, "STACKS_PDF_PAGES", "10")) || 10));
     const pdfStartPage = Math.min(20, Math.max(1, Math.floor(Number(body.pdfStartPage) || 1)));
     const pdfEndPage = Math.min(20, Math.max(pdfStartPage, Math.floor(Number(body.pdfEndPage) || (pdfStartPage + configuredPdfPages - 1))));
     // Fetch every paper's document text concurrently (each can take seconds),
@@ -103,7 +103,7 @@ export async function POST(request: Request): Promise<Response> {
     const paperContext = paperContexts.length
       ? paperContexts.join("\n\n---\n\n")
       : "No paper is selected. Help with the research library as a whole.";
-    const configuredPrompt = runtimeValue(runtime, "PA_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT);
+    const configuredPrompt = runtimeValue(runtime, "STACKS_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT);
     const replacements: Record<string, string> = {
       paper_count: String(paperContexts.length),
       papers: paperContext,
@@ -128,8 +128,8 @@ export async function POST(request: Request): Promise<Response> {
       model,
       system: `${systemPrompt}\n\nGive concise, useful next steps. Format responses as GitHub-flavored Markdown. Use $...$ for inline mathematics and $$...$$ on separate lines for display equations. Use fenced code blocks when code is useful.`,
       messages,
-      maxTokens: Math.max(128, Number(runtimeValue(runtime, "PA_MAX_TOKENS", "1200"))),
-      temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "PA_TEMPERATURE", "0.25")))),
+      maxTokens: Math.max(128, Number(runtimeValue(runtime, "STACKS_MAX_TOKENS", "1200"))),
+      temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "STACKS_TEMPERATURE", "0.25")))),
       // Forward the client's abort so stopping generation cancels the upstream
       // Bedrock request rather than letting it run (and bill) to completion.
       signal: request.signal,

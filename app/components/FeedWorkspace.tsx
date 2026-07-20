@@ -368,7 +368,7 @@ export default function FeedWorkspace() {
     <main className="feed-page">
       <div className="feed-column">
         <header className="feed-column-header">
-          <Link href="/" aria-label="Return to Paper Assistant" className="feed-brand"><span className="brand-mark compact">PA</span><span><strong>Paper Assistant</strong><small>AI feed</small></span></Link>
+          <Link href="/" aria-label="Return to Stacks" className="feed-brand"><img src="/favicon.svg" alt="" className="brand-logo compact" width={30} height={30} /><span><strong>Stacks</strong><small>AI feed</small></span></Link>
         </header>
         <form className="feed-composer" onSubmit={createSnippet}>
           <textarea

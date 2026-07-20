@@ -29,7 +29,7 @@ export async function GET(request: Request): Promise<Response> {
     const response = await fetch(RELEASES_ENDPOINT, {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": `PaperAssistant/${currentVersion}`,
+        "User-Agent": `Stacks/${currentVersion}`,
       },
     });
     if (!response.ok) {
@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
       releaseName: release.name || release.tag_name || latestVersion,
       releaseUrl: typeof release.html_url === "string" && release.html_url.startsWith("https://github.com/") ? release.html_url : null,
       publishedAt: release.published_at ?? null,
-      message: newerVersion(latestVersion, currentVersion) ? `Paper Assistant ${latestVersion} is available.` : "Paper Assistant is up to date.",
+      message: newerVersion(latestVersion, currentVersion) ? `Stacks ${latestVersion} is available.` : "Stacks is up to date.",
     });
   } catch (error) {
     return Response.json({

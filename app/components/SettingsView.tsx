@@ -253,7 +253,7 @@ const discussionVariables: PromptVariableDefinition[] = [
 
 const summaryVariables: PromptVariableDefinition[] = [
   { token: "{{paper}}", description: "The complete selected-paper context: metadata, abstract, and extracted source text." },
-  { token: "{{paper1}}", description: "An exact alias of {{paper}} for PA’s numbered-paper convention." },
+  { token: "{{paper1}}", description: "An exact alias of {{paper}} for Stacks’s numbered-paper convention." },
   { token: "{{title}}", description: "The selected paper’s title." },
   { token: "{{authors}}", description: "The selected paper’s author names, joined with commas." },
   { token: "{{venue}}", description: "The selected paper’s venue or publication source." },
@@ -478,7 +478,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
   async function chooseStorageDirectory() {
     if (storageReport?.capabilities?.folderMove === false) {
-      notify("Moving a local library folder requires PA's local filesystem companion.", "info");
+      notify("Moving a local library folder requires Stacks's local filesystem companion.", "info");
       return;
     }
     setSelectingStorageDirectory(true);
@@ -535,7 +535,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       const saved = (await response.json()) as SettingsSnapshot;
       setSettings(saved);
       setSecrets({});
-      notify(saved.local ? "Settings saved to PA’s protected local settings file." : "Settings saved to PA’s application database.");
+      notify(saved.local ? "Settings saved to Stacks’s protected local settings file." : "Settings saved to Stacks’s application database.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Settings could not be saved.", "error");
     } finally {
@@ -554,7 +554,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
     setSyncing(true);
     try {
-      const payload = await runTask("Back up PA library to OneDrive", async () => {
+      const payload = await runTask("Back up Stacks library to OneDrive", async () => {
         const response = await fetch("/api/local-sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -584,7 +584,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       }
       setVersionInfo(await response.json() as VersionInfo);
     } catch (error) {
-      notify(error instanceof Error ? error.message : "PA could not check for updates.", "error");
+      notify(error instanceof Error ? error.message : "Stacks could not check for updates.", "error");
     } finally {
       setCheckingVersion(false);
     }
@@ -614,7 +614,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         notify(`Doctor checked ${report.paperRecords} papers and ${report.totalFiles} managed files.`, report.missingPdfFiles || report.missingHtmlFiles || report.invalidReferences ? "info" : "success");
       }
     } catch (error) {
-      notify(error instanceof Error ? error.message : "Library Doctor could not inspect PA storage.", "error");
+      notify(error instanceof Error ? error.message : "Library Doctor could not inspect Stacks storage.", "error");
     } finally {
       setCheckingStorage(false);
     }
@@ -622,11 +622,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
   async function cleanStorage() {
     if (!storageReport?.orphanedFiles) {
-      notify("Doctor did not find any unlinked PA-managed assets.", "info");
+      notify("Doctor did not find any unlinked Stacks-managed assets.", "info");
       return;
     }
     const summary = `${storageReport.orphanedFiles} unlinked file${storageReport.orphanedFiles === 1 ? "" : "s"} (${byteLabel(storageReport.orphanedBytes)})`;
-    if (!window.confirm(`Remove ${summary} from the active PA library? Referenced files will not be touched.`)) {
+    if (!window.confirm(`Remove ${summary} from the active Stacks library? Referenced files will not be touched.`)) {
       return;
     }
     if (!window.confirm(`Final confirmation: permanently delete ${summary}? This cannot be undone.`)) {
@@ -662,7 +662,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
   async function repairStorage() {
     const description = "remove orphaned association rows, delete authors, venues, and collections left with no papers, and delete unlinked files from the managed pdfs/ and html_snapshots/ folders";
-    if (!window.confirm(`Repair PA now? Doctor will ${description}. Missing or ambiguous files will be left unchanged.`)) {
+    if (!window.confirm(`Repair Stacks now? Doctor will ${description}. Missing or ambiguous files will be left unchanged.`)) {
       return;
     }
     if (!window.confirm("Final confirmation: apply these database and managed-file repairs?")) {
@@ -670,7 +670,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
     setRepairingStorage(true);
     try {
-      const report = await runTask("Repair PA library", async () => {
+      const report = await runTask("Repair Stacks library", async () => {
         const response = await fetch("/api/storage-management", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -700,7 +700,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         await inspectStorage(false);
       }
     } catch (error) {
-      notify(error instanceof Error ? error.message : "PA could not complete the repair.", "error");
+      notify(error instanceof Error ? error.message : "Stacks could not complete the repair.", "error");
     } finally {
       setRepairingStorage(false);
     }
@@ -709,14 +709,14 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   async function moveLibrary() {
     const targetPath = storageTarget.trim();
     if (!targetPath) {
-      notify("Choose a destination for the PA library first.", "info");
+      notify("Choose a destination for the Stacks library first.", "info");
       return;
     }
-    const sourcePath = storageReport?.libraryRoot ?? "the active PA library";
-    if (!window.confirm(`Move the complete PA library from ${sourcePath} to ${targetPath}?`)) {
+    const sourcePath = storageReport?.libraryRoot ?? "the active Stacks library";
+    if (!window.confirm(`Move the complete Stacks library from ${sourcePath} to ${targetPath}?`)) {
       return;
     }
-    if (!window.confirm("Final confirmation: copy PA’s managed PDFs and HTML snapshots to the new location, switch local file storage to it, and remove the old managed-file folder?")) {
+    if (!window.confirm("Final confirmation: copy Stacks’s managed PDFs and HTML snapshots to the new location, switch local file storage to it, and remove the old managed-file folder?")) {
       return;
     }
     setMovingStorage(true);
@@ -741,9 +741,9 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       const report = await response.json() as StorageReport;
       setStorageReport(report);
       setStorageTarget("");
-      notify(`PA now uses ${report.libraryRoot}.`, "success");
+      notify(`Stacks now uses ${report.libraryRoot}.`, "success");
     } catch (error) {
-      notify(error instanceof Error ? error.message : "The PA library could not be moved.", "error");
+      notify(error instanceof Error ? error.message : "The Stacks library could not be moved.", "error");
     } finally {
       setMovingStorage(false);
     }
@@ -784,10 +784,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "appearance" ? (
           <section>
-            <SettingsHeading icon={<Palette size={19} />} title="Appearance" detail="Personalize this browser without changing PA’s source database." />
+            <SettingsHeading icon={<Palette size={19} />} title="Appearance" detail="Personalize this browser without changing Stacks’s source database." />
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /><small>Shown in the lower-left library status. The product name remains Paper Assistant.</small></label>
+                <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /><small>Shown in the lower-left library status. The product name remains Stacks.</small></label>
                 <div className="theme-choice-field span-2"><span>Color theme</span><div className="theme-choice-grid"><SelectCard selected={theme === "dark"} onClick={() => onThemeChange("dark")} icon={<Moon />} title="Dark" description="Low-glare research workspace" trailing={theme === "dark" ? <Check /> : null} /><SelectCard selected={theme === "light"} onClick={() => onThemeChange("light")} icon={<Sun />} title="Light" description="Bright, paper-like workspace" trailing={theme === "light" ? <Check /> : null} /></div><small>Appearance is saved automatically in this browser.</small></div>
               </div>
             </div>
@@ -804,8 +804,8 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Base Anthropic IDs use Bedrock Mantle; geo, global, and inference-profile IDs use Bedrock Runtime.</small></label> : null}
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
-                <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>PA sends this value to the selected model without imposing an artificial upper limit; the model’s own output limit still applies.</small></label>
-                <label><span>PDF grounding pages</span><input type="number" min="1" max="20" step="1" value={settings.ai.pdfPages} onChange={(event) => updateAi("pdfPages", Number(event.target.value))} /><small>Ask PA extracts this many opening pages from each attached PDF, up to a safe 20-page limit.</small></label>
+                <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>Stacks sends this value to the selected model without imposing an artificial upper limit; the model’s own output limit still applies.</small></label>
+                <label><span>PDF grounding pages</span><input type="number" min="1" max="20" step="1" value={settings.ai.pdfPages} onChange={(event) => updateAi("pdfPages", Number(event.target.value))} /><small>Ask Stacks extracts this many opening pages from each attached PDF, up to a safe 20-page limit.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
               <label className="settings-toggle"><input type="checkbox" checked={Boolean(settings.feedEnabled)} onChange={(event) => updateFeedEnabled(event.target.checked)} /><span /><div><strong>AI feed (experimental)</strong><small>Adds an AI feed workspace where snippets run a headless Claude agent. Every library change it proposes needs your approval.</small></div></label>
@@ -819,11 +819,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <SettingsHeading icon={<MessageSquareText size={19} />} title="Prompt templates" detail="Shape discussion, summary, and PDF metadata extraction." />
             <div className="settings-card prompt-settings-card">
               <details className="prompt-template-section">
-                <summary><span><strong>Discussion system prompt</strong><small>Ask PA with up to eight selected papers.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="chatSystem" value={settings.prompts.chatSystem} onChange={(value) => updatePrompt("chatSystem", value)} /><small>PA numbers discussion context as Paper 1, Paper 2, and so on. Insert a placeholder wherever that context should appear.</small><PromptVariables variables={discussionVariables} onInsert={(variable) => insertPromptVariable("chatSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("chatSystem", DEFAULT_CHAT_SYSTEM_PROMPT)}>Restore discussion default</ActionButton></div>
+                <summary><span><strong>Discussion system prompt</strong><small>Ask Stacks with up to eight selected papers.</small></span><ChevronDown size={16} /></summary>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="chatSystem" value={settings.prompts.chatSystem} onChange={(value) => updatePrompt("chatSystem", value)} /><small>Stacks numbers discussion context as Paper 1, Paper 2, and so on. Insert a placeholder wherever that context should appear.</small><PromptVariables variables={discussionVariables} onInsert={(variable) => insertPromptVariable("chatSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("chatSystem", DEFAULT_CHAT_SYSTEM_PROMPT)}>Restore discussion default</ActionButton></div>
               </details>
               <details className="prompt-template-section">
-                <summary><span><strong>Summary system prompt</strong><small>Create the reusable PA summary stored with a paper.</small></span><ChevronDown size={16} /></summary>
+                <summary><span><strong>Summary system prompt</strong><small>Create the reusable Stacks summary stored with a paper.</small></span><ChevronDown size={16} /></summary>
                 <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Summary placeholders are replaced with the selected paper’s current metadata and extracted content.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</ActionButton></div>
               </details>
               <details className="prompt-template-section">
@@ -837,11 +837,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "storage" ? (
           <section className="settings-storage-section">
-            <SettingsHeading icon={<HardDrive size={19} />} title="Storage & Doctor" detail="Manage PA’s independent library location and verify every local asset." />
+            <SettingsHeading icon={<HardDrive size={19} />} title="Storage & Doctor" detail="Manage Stacks’s independent library location and verify every local asset." />
             <div className="settings-card storage-location-card">
               <div className="storage-location-heading">
                 <span className="storage-doctor-icon"><HardDrive size={18} /></span>
-                <div><strong>PA library location</strong><small>The library.db database, settings, and managed PDFs and HTML snapshots all live in this folder.</small></div>
+                <div><strong>Stacks library location</strong><small>The library.db database, settings, and managed PDFs and HTML snapshots all live in this folder.</small></div>
               </div>
               <div className="storage-root-summary">
                 <span>Active library</span>
@@ -851,17 +851,17 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
               <label className="storage-move-field">
                 <span>Move library to</span>
                 <div className="path-picker-control">
-                  <input disabled={storageReport?.capabilities?.folderMove === false} value={storageTarget} onChange={(event) => setStorageTarget(event.target.value)} placeholder="/Users/…/PaperAssistant" />
+                  <input disabled={storageReport?.capabilities?.folderMove === false} value={storageTarget} onChange={(event) => setStorageTarget(event.target.value)} placeholder="/Users/…/Stacks" />
                   <ActionButton variant="secondary" onClick={() => void chooseStorageDirectory()} disabled={storageReport?.capabilities?.folderMove === false || selectingStorageDirectory || movingStorage} icon={selectingStorageDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Browse</ActionButton>
                   <ActionButton variant="secondary" onClick={() => void moveLibrary()} disabled={storageReport?.capabilities?.folderMove === false || movingStorage || !storageTarget.trim()} icon={movingStorage ? <LoaderCircle className="spin" size={15} /> : <ArrowRightLeft size={15} />}>Move</ActionButton>
                 </div>
-                <small>Moves PA-managed files, switches local file storage to the new location, and removes the old managed-file folder only after two confirmations.</small>
+                <small>Moves Stacks-managed files, switches local file storage to the new location, and removes the old managed-file folder only after two confirmations.</small>
               </label>
             </div>
             <div className="settings-card storage-doctor-card">
               <div className="storage-doctor-heading">
                 <span className="storage-doctor-icon"><ScanSearch size={18} /></span>
-                <div><strong>Library Doctor</strong><small>Checks database records against PDFs, HTML snapshots, invalid paths, and unlinked PA-managed assets.</small></div>
+                <div><strong>Library Doctor</strong><small>Checks database records against PDFs, HTML snapshots, invalid paths, and unlinked Stacks-managed assets.</small></div>
                 <ActionButton variant="secondary" onClick={() => void inspectStorage(true)} disabled={checkingStorage} icon={checkingStorage ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>Check now</ActionButton>
               </div>
               {storageReport ? (
@@ -877,7 +877,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                     <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedPdfFiles} referenced` : `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}`} tone={storageReport.missingPdfFiles ? "bad" : "good"} />
                     <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedHtmlFiles} referenced` : `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}`} tone={storageReport.missingHtmlFiles ? "bad" : "good"} />
                     <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} papers`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} />
-                    <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="Stored paths that do not satisfy PA’s portable-path rules" tone={storageReport.invalidReferences ? "bad" : "good"} />
+                    <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="Stored paths that do not satisfy Stacks’s portable-path rules" tone={storageReport.invalidReferences ? "bad" : "good"} />
                     <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} files`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} />
                     {storageReport.systemHealth ? (
                       <>
@@ -892,32 +892,32 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                   <DoctorPaths label="Invalid PDF paths" paths={storageReport.invalidPdfPaths} />
                   <DoctorPaths label="Invalid HTML paths" paths={storageReport.invalidHtmlPaths} />
                   <div className="storage-doctor-actions">
-                    <p>Cleanup deletes only unlinked files from PA’s managed pdfs/ and html_snapshots/ folders. It requires two confirmations and never deletes linked assets.</p>
+                    <p>Cleanup deletes only unlinked files from Stacks’s managed pdfs/ and html_snapshots/ folders. It requires two confirmations and never deletes linked assets.</p>
                     <div className="storage-doctor-action-buttons">
                       <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage || !storageReport.capabilities?.repairs.length} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>{storageReport.mode === "hosted" ? "Repair database" : "Repair paths & filenames"}</ActionButton>
                       <ActionButton variant="danger" onClick={() => void cleanStorage()} disabled={cleaningStorage || !storageReport.orphanedFiles} icon={cleaningStorage ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}>Clean unlinked assets</ActionButton>
                     </div>
                   </div>
                 </>
-              ) : <div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Inspecting PA storage…</span></div>}
+              ) : <div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Inspecting Stacks storage…</span></div>}
             </div>
           </section>
         ) : null}
 
         {!loading && tab === "sync" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up PA’s library database, PDFs, and HTML snapshots." />
+            <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up Stacks’s library database, PDFs, and HTML snapshots." />
             <div className="sync-status-card">
               <span className={`sync-status-icon ${settings.sync.lastResult?.ok ? "is-success" : ""}`}><FolderSync size={20} /></span>
               <div><strong>{settings.sync.lastResult?.summary ?? (settings.local ? "Ready to connect OneDrive" : "Local companion required")}</strong><small>{settings.local ? timeLabel(settings.sync.lastSyncAt) : settings.sync.unavailableReason}</small></div>
-              <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "PA’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up PA now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
+              <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "Stacks’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up Stacks now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PaperAssistant-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PaperAssistant-Backup`} key={path} />)}</datalist><small>{settings.local ? "PA writes a consistent library.db backup plus pdfs/ and html_snapshots/ here, creating the folder if needed. Existing contents are kept — backup only adds, never deletes. Must be outside the live library folder." : "A hosted Worker cannot access a folder on this computer. Run PA locally to enable backups."}</small></label>
+                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>{settings.local ? "Stacks writes a consistent library.db backup plus pdfs/ and html_snapshots/ here, creating the folder if needed. Existing contents are kept — backup only adds, never deletes. Must be outside the live library folder." : "A hosted Worker cannot access a folder on this computer. Run Stacks locally to enable backups."}</small></label>
                 <label><span>Auto-sync interval</span><div className="unit-input"><input disabled={!settings.local} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
-              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live PA changes</strong><small>Writes a fresh one-way backup to OneDrive in the background.</small></div></label>
+              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong><small>Writes a fresh one-way backup to OneDrive in the background.</small></div></label>
               <div className="sync-caution"><ShieldCheck size={16} /><p><strong>The local library is authoritative.</strong> Backup writes a consistent one-way copy to OneDrive; it never reads the OneDrive copy back onto the live library. Restoring a backup is a manual step.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
@@ -943,7 +943,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card version-status-card">
               <div>
                 <span>Installed version</span>
-                <strong>{versionInfo?.currentVersion ? `Paper Assistant ${versionInfo.currentVersion}` : "Paper Assistant"}</strong>
+                <strong>{versionInfo?.currentVersion ? `Stacks ${versionInfo.currentVersion}` : "Stacks"}</strong>
                 <small>{versionInfo?.message ?? "Checking release status…"}</small>
               </div>
               <span className={`version-status-pill ${versionInfo?.updateAvailable ? "is-update" : ""}`}>{versionInfo?.updateAvailable ? "Update available" : versionInfo?.checked ? "Current" : "Checking"}</span>
@@ -952,7 +952,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 {versionInfo?.releaseUrl ? <ActionLink variant="primary" href={versionInfo.releaseUrl} target="_blank" rel="noreferrer">View release</ActionLink> : null}
               </div>
             </div>
-            <p className="version-update-note">Local installs update from the Git repository, followed by <code>npm install</code>. Hosted installs update when the latest commit is redeployed; PA never modifies its own source tree automatically.</p>
+            <p className="version-update-note">Local installs update from the Git repository, followed by <code>npm install</code>. Hosted installs update when the latest commit is redeployed; Stacks never modifies its own source tree automatically.</p>
           </section>
         ) : null}
       </div>
