@@ -1549,19 +1549,15 @@ function LibraryView({
                 <button type="button" className={clause.negated ? "is-active" : ""} onClick={() => updateFilter(clause.key, { negated: !clause.negated })} aria-pressed={clause.negated}>NOT</button>
                 <select aria-label={`Field for ${clause.label}`} value={clause.kind} onChange={(event) => changeFilterKind(clause, event.target.value as LibraryFilterKind)}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
                 <span>=</span>
-                {clause.kind === "author" || clause.kind === "venue" ? (
-                  <FilterValueCombobox
-                    kind={clause.kind}
-                    options={filterOptions[clause.kind]}
-                    valueId={clause.valueId}
-                    fallbackLabel={clause.label}
-                    ariaLabel={`Value for ${clause.kind}`}
-                    onSelect={(option) => updateFilter(clause.key, { valueId: option.id, label: option.label })}
-                    onClear={() => updateFilter(clause.key, { valueId: "", label: "" })}
-                  />
-                ) : (
-                  <select className="filter-value-select" aria-label={`Value for ${clause.kind}`} value={clause.valueId} onChange={(event) => { const option = filterOptions[clause.kind].find((candidate) => candidate.id === event.target.value); if (option) updateFilter(clause.key, { valueId: option.id, label: option.label }); }}>{filterOptions[clause.kind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
-                )}
+                <FilterValueCombobox
+                  kind={clause.kind}
+                  options={filterOptions[clause.kind]}
+                  valueId={clause.valueId}
+                  fallbackLabel={clause.label}
+                  ariaLabel={`Value for ${clause.kind}`}
+                  onSelect={(option) => updateFilter(clause.key, { valueId: option.id, label: option.label })}
+                  onClear={() => updateFilter(clause.key, { valueId: "", label: "" })}
+                />
                 <button type="button" className={clause.closeGroups ? "is-active" : ""} onClick={() => updateFilter(clause.key, { closeGroups: (clause.closeGroups + 1) % 3 })} aria-label="Add closing parenthesis">{clause.closeGroups ? ")".repeat(clause.closeGroups) : ")"}</button>
                 <button type="button" className="is-danger" onClick={() => { setFilters(filters.filter((candidate) => candidate.key !== clause.key)); setPage(1); }} aria-label={`Remove ${clause.kind} filter`}><Trash2 size={14} /></button>
               </div>
@@ -1570,18 +1566,14 @@ function LibraryView({
               <span className="filter-start">ADD</span>
               <select aria-label="New filter field" value={filterKind} onChange={(event) => { setFilterKind(event.target.value as LibraryFilterKind); setFilterValue(""); }}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
               <span>=</span>
-              {filterKind === "author" || filterKind === "venue" ? (
-                <FilterValueCombobox
-                  kind={filterKind}
-                  options={filterOptions[filterKind]}
-                  valueId={filterValue}
-                  ariaLabel={`New ${filterKind} filter value`}
-                  onSelect={(option) => setFilterValue(option.id)}
-                  onClear={() => setFilterValue("")}
-                />
-              ) : (
-                <select className="filter-value-select" aria-label={`New ${filterKind} filter value`} value={filterValue} onChange={(event) => setFilterValue(event.target.value)}><option value="">Choose…</option>{filterOptions[filterKind].map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select>
-              )}
+              <FilterValueCombobox
+                kind={filterKind}
+                options={filterOptions[filterKind]}
+                valueId={filterValue}
+                ariaLabel={`New ${filterKind} filter value`}
+                onSelect={(option) => setFilterValue(option.id)}
+                onClear={() => setFilterValue("")}
+              />
               <button type="button" className="filter-add-button" onClick={addFilter} disabled={!filterValue} aria-label="Add filter"><Plus size={14} /> Add</button>
             </div>
           </div>
@@ -2197,7 +2189,7 @@ function PageSearch({ value, onChange, placeholder }: {
 }
 
 function FilterValueCombobox({ kind, options, valueId, fallbackLabel = "", ariaLabel, onSelect, onClear }: {
-  kind: "author" | "venue";
+  kind: LibraryFilterKind;
   options: LibraryFilterOption[];
   valueId: string;
   fallbackLabel?: string;
@@ -2251,7 +2243,7 @@ function FilterValueCombobox({ kind, options, valueId, fallbackLabel = "", ariaL
         aria-expanded={open}
         aria-controls={listboxId}
         aria-activedescendant={open && matchingOptions[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined}
-        placeholder={`Search ${kind === "author" ? "authors" : "venues"}…`}
+        placeholder={`Search ${kind === "author" ? "authors" : kind === "venue" ? "venues" : kind === "collection" ? "collections" : "years"}…`}
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           const nextQuery = event.target.value;

@@ -7,6 +7,10 @@
   --line-strong: rgba(255, 255, 255, 0.14);
   --canvas: #070912;
   --panel: rgba(255, 255, 255, 0.035);
+  /* Opaque elevated surface for floating popovers (dropdowns, menus, comboboxes)
+     that sit over the raw canvas — --panel is a translucent tint meant to layer
+     on a solid parent and shows the canvas through when floated. */
+  --panel-strong: #121523;
   --white: #ffffff;
   --brand-blue: #2d9cff;
   --brand-blue-strong: #71c2ff;

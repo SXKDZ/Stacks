@@ -1372,6 +1372,7 @@ textarea::placeholder {
   --line-strong: rgba(36, 42, 59, 0.17);
   --canvas: #f4f5f9;
   --panel: rgba(255, 255, 255, 0.82);
+  --panel-strong: #ffffff;
   --brand-blue: #168dec;
   --brand-blue-strong: #086dc4;
   --brand-blue-soft: rgba(22, 141, 236, 0.1);

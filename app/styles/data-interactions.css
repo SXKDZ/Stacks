@@ -119,10 +119,6 @@
   padding: 0 24px 0 7px;
 }
 
-.filter-clause-row .filter-value-select {
-  flex: 1 1 150px;
-}
-
 .filter-value-combobox {
   align-items: center;
   background: var(--panel);
@@ -167,10 +163,10 @@
 }
 
 .filter-value-options {
-  background: var(--panel);
+  background: var(--panel-strong);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   left: -1px;
@@ -1139,7 +1135,7 @@ body.is-resizing-chat {
 }
 
 .metadata-autocomplete-options {
-  background: var(--panel);
+  background: var(--panel-strong);
   border: 1px solid var(--line-strong);
   border-radius: 9px;
   box-shadow: var(--shadow-md);

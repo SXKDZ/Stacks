@@ -574,10 +574,10 @@
 }
 
 .page-size-menu {
-  background: var(--panel-strong, var(--panel));
+  background: var(--panel-strong);
   border: 1px solid var(--line-strong);
   border-radius: 9px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-md);
   display: grid;
   gap: 2px;
   left: 0;
