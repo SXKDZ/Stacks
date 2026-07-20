@@ -37,12 +37,12 @@ const actionVariants = cva(
           "hover:border-[var(--line-strong)] hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue-strong)]",
         ],
         danger: [
-          // Mirrors the ghost "Edit" weight so the pair balances: transparent at
-          // rest, and on hover a subtle soft tint + border (rose instead of the
-          // ghost's blue), keeping the rose text rather than a solid fill.
-          // Deletes are confirm-guarded regardless.
-          "border-transparent bg-transparent text-[var(--rose)]",
-          "hover:border-[color-mix(in_srgb,var(--rose)_36%,var(--line-strong))] hover:bg-[var(--rose-soft)] hover:text-[var(--rose)]",
+          // Quiet destructive control: a subtle rose-tinted border at rest (so it
+          // still reads as a button next to bordered siblings) with no fill, then
+          // a soft rose-soft tint on hover. Keeps rose text throughout rather than
+          // a strong solid fill. Deletes are confirm-guarded regardless.
+          "border-[color-mix(in_srgb,var(--rose)_28%,var(--line-strong))] bg-transparent text-[var(--rose)]",
+          "hover:border-[color-mix(in_srgb,var(--rose)_46%,var(--line-strong))] hover:bg-[var(--rose-soft)] hover:text-[var(--rose)]",
         ],
         success: [
           "border-[color-mix(in_srgb,var(--green)_40%,transparent)] bg-[var(--green-soft)] text-[var(--green)]",

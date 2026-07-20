@@ -235,18 +235,18 @@
   color: var(--brand-blue-strong);
 }
 
-/* Match the shared danger ActionButton: transparent at rest with rose text,
-   and a subtle rose-soft tint + border on hover (no strong solid fill). */
+/* Match the shared danger ActionButton: a subtle rose-tinted border at rest with
+   rose text, and a soft rose-soft tint on hover (no strong solid fill). */
 .filter-clause-row > button.is-danger {
   background: transparent;
-  border-color: transparent;
+  border-color: color-mix(in srgb, var(--rose) 28%, var(--line-strong));
   color: var(--rose);
   margin-left: auto;
 }
 
 .filter-clause-row > button.is-danger:hover {
   background: var(--rose-soft);
-  border-color: color-mix(in srgb, var(--rose) 36%, var(--line-strong));
+  border-color: color-mix(in srgb, var(--rose) 46%, var(--line-strong));
   color: var(--rose);
 }
 
