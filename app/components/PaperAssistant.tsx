@@ -1247,8 +1247,8 @@ function Dashboard({
               <span>{venueLine(currentPaper)} · {currentPaper.year}</span>
             </div>
             <div className="continue-actions">
-              <ActionButton variant="light" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
-              <ActionButton variant="brand-ghost" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Ask PA</ActionButton>
+              <ActionButton variant="primary" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
+              <ActionButton variant="on-dark" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Ask PA</ActionButton>
             </div>
           </div>
           <div className="continue-visual" aria-hidden="true">

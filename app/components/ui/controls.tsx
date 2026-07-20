@@ -37,8 +37,11 @@ const actionVariants = cva(
           "hover:border-[var(--line-strong)] hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue-strong)]",
         ],
         danger: [
-          "border-[var(--rose)] bg-[var(--rose-soft)] text-[var(--rose)]",
-          "hover:bg-[var(--rose)] hover:text-white",
+          // Quiet at rest so it balances a neighboring ghost "Edit" rather than
+          // out-shouting it; the rose text + icon still read as destructive, and
+          // hover fills solid rose. Deletes are confirm-guarded regardless.
+          "border-transparent bg-transparent text-[var(--rose)]",
+          "hover:border-[var(--rose)] hover:bg-[var(--rose)] hover:text-white",
         ],
         success: [
           "border-[color-mix(in_srgb,var(--green)_40%,transparent)] bg-[var(--green-soft)] text-[var(--green)]",
