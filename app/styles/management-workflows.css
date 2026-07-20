@@ -555,10 +555,12 @@
   appearance: none;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   color: var(--ink);
   font: inherit;
-  min-height: 44px;
+  /* Match the medium ActionButton height so the input and Browse/Move buttons
+     line up (align-items: stretch on the grid keeps them equal). */
+  min-height: 38px;
   min-width: 0;
   padding: 0 14px;
 }

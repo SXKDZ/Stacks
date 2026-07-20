@@ -124,6 +124,11 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(doctor, /DELETE FROM authors WHERE id NOT IN/);
   assert.match(doctor, /DELETE FROM venues WHERE id NOT IN/);
   assert.match(doctor, /DELETE FROM collections WHERE id NOT IN/);
+  // Moving the library is implemented (consistent backup + repoint), not stubbed.
+  assert.match(doctor, /async function moveLibrary/);
+  assert.match(doctor, /setLibraryRoot\(target\)/);
+  assert.match(doctor, /folderMove: true/);
+  assert.doesNotMatch(doctor, /Move the library folder from the filesystem/);
   assert.match(chat, /PA_PDF_PAGES/);
   assert.match(chat, /pdfStartPage/);
   assert.match(grounding, /getDocumentProxy/);

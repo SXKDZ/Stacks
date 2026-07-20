@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /**
  * Single source of truth for where the Paper Assistant library lives. The
@@ -55,4 +55,15 @@ export function ensureLibraryDirectories(root = libraryRoot()): string {
   mkdirSync(join(root, "pdfs"), { recursive: true });
   mkdirSync(join(root, "html_snapshots"), { recursive: true });
   return root;
+}
+
+/**
+ * Persist the library location to ~/.paperassistant/storage.json so the next
+ * libraryRoot() resolves to `root`. Used when moving the library folder. Note:
+ * PA_LIBRARY_DIR (if set) still wins over the stored value.
+ */
+export function setLibraryRoot(root: string): void {
+  const resolved = resolve(root);
+  mkdirSync(dirname(storageConfigPath), { recursive: true });
+  writeFileSync(storageConfigPath, `${JSON.stringify({ libraryRoot: resolved }, null, 2)}\n`);
 }

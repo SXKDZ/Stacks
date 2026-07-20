@@ -1,5 +1,8 @@
-import { basename } from "node:path";
+import { cpSync, existsSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { ensureDatabase } from "@/db/bootstrap";
+import { getRawConnection } from "@/db/client";
+import { databasePath, ensureLibraryDirectories, libraryRoot, setLibraryRoot, settingsPath } from "@/db/library-paths";
 import { papers } from "@/db/schema";
 import { inspectStorage } from "@/app/lib/local-files";
 
@@ -9,6 +12,65 @@ export const runtime = "nodejs";
 interface StorageManagementRequest {
   operation?: "inspect" | "clean" | "repair" | "move";
   confirmed?: boolean;
+  targetDirectory?: string;
+}
+
+/**
+ * Move the whole library to `targetDirectory`: a transactionally-consistent
+ * copy of library.db plus settings.json and the pdfs/ and html_snapshots/
+ * assets, then repoint storage.json so the next libraryRoot() resolves there.
+ * Returns the new root. The original folder is left in place (the UI's second
+ * confirmation covers removing it manually, or a later cleanup).
+ */
+async function moveLibrary(targetDirectory: string): Promise<string> {
+  const target = resolve(targetDirectory.trim());
+  const current = resolve(libraryRoot());
+  if (!target) {
+    throw new Error("Choose a destination folder for the PA library.");
+  }
+  if (target === current) {
+    throw new Error("The destination is already the current library folder.");
+  }
+  if (target.startsWith(`${current}/`) || current.startsWith(`${target}/`)) {
+    throw new Error("The destination must not be nested inside the current library folder (or vice versa).");
+  }
+  const parent = dirname(target);
+  if (!existsSync(parent) || !statSync(parent).isDirectory()) {
+    throw new Error("The destination's parent folder does not exist. Choose a valid location.");
+  }
+  if (existsSync(target)) {
+    if (!statSync(target).isDirectory()) {
+      throw new Error("The destination path is a file. Choose a folder.");
+    }
+    if (existsSync(join(target, "library.db"))) {
+      throw new Error("The destination already contains a PA library (library.db). Choose an empty or new folder.");
+    }
+  }
+
+  // Ensure schema init has run and the connection is open before snapshotting.
+  await ensureDatabase();
+  ensureLibraryDirectories(target);
+
+  // Consistent DB snapshot via SQLite's backup API (never a torn file copy).
+  const source = getRawConnection(databasePath());
+  await source.backup(join(target, "library.db"));
+
+  // Copy settings.json and the managed asset trees if present.
+  const currentSettings = settingsPath();
+  if (existsSync(currentSettings)) {
+    cpSync(currentSettings, join(target, "settings.json"));
+  }
+  for (const dir of ["pdfs", "html_snapshots"]) {
+    const from = join(current, dir);
+    if (existsSync(from)) {
+      cpSync(from, join(target, dir), { recursive: true });
+    }
+  }
+
+  // Repoint PA at the new folder. getLibraryDb reopens on the changed path.
+  setLibraryRoot(target);
+  await ensureDatabase();
+  return target;
 }
 
 const countedTables = [
@@ -114,10 +176,14 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const body = await request.json() as StorageManagementRequest;
     if (body.operation === "move") {
-      return Response.json(
-        { error: "Move the library folder from the filesystem, then update ~/.paperassistant/storage.json." },
-        { status: 409 },
-      );
+      if (!body.confirmed) {
+        return Response.json({ error: "Moving the library requires explicit confirmation." }, { status: 400 });
+      }
+      if (!body.targetDirectory?.trim()) {
+        return Response.json({ error: "Choose a destination folder for the PA library." }, { status: 400 });
+      }
+      await moveLibrary(body.targetDirectory);
+      // Fall through to return a fresh inspection of the now-current library.
     }
     const clean = body.operation === "clean" || body.operation === "repair";
     if (clean && !body.confirmed) {
@@ -150,7 +216,7 @@ export async function POST(request: Request): Promise<Response> {
         databaseChecks: true,
         fileChecks: true,
         repairs: ["orphaned-associations", "orphaned-entities", "orphaned-files"],
-        folderMove: false,
+        folderMove: true,
       },
       libraryRoot: storage.libraryRoot,
       libraryExists: true,
