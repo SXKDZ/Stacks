@@ -915,17 +915,25 @@
   font-size: var(--type-label);
 }
 
-/* Composer: an always-there capture box at the top of the feed. */
+/* Composer: an always-there capture box at the top of the feed. Elevated on the
+   -2 surface with a brand-tinted focus ring so it reads as the primary input,
+   clearly set apart from the cards below (separated by a divider + spacing). */
 .feed-composer {
-  background: var(--panel);
+  background-color: var(--surface-2);
+  background-image: linear-gradient(var(--panel), var(--panel));
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-1), var(--edge-highlight);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 22px;
-  padding: 12px;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
+}
+
+.feed-composer:focus-within {
+  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
+  box-shadow: var(--shadow-1), 0 0 0 3px var(--brand-blue-soft);
 }
 
 .feed-composer textarea {
@@ -933,20 +941,36 @@
   border: 0;
   color: var(--ink);
   font: inherit;
-  font-size: var(--type-body);
+  font-size: var(--type-body-large);
+  line-height: 1.5;
   outline: none;
   resize: vertical;
 }
 
 .feed-composer-actions {
+  align-items: center;
   display: flex;
   justify-content: flex-end;
 }
 
+/* A labelled divider that visually separates the composer from the feed below. */
 .feed-cards {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 26px;
+  position: relative;
+}
+
+.feed-cards::before {
+  color: var(--soft);
+  content: "Feed";
+  display: block;
+  font-size: var(--type-label);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
 }
 
 .feed-cards-empty {
@@ -963,23 +987,26 @@
   margin: 0;
 }
 
-/* A card: collapsed shows a summary; expanded shows the full thread. */
+/* A card: collapsed shows a summary; expanded shows the full thread. Raised on
+   the -1 surface with an edge highlight so it reads as a lifted tile. */
 .feed-card {
-  background: var(--panel-strong);
+  background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-1), var(--edge-highlight);
   overflow: hidden;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control), transform var(--motion-control);
 }
 
 .feed-card:hover {
   border-color: var(--line-strong);
+  transform: translateY(-1px);
 }
 
 .feed-card.is-expanded {
   border-color: color-mix(in srgb, var(--brand-blue) 26%, var(--line-strong));
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-2), var(--edge-highlight);
+  transform: none;
 }
 
 .feed-card-error:not(.is-expanded) {

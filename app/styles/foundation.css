@@ -7,12 +7,18 @@
   --soft: #808ca3;
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.14);
-  --canvas: #070912;
+  --canvas: #060811;
   --panel: rgba(255, 255, 255, 0.035);
-  /* Opaque elevated surface for floating popovers (dropdowns, menus, comboboxes)
-     that sit over the raw canvas — --panel is a translucent tint meant to layer
-     on a solid parent and shows the canvas through when floated. */
-  --panel-strong: #121523;
+  /* Opaque layered surface ladder. On a near-black canvas, elevation reads as a
+     step to a lighter opaque surface (plus a subtle ring + soft shadow), not a
+     translucent tint — so cards and panels look raised rather than flat.
+     surface-1 = raised card, surface-2 = elevated/floating popover. */
+  --surface-1: #0e1120;
+  --surface-2: #151a2b;
+  /* Legacy name kept: the opaque floating surface (== surface-2). */
+  --panel-strong: var(--surface-2);
+  /* A hairline top highlight that fakes a light source on raised dark surfaces. */
+  --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --white: #ffffff;
   --brand-blue: #2d9cff;
   --brand-blue-strong: #71c2ff;
@@ -57,11 +63,13 @@
   --status-complete-soft: var(--green-soft);
   --status-inbox: var(--amber);
   --status-inbox-soft: var(--amber-soft);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16), 0 10px 28px rgba(0, 0, 0, 0.12);
-  --shadow-md: 0 28px 80px rgba(0, 0, 0, 0.42), 0 3px 14px rgba(0, 0, 0, 0.24);
-  /* Elevation scale for cards/panels between the sm/md extremes. */
-  --shadow-1: 0 7px 20px rgba(12, 15, 28, 0.06);
-  --shadow-2: 0 8px 26px rgba(12, 15, 28, 0.08);
+  /* Elevation for the dark canvas: real depth needs deep shadow (black, not the
+     old near-canvas tint that vanished) plus the edge highlight for a lit rim.
+     The light theme overrides these with soft neutral shadows. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 24px 64px rgba(0, 0, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-1: 0 2px 6px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.28);
+  --shadow-2: 0 4px 10px rgba(0, 0, 0, 0.36), 0 20px 48px rgba(0, 0, 0, 0.4);
   --sidebar: 252px;
   --font-ui: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
   --font-display: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
@@ -73,12 +81,13 @@
   --type-body: 13px;
   --type-body-large: 14px;
   --type-heading-small: 17px;
-  /* Radius scale. --radius-control (10px) is the button/input default;
-     the sm/md/lg steps cover chips, cards, and large panels. */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-control: 10px;
-  --radius-lg: 12px;
+  /* Radius scale, nudged up a step for a softer, more modern feel.
+     --radius-control (11px) is the button/input default. */
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-control: 11px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
   --radius-pill: 999px;
   /* Motion scale. --motion-control is the shared control transition. */
   --motion-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
