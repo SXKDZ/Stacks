@@ -99,6 +99,16 @@ export default function FeedWorkspace() {
     setReply("");
   }, [activeId]);
 
+  // Self-correct if any snippet is showing as running: refresh the list on an
+  // interval so a missed SSE "done" can never leave a card spinning forever.
+  useEffect(() => {
+    if (!snippets.some((snippet) => snippet.status === "running")) {
+      return;
+    }
+    const timer = window.setInterval(() => void loadSnippets(), 4000);
+    return () => window.clearInterval(timer);
+  }, [snippets, loadSnippets]);
+
   // Stream the active snippet's events. Re-runs on a reply (streamNonce bump) to
   // pick up the new turn; the events route replays history and the dedup guards
   // below keep the thread from doubling.

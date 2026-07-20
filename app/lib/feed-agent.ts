@@ -248,18 +248,17 @@ export async function runFeedAgent(options: {
   });
 
   child.on("error", async (error) => {
-    runs.delete(snippetId);
     await persistMessage(snippetId, "system", "error", error.message);
     await setStatus(snippetId, "error", error.message);
     emit(snippetId, { type: "done", status: "error" });
+    runs.delete(snippetId);
   });
 
   child.on("close", async (code, signal) => {
     if (buffer.trim()) {
       await handleLine(buffer);
     }
-    runs.delete(snippetId);
-    const stopped = signal === "SIGTERM";
+    const stopped = signal === "SIGTERM" || signal === "SIGKILL";
     const status = stopped ? "stopped" : code === 0 ? "done" : "error";
     if (status === "error") {
       const detail = stderr.trim().slice(-500) || `The agent exited with code ${code}.`;
@@ -268,6 +267,10 @@ export async function runFeedAgent(options: {
     } else {
       await setStatus(snippetId, status);
     }
+    // Emit the terminal event BEFORE dropping the run, so live subscribers (the
+    // SSE stream) are still reachable and can close cleanly. Deleting first
+    // would strand the "done" event and leave the client spinning forever.
     emit(snippetId, { type: "done", status });
+    runs.delete(snippetId);
   });
 }
