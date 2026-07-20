@@ -36,6 +36,7 @@ export interface Paper {
   semanticScholarId: string | null;
   url: string | null;
   pdfUrl: string | null;
+  pdfViewUrl: string | null;
   localPath: string | null;
   htmlSnapshotPath: string | null;
   htmlUrl: string | null;

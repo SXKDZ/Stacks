@@ -435,7 +435,7 @@ export default function ChatWorkspace() {
         authors: paper.authors.map((author) => author.displayName),
         venue: venue(paper),
         year: paper.year,
-        pdfUrl: paper.pdfUrl,
+        pdfUrl: paper.pdfViewUrl,
         htmlUrl: paper.htmlUrl,
       })),
     });

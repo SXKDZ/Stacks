@@ -45,6 +45,29 @@ export function storedFileExists(kind: AcquisitionKind, name: string | null): bo
   return existsSync(join(storedDirectory(kind), name));
 }
 
+/**
+ * Delete a PA-managed asset by its stored (portable) filename. Only removes
+ * files inside the managed pdfs/ or html_snapshots/ directory — a value that
+ * isn't a bare filename (e.g. contains a path separator) is ignored, so this
+ * can never reach outside the library folder. Returns true if a file was removed.
+ */
+export function removeStoredFile(kind: AcquisitionKind, name: string | null | undefined): boolean {
+  const trimmed = name?.trim();
+  if (!trimmed || basename(trimmed) !== trimmed || trimmed === "." || trimmed === "..") {
+    return false;
+  }
+  const target = join(storedDirectory(kind), trimmed);
+  try {
+    if (existsSync(target)) {
+      unlinkSync(target);
+      return true;
+    }
+  } catch {
+    // A file that vanished or can't be removed must not abort the delete.
+  }
+  return false;
+}
+
 interface AssetInspection {
   storedFiles: number;
   storedBytes: number;

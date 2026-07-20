@@ -46,11 +46,11 @@ function documentIdentity(paper: Paper): { kind: string; value: string; url: str
       isHtml: true,
     };
   }
-  if (paper.pdfUrl) {
+  if (paper.pdfViewUrl) {
     return {
       kind: "PDF source",
-      value: paper.pdfUrl,
-      url: paper.pdfUrl,
+      value: paper.pdfViewUrl,
+      url: paper.pdfViewUrl,
       isHtml: false,
     };
   }

@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import type { LibraryQuerier } from "@/db/client";
+import { removeStoredFile } from "@/app/lib/local-files";
 import {
   authors,
   collections,
@@ -164,7 +165,12 @@ async function readSnapshot() {
       preprintId: paper.preprintId,
       semanticScholarId: paper.semanticScholarId,
       url: paper.url,
-      pdfUrl: paper.pdfUrl || (paper.localPath ? `/pa-files/pdfs/${encodeURIComponent(paper.localPath)}` : null),
+      // pdfUrl is the real stored value (an editable/savable field, may be null).
+      // pdfViewUrl is what the reader/grounding open — the stored URL, or a
+      // /pa-files path synthesized from the local PDF. Keeping these separate
+      // stops a synthesized relative path from being persisted or URL-validated.
+      pdfUrl: paper.pdfUrl,
+      pdfViewUrl: paper.pdfUrl || (paper.localPath ? `/pa-files/pdfs/${encodeURIComponent(paper.localPath)}` : null),
       localPath: paper.localPath,
       htmlSnapshotPath: paper.htmlSnapshotPath,
       htmlUrl: paper.htmlSnapshotPath ? `/pa-files/html/${encodeURIComponent(paper.htmlSnapshotPath)}` : null,
@@ -688,6 +694,30 @@ async function deleteEntities(entity: string, ids: string[]): Promise<void> {
     throw new Error("Unsupported entity type.");
   }
   const database = await ensureDatabase();
+  if (entity === "paper") {
+    // Capture the managed asset filenames before the rows go away so the PDFs
+    // and HTML snapshots don't linger on disk as orphans after the delete.
+    const assets = database
+      .select({ localPath: papers.localPath, htmlSnapshotPath: papers.htmlSnapshotPath })
+      .from(papers)
+      .where(inArray(papers.id, ids))
+      .all();
+    database.delete(papers).where(inArray(papers.id, ids)).run();
+    // Only remove a file if no surviving paper still references that filename
+    // (assets are normally unique per paper, but a shared name must not be
+    // pulled out from under another record).
+    const stillReferenced = (kind: "localPath" | "htmlSnapshotPath", name: string) =>
+      database.select({ id: papers.id }).from(papers).where(eq(papers[kind], name)).limit(1).get();
+    for (const asset of assets) {
+      if (asset.localPath && !stillReferenced("localPath", asset.localPath)) {
+        removeStoredFile("pdf", asset.localPath);
+      }
+      if (asset.htmlSnapshotPath && !stillReferenced("htmlSnapshotPath", asset.htmlSnapshotPath)) {
+        removeStoredFile("html", asset.htmlSnapshotPath);
+      }
+    }
+    return;
+  }
   database.delete(table).where(inArray(table.id, ids)).run();
 }
 

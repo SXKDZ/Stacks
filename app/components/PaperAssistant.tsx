@@ -2562,7 +2562,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
   onOpenVenue: () => void;
   onOpenCollection: (collectionId: string, collectionName: string) => void;
 }) {
-  const hasViewer = Boolean(paper.pdfUrl || paper.htmlUrl);
+  const hasViewer = Boolean(paper.pdfViewUrl || paper.htmlUrl);
   const detailPanelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -2999,7 +2999,12 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
     }
     const data = Object.fromEntries(new FormData(form).entries()) as Record<string, unknown>;
     data.paperType = paperType;
-    data.pdfUrl = paper?.pdfUrl ?? "";
+    // Only reuse the stored explicit PDF URL when the Source URL is unchanged.
+    // If the user edited the Source URL, the old pdfUrl is stale — dropping it
+    // lets the server derive a fresh PDF candidate from the new source instead
+    // of downloading the previous paper's PDF.
+    const editedUrl = paperValue(data, "url");
+    data.pdfUrl = editedUrl && editedUrl === (paper?.url ?? "") ? (paper?.pdfUrl ?? "") : "";
     if (!hasAcquirableSource(data)) {
       notify("Enter a Source URL or preprint identifier before downloading.", "error");
       return;
