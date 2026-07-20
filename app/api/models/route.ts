@@ -5,6 +5,7 @@ import {
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 interface InferenceProfileSummary {
   inferenceProfileId?: string;
@@ -45,8 +46,8 @@ function upstreamMessage(raw: string): string {
   }
 }
 
-export async function GET(request: Request): Promise<Response> {
-  const runtime = await resolveRuntimeValues(request);
+export async function GET(): Promise<Response> {
+  const runtime = await resolveRuntimeValues();
   const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
   if (!token) {
     return Response.json({ error: "AWS_BEARER_TOKEN_BEDROCK is not configured." }, { status: 500 });
@@ -114,7 +115,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const runtime = await resolveRuntimeValues(request);
+  const runtime = await resolveRuntimeValues();
   const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
   if (!token) {
     return Response.json({ error: "AWS_BEARER_TOKEN_BEDROCK is not configured." }, { status: 500 });

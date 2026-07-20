@@ -243,9 +243,14 @@
 }
 
 .paper-table.research-grid tbody tr:has(.expandable-author-list.is-expanded) td {
-  height: auto;
-  padding-bottom: 9px;
-  padding-top: 9px;
+  height: var(--paper-row-min-height);
+  padding-bottom: 5px;
+  padding-top: 5px;
+}
+
+.paper-table.research-grid tbody tr.has-collections:has(.expandable-author-list.is-expanded) td {
+  padding-bottom: 4px;
+  padding-top: 4px;
 }
 
 .detail-authors .expandable-author-buttons,

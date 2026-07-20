@@ -1,9 +1,45 @@
+import { existsSync, readFileSync } from "node:fs";
+import { eq, sql } from "drizzle-orm";
 import {
   DEFAULT_CHAT_SYSTEM_PROMPT,
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 import { ensureDatabase } from "@/db/bootstrap";
+import { settingsPath } from "@/db/library-paths";
+import { appSettings } from "@/db/schema";
+
+const SECRET_KEYS = ["AWS_BEARER_TOKEN_BEDROCK", "JINA_API_KEY", "SEMANTIC_SCHOLAR_API_KEY", "SERPAPI_KEY"] as const;
+
+interface LibrarySettingsFile {
+  ai?: { modelId?: string; region?: string; maxTokens?: string; temperature?: string; pdfPages?: string };
+  prompts?: { chatSystem?: string; extractionSystem?: string; summarySystem?: string };
+  sync?: { remotePath?: string; autoSync?: string; autoSyncInterval?: string };
+  secrets?: Partial<Record<(typeof SECRET_KEYS)[number], string>>;
+}
+
+/**
+ * Read the self-contained library settings.json (AI config, prompts, sync, and
+ * secrets). This file lives in the library folder alongside library.db, so the
+ * app resolves everything — including API keys — from one place with no
+ * host/localhost gating.
+ */
+function readLibrarySettingsFile(): LibrarySettingsFile | null {
+  try {
+    const path = settingsPath();
+    if (!existsSync(path)) {
+      return null;
+    }
+    return JSON.parse(readFileSync(path, "utf8")) as LibrarySettingsFile;
+  } catch {
+    return null;
+  }
+}
+
+/** A secret's value: prefer the library settings.json, fall back to env. */
+function secretValue(file: LibrarySettingsFile | null, key: (typeof SECRET_KEYS)[number]): string {
+  return (file?.secrets?.[key]?.trim() || process.env[key]?.trim() || "");
+}
 
 export interface SettingsInput {
   modelId?: unknown;
@@ -104,10 +140,11 @@ function normalizeStoredSettings(value: unknown): StoredSettings {
 
 export async function readStoredSettings(): Promise<StoredSettings> {
   const database = await ensureDatabase();
-  const row = await database
-    .prepare("SELECT value FROM app_settings WHERE id = ?")
-    .bind(SETTINGS_ID)
-    .first<{ value: string }>();
+  const row = database
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.id, SETTINGS_ID))
+    .get();
   if (!row?.value) {
     return environmentDefaults();
   }
@@ -141,18 +178,22 @@ export async function saveStoredSettings(input: SettingsInput): Promise<StoredSe
     },
   });
   const database = await ensureDatabase();
-  await database
-    .prepare(`INSERT INTO app_settings (id, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`)
-    .bind(SETTINGS_ID, JSON.stringify(next))
+  database
+    .insert(appSettings)
+    .values({ id: SETTINGS_ID, value: JSON.stringify(next) })
+    .onConflictDoUpdate({
+      target: appSettings.id,
+      set: { value: sql`excluded.value`, updatedAt: sql`CURRENT_TIMESTAMP` },
+    })
     .run();
   return next;
 }
 
 export function settingsSnapshot(settings: StoredSettings) {
-  const configured = (name: string) => Boolean(process.env[name]?.trim());
+  const file = readLibrarySettingsFile();
+  const configured = (name: (typeof SECRET_KEYS)[number]) => Boolean(secretValue(file, name));
   return {
-    local: false,
+    local: true,
     ai: { provider: "bedrock", ...settings.ai },
     integrations: {
       AWS_BEARER_TOKEN_BEDROCK: configured("AWS_BEARER_TOKEN_BEDROCK"),
@@ -176,7 +217,8 @@ export function settingsSnapshot(settings: StoredSettings) {
 
 export async function storedRuntimeValues(): Promise<Record<string, string>> {
   const settings = await readStoredSettings();
-  return {
+  const file = readLibrarySettingsFile();
+  const values: Record<string, string> = {
     AWS_REGION: settings.ai.region,
     BEDROCK_MODEL_ID: settings.ai.modelId,
     PA_MAX_TOKENS: String(settings.ai.maxTokens),
@@ -186,4 +228,13 @@ export async function storedRuntimeValues(): Promise<Record<string, string>> {
     PA_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
     PA_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
   };
+  // Secrets come from the library settings.json (or env); include only the ones
+  // that resolve to a value so callers can fall back to process.env otherwise.
+  for (const key of SECRET_KEYS) {
+    const value = secretValue(file, key);
+    if (value) {
+      values[key] = value;
+    }
+  }
+  return values;
 }

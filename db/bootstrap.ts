@@ -1,4 +1,5 @@
-import { env } from "cloudflare:workers";
+import { databasePath, ensureLibraryDirectories } from "./library-paths";
+import { getLibraryDb, type LibraryDb } from "./client";
 
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS venues (
@@ -179,69 +180,66 @@ const seedStatements = [
 
 let initializationPromise: Promise<void> | null = null;
 
-function getDatabase(): D1Database {
-  if (!env.DB) {
-    throw new Error("Paper Assistant requires the D1 binding named DB.");
-  }
-  return env.DB;
+function getDatabase(): LibraryDb {
+  ensureLibraryDirectories();
+  return getLibraryDb(databasePath());
+}
+
+function tableColumns(raw: import("better-sqlite3").Database, table: string): Set<string> {
+  const rows = raw.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return new Set(rows.map((column) => column.name));
 }
 
 async function initializeDatabase(): Promise<void> {
-  const database = getDatabase();
-  await database.prepare("PRAGMA foreign_keys = ON").run();
+  // Schema creation, column migrations, and one-time seeding are DDL/bulk work
+  // where Drizzle's query builder adds nothing; run them as raw SQL on the same
+  // connection Drizzle owns. Application queries go through Drizzle (see the
+  // library route). Everything here is synchronous better-sqlite3.
+  const raw = getDatabase().$client;
+  raw.pragma("foreign_keys = ON");
 
   for (const statement of schemaStatements) {
-    await database.prepare(statement).run();
+    raw.prepare(statement).run();
   }
 
-  const paperColumns = await database
-    .prepare("PRAGMA table_info(papers)")
-    .all<{ name: string }>();
-  const existingPaperColumns = new Set(
-    paperColumns.results.map((column) => column.name),
-  );
+  const existingPaperColumns = tableColumns(raw, "papers");
   for (const [column, statement] of paperColumnUpgrades) {
     if (!existingPaperColumns.has(column)) {
-      await database.prepare(statement).run();
+      raw.prepare(statement).run();
     }
   }
   if (existingPaperColumns.has("citation_count")) {
-    await database.prepare("ALTER TABLE papers DROP COLUMN citation_count").run();
+    raw.prepare("ALTER TABLE papers DROP COLUMN citation_count").run();
   }
 
-  const collectionColumns = await database
-    .prepare("PRAGMA table_info(collections)")
-    .all<{ name: string }>();
-  if (collectionColumns.results.some((column) => column.name === "description")) {
-    await database.prepare("ALTER TABLE collections DROP COLUMN description").run();
+  const collectionColumns = tableColumns(raw, "collections");
+  if (collectionColumns.has("description")) {
+    raw.prepare("ALTER TABLE collections DROP COLUMN description").run();
   }
-  if (collectionColumns.results.some((column) => column.name === "color")) {
-    await database.prepare("ALTER TABLE collections DROP COLUMN color").run();
+  if (collectionColumns.has("color")) {
+    raw.prepare("ALTER TABLE collections DROP COLUMN color").run();
   }
 
-  const authorColumns = await database
-    .prepare("PRAGMA table_info(authors)")
-    .all<{ name: string }>();
-  const existingAuthorColumns = new Set(authorColumns.results.map((column) => column.name));
+  const existingAuthorColumns = tableColumns(raw, "authors");
   if (existingAuthorColumns.has("affiliation")) {
-    await database.prepare("ALTER TABLE authors DROP COLUMN affiliation").run();
+    raw.prepare("ALTER TABLE authors DROP COLUMN affiliation").run();
   }
   if (existingAuthorColumns.has("h_index")) {
-    await database.prepare("ALTER TABLE authors DROP COLUMN h_index").run();
+    raw.prepare("ALTER TABLE authors DROP COLUMN h_index").run();
   }
 
-  const paperCount = await database
-    .prepare("SELECT COUNT(*) AS count FROM papers")
-    .first<{ count: number }>();
+  const paperCount = raw.prepare("SELECT COUNT(*) AS count FROM papers").get() as { count: number };
   if (Number(paperCount?.count ?? 0) === 0) {
-    const preparedSeeds = seedStatements.map(([statement, values]) => {
-      return database.prepare(statement).bind(...values);
+    const seed = raw.transaction(() => {
+      for (const [statement, values] of seedStatements) {
+        raw.prepare(statement).run(...values);
+      }
     });
-    await database.batch(preparedSeeds);
+    seed();
   }
 }
 
-export async function ensureDatabase(): Promise<D1Database> {
+export async function ensureDatabase(): Promise<LibraryDb> {
   if (!initializationPromise) {
     initializationPromise = initializeDatabase().catch((error) => {
       initializationPromise = null;

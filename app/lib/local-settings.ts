@@ -1,25 +1,22 @@
 import { spawn } from "node:child_process";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Plugin } from "vite";
+import { dirname, join, resolve } from "node:path";
 import {
   DEFAULT_CHAT_SYSTEM_PROMPT,
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
-} from "../app/lib/ai-prompts";
+} from "@/app/lib/ai-prompts";
+import { databasePath, ensureLibraryDirectories, libraryRoot, settingsPath } from "@/db/library-paths";
 
-interface SettingsPayload {
+/**
+ * Local settings companion. The structured `settings.json` (AI config, prompts,
+ * sync, secrets) lives in the self-contained library folder via
+ * `settingsPath()`, alongside `library.db`. The OneDrive sync bridge backs up
+ * the live `library.db` (resolved through `databasePath()`).
+ */
+
+export interface SettingsPayload {
   modelId?: string;
   region?: string;
   maxTokens?: string | number;
@@ -57,7 +54,7 @@ interface StructuredSettingsFile {
   secrets: Record<string, string>;
 }
 
-interface SyncResult {
+export interface SyncResult {
   ok: boolean;
   summary: string;
   changes: Record<string, number>;
@@ -94,34 +91,20 @@ const secretKeys = [
   "SERPAPI_KEY",
 ] as const;
 
-const paDirectory = resolve(process.cwd());
-const repositoryRoot = resolve(paDirectory, "..");
-const settingsDirectory = join(paDirectory, "data");
-const settingsPath = join(settingsDirectory, "settings.json");
-const settingsTemporaryPath = join(settingsDirectory, "settings.json.tmp");
-const bridgePath = join(paDirectory, "scripts", "pa_sync_bridge.py");
-const localAssetDirectory = join(paDirectory, "data");
-const localD1Directory = join(
-  paDirectory,
-  ".wrangler",
-  "state",
-  "v3",
-  "d1",
-  "miniflare-D1DatabaseObject",
-);
+const bridgePath = join(process.cwd(), "scripts", "pa_sync_bridge.py");
+const repositoryRoot = resolve(process.cwd(), "..");
 
 let syncRunning = false;
 let lastSyncAt: string | null = null;
 let lastSyncResult: SyncResult | null = null;
-let lastObservedDatabaseTime = 0;
-let pendingAutoSyncAt = 0;
 
 function readStructuredSettings(): StructuredSettingsFile | null {
-  if (!existsSync(settingsPath)) {
+  const path = settingsPath();
+  if (!existsSync(path)) {
     return null;
   }
   try {
-    const parsed = JSON.parse(readFileSync(settingsPath, "utf8")) as StructuredSettingsFile;
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as StructuredSettingsFile;
     return parsed.version === 1 ? parsed : null;
   } catch {
     return null;
@@ -160,31 +143,9 @@ function truthy(value: string): boolean {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
-function findLocalD1Database(): string | null {
-  if (!existsSync(localD1Directory)) {
-    return null;
-  }
-  const candidates = readdirSync(localD1Directory)
-    .filter((name) => name.endsWith(".sqlite") && name !== "metadata.sqlite")
-    .map((name) => join(localD1Directory, name))
-    .filter((path) => existsSync(path))
-    .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
-  return candidates[0] ?? null;
-}
-
-function parseBody(request: IncomingMessage): Promise<Record<string, unknown>> {
-  return new Promise((resolveBody, rejectBody) => {
-    const chunks: Buffer[] = [];
-    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    request.on("end", () => {
-      try {
-        resolveBody(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>);
-      } catch (error) {
-        rejectBody(error);
-      }
-    });
-    request.on("error", rejectBody);
-  });
+function databaseSource(): string | null {
+  const path = databasePath();
+  return existsSync(path) ? path : null;
 }
 
 function commandOutput(command: string, args: string[]): Promise<string | null> {
@@ -213,7 +174,7 @@ function commandOutput(command: string, args: string[]): Promise<string | null> 
   });
 }
 
-async function chooseDirectory(target: "local" | "remote" | "storage"): Promise<string | null> {
+export async function chooseDirectory(target: "local" | "remote" | "storage"): Promise<string | null> {
   const prompt = target === "remote"
     ? "Choose the OneDrive folder for PA sync"
     : target === "storage"
@@ -239,14 +200,7 @@ async function chooseDirectory(target: "local" | "remote" | "storage"): Promise<
   return selected.replace(/[\\/]+$/, "");
 }
 
-function sendJson(response: ServerResponse, value: unknown, status = 200): void {
-  response.statusCode = status;
-  response.setHeader("Content-Type", "application/json; charset=utf-8");
-  response.setHeader("Cache-Control", "no-store");
-  response.end(JSON.stringify(value));
-}
-
-function settingsFromCurrentValues(): StructuredSettingsFile {
+function settingsFromCurrentValues(existing: StructuredSettingsFile | null): StructuredSettingsFile {
   return {
     version: 1,
     updatedAt: new Date().toISOString(),
@@ -267,12 +221,19 @@ function settingsFromCurrentValues(): StructuredSettingsFile {
       autoSync: envValue("PA_AUTO_SYNC", "false"),
       autoSyncInterval: envValue("PA_AUTO_SYNC_INTERVAL", "5"),
     },
-    secrets: Object.fromEntries(secretKeys.map((key) => [key, envValue(key)])),
+    // Seed the secret baseline from the persisted settings file ONLY (no env
+    // fallback). Otherwise a secret supplied purely through the environment
+    // would be silently materialized into plaintext settings.json the first
+    // time any unrelated setting is saved. Secrets are persisted only when the
+    // user enters them in the UI (they then arrive via the request payload).
+    secrets: Object.fromEntries(
+      secretKeys.map((key) => [key, existing?.secrets?.[key]?.trim() ?? ""]),
+    ),
   };
 }
 
 function saveStructuredSettings(updates: Record<string, string>): void {
-  const next = settingsFromCurrentValues();
+  const next = settingsFromCurrentValues(readStructuredSettings());
   const setValue = (key: string, value: string) => {
     switch (key) {
       case "BEDROCK_MODEL_ID": next.ai.modelId = value; break;
@@ -300,10 +261,12 @@ function saveStructuredSettings(updates: Record<string, string>): void {
     process.env[key] = value;
   }
   next.updatedAt = new Date().toISOString();
-  mkdirSync(settingsDirectory, { recursive: true, mode: 0o700 });
-  writeFileSync(settingsTemporaryPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
-  renameSync(settingsTemporaryPath, settingsPath);
-  chmodSync(settingsPath, 0o600);
+  ensureLibraryDirectories();
+  const path = settingsPath();
+  const temporaryPath = join(dirname(path), "settings.json.tmp");
+  writeFileSync(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  renameSync(temporaryPath, path);
+  chmodSync(path, 0o600);
 }
 
 function detectOneDrivePaths(): string[] {
@@ -329,8 +292,7 @@ function detectOneDrivePaths(): string[] {
   return [...candidates].sort();
 }
 
-function currentSettings() {
-  const localD1Database = findLocalD1Database();
+export function currentSettings() {
   return {
     local: true,
     ai: {
@@ -357,7 +319,7 @@ function currentSettings() {
       running: syncRunning,
       lastSyncAt,
       lastResult: lastSyncResult,
-      sourceExists: Boolean(localD1Database),
+      sourceExists: Boolean(databaseSource()),
     },
   };
 }
@@ -385,6 +347,10 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
   return updates;
 }
 
+export function persistSettings(data: SettingsPayload): void {
+  saveStructuredSettings(sanitizeSettings(data));
+}
+
 function pythonExecutable(): string {
   const virtualEnvironmentPython = process.platform === "win32"
     ? join(repositoryRoot, ".venv", "Scripts", "python.exe")
@@ -395,17 +361,40 @@ function pythonExecutable(): string {
   return process.platform === "win32" ? "python" : "python3";
 }
 
-async function runSync(auto = false): Promise<SyncResult> {
+export async function runSync(auto = false): Promise<SyncResult> {
   if (syncRunning) {
-    throw new Error("A PA sync is already running.");
+    throw new Error("A PA backup is already running.");
   }
-  const localDatabase = findLocalD1Database();
+  const localDatabase = databaseSource();
   const remoteDirectory = envValue("PA_ONEDRIVE_PATH");
   if (!localDatabase) {
-    throw new Error("The local PA D1 database is not available yet.");
+    throw new Error("The local PA database is not available yet.");
   }
   if (!remoteDirectory) {
-    throw new Error("Choose a OneDrive remote directory before syncing.");
+    throw new Error("Choose a OneDrive backup folder first.");
+  }
+  // Choosing the path and starting a backup is the user's authorization to
+  // create the folder, so a not-yet-existing destination is created here (its
+  // parent must already exist, so a typo can't scatter a tree at a phantom
+  // path). A non-empty folder is fine: the backup is one-way and additive —
+  // it only writes library.db + pdfs/ + html_snapshots/ and never deletes other
+  // contents. The one hard rule is that the destination must be outside the
+  // live library folder, or the backup would clobber the source it copies.
+  const resolvedRemote = resolve(remoteDirectory);
+  const resolvedLibrary = resolve(libraryRoot());
+  if (resolvedRemote === resolvedLibrary || resolvedRemote.startsWith(`${resolvedLibrary}/`)) {
+    throw new Error("The backup folder must be outside the live library folder.");
+  }
+  if (existsSync(resolvedRemote)) {
+    if (!statSync(resolvedRemote).isDirectory()) {
+      throw new Error("The OneDrive backup path is a file. Choose a folder.");
+    }
+  } else {
+    const parent = dirname(resolvedRemote);
+    if (!existsSync(parent) || !statSync(parent).isDirectory()) {
+      throw new Error("The OneDrive backup folder's parent does not exist. Choose a valid location.");
+    }
+    mkdirSync(resolvedRemote, { recursive: true });
   }
   syncRunning = true;
   try {
@@ -413,13 +402,11 @@ async function runSync(auto = false): Promise<SyncResult> {
       const args = [
         bridgePath,
         "--local",
-        localAssetDirectory,
+        libraryRoot(),
         "--database",
         localDatabase,
         "--remote",
-        remoteDirectory,
-        "--policy",
-        "local",
+        resolvedRemote,
       ];
       if (auto) {
         args.push("--auto");
@@ -431,6 +418,13 @@ async function runSync(auto = false): Promise<SyncResult> {
       });
       let output = "";
       let errorOutput = "";
+      let timedOut = false;
+      // Never let a stuck bridge (network stall, lock contention) hang the sync
+      // request forever; SIGKILL after 5 minutes and surface a clear error.
+      const killTimer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGKILL");
+      }, 5 * 60 * 1000);
       child.stdout.on("data", (chunk) => {
         output += String(chunk);
         if (output.length > 2_000_000) {
@@ -440,8 +434,16 @@ async function runSync(auto = false): Promise<SyncResult> {
       child.stderr.on("data", (chunk) => {
         errorOutput += String(chunk);
       });
-      child.on("error", rejectResult);
+      child.on("error", (error) => {
+        clearTimeout(killTimer);
+        rejectResult(error);
+      });
       child.on("close", () => {
+        clearTimeout(killTimer);
+        if (timedOut) {
+          rejectResult(new Error("PA sync timed out after 5 minutes."));
+          return;
+        }
         try {
           const lines = output.trim().split(/\r?\n/).filter(Boolean);
           const parsed = JSON.parse(lines.at(-1) ?? "{}") as SyncResult;
@@ -460,113 +462,4 @@ async function runSync(auto = false): Promise<SyncResult> {
   } finally {
     syncRunning = false;
   }
-}
-
-export function paSettings(): Plugin {
-  return {
-    name: "pa-local-settings",
-    apply: "serve",
-    configureServer(server) {
-      const observeDatabase = () => {
-        const settings = currentSettings();
-        const databasePath = findLocalD1Database();
-        if (!settings.sync.autoSync || !settings.sync.remotePath || !databasePath) {
-          return;
-        }
-        const modified = statSync(databasePath).mtimeMs;
-        if (!lastObservedDatabaseTime) {
-          lastObservedDatabaseTime = modified;
-          return;
-        }
-        if (modified > lastObservedDatabaseTime) {
-          lastObservedDatabaseTime = modified;
-          pendingAutoSyncAt = Date.now() + settings.sync.autoSyncInterval * 1000;
-        }
-        if (pendingAutoSyncAt && Date.now() >= pendingAutoSyncAt && !syncRunning) {
-          pendingAutoSyncAt = 0;
-          void runSync(true).catch((error) => {
-            lastSyncAt = new Date().toISOString();
-            lastSyncResult = {
-              ok: false,
-              summary: "Auto-sync failed",
-              changes: {},
-              details: {},
-              conflicts: 0,
-              errors: [error instanceof Error ? error.message : "Auto-sync failed."],
-              cancelled: false,
-              progress: [],
-              logs: [],
-            };
-          });
-        }
-      };
-      const timer = setInterval(observeDatabase, 1000);
-      server.httpServer?.once("close", () => clearInterval(timer));
-
-      server.middlewares.use(async (request, response, next) => {
-        const url = new URL(request.url ?? "/", "http://localhost");
-        if (url.pathname === "/api/local-directory-picker") {
-          if (request.method !== "POST") {
-            sendJson(response, { error: "Use POST to choose a directory." }, 405);
-            return;
-          }
-          try {
-            const body = await parseBody(request);
-            const target = body.target === "local" ? "local" : body.target === "storage" ? "storage" : "remote";
-            const path = await chooseDirectory(target);
-            sendJson(response, {
-              path,
-              sourceExists: target === "local" && path ? existsSync(join(path, "papers.db")) : undefined,
-            });
-          } catch (error) {
-            sendJson(response, { error: error instanceof Error ? error.message : "The folder selector could not be opened." }, 500);
-          }
-          return;
-        }
-        if (url.pathname === "/api/local-settings") {
-          try {
-            if (request.method === "POST") {
-              const body = await parseBody(request);
-              saveStructuredSettings(sanitizeSettings((body.data ?? {}) as SettingsPayload));
-            }
-            sendJson(response, currentSettings());
-          } catch (error) {
-            sendJson(response, { error: error instanceof Error ? error.message : "Settings could not be saved." }, 400);
-          }
-          return;
-        }
-        if (url.pathname === "/api/local-runtime-settings") {
-          const hasBrowserHeaders = Boolean(request.headers.origin || request.headers["sec-fetch-site"]);
-          if (request.method !== "GET" || request.headers["x-pa-internal-runtime"] !== "pa-runtime-v1" || hasBrowserHeaders) {
-            sendJson(response, { error: "Internal runtime configuration is unavailable." }, 403);
-            return;
-          }
-          sendJson(response, {
-            values: Object.fromEntries([...environmentKeys].map((key) => [key, envValue(key)])),
-          });
-          return;
-        }
-        if (url.pathname === "/api/local-sync") {
-          if (request.method === "GET") {
-            sendJson(response, currentSettings().sync);
-            return;
-          }
-          if (request.method === "POST") {
-            try {
-              const body = await parseBody(request);
-              if (body.data && typeof body.data === "object") {
-                saveStructuredSettings(sanitizeSettings(body.data as SettingsPayload));
-              }
-              const result = await runSync(false);
-              sendJson(response, { result, sync: currentSettings().sync }, result.ok ? 200 : 502);
-            } catch (error) {
-              sendJson(response, { error: error instanceof Error ? error.message : "Sync failed.", sync: currentSettings().sync }, 502);
-            }
-            return;
-          }
-        }
-        next();
-      });
-    },
-  };
 }

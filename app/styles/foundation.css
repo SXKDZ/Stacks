@@ -15,6 +15,7 @@
   /* Product CTAs intentionally use the same stable blue in both themes. The
      brighter theme accent remains available for focus and selected states. */
   --brand-cta: #168dec;
+  --brand-cta-hover: #2b9cf2;
   --brand-cta-border: rgba(22, 141, 236, 0.38);
   --brand-cta-shadow: rgba(22, 141, 236, 0.18);
   /* Legacy aliases: map the ghost --blue* tokens onto the theme-aware brand
@@ -32,7 +33,6 @@
   --scrim: rgba(2, 3, 8, 0.66);
   /* Brand CTA gradient, applied identically in both themes. */
   --brand-gradient: linear-gradient(135deg, #168dec 0%, #258de4 52%, #357fd8 100%);
-  --brand-gradient-hover: linear-gradient(135deg, #249cf4, #268be0 52%, #397fd6);
   --cyan: #5fd9e8;
   --cyan-soft: rgba(95, 217, 232, 0.12);
   --amber: #ffcf5c;
@@ -280,7 +280,7 @@ body {
 /* Sidebar "Add paper" CTA. */
 .new-paper-button {
   align-items: center;
-  background: var(--brand-cta);
+  background-color: var(--brand-cta);
   border: 1px solid var(--brand-cta-border);
   border-radius: 11px;
   box-shadow: 0 7px 18px var(--brand-cta-shadow);
@@ -296,9 +296,12 @@ body {
   transition: background-color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
 }
 
+/* Use background-color on both states (not the `background` shorthand + a
+   gradient) so the transition animates color→color. Mixing a solid base with a
+   gradient-image hover made background-color flash through white on hover-out. */
 .new-paper-button:hover,
 .new-paper-button:focus-visible {
-  background: var(--brand-gradient-hover);
+  background-color: var(--brand-cta-hover);
   border-color: var(--brand-cta-border);
   transform: translateY(-1px);
 }
@@ -859,3 +862,58 @@ button.stat-card:hover {
 .sheet-chart i:nth-child(3) { height: 48%; }
 .sheet-chart i:nth-child(4) { height: 82%; }
 .sheet-chart i:nth-child(5) { height: 70%; }
+
+/* Full-page error boundary (app/error.tsx). */
+.error-boundary {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: center;
+  margin: 0 auto;
+  max-width: 460px;
+  min-height: 100dvh;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.error-boundary-icon {
+  align-items: center;
+  background: var(--rose-soft);
+  border-radius: var(--radius-lg);
+  color: var(--rose);
+  display: flex;
+  height: 54px;
+  justify-content: center;
+  width: 54px;
+}
+
+.error-boundary h1 {
+  font-size: 21px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  margin: 4px 0 0;
+}
+
+.error-boundary p {
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.error-boundary-digest {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  padding: 4px 8px;
+}
+
+.error-boundary-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}

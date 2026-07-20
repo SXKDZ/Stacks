@@ -1,6 +1,10 @@
+import { basename } from "node:path";
 import { ensureDatabase } from "@/db/bootstrap";
+import { papers } from "@/db/schema";
+import { inspectStorage } from "@/app/lib/local-files";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 interface StorageManagementRequest {
   operation?: "inspect" | "clean" | "repair" | "move";
@@ -25,50 +29,55 @@ function absolutePath(value: string | null): boolean {
 
 async function databaseDiagnostic(clean: boolean) {
   const database = await ensureDatabase();
+  // PRAGMAs, orphan cleanup, and per-table counts are maintenance SQL that maps
+  // cleanly to the raw connection Drizzle owns; run them there.
+  const raw = database.$client;
   if (clean) {
-    await database.batch([
-      database.prepare(`DELETE FROM paper_authors
+    const cleanup = raw.transaction(() => {
+      raw.prepare(`DELETE FROM paper_authors
         WHERE paper_id NOT IN (SELECT id FROM papers)
-           OR author_id NOT IN (SELECT id FROM authors)`),
-      database.prepare(`DELETE FROM paper_collections
+           OR author_id NOT IN (SELECT id FROM authors)`).run();
+      raw.prepare(`DELETE FROM paper_collections
         WHERE paper_id NOT IN (SELECT id FROM papers)
-           OR collection_id NOT IN (SELECT id FROM collections)`),
-      database.prepare(`DELETE FROM paper_tags
+           OR collection_id NOT IN (SELECT id FROM collections)`).run();
+      raw.prepare(`DELETE FROM paper_tags
         WHERE paper_id NOT IN (SELECT id FROM papers)
-           OR tag_id NOT IN (SELECT id FROM tags)`),
-    ]);
+           OR tag_id NOT IN (SELECT id FROM tags)`).run();
+    });
+    cleanup();
   }
 
-  const [integrityResult, foreignKeyResult, paperRows, orphanedAuthors, orphanedCollections, orphanedTags] = await Promise.all([
-    database.prepare("PRAGMA quick_check").all<Record<string, unknown>>(),
-    database.prepare("PRAGMA foreign_key_check").all<Record<string, unknown>>(),
-    database.prepare("SELECT id, local_path, html_snapshot_path FROM papers").all<{ id: string; local_path: string | null; html_snapshot_path: string | null }>(),
-    database.prepare(`SELECT COUNT(*) AS count FROM paper_authors pa
-      LEFT JOIN papers p ON p.id = pa.paper_id
-      LEFT JOIN authors a ON a.id = pa.author_id
-      WHERE p.id IS NULL OR a.id IS NULL`).first<{ count: number }>(),
-    database.prepare(`SELECT COUNT(*) AS count FROM paper_collections pc
-      LEFT JOIN papers p ON p.id = pc.paper_id
-      LEFT JOIN collections c ON c.id = pc.collection_id
-      WHERE p.id IS NULL OR c.id IS NULL`).first<{ count: number }>(),
-    database.prepare(`SELECT COUNT(*) AS count FROM paper_tags pt
-      LEFT JOIN papers p ON p.id = pt.paper_id
-      LEFT JOIN tags t ON t.id = pt.tag_id
-      WHERE p.id IS NULL OR t.id IS NULL`).first<{ count: number }>(),
-  ]);
-  const tableCounts = Object.fromEntries(await Promise.all(countedTables.map(async (table) => {
-    const result = await database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>();
+  const integrityResult = raw.prepare("PRAGMA quick_check").all() as Array<Record<string, unknown>>;
+  const foreignKeyResult = raw.prepare("PRAGMA foreign_key_check").all() as Array<Record<string, unknown>>;
+  const paperRows = database
+    .select({ id: papers.id, localPath: papers.localPath, htmlSnapshotPath: papers.htmlSnapshotPath })
+    .from(papers)
+    .all();
+  const orphanedAuthors = raw.prepare(`SELECT COUNT(*) AS count FROM paper_authors pa
+    LEFT JOIN papers p ON p.id = pa.paper_id
+    LEFT JOIN authors a ON a.id = pa.author_id
+    WHERE p.id IS NULL OR a.id IS NULL`).get() as { count: number };
+  const orphanedCollections = raw.prepare(`SELECT COUNT(*) AS count FROM paper_collections pc
+    LEFT JOIN papers p ON p.id = pc.paper_id
+    LEFT JOIN collections c ON c.id = pc.collection_id
+    WHERE p.id IS NULL OR c.id IS NULL`).get() as { count: number };
+  const orphanedTags = raw.prepare(`SELECT COUNT(*) AS count FROM paper_tags pt
+    LEFT JOIN papers p ON p.id = pt.paper_id
+    LEFT JOIN tags t ON t.id = pt.tag_id
+    WHERE p.id IS NULL OR t.id IS NULL`).get() as { count: number };
+  const tableCounts = Object.fromEntries(countedTables.map((table) => {
+    const result = raw.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
     return [table, Number(result?.count ?? 0)] as const;
-  }))) as Record<string, number>;
-  const absolutePdfPaths = paperRows.results.filter((paper) => absolutePath(paper.local_path)).map((paper) => paper.local_path as string);
-  const absoluteHtmlPaths = paperRows.results.filter((paper) => absolutePath(paper.html_snapshot_path)).map((paper) => paper.html_snapshot_path as string);
-  const integrityValues = integrityResult.results.flatMap((row) => Object.values(row).map(String));
+  })) as Record<string, number>;
+  const absolutePdfPaths = paperRows.filter((paper) => absolutePath(paper.localPath)).map((paper) => paper.localPath as string);
+  const absoluteHtmlPaths = paperRows.filter((paper) => absolutePath(paper.htmlSnapshotPath)).map((paper) => paper.htmlSnapshotPath as string);
+  const integrityValues = integrityResult.flatMap((row) => Object.values(row).map(String));
   const integrityOk = integrityValues.length > 0 && integrityValues.every((value) => value.toLowerCase() === "ok");
   return {
     integrityOk,
     integrityMessages: integrityValues,
     foreignKeyEnforced: true,
-    foreignKeyViolations: foreignKeyResult.results.length,
+    foreignKeyViolations: foreignKeyResult.length,
     tableCounts,
     orphanedAssociations: {
       paperAuthors: Number(orphanedAuthors?.count ?? 0),
@@ -85,65 +94,78 @@ export async function POST(request: Request): Promise<Response> {
     const body = await request.json() as StorageManagementRequest;
     if (body.operation === "move") {
       return Response.json(
-        { error: "Moving a local library folder requires PA's local filesystem companion." },
+        { error: "Move the library folder from the filesystem, then update ~/.paperassistant/storage.json." },
         { status: 409 },
       );
     }
     const clean = body.operation === "clean" || body.operation === "repair";
     if (clean && !body.confirmed) {
-      return Response.json({ error: "Database repair requires explicit confirmation." }, { status: 400 });
+      return Response.json({ error: "Cleanup requires explicit confirmation." }, { status: 400 });
     }
     const databaseHealth = await databaseDiagnostic(clean);
     const paperRecords = databaseHealth.tableCounts.papers ?? 0;
-    const referencedPdfFiles = await (await ensureDatabase())
-      .prepare("SELECT COUNT(*) AS count FROM papers WHERE local_path IS NOT NULL AND trim(local_path) <> ''")
-      .first<{ count: number }>();
-    const referencedHtmlFiles = await (await ensureDatabase())
-      .prepare("SELECT COUNT(*) AS count FROM papers WHERE html_snapshot_path IS NOT NULL AND trim(html_snapshot_path) <> ''")
-      .first<{ count: number }>();
+
+    // The library is a local SQLite file with real PDF/HTML assets on disk;
+    // inspect them against the paths the database references.
+    const database = await ensureDatabase();
+    const assetRows = database
+      .select({ localPath: papers.localPath, htmlSnapshotPath: papers.htmlSnapshotPath })
+      .from(papers)
+      .all();
+    const referencedPdf = assetRows
+      .map((row) => (row.localPath ? basename(row.localPath) : null))
+      .filter((name): name is string => Boolean(name));
+    const referencedHtml = assetRows
+      .map((row) => (row.htmlSnapshotPath ? basename(row.htmlSnapshotPath) : null))
+      .filter((name): name is string => Boolean(name));
+    const papersWithoutLocalAsset = assetRows.filter(
+      (row) => !row.localPath?.trim() && !row.htmlSnapshotPath?.trim(),
+    ).length;
+    const storage = inspectStorage(referencedPdf, referencedHtml, clean);
+
     return Response.json({
-      mode: "hosted",
+      mode: "local",
       capabilities: {
         databaseChecks: true,
-        fileChecks: false,
-        repairs: ["orphaned-associations"],
+        fileChecks: true,
+        repairs: ["orphaned-associations", "orphaned-files"],
         folderMove: false,
       },
-      libraryRoot: "D1 database",
+      libraryRoot: storage.libraryRoot,
       libraryExists: true,
-      databasePresent: true,
+      databasePresent: storage.databaseExists,
       settingsPresent: true,
       databaseHealth,
       systemHealth: {
-        runtime: "Cloudflare Workers",
-        database: "D1",
-        filesystemAvailable: false,
+        runtime: "Node.js",
+        database: "SQLite (library.db)",
+        filesystemAvailable: true,
       },
       assets: [],
       paperRecords,
-      referencedPdfFiles: Number(referencedPdfFiles?.count ?? 0),
-      presentPdfFiles: 0,
-      missingPdfFiles: 0,
-      missingPdfPaths: [],
-      referencedHtmlFiles: Number(referencedHtmlFiles?.count ?? 0),
-      presentHtmlFiles: 0,
-      missingHtmlFiles: 0,
-      missingHtmlPaths: [],
+      referencedPdfFiles: referencedPdf.length,
+      presentPdfFiles: storage.pdf.present,
+      missingPdfFiles: storage.pdf.missing,
+      missingPdfPaths: storage.pdf.missingPaths,
+      referencedHtmlFiles: referencedHtml.length,
+      presentHtmlFiles: storage.html.present,
+      missingHtmlFiles: storage.html.missing,
+      missingHtmlPaths: storage.html.missingPaths,
       invalidPdfPaths: databaseHealth.absolutePdfPaths,
       invalidHtmlPaths: databaseHealth.absoluteHtmlPaths,
       invalidReferences: databaseHealth.absolutePdfPaths.length + databaseHealth.absoluteHtmlPaths.length,
-      papersWithoutLocalAsset: 0,
+      papersWithoutLocalAsset,
       paperIdsWithoutLocalAsset: [],
-      storedPdfFiles: 0,
-      storedPdfBytes: 0,
-      storedHtmlFiles: 0,
-      storedHtmlBytes: 0,
-      totalFiles: 0,
-      totalBytes: 0,
-      orphanedFiles: 0,
-      orphanedBytes: 0,
-      removedFiles: 0,
-      removedBytes: 0,
+      storedPdfFiles: storage.pdf.storedFiles,
+      storedPdfBytes: storage.pdf.storedBytes,
+      storedHtmlFiles: storage.html.storedFiles,
+      storedHtmlBytes: storage.html.storedBytes,
+      totalFiles: storage.totalFiles,
+      totalBytes: storage.totalBytes,
+      orphanedFiles: storage.orphanedFiles,
+      orphanedBytes: storage.orphanedBytes,
+      removedFiles: storage.removedFiles,
+      removedBytes: storage.removedBytes,
     });
   } catch (error) {
     return Response.json(

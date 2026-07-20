@@ -39,25 +39,37 @@ test("keeps API credentials out of tracked examples", async () => {
 });
 
 test("persists local settings atomically and backs up the normalized library", async () => {
-  const [plugin, bridge, example, ignore] = await Promise.all([
-    readFile(new URL("../build/pa-settings-plugin.ts", import.meta.url), "utf8"),
+  const [settings, routeSettings, proxy, routeSync, routePicker, bridge, example, ignore] = await Promise.all([
+    readFile(new URL("../app/lib/local-settings.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/local-settings/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/local-sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/local-directory-picker/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../scripts/pa_sync_bridge.py", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../.gitignore", import.meta.url), "utf8"),
   ]);
-  assert.match(plugin, /api\/local-settings/);
-  assert.match(plugin, /api\/local-runtime-settings/);
-  assert.match(plugin, /api\/local-sync/);
-  assert.match(plugin, /api\/local-directory-picker/);
-  assert.match(plugin, /"local" \| "remote" \| "storage"/);
-  assert.match(plugin, /Choose the destination folder for the PA library/);
-  assert.match(plugin, /settings\.json\.tmp/);
-  assert.match(plugin, /renameSync\(settingsTemporaryPath, settingsPath\)/);
-  assert.doesNotMatch(plugin, /writeFileSync\(environmentPath/);
-  assert.match(plugin, /findLocalD1Database/);
+  // Local settings are served by real Next routes (Node runtime), backed by the
+  // self-contained library folder via db/library-paths.
+  assert.match(routeSettings, /export const runtime = "nodejs"/);
+  // Mutating API requests are CSRF-guarded by the same-origin proxy.
+  assert.match(proxy, /sec-fetch-site/);
+  assert.match(proxy, /matcher: \["\/api\/:path\*"\]/);
+  assert.match(routeSync, /export async function POST/);
+  assert.match(routePicker, /chooseDirectory/);
+  assert.match(settings, /settingsPath\(\)/);
+  assert.match(settings, /databasePath\(\)/);
+  assert.match(settings, /"local" \| "remote" \| "storage"/);
+  // Atomic write: temp file + rename.
+  assert.match(settings, /settings\.json\.tmp/);
+  assert.match(settings, /renameSync\(temporaryPath, path\)/);
   assert.match(bridge, /pa_sync\.lock/);
-  assert.match(bridge, /D1 is authoritative/);
   assert.match(bridge, /html_snapshots/);
+  // The backup destination is created if missing and must be outside the live
+  // library, but need not pre-exist or be empty.
+  assert.match(settings, /mkdirSync\(resolvedRemote/);
+  assert.match(settings, /must be outside the live library folder/);
+  assert.doesNotMatch(settings, /Choose an existing folder/);
   assert.match(example, /PA_ONEDRIVE_PATH/);
   assert.match(example, /PA_MAX_TOKENS/);
   assert.match(ignore, /data\/settings\.json/);
@@ -75,6 +87,17 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(bedrock, /\/converse/);
   assert.match(prompts, /\{\{papers\}\}/);
   assert.match(prompts, /\{\{paper1\}\}/);
+  // Streaming robustness: mid-stream exception frames/events surface as errors
+  // (both parsers) and the client abort is forwarded to Bedrock.
+  assert.match(bedrock, /messageType === "exception"/);
+  assert.match(bedrock, /parsed\.type === "error" \|\| parsed\.error/);
+  assert.match(bedrock, /signal: options\.signal/);
+  // AI routes pin the Node runtime.
+  const chatRoute = await readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8");
+  assert.match(chatRoute, /export const runtime = "nodejs"/);
+  assert.match(chatRoute, /signal: request\.signal/);
+  // Grounding is fetched concurrently, not in a sequential await loop.
+  assert.match(chatRoute, /Promise\.all\(\s*papers\.map/);
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {
@@ -91,14 +114,25 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS app_settings/);
   assert.match(settingsRoute, /saveStoredSettings/);
   assert.doesNotMatch(settingsRoute, /501|Not implemented/i);
-  assert.match(settingsStore, /Preferences use D1|app_settings/);
+  // Preferences persist to the app_settings table through the Drizzle ORM.
+  assert.match(settingsStore, /appSettings/);
   assert.match(doctor, /PRAGMA quick_check/);
   assert.match(doctor, /PRAGMA foreign_key_check/);
   assert.match(doctor, /orphanedAssociations/);
   assert.match(chat, /PA_PDF_PAGES/);
   assert.match(chat, /pdfStartPage/);
   assert.match(grounding, /getDocumentProxy/);
-  assert.match(grounding, /redirect: "manual"/);
+  // SSRF guards live in the shared url-safety module and are used on every
+  // server-side fetch of a user-supplied URL (grounding + source acquisition).
+  const [urlSafety, localFiles] = await Promise.all([
+    readFile(new URL("../app/lib/url-safety.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(urlSafety, /redirect: "manual"/);
+  assert.match(urlSafety, /publicHttpsUrl/);
+  assert.match(grounding, /from "@\/app\/lib\/url-safety"/);
+  assert.match(localFiles, /safeFetch/);
+  assert.doesNotMatch(localFiles, /redirect: "follow"/);
   assert.match(settingsView, /PDF grounding pages/);
   assert.match(settingsView, /About & updates/);
   assert.match(version, /releases\/latest/);
@@ -148,9 +182,10 @@ test("persists collection membership through the paper-collection composite key"
     readFile(new URL("../drizzle/0005_lyrical_victor_mancha.sql", import.meta.url), "utf8"),
   ]);
   assert.match(schema, /primaryKey\(\{ columns: \[table\.paperId, table\.collectionId\] \}\)/);
-  assert.match(library, /INSERT OR IGNORE INTO paper_collections \(paper_id, collection_id\)/);
-  assert.match(library, /DELETE FROM paper_collections WHERE paper_id = \? AND collection_id = \?/);
-  assert.match(library, /createPaper[\s\S]*?if \(Array\.isArray\(data\.collectionNames\)\)[\s\S]*?syncPaperCollectionsByName\(database, id, data\.collectionNames\)/);
+  // Membership is reconciled through Drizzle: idempotent inserts + composite-key deletes.
+  assert.match(library, /\.insert\(paperCollections\)[\s\S]*?\.onConflictDoNothing\(\)/);
+  assert.match(library, /\.delete\(paperCollections\)[\s\S]*?eq\(paperCollections\.paperId[\s\S]*?eq\(paperCollections\.collectionId/);
+  assert.match(library, /resolveCollectionIdsByName\(tx, data\.collectionNames\)/);
   assert.match(application, /Papers in collection/);
   assert.match(application, /All remaining papers/);
   assert.match(application, /aria-label="Remove selected paper from collection"/);
@@ -205,37 +240,58 @@ test("tracks long-running work while persisting chat as separate discussions", a
   assert.match(tasks, /pa-activity-log-v1/);
   assert.match(application, /Generate summary ·/);
   assert.match(application, /Copy \$\{file\.name\} into PA storage/);
-  assert.match(settings, /Sync PA library to OneDrive/);
+  assert.match(settings, /Back up PA library to OneDrive/);
   assert.match(chatWorkspace, /pa-chat-sessions-v2/);
   assert.match(chatWorkspace, /persistSessions/);
   assert.match(chatWorkspace, /Discussion title/);
+  assert.match(chatWorkspace, /session\.titleMode === "auto" \? automaticTitle\(selected\) : session\.title/);
+  assert.match(chatWorkspace, /titleMode: titleDraft\.trim\(\) \? "custom" : "auto"/);
+  assert.match(chatWorkspace, /className="chat-history-close"[\s\S]*icon=\{<PanelLeftClose \/>\}/);
+  assert.match(chatWorkspace, /className="chat-context-close"[\s\S]*icon=\{<PanelRightClose \/>\}/);
   assert.doesNotMatch(chatWorkspace, /runTask/);
 });
 
-test("uses D1 as the active library and treats legacy SQLite as import-only", async () => {
-  const [library, bootstrap, localFiles, config] = await Promise.all([
+test("runs the library on a local SQLite file in the self-contained library folder", async () => {
+  const [library, bootstrap, dbIndex, client, paths, localFiles] = await Promise.all([
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
-    readFile(new URL("../build/local-files-plugin.ts", import.meta.url), "utf8"),
-    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/client.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/library-paths.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
   ]);
+  // The database is a plain SQLite file (better-sqlite3) queried through the
+  // Drizzle ORM — there is no Cloudflare D1 or D1-compatible adapter left.
   assert.match(library, /ensureDatabase/);
+  assert.match(library, /from "drizzle-orm"/);
+  assert.match(library, /from "@\/db\/schema"/);
   assert.match(bootstrap, /SELECT COUNT\(\*\) AS count FROM papers/);
-  assert.match(config, /paLocalFiles/);
-  assert.doesNotMatch(config, /local-papercli|papercliLocal/);
-  assert.match(localFiles, /DatabaseSync/);
-  assert.match(localFiles, /BEGIN IMMEDIATE/);
-  assert.match(localFiles, /operation === "repair"/);
-  assert.match(localFiles, /if \(\(clean \|\| repair\) && !payload\.confirmed\)/);
-  assert.match(localFiles, /response\.body\.getReader\(\)/);
-  assert.match(localFiles, /containsPath\(source, target\) \|\| containsPath\(target, source\)/);
+  assert.doesNotMatch(bootstrap, /cloudflare:workers/);
+  assert.doesNotMatch(dbIndex, /drizzle-orm\/d1|cloudflare:workers/);
+  assert.match(client, /import Database from "better-sqlite3"/);
+  assert.match(client, /drizzle-orm\/better-sqlite3/);
+  // Reopen when the resolved library path changes (folder move at runtime).
+  assert.match(client, /connection\.file !== file/);
+  // Non-WAL journal: the library folder is cloud-synced, where a WAL sidecar
+  // could be clobbered mid-write.
+  assert.match(client, /journal_mode = TRUNCATE/);
+  assert.doesNotMatch(client, /journal_mode = WAL/);
+  // The library folder is the single self-contained location.
+  assert.match(paths, /library\.db/);
+  assert.match(paths, /settings\.json/);
+  assert.match(paths, /export function libraryRoot/);
+  // The live library defaults to a local path; OneDrive is only a backup target.
+  assert.match(paths, /\.paperassistant", "library"/);
+  // Stored PDFs/HTML are served by a real Node helper with a traversal guard.
+  assert.match(localFiles, /application\/pdf/);
+  assert.match(localFiles, /basename/);
 });
 
-test("backs up a D1 SQLite snapshot without replacing the live source", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pa-sync-test-"));
+test("backs up the local library one-way to OneDrive without replacing the live source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pa-backup-test-"));
   const local = join(root, "local");
   const remote = join(root, "remote");
-  const databasePath = join(root, "live-d1.sqlite");
+  const databasePath = join(local, "library.db");
   try {
     await mkdir(join(local, "pdfs"), { recursive: true });
     await mkdir(join(local, "html_snapshots"), { recursive: true });
@@ -246,16 +302,29 @@ test("backs up a D1 SQLite snapshot without replacing the live source", async ()
     database.exec("INSERT INTO papers VALUES ('paper-1', 'Fixture')");
     database.close();
 
+    // The backup folder does not exist yet: the bridge must create it rather
+    // than fail, and pre-existing contents (once present) must never be deleted.
+    await mkdir(remote, { recursive: true });
+    await writeFile(join(remote, "unrelated-user-file.txt"), "keep me");
+
     const bridgePath = fileURLToPath(new URL("../scripts/pa_sync_bridge.py", import.meta.url));
-    const { stdout } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote, "--policy", "local"]);
+    const { stdout } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
     const result = JSON.parse(stdout.trim());
     assert.equal(result.ok, true);
+    // One-way and additive: an unrelated file in a non-empty destination survives.
+    assert.equal(await readFile(join(remote, "unrelated-user-file.txt"), "utf8"), "keep me");
 
-    const backup = new DatabaseSync(join(remote, "papers.db"), { readOnly: true });
+    // The backup copy mirrors the live database name (library.db), consistently.
+    const backup = new DatabaseSync(join(remote, "library.db"), { readOnly: true });
     assert.equal(backup.prepare("SELECT COUNT(*) AS count FROM papers").get().count, 1);
     backup.close();
     assert.equal(await readFile(join(remote, "pdfs", "paper.pdf"), "utf8"), "pdf fixture");
     assert.equal(await readFile(join(remote, "html_snapshots", "paper.html"), "utf8"), "<p>fixture</p>");
+
+    // A second run is idempotent: nothing changes when the backup is current.
+    const { stdout: second } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
+    const secondResult = JSON.parse(second.trim());
+    assert.equal(Object.values(secondResult.changes).reduce((a, b) => a + b, 0), 0);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -452,6 +452,23 @@
   min-width: 0;
 }
 
+.paper-title-open {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: block;
+  font: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.paper-title-open:hover strong,
+.paper-title-open:focus-visible strong {
+  color: var(--brand-blue-strong);
+}
+
 .paper-title-cell strong {
   display: block;
   font-family: var(--font-display);

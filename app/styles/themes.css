@@ -116,7 +116,8 @@ body {
 }
 
 .icon-button:hover,
-.command-results > button:hover {
+.command-results > button:hover,
+.command-results > button.is-active {
   background: var(--brand-blue-soft);
   color: var(--brand-blue-strong);
 }

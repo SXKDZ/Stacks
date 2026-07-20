@@ -1,13 +1,13 @@
-import { env } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
+import { databasePath, ensureLibraryDirectories } from "./library-paths";
+import { getLibraryDb, type LibraryDb } from "./client";
 
-export function getDb() {
-  if (!env.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
-    );
-  }
-
-  return drizzle(env.DB, { schema });
+/**
+ * Convenience accessor for the typed Drizzle handle over the local SQLite
+ * library file. Most code obtains the handle through `ensureDatabase()` in
+ * db/bootstrap.ts (which also runs schema init); use this when you only need a
+ * handle and initialization has already happened.
+ */
+export function getDb(): LibraryDb {
+  ensureLibraryDirectories();
+  return getLibraryDb(databasePath());
 }
