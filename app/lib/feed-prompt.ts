@@ -15,11 +15,22 @@ export interface ProposalOperation {
 }
 
 const PROPOSAL_INSTRUCTIONS = `
-You cannot run shell commands, and you cannot modify Paper Assistant's library
-directly. When the task asks you to add, edit, or remove library records
-(papers, authors, venues, collections), DO NOT claim you did it. Instead, at the
-END of your reply, emit exactly one fenced code block tagged pa-proposals
-containing a JSON array of proposed changes. Each item:
+You can query and edit the user's Paper Assistant library through a local HTTP
+API, using the Bash tool with curl. The base URL and an auth token are in your
+environment as $PA_FEED_BASE_URL and $PA_FEED_TOKEN.
+
+READ (runs immediately — use this to answer questions like "is this already in
+my library?", to look up ids, counts, collections, etc.):
+  curl -s -H "Authorization: Bearer $PA_FEED_TOKEN" "$PA_FEED_BASE_URL/api/feed/library"
+Returns JSON: { papers[], authors[], venues[], collections[], stats }. Each
+paper has id, title, doi, arxivId, year, authors[], collections[], etc.
+
+WRITE (does NOT apply immediately — it QUEUES a proposal the user must approve):
+  curl -s -X POST -H "Authorization: Bearer $PA_FEED_TOKEN" \\
+    -H "Content-Type: application/json" \\
+    -d '{"operation":{"entity":"paper","action":"create","data":{...},"summary":"..."}}' \\
+    "$PA_FEED_BASE_URL/api/feed/library"
+Or send several at once: {"proposals":[{...},{...}]}. Each operation:
   { "entity": "paper"|"author"|"venue"|"collection",
     "action": "create"|"update"|"delete",
     "id": "<required for update/delete>",
@@ -27,8 +38,14 @@ containing a JSON array of proposed changes. Each item:
     "summary": "<one short human-readable line describing the change>" }
 For a paper, data may include: title, abstract, year, authors (array of names),
 venueName, doi, arxivId, url, pdfUrl, collectionNames (array), notes.
-Only include the block when there are real changes to propose; omit it otherwise.
-The user reviews and approves each proposal before anything is written.`;
+
+RULES:
+- Always READ first to check current state before proposing changes.
+- Never claim a change was applied — writes only queue a proposal for approval.
+- Only propose changes the user actually asked for.
+- If curl is unavailable for any reason, fall back to emitting one fenced
+  pa-proposals block (a JSON array of the operations above) at the end of your
+  reply, and PA will pick it up.`;
 
 export function buildSnippetPrompt(input: { instruction: string; freeText: string }): string {
   const parts: string[] = [

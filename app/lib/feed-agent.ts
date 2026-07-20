@@ -7,6 +7,7 @@ import { libraryRoot } from "@/db/library-paths";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { parseProposals, type ProposalOperation } from "@/app/lib/feed-prompt";
+import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 
 /**
  * Drives a headless `claude -p` agent for one feed snippet. The agent runs with
@@ -140,13 +141,20 @@ function emit(snippetId: string, event: FeedEvent): void {
   });
 }
 
-async function bedrockEnv(): Promise<NodeJS.ProcessEnv> {
+function feedBaseUrl(): string {
+  return process.env.PA_FEED_BASE_URL?.trim() || `http://127.0.0.1:${process.env.PORT?.trim() || "3000"}`;
+}
+
+async function agentEnv(feedToken: string): Promise<NodeJS.ProcessEnv> {
   const runtime = await resolveRuntimeValues();
   const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
   const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
   return {
     ...process.env,
     ...(token ? { CLAUDE_CODE_USE_BEDROCK: "1", AWS_BEARER_TOKEN_BEDROCK: token, AWS_REGION: region } : {}),
+    // The agent uses these (via Bash + curl) to query and edit the library.
+    PA_FEED_BASE_URL: feedBaseUrl(),
+    PA_FEED_TOKEN: feedToken,
   };
 }
 
@@ -166,6 +174,10 @@ export async function runFeedAgent(options: {
   const workingDir = feedWorkingDir(snippetId);
   mkdirSync(workingDir, { recursive: true });
 
+  // Issue a per-run token the agent uses (via Bash + curl) to reach the
+  // agent-facing library APIs. Reads run live; writes enqueue approvals.
+  const feedToken = issueFeedToken(snippetId);
+
   const args = [
     "-p",
     prompt,
@@ -174,8 +186,6 @@ export async function runFeedAgent(options: {
     "--verbose",
     "--max-turns",
     MAX_TURNS,
-    "--disallowedTools",
-    "Bash",
     "--add-dir",
     workingDir,
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
@@ -183,7 +193,7 @@ export async function runFeedAgent(options: {
 
   const child = spawn(CLAUDE_BIN, args, {
     cwd: workingDir,
-    env: await bedrockEnv(),
+    env: await agentEnv(feedToken),
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
@@ -286,6 +296,7 @@ export async function runFeedAgent(options: {
     await persistMessage(snippetId, "system", "error", error.message);
     await setStatus(snippetId, "error", error.message);
     emit(snippetId, { type: "done", status: "error" });
+    revokeFeedToken(snippetId);
     runs.delete(snippetId);
   });
 
@@ -306,6 +317,7 @@ export async function runFeedAgent(options: {
     // SSE stream) are still reachable and can close cleanly. Deleting first
     // would strand the "done" event and leave the client spinning forever.
     emit(snippetId, { type: "done", status });
+    revokeFeedToken(snippetId);
     runs.delete(snippetId);
   });
 }
