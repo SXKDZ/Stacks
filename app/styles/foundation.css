@@ -1,8 +1,10 @@
 
 :root {
   --ink: #eef1f7;
-  --muted: #8590a6;
-  --soft: #68738a;
+  /* Secondary/tertiary text. Nudged brighter for the dark canvas so labels,
+     counts, and inactive tabs read clearly rather than dim gray. */
+  --muted: #a2acbf;
+  --soft: #808ca3;
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.14);
   --canvas: #070912;
