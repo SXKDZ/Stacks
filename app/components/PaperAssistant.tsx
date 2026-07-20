@@ -34,6 +34,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Rss,
   Save,
   Search,
   Settings2,
@@ -681,6 +682,7 @@ function PaperAssistantWorkspace() {
   const [themeReady, setThemeReady] = useState(false);
   const [libraryName, setLibraryName] = useState("My Paper Library");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilterClause[]>([]);
+  const [feedEnabled, setFeedEnabled] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const notify = useCallback((message: string, tone: ToastState["tone"] = "success") => {
@@ -754,6 +756,21 @@ function PaperAssistantWorkspace() {
       void loadLibrary();
     }, 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/settings", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.feedEnabled === "boolean") {
+          setFeedEnabled(data.feedEnabled);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -924,6 +941,15 @@ function PaperAssistantWorkspace() {
               </button>
             );
           })}
+          {feedEnabled ? (
+            <button
+              className="nav-item"
+              onClick={() => window.open("/feed", "_blank", "noopener,noreferrer")}
+            >
+              <Rss size={17} strokeWidth={2} />
+              <span>AI feed</span>
+            </button>
+          ) : null}
         </nav>
 
         <div className="sidebar-spacer" />

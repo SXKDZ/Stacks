@@ -162,7 +162,66 @@ export const appSettings = sqliteTable("app_settings", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+// --- AI feed: an opt-in notebook driving headless claude -p agents ---
+
+export const feedSnippets = sqliteTable(
+  "feed_snippets",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull().default(""),
+    instruction: text("instruction").notNull().default(""),
+    // queued | running | awaiting_input | done | error | stopped
+    status: text("status").notNull().default("queued"),
+    workingDir: text("working_dir"),
+    // The claude -p session id, used with --resume for follow-up turns.
+    sessionId: text("session_id"),
+    error: text("error"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("feed_snippets_updated_idx").on(table.updatedAt)],
+);
+
+export const feedMessages = sqliteTable(
+  "feed_messages",
+  {
+    id: text("id").primaryKey(),
+    snippetId: text("snippet_id")
+      .notNull()
+      .references(() => feedSnippets.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    // user | assistant | system | event
+    role: text("role").notNull(),
+    // text | tool_use | tool_result | result | error
+    kind: text("kind").notNull().default("text"),
+    content: text("content").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("feed_messages_snippet_idx").on(table.snippetId, table.createdAt)],
+);
+
+export const feedProposals = sqliteTable(
+  "feed_proposals",
+  {
+    id: text("id").primaryKey(),
+    snippetId: text("snippet_id")
+      .notNull()
+      .references(() => feedSnippets.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    messageId: text("message_id"),
+    // JSON: { entity, action, data } describing a proposed library mutation.
+    operation: text("operation").notNull(),
+    // pending | approved | rejected | applied | failed
+    status: text("status").notNull().default("pending"),
+    resultSummary: text("result_summary"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    resolvedAt: text("resolved_at"),
+  },
+  (table) => [index("feed_proposals_snippet_idx").on(table.snippetId)],
+);
+
 export type PaperRecord = typeof papers.$inferSelect;
 export type AuthorRecord = typeof authors.$inferSelect;
 export type VenueRecord = typeof venues.$inferSelect;
 export type CollectionRecord = typeof collections.$inferSelect;
+export type FeedSnippetRecord = typeof feedSnippets.$inferSelect;
+export type FeedMessageRecord = typeof feedMessages.$inferSelect;
+export type FeedProposalRecord = typeof feedProposals.$inferSelect;

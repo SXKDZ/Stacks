@@ -84,11 +84,43 @@ const schemaStatements = [
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS feed_snippets (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '',
+    instruction TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'queued',
+    working_dir TEXT,
+    session_id TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS feed_messages (
+    id TEXT PRIMARY KEY,
+    snippet_id TEXT NOT NULL REFERENCES feed_snippets(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    role TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'text',
+    content TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS feed_proposals (
+    id TEXT PRIMARY KEY,
+    snippet_id TEXT NOT NULL REFERENCES feed_snippets(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    message_id TEXT,
+    operation TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result_summary TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TEXT
+  )`,
   "CREATE INDEX IF NOT EXISTS papers_title_idx ON papers(title)",
   "CREATE INDEX IF NOT EXISTS papers_year_idx ON papers(year)",
   "CREATE INDEX IF NOT EXISTS papers_venue_idx ON papers(venue_id)",
   "CREATE INDEX IF NOT EXISTS authors_name_idx ON authors(display_name)",
   "CREATE INDEX IF NOT EXISTS paper_authors_author_idx ON paper_authors(author_id)",
+  "CREATE INDEX IF NOT EXISTS feed_snippets_updated_idx ON feed_snippets(updated_at)",
+  "CREATE INDEX IF NOT EXISTS feed_messages_snippet_idx ON feed_messages(snippet_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS feed_proposals_snippet_idx ON feed_proposals(snippet_id)",
 ];
 
 const paperColumnUpgrades = [
