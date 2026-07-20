@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -373,15 +373,28 @@ export async function runSync(auto = false): Promise<SyncResult> {
   if (!remoteDirectory) {
     throw new Error("Choose a OneDrive backup folder first.");
   }
-  // The backup destination must be an existing directory the user picked, and
-  // must never be the live library folder itself (which would overwrite the
-  // source it is meant to back up).
+  // Choosing the path and starting a backup is the user's authorization to
+  // create the folder, so a not-yet-existing destination is created here (its
+  // parent must already exist, so a typo can't scatter a tree at a phantom
+  // path). A non-empty folder is fine: the backup is one-way and additive —
+  // it only writes library.db + pdfs/ + html_snapshots/ and never deletes other
+  // contents. The one hard rule is that the destination must be outside the
+  // live library folder, or the backup would clobber the source it copies.
   const resolvedRemote = resolve(remoteDirectory);
-  if (!existsSync(resolvedRemote)) {
-    throw new Error("The OneDrive backup folder does not exist. Choose an existing folder.");
+  const resolvedLibrary = resolve(libraryRoot());
+  if (resolvedRemote === resolvedLibrary || resolvedRemote.startsWith(`${resolvedLibrary}/`)) {
+    throw new Error("The backup folder must be outside the live library folder.");
   }
-  if (resolvedRemote === resolve(libraryRoot())) {
-    throw new Error("The backup folder must be different from the live library folder.");
+  if (existsSync(resolvedRemote)) {
+    if (!statSync(resolvedRemote).isDirectory()) {
+      throw new Error("The OneDrive backup path is a file. Choose a folder.");
+    }
+  } else {
+    const parent = dirname(resolvedRemote);
+    if (!existsSync(parent) || !statSync(parent).isDirectory()) {
+      throw new Error("The OneDrive backup folder's parent does not exist. Choose a valid location.");
+    }
+    mkdirSync(resolvedRemote, { recursive: true });
   }
   syncRunning = true;
   try {

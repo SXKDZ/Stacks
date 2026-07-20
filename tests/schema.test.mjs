@@ -65,6 +65,11 @@ test("persists local settings atomically and backs up the normalized library", a
   assert.match(settings, /renameSync\(temporaryPath, path\)/);
   assert.match(bridge, /pa_sync\.lock/);
   assert.match(bridge, /html_snapshots/);
+  // The backup destination is created if missing and must be outside the live
+  // library, but need not pre-exist or be empty.
+  assert.match(settings, /mkdirSync\(resolvedRemote/);
+  assert.match(settings, /must be outside the live library folder/);
+  assert.doesNotMatch(settings, /Choose an existing folder/);
   assert.match(example, /PA_ONEDRIVE_PATH/);
   assert.match(example, /PA_MAX_TOKENS/);
   assert.match(ignore, /data\/settings\.json/);
@@ -235,7 +240,7 @@ test("tracks long-running work while persisting chat as separate discussions", a
   assert.match(tasks, /pa-activity-log-v1/);
   assert.match(application, /Generate summary ·/);
   assert.match(application, /Copy \$\{file\.name\} into PA storage/);
-  assert.match(settings, /Sync PA library to OneDrive/);
+  assert.match(settings, /Back up PA library to OneDrive/);
   assert.match(chatWorkspace, /pa-chat-sessions-v2/);
   assert.match(chatWorkspace, /persistSessions/);
   assert.match(chatWorkspace, /Discussion title/);
@@ -297,10 +302,17 @@ test("backs up the local library one-way to OneDrive without replacing the live 
     database.exec("INSERT INTO papers VALUES ('paper-1', 'Fixture')");
     database.close();
 
+    // The backup folder does not exist yet: the bridge must create it rather
+    // than fail, and pre-existing contents (once present) must never be deleted.
+    await mkdir(remote, { recursive: true });
+    await writeFile(join(remote, "unrelated-user-file.txt"), "keep me");
+
     const bridgePath = fileURLToPath(new URL("../scripts/pa_sync_bridge.py", import.meta.url));
     const { stdout } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
     const result = JSON.parse(stdout.trim());
     assert.equal(result.ok, true);
+    // One-way and additive: an unrelated file in a non-empty destination survives.
+    assert.equal(await readFile(join(remote, "unrelated-user-file.txt"), "utf8"), "keep me");
 
     // The backup copy mirrors the live database name (library.db), consistently.
     const backup = new DatabaseSync(join(remote, "library.db"), { readOnly: true });

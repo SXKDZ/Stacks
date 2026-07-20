@@ -539,7 +539,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
     setSyncing(true);
     try {
-      const payload = await runTask("Sync PA library to OneDrive", async () => {
+      const payload = await runTask("Back up PA library to OneDrive", async () => {
         const response = await fetch("/api/local-sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -886,7 +886,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PaperAssistant-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PaperAssistant-Backup`} key={path} />)}</datalist><small>{settings.local ? "PA writes a consistent library.db backup plus pdfs/ and html_snapshots/ here. Must differ from the live library folder." : "A hosted Worker cannot access a folder on this computer. Run PA locally to enable backups."}</small></label>
+                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/PaperAssistant-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/PaperAssistant-Backup`} key={path} />)}</datalist><small>{settings.local ? "PA writes a consistent library.db backup plus pdfs/ and html_snapshots/ here, creating the folder if needed. Existing contents are kept — backup only adds, never deletes. Must be outside the live library folder." : "A hosted Worker cannot access a folder on this computer. Run PA locally to enable backups."}</small></label>
                 <label><span>Auto-sync interval</span><div className="unit-input"><input disabled={!settings.local} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
               <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live PA changes</strong><small>Writes a fresh one-way backup to OneDrive in the background.</small></div></label>
