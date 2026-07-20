@@ -491,13 +491,15 @@
 
 .star-button {
   background: transparent;
-  color: #bcb5c1;
+  color: var(--soft);
   flex: 0 0 auto;
   padding: 0;
 }
 
+/* Bright, theme-aware amber for a starred/hovered paper (was a muddy hardcoded
+   hex that read dull in both themes). */
 .star-button:hover,
-.star-button.is-starred { color: #d69a2d; }
+.star-button.is-starred { color: var(--amber); }
 
 .collection-chips {
   display: flex;

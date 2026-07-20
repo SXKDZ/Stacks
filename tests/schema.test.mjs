@@ -119,6 +119,11 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(doctor, /PRAGMA quick_check/);
   assert.match(doctor, /PRAGMA foreign_key_check/);
   assert.match(doctor, /orphanedAssociations/);
+  // Doctor also reports and cleans entities (authors/venues/collections) left with no papers.
+  assert.match(doctor, /orphanedEntities/);
+  assert.match(doctor, /DELETE FROM authors WHERE id NOT IN/);
+  assert.match(doctor, /DELETE FROM venues WHERE id NOT IN/);
+  assert.match(doctor, /DELETE FROM collections WHERE id NOT IN/);
   assert.match(chat, /PA_PDF_PAGES/);
   assert.match(chat, /pdfStartPage/);
   assert.match(grounding, /getDocumentProxy/);

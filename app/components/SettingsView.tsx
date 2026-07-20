@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Sun,
   Trash2,
+  Users,
   Wrench,
 } from "lucide-react";
 import type { FormEvent, ReactNode, RefObject } from "react";
@@ -151,6 +152,11 @@ interface StorageReport {
       paperAuthors: number;
       paperCollections: number;
       paperTags: number;
+    };
+    orphanedEntities?: {
+      authors: number;
+      venues: number;
+      collections: number;
     };
     absolutePdfPaths: string[];
     absoluteHtmlPaths: string[];
@@ -646,7 +652,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function repairStorage() {
-    const description = "remove orphaned association rows and delete unlinked files from the managed pdfs/ and html_snapshots/ folders";
+    const description = "remove orphaned association rows, delete authors, venues, and collections left with no papers, and delete unlinked files from the managed pdfs/ and html_snapshots/ folders";
     if (!window.confirm(`Repair PA now? Doctor will ${description}. Missing or ambiguous files will be left unchanged.`)) {
       return;
     }
@@ -853,6 +859,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                   <div className="storage-doctor-grid">
                     <DoctorMetric icon={<DatabaseBackup size={17} />} label="Library database" value={storageReport.databaseHealth ? storageReport.databaseHealth.integrityOk && !storageReport.databaseHealth.foreignKeyViolations ? "Healthy" : "Needs attention" : storageReport.databasePresent ? "Available" : "Missing"} detail={`${storageReport.paperRecords} papers · ${storageReport.databaseHealth?.foreignKeyViolations ?? 0} FK violations`} tone={storageReport.databaseHealth ? storageReport.databaseHealth.integrityOk && !storageReport.databaseHealth.foreignKeyViolations ? "good" : "bad" : storageReport.databasePresent ? "good" : "bad"} />
                     <DoctorMetric icon={<DatabaseBackup size={17} />} label="Associations" value={`${storageReport.databaseHealth ? Object.values(storageReport.databaseHealth.orphanedAssociations).reduce((sum, count) => sum + count, 0) : 0} orphaned`} detail={storageReport.databaseHealth?.foreignKeyEnforced ? "Foreign keys are enforced" : "Foreign-key enforcement unavailable"} tone={storageReport.databaseHealth && (storageReport.databaseHealth.foreignKeyViolations || Object.values(storageReport.databaseHealth.orphanedAssociations).some(Boolean)) ? "bad" : "good"} />
+                    {storageReport.databaseHealth?.orphanedEntities ? (() => {
+                      const entities = storageReport.databaseHealth.orphanedEntities;
+                      const total = entities.authors + entities.venues + entities.collections;
+                      return <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${total} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={total ? "warn" : "good"} />;
+                    })() : null}
                     <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedPdfFiles} referenced` : `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}`} tone={storageReport.missingPdfFiles ? "bad" : "good"} />
                     <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedHtmlFiles} referenced` : `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}`} tone={storageReport.missingHtmlFiles ? "bad" : "good"} />
                     <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} papers`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} />

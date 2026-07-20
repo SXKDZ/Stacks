@@ -27,6 +27,15 @@ function absolutePath(value: string | null): boolean {
   return Boolean(value && (/^(?:[a-z]:[\\/]|[\\/]{1,2})/i.test(value)));
 }
 
+// Entities left with no papers after deletions. Authors/venues/collections are
+// shared records, so deleting a paper never removes them — they accumulate as
+// orphans the Doctor can report and clean.
+const orphanedEntityQueries = {
+  authors: "SELECT COUNT(*) AS count FROM authors WHERE id NOT IN (SELECT author_id FROM paper_authors)",
+  venues: "SELECT COUNT(*) AS count FROM venues WHERE id NOT IN (SELECT venue_id FROM papers WHERE venue_id IS NOT NULL)",
+  collections: "SELECT COUNT(*) AS count FROM collections WHERE id NOT IN (SELECT collection_id FROM paper_collections)",
+} as const;
+
 async function databaseDiagnostic(clean: boolean) {
   const database = await ensureDatabase();
   // PRAGMAs, orphan cleanup, and per-table counts are maintenance SQL that maps
@@ -43,9 +52,20 @@ async function databaseDiagnostic(clean: boolean) {
       raw.prepare(`DELETE FROM paper_tags
         WHERE paper_id NOT IN (SELECT id FROM papers)
            OR tag_id NOT IN (SELECT id FROM tags)`).run();
+      // Then drop entities left with no papers (dangling associations are gone,
+      // so these NOT IN checks see the reconciled join tables).
+      raw.prepare("DELETE FROM authors WHERE id NOT IN (SELECT author_id FROM paper_authors)").run();
+      raw.prepare("DELETE FROM venues WHERE id NOT IN (SELECT venue_id FROM papers WHERE venue_id IS NOT NULL)").run();
+      raw.prepare("DELETE FROM collections WHERE id NOT IN (SELECT collection_id FROM paper_collections)").run();
     });
     cleanup();
   }
+  const orphanedEntities = Object.fromEntries(
+    Object.entries(orphanedEntityQueries).map(([key, query]) => {
+      const row = raw.prepare(query).get() as { count: number };
+      return [key, Number(row?.count ?? 0)] as const;
+    }),
+  ) as Record<keyof typeof orphanedEntityQueries, number>;
 
   const integrityResult = raw.prepare("PRAGMA quick_check").all() as Array<Record<string, unknown>>;
   const foreignKeyResult = raw.prepare("PRAGMA foreign_key_check").all() as Array<Record<string, unknown>>;
@@ -84,6 +104,7 @@ async function databaseDiagnostic(clean: boolean) {
       paperCollections: Number(orphanedCollections?.count ?? 0),
       paperTags: Number(orphanedTags?.count ?? 0),
     },
+    orphanedEntities,
     absolutePdfPaths,
     absoluteHtmlPaths,
   };
@@ -128,7 +149,7 @@ export async function POST(request: Request): Promise<Response> {
       capabilities: {
         databaseChecks: true,
         fileChecks: true,
-        repairs: ["orphaned-associations", "orphaned-files"],
+        repairs: ["orphaned-associations", "orphaned-entities", "orphaned-files"],
         folderMove: false,
       },
       libraryRoot: storage.libraryRoot,
