@@ -60,8 +60,11 @@ export default function FeedWorkspace() {
   const [messages, setMessages] = useState<FeedMessage[]>([]);
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [instruction, setInstruction] = useState("");
+  const [reply, setReply] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [replying, setReplying] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
+  const [streamNonce, setStreamNonce] = useState(0);
   const eventsRef = useRef<EventSource | null>(null);
 
   const loadSnippets = useCallback(async () => {
@@ -89,12 +92,19 @@ export default function FeedWorkspace() {
     return () => { cancelled = true; };
   }, [loadSnippets]);
 
-  // Stream the active snippet's events.
+  // Reset the thread when switching snippets (not on a reply re-stream).
+  useEffect(() => {
+    setMessages([]);
+    setProposals([]);
+    setReply("");
+  }, [activeId]);
+
+  // Stream the active snippet's events. Re-runs on a reply (streamNonce bump) to
+  // pick up the new turn; the events route replays history and the dedup guards
+  // below keep the thread from doubling.
   useEffect(() => {
     eventsRef.current?.close();
     eventsRef.current = null;
-    setMessages([]);
-    setProposals([]);
     if (!activeId) {
       return;
     }
@@ -113,7 +123,7 @@ export default function FeedWorkspace() {
       void loadSnippets();
     });
     return () => source.close();
-  }, [activeId, loadSnippets]);
+  }, [activeId, streamNonce, loadSnippets]);
 
   async function createSnippet(event: FormEvent) {
     event.preventDefault();
@@ -141,6 +151,30 @@ export default function FeedWorkspace() {
 
   async function stopSnippet(id: string) {
     await fetch(`/api/feed/snippets/${id}/stop`, { method: "POST" });
+  }
+
+  async function sendReply(event: FormEvent) {
+    event.preventDefault();
+    const text = reply.trim();
+    if (!text || replying || !activeId) {
+      return;
+    }
+    setReplying(true);
+    try {
+      const response = await fetch(`/api/feed/snippets/${activeId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reply: text }),
+      });
+      if (response.ok) {
+        setReply("");
+        // Re-open the event stream to follow the resumed turn.
+        setStreamNonce((nonce) => nonce + 1);
+        void loadSnippets();
+      }
+    } finally {
+      setReplying(false);
+    }
   }
 
   async function resolveProposal(proposalId: string, decision: "approve" | "reject") {
@@ -260,6 +294,17 @@ export default function FeedWorkspace() {
                 </div>
               ) : null}
             </div>
+            {active.status !== "running" ? (
+              <form className="feed-reply" onSubmit={sendReply}>
+                <textarea
+                  value={reply}
+                  onChange={(event) => setReply(event.target.value)}
+                  placeholder="Reply to continue this thread — the agent keeps its context…"
+                  rows={2}
+                />
+                <ActionButton type="submit" variant="primary" disabled={!reply.trim() || replying} icon={replying ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>Reply</ActionButton>
+              </form>
+            ) : null}
           </>
         )}
       </section>
