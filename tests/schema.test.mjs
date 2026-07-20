@@ -143,6 +143,30 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(version, /releases\/latest/);
 });
 
+test("captures webpage snapshots with WebKit and rejects challenge pages instead of Jina", async () => {
+  const [snapshot, localFiles, importRoute, summarize, envExample] = await Promise.all([
+    readFile(new URL("../app/lib/webpage-snapshot.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/import/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  // Snapshots render locally in headless WebKit (Playwright), no external reader.
+  assert.match(snapshot, /from "playwright"/);
+  assert.match(snapshot, /webkit\.launch/);
+  assert.match(snapshot, /looksBlocked/);
+  assert.match(snapshot, /verifying your browser/i);
+  // Acquisition and the URL-import/summarize paths use the snapshot, not Jina.
+  assert.match(localFiles, /captureWebpageSnapshot/);
+  assert.match(importRoute, /captureWebpageSnapshot/);
+  assert.match(summarize, /captureWebpageSnapshot/);
+  // Jina is fully removed from the codebase and env template.
+  assert.doesNotMatch(localFiles, /jina/i);
+  assert.doesNotMatch(importRoute, /jina/i);
+  assert.doesNotMatch(summarize, /jina/i);
+  assert.doesNotMatch(envExample, /JINA_API_KEY/);
+});
+
 test("supports provider search and PA-style identifier imports", async () => {
   const [discover, identifier, scholarly] = await Promise.all([
     readFile(new URL("../app/api/discover/route.ts", import.meta.url), "utf8"),

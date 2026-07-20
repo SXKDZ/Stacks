@@ -7,6 +7,7 @@ import {
   invokeBedrockMessages,
 } from "@/app/lib/bedrock";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,22 +24,17 @@ interface SummaryRequest {
   };
 }
 
-async function readSource(url: string, jinaKey: string): Promise<string> {
-  if (!jinaKey) {
-    return "";
-  }
+async function readSource(url: string): Promise<string> {
+  // Best-effort readable text from a locally-rendered snapshot. Grounding is
+  // optional here, so a challenge/error page just yields no extra context
+  // (the summary falls back to metadata) rather than surfacing an error.
   try {
-    const response = await fetch(`https://r.jina.ai/${url}`, {
-      headers: {
-        Authorization: `Bearer ${jinaKey}`,
-        "X-Return-Format": "text",
-        "X-Remove-Selector": "nav, footer, aside",
-      },
-    });
-    if (!response.ok) {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") {
       return "";
     }
-    return (await response.text()).slice(0, 28000);
+    const snapshot = await captureWebpageSnapshot(parsed);
+    return snapshot.text.slice(0, 28000);
   } catch {
     return "";
   }
@@ -59,8 +55,8 @@ export async function POST(request: Request): Promise<Response> {
         { status: 500 },
       );
     }
-    const sourceText = paper.url?.startsWith("http")
-      ? await readSource(paper.url, runtimeValue(runtime, "JINA_API_KEY"))
+    const sourceText = paper.url?.startsWith("https")
+      ? await readSource(paper.url)
       : "";
     const context = [
       `Title: ${paper.title}`,

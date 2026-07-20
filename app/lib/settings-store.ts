@@ -9,7 +9,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { settingsPath } from "@/db/library-paths";
 import { appSettings } from "@/db/schema";
 
-const SECRET_KEYS = ["AWS_BEARER_TOKEN_BEDROCK", "JINA_API_KEY", "SEMANTIC_SCHOLAR_API_KEY", "SERPAPI_KEY"] as const;
+const SECRET_KEYS = ["AWS_BEARER_TOKEN_BEDROCK", "SEMANTIC_SCHOLAR_API_KEY", "SERPAPI_KEY"] as const;
 
 interface LibrarySettingsFile {
   ai?: { modelId?: string; region?: string; maxTokens?: string; temperature?: string; pdfPages?: string };
@@ -197,7 +197,6 @@ export function settingsSnapshot(settings: StoredSettings) {
     ai: { provider: "bedrock", ...settings.ai },
     integrations: {
       AWS_BEARER_TOKEN_BEDROCK: configured("AWS_BEARER_TOKEN_BEDROCK"),
-      JINA_API_KEY: configured("JINA_API_KEY"),
       SEMANTIC_SCHOLAR_API_KEY: configured("SEMANTIC_SCHOLAR_API_KEY"),
       SERPAPI_KEY: configured("SERPAPI_KEY"),
     },

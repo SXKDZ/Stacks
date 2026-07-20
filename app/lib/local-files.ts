@@ -5,6 +5,7 @@ import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { databasePath, libraryRoot } from "@/db/library-paths";
 import { safeFetch } from "@/app/lib/url-safety";
+import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
 
 /**
  * Local filesystem companion for PA's self-contained library folder. All PDF
@@ -355,10 +356,6 @@ function acquisitionFilename(title: string | undefined, source: URL, extension: 
   return `${stem}-${digest}${extension}`;
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character] ?? character);
-}
-
 interface AcquisitionResult {
   kind: AcquisitionKind;
   storedPath: string;
@@ -401,32 +398,19 @@ async function acquireHtml(payload: SourceAcquisitionRequest): Promise<Acquisiti
   if (!source) {
     throw new Error("A Source URL is required to save an HTML snapshot.");
   }
-  let contents: Buffer;
-  let contentType = "";
-  try {
-    ({ contents, contentType } = await fetchWithLimit(source, HTML_LIMIT));
-  } catch (directError) {
-    if (!process.env.JINA_API_KEY?.trim()) {
-      throw directError;
-    }
-    const jinaUrl = new URL(`https://r.jina.ai/${source.href}`);
-    ({ contents, contentType } = await fetchWithLimit(jinaUrl, HTML_LIMIT, {
-      Authorization: `Bearer ${process.env.JINA_API_KEY?.trim()}`,
-    }));
+  if (source.protocol !== "https:") {
+    throw new Error("HTML snapshots require an https:// source URL.");
   }
-  if (!/html|xml|text\/plain|markdown/i.test(contentType) && /\0/.test(contents.toString("utf8", 0, Math.min(contents.length, 4096)))) {
-    throw new Error("The source did not return readable HTML or text.");
-  }
-  let html = contents.toString("utf8");
-  if (!/<(?:!doctype|html|body|article|main)\b/i.test(html)) {
-    html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(payload.title?.trim() || source.hostname)}</title></head><body><main><pre style="white-space:pre-wrap">${escapeHtml(html)}</pre></main></body></html>`;
-  }
+  // Render a self-contained snapshot in headless WebKit (no external reader).
+  // captureWebpageSnapshot throws on a challenge/error page, so a "Verifying
+  // your browser" interstitial is surfaced to the user instead of being saved.
+  const snapshot = await captureWebpageSnapshot(source);
   const directory = join(libraryRoot(), "html_snapshots");
   mkdirSync(directory, { recursive: true });
   const storedPath = acquisitionFilename(payload.title, source, ".html");
   const target = join(directory, storedPath);
   if (!existsSync(target)) {
-    writeFileSync(target, html, { flag: "wx" });
+    writeFileSync(target, snapshot.html, { flag: "wx" });
   }
   return { kind: "html", storedPath, fileUrl: `/pa-files/html/${encodeURIComponent(storedPath)}`, sourceUrl: source.href };
 }

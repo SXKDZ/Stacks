@@ -70,7 +70,6 @@ const environmentKeys = new Set([
   "AWS_BEARER_TOKEN_BEDROCK",
   "AWS_REGION",
   "BEDROCK_MODEL_ID",
-  "JINA_API_KEY",
   "PA_MAX_TOKENS",
   "PA_PDF_PAGES",
   "PA_CHAT_SYSTEM_PROMPT",
@@ -86,7 +85,6 @@ const environmentKeys = new Set([
 
 const secretKeys = [
   "AWS_BEARER_TOKEN_BEDROCK",
-  "JINA_API_KEY",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
 ] as const;
@@ -119,7 +117,6 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     AWS_BEARER_TOKEN_BEDROCK: settings.secrets.AWS_BEARER_TOKEN_BEDROCK,
     AWS_REGION: settings.ai.region,
     BEDROCK_MODEL_ID: settings.ai.modelId,
-    JINA_API_KEY: settings.secrets.JINA_API_KEY,
     PA_MAX_TOKENS: settings.ai.maxTokens,
     PA_PDF_PAGES: settings.ai.pdfPages,
     PA_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,

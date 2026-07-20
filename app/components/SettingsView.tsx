@@ -216,7 +216,6 @@ const secretFields = [
   { key: "AWS_BEARER_TOKEN_BEDROCK", label: "AWS Bedrock API key", detail: "Chat and on-demand summaries" },
   { key: "SEMANTIC_SCHOLAR_API_KEY", label: "Semantic Scholar", detail: "Academic discovery and metadata" },
   { key: "SERPAPI_KEY", label: "SerpAPI", detail: "Google Scholar discovery" },
-  { key: "JINA_API_KEY", label: "Jina Reader", detail: "Clean web and paper extraction" },
 ] as const;
 
 const fallbackBedrockModels: BedrockModelOption[] = [
