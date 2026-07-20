@@ -1969,6 +1969,13 @@
   border-color: var(--brand-blue);
 }
 
+/* Active drag target: solid brand border + stronger tint so the drop is obvious. */
+.bibliography-dropzone.is-dragging {
+  background: color-mix(in srgb, var(--brand-blue-soft) 100%, transparent);
+  border-color: var(--brand-blue-strong);
+  border-style: solid;
+}
+
 .bibliography-dropzone > input {
   height: 1px;
   opacity: 0;

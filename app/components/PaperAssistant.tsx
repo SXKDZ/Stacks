@@ -3057,11 +3057,23 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   const [identifier, setIdentifier] = useState("");
   const [bibliographyFile, setBibliographyFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfDragActive, setPdfDragActive] = useState(false);
   const [results, setResults] = useState<DiscoveryResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<string[]>([]);
   const [manualPaperType, setManualPaperType] = useState<EditablePaperType>("conference");
   const { runTask } = useBackgroundTasks();
+
+  function acceptDroppedPdf(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
+      notify("Drop a .pdf file to import.", "error");
+      return;
+    }
+    setPdfFile(file);
+  }
 
   async function acquireImportSource(data: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (!hasAcquirableSource(data)) {
@@ -3372,9 +3384,14 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
         </form>
       ) : tab === "pdf" ? (
         <form className="modal-body bibliography-import-form" onSubmit={importLocalPdf}>
-          <label className={`bibliography-dropzone ${pdfFile ? "has-file" : ""}`}>
+          <label
+            className={`bibliography-dropzone ${pdfFile ? "has-file" : ""} ${pdfDragActive ? "is-dragging" : ""}`}
+            onDragOver={(event) => { event.preventDefault(); setPdfDragActive(true); }}
+            onDragLeave={(event) => { event.preventDefault(); setPdfDragActive(false); }}
+            onDrop={(event) => { event.preventDefault(); setPdfDragActive(false); acceptDroppedPdf(event.dataTransfer.files?.[0]); }}
+          >
             <span className="bibliography-upload-icon">{pdfFile ? <Check size={23} /> : <FileSearch size={23} />}</span>
-            <span><strong>{pdfFile?.name ?? "Choose a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : "PA copies the file locally and extracts metadata from its first pages."}</small></span>
+            <span><strong>{pdfFile?.name ?? "Choose or drop a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : "Drag a PDF here or click to browse. PA copies it locally and extracts metadata from its first pages."}</small></span>
             <input type="file" accept=".pdf,application/pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setPdfFile(event.target.files?.[0] ?? null)} />
           </label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <FileSearch size={16} />} disabled={loading || !pdfFile}>Import and extract PDF</ActionButton>

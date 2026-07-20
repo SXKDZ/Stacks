@@ -1558,3 +1558,64 @@ body.is-resizing-chat {
     flex: 1 1 0;
   }
 }
+
+/* "No local source is available" confirmation, layered over the paper modal. */
+.asset-acquisition-layer {
+  align-items: center;
+  backdrop-filter: blur(3px);
+  background: var(--scrim);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: absolute;
+  z-index: 10;
+}
+
+.asset-acquisition-dialog {
+  background-color: var(--canvas);
+  background-image: linear-gradient(var(--panel), var(--panel));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto 1fr;
+  max-width: 460px;
+  padding: 20px;
+  width: 100%;
+}
+
+.asset-acquisition-icon {
+  align-items: center;
+  background: var(--brand-blue-soft);
+  border-radius: var(--radius-md);
+  color: var(--brand-blue-strong);
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.asset-acquisition-dialog h3 {
+  font-size: var(--type-body-large);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 2px 0 0;
+}
+
+.asset-acquisition-dialog p {
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.asset-acquisition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
