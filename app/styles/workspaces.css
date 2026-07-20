@@ -894,12 +894,12 @@
 
 .feed-column {
   margin: 0 auto;
-  max-width: 760px;
-  padding: 24px 20px 80px;
+  max-width: 800px;
+  padding: 32px 24px 96px;
 }
 
 .feed-column-header {
-  margin-bottom: 18px;
+  margin-bottom: 24px;
 }
 
 .feed-brand {
@@ -915,25 +915,25 @@
   font-size: var(--type-label);
 }
 
-/* Composer: an always-there capture box at the top of the feed. Elevated on the
-   -2 surface with a brand-tinted focus ring so it reads as the primary input,
-   clearly set apart from the cards below (separated by a divider + spacing). */
+/* Composer: the hero input. A gradient-lit elevated surface with a soft brand
+   glow at the top so it clearly reads as the focal point, well above the cards. */
 .feed-composer {
-  background-color: var(--surface-2);
-  background-image: linear-gradient(var(--panel), var(--panel));
+  background:
+    radial-gradient(120% 100% at 50% -20%, color-mix(in srgb, var(--brand-blue) 12%, transparent), transparent 60%),
+    var(--surface-2);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1), var(--edge-highlight);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2), var(--edge-highlight);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 14px 12px;
+  gap: 12px;
+  padding: 18px 18px 14px;
   transition: border-color var(--motion-control), box-shadow var(--motion-control);
 }
 
 .feed-composer:focus-within {
-  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
-  box-shadow: var(--shadow-1), 0 0 0 3px var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 50%, var(--line-strong));
+  box-shadow: var(--shadow-2), 0 0 0 4px var(--brand-blue-soft), var(--edge-highlight);
 }
 
 .feed-composer textarea {
@@ -941,10 +941,15 @@
   border: 0;
   color: var(--ink);
   font: inherit;
-  font-size: var(--type-body-large);
-  line-height: 1.5;
+  font-size: var(--type-heading-small);
+  letter-spacing: -0.01em;
+  line-height: 1.45;
   outline: none;
   resize: vertical;
+}
+
+.feed-composer textarea::placeholder {
+  color: var(--soft);
 }
 
 .feed-composer-actions {
@@ -957,8 +962,8 @@
 .feed-cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 26px;
+  gap: 14px;
+  margin-top: 34px;
   position: relative;
 }
 
@@ -968,8 +973,9 @@
   display: block;
   font-size: var(--type-label);
   font-weight: 800;
-  letter-spacing: 0.14em;
-  margin-bottom: 4px;
+  letter-spacing: 0.16em;
+  margin-bottom: 6px;
+  padding-left: 2px;
   text-transform: uppercase;
 }
 
@@ -988,29 +994,44 @@
 }
 
 /* A card: collapsed shows a summary; expanded shows the full thread. Raised on
-   the -1 surface with an edge highlight so it reads as a lifted tile. */
+   the -1 surface with an edge highlight and a status accent stripe down the
+   left edge, so it reads as a lifted tile with an at-a-glance state. */
 .feed-card {
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-1), var(--edge-highlight);
   overflow: hidden;
+  position: relative;
   transition: border-color var(--motion-control), box-shadow var(--motion-control), transform var(--motion-control);
 }
 
+.feed-card::before {
+  background: var(--feed-accent, transparent);
+  bottom: 0;
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 3px;
+}
+
+.feed-card-running { --feed-accent: var(--brand-blue); }
+.feed-card-queued { --feed-accent: var(--soft); }
+.feed-card-done { --feed-accent: var(--status-complete); }
+.feed-card-error { --feed-accent: var(--rose); }
+.feed-card-stopped { --feed-accent: var(--soft); }
+
 .feed-card:hover {
-  border-color: var(--line-strong);
+  border-color: color-mix(in srgb, var(--brand-blue) 22%, var(--line-strong));
+  box-shadow: var(--shadow-2), 0 0 0 1px color-mix(in srgb, var(--brand-blue) 14%, transparent), var(--edge-highlight);
   transform: translateY(-1px);
 }
 
 .feed-card.is-expanded {
-  border-color: color-mix(in srgb, var(--brand-blue) 26%, var(--line-strong));
+  border-color: color-mix(in srgb, var(--brand-blue) 30%, var(--line-strong));
   box-shadow: var(--shadow-2), var(--edge-highlight);
   transform: none;
-}
-
-.feed-card-error:not(.is-expanded) {
-  border-color: color-mix(in srgb, var(--rose) 30%, var(--line));
 }
 
 .feed-card-head {
@@ -1019,9 +1040,9 @@
   border: 0;
   cursor: pointer;
   display: flex;
-  gap: 14px;
+  gap: 16px;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 18px 20px;
   text-align: left;
   width: 100%;
 }
@@ -1029,13 +1050,15 @@
 .feed-card-head-main {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
 .feed-card-head-main strong {
   color: var(--ink);
   font-size: var(--type-body-large);
+  font-weight: 620;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1044,8 +1067,8 @@
 .feed-card-summary {
   color: var(--muted);
   display: -webkit-box;
-  font-size: var(--type-control);
-  line-height: 1.45;
+  font-size: var(--type-body);
+  line-height: 1.5;
   margin: 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -1079,8 +1102,8 @@
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
+  gap: 16px;
+  padding: 18px 20px 20px;
 }
 
 .feed-card-actions {
