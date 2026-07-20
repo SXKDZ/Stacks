@@ -270,6 +270,12 @@ test("runs the library on a local SQLite file in the self-contained library fold
   assert.match(library, /ensureDatabase/);
   assert.match(library, /from "drizzle-orm"/);
   assert.match(library, /from "@\/db\/schema"/);
+  // Imported/edited metadata is normalized (title case, author ordering, pages).
+  assert.match(library, /from "@\/app\/lib\/metadata-normalize"/);
+  assert.match(library, /normalizeTitle\(/);
+  // Deleting a paper removes its managed files from disk.
+  assert.match(library, /removeStoredFile\("pdf"/);
+  assert.match(localFiles, /export function removeStoredFile/);
   assert.match(bootstrap, /SELECT COUNT\(\*\) AS count FROM papers/);
   assert.doesNotMatch(bootstrap, /cloudflare:workers/);
   assert.doesNotMatch(dbIndex, /drizzle-orm\/d1|cloudflare:workers/);

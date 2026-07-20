@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import type { LibraryQuerier } from "@/db/client";
 import { removeStoredFile } from "@/app/lib/local-files";
+import { normalizeAbstract, normalizeAuthorNames, normalizePages, normalizeTitle } from "@/app/lib/metadata-normalize";
 import {
   authors,
   collections,
@@ -284,15 +285,14 @@ function writeAuthors(
 ): void {
   const names: string[] = [];
   const seen = new Set<string>();
-  if (Array.isArray(value)) {
-    for (const raw of value) {
-      const name = cleanString(raw);
-      if (!name) continue;
-      const key = name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      names.push(name);
-    }
+  // Reorder "Last, First" and split multi-author strings/arrays consistently.
+  for (const raw of normalizeAuthorNames(value)) {
+    const name = cleanString(raw);
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
   }
   if (!names.length) {
     return;
@@ -388,10 +388,18 @@ function findDuplicatePaper(querier: LibraryQuerier, data: Record<string, unknow
 }
 
 async function createPaper(data: Record<string, unknown>): Promise<void> {
-  const title = cleanString(data.title);
-  if (!title) {
+  const rawTitle = cleanString(data.title);
+  if (!rawTitle) {
     throw new Error("A paper title is required.");
   }
+  // Normalize incoming metadata (title case, author ordering, page dashes,
+  // broken abstract lines) so imported and manually-entered records are
+  // consistent. See app/lib/metadata-normalize.ts (ported from PaperCLI).
+  const title = normalizeTitle(rawTitle);
+  const rawAbstract = cleanString(data.abstract);
+  const normalizedAbstract = rawAbstract ? normalizeAbstract(rawAbstract) : "";
+  const rawPages = cleanString(data.pages);
+  const normalizedPages = rawPages ? normalizePages(rawPages) : null;
   const database = await ensureDatabase();
   const id = createId("paper");
   // The whole paper — venue, row, authorship, collection links — commits in one
@@ -406,12 +414,12 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
     tx.insert(papers).values({
       id,
       title,
-      abstract: cleanString(data.abstract) ?? "",
+      abstract: normalizedAbstract,
       year: cleanNumber(data.year),
       paperType: cleanString(data.paperType) ?? "article",
       volume: cleanString(data.volume),
       issue: cleanString(data.issue),
-      pages: cleanString(data.pages),
+      pages: normalizedPages,
       category: cleanString(data.category),
       doi: cleanString(data.doi),
       arxivId: cleanString(data.arxivId),
@@ -641,9 +649,12 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   // Build a typed, coerced assignment set. Each column gets exactly the shape
   // SQLite expects (text/number/boolean-as-0/1), so no client value can crash
   // the bind the way the previous raw-passthrough did.
+  // Only fields actually present in the edit are touched (a star-toggle never
+  // reaches the title), and title/pages/abstract are normalized the same way as
+  // on import so an edit produces a consistent record.
   const assignments: Record<string, unknown> = {};
-  if ("title" in data) assignments.title = cleanString(data.title) ?? "";
-  if ("abstract" in data) assignments.abstract = typeof data.abstract === "string" ? data.abstract : "";
+  if ("title" in data) assignments.title = normalizeTitle(cleanString(data.title) ?? "");
+  if ("abstract" in data) assignments.abstract = typeof data.abstract === "string" ? normalizeAbstract(data.abstract) : "";
   if ("summary" in data) assignments.summary = typeof data.summary === "string" ? data.summary : "";
   if ("notes" in data) assignments.notes = typeof data.notes === "string" ? data.notes : "";
   if ("paperType" in data) assignments.paperType = cleanString(data.paperType) ?? "other";
@@ -652,7 +663,8 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   if ("favorite" in data) assignments.favorite = Boolean(data.favorite);
   for (const key of Object.keys(paperTextFields) as Array<keyof typeof paperTextFields>) {
     if (key in data) {
-      assignments[key] = textValue(data[key]);
+      const value = textValue(data[key]);
+      assignments[key] = key === "pages" && value ? normalizePages(value) : value;
     }
   }
 
