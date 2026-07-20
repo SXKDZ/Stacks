@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { libraryRoot } from "@/db/library-paths";
-import { feedMessages, feedSnippets } from "@/db/schema";
+import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { parseProposals, type ProposalOperation } from "@/app/lib/feed-prompt";
 
 /**
  * Drives a headless `claude -p` agent for one feed snippet. The agent runs with
@@ -20,6 +21,7 @@ import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 type FeedEvent =
   | { type: "status"; status: string }
   | { type: "message"; id: string; role: string; kind: string; content: string; createdAt: string }
+  | { type: "proposal"; id: string; operation: string; status: string; summary: string; createdAt: string }
   | { type: "done"; status: string };
 
 const MAX_TURNS = "40";
@@ -76,6 +78,22 @@ async function persistMessage(
   const createdAt = new Date().toISOString();
   database.insert(feedMessages).values({ id, snippetId, role, kind, content, createdAt }).run();
   return { type: "message", id, role, kind, content, createdAt };
+}
+
+async function persistProposal(
+  snippetId: string,
+  messageId: string | null,
+  operation: ProposalOperation,
+): Promise<FeedEvent> {
+  const database = await ensureDatabase();
+  const id = createId("prop");
+  const createdAt = new Date().toISOString();
+  const serialized = JSON.stringify(operation);
+  database
+    .insert(feedProposals)
+    .values({ id, snippetId, messageId, operation: serialized, status: "pending", createdAt })
+    .run();
+  return { type: "proposal", id, operation: serialized, status: "pending", summary: operation.summary ?? "Proposed change", createdAt };
 }
 
 async function setStatus(snippetId: string, status: string, error?: string): Promise<void> {
@@ -196,11 +214,21 @@ export async function runFeedAgent(options: {
     if (event.type === "result") {
       const isError = Boolean(event.is_error);
       const text = typeof event.result === "string" ? event.result : "";
+      let resultMessageId: string | null = null;
       if (text.trim()) {
-        emit(snippetId, await persistMessage(snippetId, "assistant", "result", text));
+        const message = await persistMessage(snippetId, "assistant", "result", text);
+        if (message.type === "message") {
+          resultMessageId = message.id;
+        }
+        emit(snippetId, message);
       }
       if (isError) {
         emit(snippetId, await persistMessage(snippetId, "system", "error", text || "The agent reported an error."));
+      } else if (text) {
+        // Parse any proposed library changes and enqueue them for approval.
+        for (const operation of parseProposals(text)) {
+          emit(snippetId, await persistProposal(snippetId, resultMessageId, operation));
+        }
       }
     }
   };

@@ -1,4 +1,4 @@
-import { readStoredSettings } from "@/app/lib/settings-store";
+import { requireFeedEnabled } from "@/app/lib/feed-access";
 import { stopFeed } from "@/app/lib/feed-agent";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +8,9 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const settings = await readStoredSettings();
-  if (!settings.feedEnabled) {
-    return Response.json({ error: "The AI feed is not enabled." }, { status: 403 });
+  const blocked = requireFeedEnabled();
+  if (blocked) {
+    return blocked;
   }
   const { id } = await context.params;
   await stopFeed(id);

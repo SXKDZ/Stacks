@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, Home, LoaderCircle, Rss, Send, Square } from "lucide-react";
+import { Check, CircleAlert, Home, LoaderCircle, Rss, Send, Square, X } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -11,6 +11,14 @@ interface FeedMessage {
   role: string;
   kind: string;
   content: string;
+  createdAt: string;
+}
+
+interface FeedProposal {
+  id: string;
+  operation: string;
+  status: string;
+  summary: string;
   createdAt: string;
 }
 
@@ -50,8 +58,10 @@ export default function FeedWorkspace() {
   const [snippets, setSnippets] = useState<FeedSnippet[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<FeedMessage[]>([]);
+  const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [instruction, setInstruction] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [resolving, setResolving] = useState<string | null>(null);
   const eventsRef = useRef<EventSource | null>(null);
 
   const loadSnippets = useCallback(async () => {
@@ -64,7 +74,7 @@ export default function FeedWorkspace() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/settings", { cache: "no-store" })
+    void fetch("/api/local-settings", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then(async (data: { feedEnabled?: boolean } | null) => {
         if (cancelled) return;
@@ -84,6 +94,7 @@ export default function FeedWorkspace() {
     eventsRef.current?.close();
     eventsRef.current = null;
     setMessages([]);
+    setProposals([]);
     if (!activeId) {
       return;
     }
@@ -92,6 +103,10 @@ export default function FeedWorkspace() {
     source.addEventListener("message", (event) => {
       const message = JSON.parse((event as MessageEvent).data) as FeedMessage;
       setMessages((current) => (current.some((m) => m.id === message.id) ? current : [...current, message]));
+    });
+    source.addEventListener("proposal", (event) => {
+      const proposal = JSON.parse((event as MessageEvent).data) as FeedProposal;
+      setProposals((current) => (current.some((p) => p.id === proposal.id) ? current : [...current, proposal]));
     });
     source.addEventListener("done", () => {
       source.close();
@@ -126,6 +141,26 @@ export default function FeedWorkspace() {
 
   async function stopSnippet(id: string) {
     await fetch(`/api/feed/snippets/${id}/stop`, { method: "POST" });
+  }
+
+  async function resolveProposal(proposalId: string, decision: "approve" | "reject") {
+    setResolving(proposalId);
+    try {
+      const response = await fetch(`/api/feed/proposals/${proposalId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const payload = await response.json().catch(() => ({})) as { status?: string; error?: string };
+      const nextStatus = response.ok ? (payload.status ?? decision) : "failed";
+      setProposals((current) => current.map((proposal) =>
+        proposal.id === proposalId
+          ? { ...proposal, status: nextStatus, summary: payload.error ? `${proposal.summary} — ${payload.error}` : proposal.summary }
+          : proposal,
+      ));
+    } finally {
+      setResolving(null);
+    }
   }
 
   if (!ready) {
@@ -205,6 +240,25 @@ export default function FeedWorkspace() {
                   </div>
                 ));
               })()}
+              {proposals.length ? (
+                <div className="feed-proposals">
+                  <h2>Proposed library changes</h2>
+                  {proposals.map((proposal) => (
+                    <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
+                      <div className="feed-proposal-body">
+                        <span className="feed-proposal-summary">{proposal.summary}</span>
+                        <span className="feed-proposal-status">{proposal.status}</span>
+                      </div>
+                      {proposal.status === "pending" ? (
+                        <div className="feed-proposal-actions">
+                          <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
+                          <ActionButton variant="primary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </>
         )}

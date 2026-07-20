@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedMessages, feedSnippets } from "@/db/schema";
-import { readStoredSettings } from "@/app/lib/settings-store";
+import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
+import { requireFeedEnabled } from "@/app/lib/feed-access";
 import { isFeedRunning, subscribeFeed } from "@/app/lib/feed-agent";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +11,9 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const settings = await readStoredSettings();
-  if (!settings.feedEnabled) {
-    return Response.json({ error: "The AI feed is not enabled." }, { status: 403 });
+  const blocked = requireFeedEnabled();
+  if (blocked) {
+    return blocked;
   }
   const { id } = await context.params;
   const database = await ensureDatabase();
@@ -41,6 +41,26 @@ export async function GET(
           kind: message.kind,
           content: message.content,
           createdAt: message.createdAt,
+        }));
+      }
+      const proposals = database
+        .select()
+        .from(feedProposals)
+        .where(eq(feedProposals.snippetId, id))
+        .all();
+      for (const proposal of proposals) {
+        let summary = "Proposed change";
+        try {
+          summary = (JSON.parse(proposal.operation) as { summary?: string }).summary ?? summary;
+        } catch {
+          // Keep the default summary if the stored operation isn't parseable.
+        }
+        controller.enqueue(frame("proposal", {
+          id: proposal.id,
+          operation: proposal.operation,
+          status: proposal.status,
+          summary,
+          createdAt: proposal.createdAt,
         }));
       }
 

@@ -760,7 +760,7 @@ function PaperAssistantWorkspace() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/settings", { cache: "no-store" })
+    void fetch("/api/local-settings", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (!cancelled && data && typeof data.feedEnabled === "boolean") {

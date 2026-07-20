@@ -1,0 +1,76 @@
+import { eq } from "drizzle-orm";
+import { ensureDatabase } from "@/db/bootstrap";
+import { feedProposals } from "@/db/schema";
+import { requireFeedEnabled } from "@/app/lib/feed-access";
+import { applyLibraryMutation } from "@/app/lib/library-mutations";
+import type { ProposalOperation } from "@/app/lib/feed-prompt";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+interface ResolveRequest {
+  decision?: "approve" | "reject";
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const blocked = requireFeedEnabled();
+  if (blocked) {
+    return blocked;
+  }
+  const { id } = await context.params;
+  const body = (await request.json().catch(() => ({}))) as ResolveRequest;
+  const decision = body.decision === "reject" ? "reject" : "approve";
+
+  const database = await ensureDatabase();
+  const proposal = database.select().from(feedProposals).where(eq(feedProposals.id, id)).get();
+  if (!proposal) {
+    return Response.json({ error: "Proposal not found." }, { status: 404 });
+  }
+  if (proposal.status !== "pending") {
+    return Response.json({ error: `This proposal was already ${proposal.status}.` }, { status: 409 });
+  }
+
+  if (decision === "reject") {
+    database
+      .update(feedProposals)
+      .set({ status: "rejected", resolvedAt: new Date().toISOString() })
+      .where(eq(feedProposals.id, id))
+      .run();
+    return Response.json({ status: "rejected" });
+  }
+
+  // Approve: apply the proposed mutation through the shared library mutation
+  // path (the same code the library API uses), then record the outcome.
+  let operation: ProposalOperation;
+  try {
+    operation = JSON.parse(proposal.operation) as ProposalOperation;
+  } catch {
+    database
+      .update(feedProposals)
+      .set({ status: "failed", resultSummary: "The proposal could not be parsed.", resolvedAt: new Date().toISOString() })
+      .where(eq(feedProposals.id, id))
+      .run();
+    return Response.json({ error: "The proposal could not be parsed." }, { status: 400 });
+  }
+
+  try {
+    const summary = await applyLibraryMutation(operation);
+    database
+      .update(feedProposals)
+      .set({ status: "applied", resultSummary: summary, resolvedAt: new Date().toISOString() })
+      .where(eq(feedProposals.id, id))
+      .run();
+    return Response.json({ status: "applied", summary });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The change could not be applied.";
+    database
+      .update(feedProposals)
+      .set({ status: "failed", resultSummary: message, resolvedAt: new Date().toISOString() })
+      .where(eq(feedProposals.id, id))
+      .run();
+    return Response.json({ error: message }, { status: 400 });
+  }
+}

@@ -1,9 +1,9 @@
 import { desc } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedSnippets } from "@/db/schema";
-import { readStoredSettings } from "@/app/lib/settings-store";
 import { runFeedAgent } from "@/app/lib/feed-agent";
 import { buildSnippetPrompt } from "@/app/lib/feed-prompt";
+import { requireFeedEnabled } from "@/app/lib/feed-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,16 +14,8 @@ interface CreateSnippetRequest {
   title?: string;
 }
 
-async function requireFeedEnabled(): Promise<Response | null> {
-  const settings = await readStoredSettings();
-  if (!settings.feedEnabled) {
-    return Response.json({ error: "The AI feed is not enabled." }, { status: 403 });
-  }
-  return null;
-}
-
 export async function GET(): Promise<Response> {
-  const blocked = await requireFeedEnabled();
+  const blocked = requireFeedEnabled();
   if (blocked) {
     return blocked;
   }
@@ -37,7 +29,7 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const blocked = await requireFeedEnabled();
+  const blocked = requireFeedEnabled();
   if (blocked) {
     return blocked;
   }

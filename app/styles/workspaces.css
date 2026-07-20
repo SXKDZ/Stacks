@@ -1056,3 +1056,69 @@
   gap: 8px;
   padding: 10px 12px;
 }
+
+.feed-proposals {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 16px;
+}
+
+.feed-proposals h2 {
+  color: var(--soft);
+  font-size: var(--type-label);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.feed-proposal {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 11px 13px;
+}
+
+.feed-proposal-applied {
+  border-color: color-mix(in srgb, var(--green) 34%, var(--line-strong));
+}
+
+.feed-proposal-rejected,
+.feed-proposal-failed {
+  opacity: 0.7;
+}
+
+.feed-proposal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.feed-proposal-summary {
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+
+.feed-proposal-status {
+  color: var(--muted);
+  font-size: var(--type-label);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.feed-proposal-applied .feed-proposal-status { color: var(--status-complete); }
+.feed-proposal-failed .feed-proposal-status { color: var(--rose); }
+
+.feed-proposal-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}

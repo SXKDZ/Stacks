@@ -53,7 +53,6 @@ export interface SettingsInput {
   remotePath?: unknown;
   autoSync?: unknown;
   autoSyncInterval?: unknown;
-  feedEnabled?: unknown;
 }
 
 interface StoredSettings {
@@ -75,8 +74,6 @@ interface StoredSettings {
     autoSync: boolean;
     autoSyncInterval: number;
   };
-  // Opt-in AI feed (headless claude -p notebook). Off by default.
-  feedEnabled: boolean;
 }
 
 const SETTINGS_ID = "primary";
@@ -110,7 +107,6 @@ function environmentDefaults(): StoredSettings {
       autoSync: ["1", "true", "yes", "on"].includes((process.env.PA_AUTO_SYNC ?? "").toLowerCase()),
       autoSyncInterval: number(process.env.PA_AUTO_SYNC_INTERVAL, 5, 5, 3600),
     },
-    feedEnabled: ["1", "true", "yes", "on"].includes((process.env.PA_FEED_ENABLED ?? "").toLowerCase()),
   };
 }
 
@@ -139,7 +135,6 @@ function normalizeStoredSettings(value: unknown): StoredSettings {
       autoSync: typeof candidate.sync?.autoSync === "boolean" ? candidate.sync.autoSync : fallback.sync.autoSync,
       autoSyncInterval: number(candidate.sync?.autoSyncInterval, fallback.sync.autoSyncInterval, 5, 3600),
     },
-    feedEnabled: typeof candidate.feedEnabled === "boolean" ? candidate.feedEnabled : fallback.feedEnabled,
   };
 }
 
@@ -181,7 +176,6 @@ export async function saveStoredSettings(input: SettingsInput): Promise<StoredSe
       autoSync: typeof input.autoSync === "boolean" ? input.autoSync : current.sync.autoSync,
       autoSyncInterval: input.autoSyncInterval ?? current.sync.autoSyncInterval,
     },
-    feedEnabled: typeof input.feedEnabled === "boolean" ? input.feedEnabled : current.feedEnabled,
   });
   const database = await ensureDatabase();
   database
@@ -217,7 +211,6 @@ export function settingsSnapshot(settings: StoredSettings) {
       available: false,
       unavailableReason: "OneDrive folder sync requires PA's local filesystem companion.",
     },
-    feedEnabled: settings.feedEnabled,
   };
 }
 

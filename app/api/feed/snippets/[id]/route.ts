@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
-import { readStoredSettings } from "@/app/lib/settings-store";
+import { requireFeedEnabled } from "@/app/lib/feed-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,9 +10,9 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const settings = await readStoredSettings();
-  if (!settings.feedEnabled) {
-    return Response.json({ error: "The AI feed is not enabled." }, { status: 403 });
+  const blocked = requireFeedEnabled();
+  if (blocked) {
+    return blocked;
   }
   const { id } = await context.params;
   const database = await ensureDatabase();
