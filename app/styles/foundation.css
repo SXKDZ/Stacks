@@ -380,6 +380,36 @@ body {
   color: var(--brand-blue);
 }
 
+/* AI feed gets a distinct accented treatment so it reads as its own workspace,
+   not another library view. Tinted surface + brand border + a beta badge. */
+.nav-item-feed {
+  background: var(--brand-blue-soft);
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 26%, transparent);
+  color: var(--brand-blue-strong);
+  margin-top: 6px;
+}
+
+.nav-item-feed svg {
+  color: var(--brand-blue-strong);
+}
+
+.nav-item-feed:hover {
+  background: color-mix(in srgb, var(--brand-blue) 16%, transparent);
+  color: var(--brand-blue-strong);
+}
+
+.nav-item-badge {
+  background: color-mix(in srgb, var(--brand-blue) 22%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--brand-blue-strong);
+  font-size: var(--type-micro);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin-left: auto;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
 .nav-count {
   color: #9b94a2;
   font-size: 10px;

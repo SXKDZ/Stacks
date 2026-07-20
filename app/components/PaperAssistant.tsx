@@ -943,11 +943,12 @@ function PaperAssistantWorkspace() {
           })}
           {feedEnabled ? (
             <button
-              className="nav-item"
+              className="nav-item nav-item-feed"
               onClick={() => window.open("/feed", "_blank", "noopener,noreferrer")}
             >
               <Rss size={17} strokeWidth={2} />
               <span>AI feed</span>
+              <span className="nav-item-badge">beta</span>
             </button>
           ) : null}
         </nav>
