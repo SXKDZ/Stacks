@@ -192,7 +192,7 @@ test("imports BibTeX and RIS files into normalized paper records", async () => {
     readFile(new URL("../app/api/import-bibliography/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/bibliography.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(route, /parseBibliography/);
   assert.match(parser, /parseBibtex/);
@@ -208,7 +208,7 @@ test("persists collection membership through the paper-collection composite key"
   const [schema, library, application, collectionMigration, colorMigration] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0003_blushing_preak.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0005_lyrical_victor_mancha.sql", import.meta.url), "utf8"),
   ]);
@@ -228,7 +228,7 @@ test("persists collection membership through the paper-collection composite key"
 
 test("uses integrated sortable table headers without a detached sort control", async () => {
   const [component, styles] = await Promise.all([
-    readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
     readApplicationStyles(),
   ]);
   assert.match(component, /SortablePaperHeader/);
@@ -246,7 +246,7 @@ test("uses integrated sortable table headers without a detached sort control", a
 });
 
 test("combines exact linked-record filters with boolean relationships", async () => {
-  const application = await readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8");
+  const application = await readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8");
   assert.match(application, /interface LibraryFilterClause/);
   assert.match(application, /matchesLibraryFilters/);
   assert.match(application, /collection\.id === clause\.valueId/);
@@ -262,7 +262,7 @@ test("combines exact linked-record filters with boolean relationships", async ()
 test("tracks long-running work and drives the AI feed instead of a chat workspace", async () => {
   const [tasks, application, settings, feed, attachBox, snippetsRoute, attachments] = await Promise.all([
     readFile(new URL("../app/components/BackgroundTasks.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),

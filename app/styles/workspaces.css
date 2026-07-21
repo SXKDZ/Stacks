@@ -1173,13 +1173,13 @@
   line-height: 1;
 }
 
-/* Attachment chips above the composer input. Capped in height so a large
+/* Attachment chips above the composer input. Capped at two rows so a large
    selection scrolls instead of pushing the textarea off-screen. */
 .feed-attach-tray {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 168px;
+  max-height: 68px;
   overflow-y: auto;
   padding: 2px 4px 4px;
 }
@@ -1199,6 +1199,18 @@
 .feed-chip svg:first-child {
   color: var(--brand-blue-strong);
   flex-shrink: 0;
+}
+
+.feed-chip-image {
+  padding-left: 4px;
+}
+
+.feed-chip-thumb {
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  height: 22px;
+  object-fit: cover;
+  width: 22px;
 }
 
 .feed-chip-label {
@@ -1228,22 +1240,42 @@
 }
 
 /* Library paper picker: a search box + scrollable list under the composer. */
-/* The library picker floats above the dock instead of pushing layout, so the
-   composer/reply box stays put when it opens. */
+/* The library picker is a centered modal over a scrim, so it floats in the
+   middle of the screen rather than being anchored to the dock. */
+.feed-picker-scrim {
+  align-items: center;
+  background: var(--scrim);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 50;
+}
+
 .feed-picker {
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
-  bottom: calc(100% + 8px);
-  box-shadow: var(--shadow-2), var(--edge-highlight);
+  box-shadow: var(--shadow-md), var(--edge-highlight);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  left: 0;
-  padding: 10px;
-  position: absolute;
-  right: 0;
-  z-index: 5;
+  gap: 10px;
+  max-height: min(560px, 80vh);
+  padding: 14px;
+  width: min(560px, 100%);
+}
+
+.feed-picker-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.feed-picker-head strong {
+  color: var(--ink);
+  font-size: var(--type-body-large);
+  font-weight: 640;
 }
 
 .feed-picker-search {
@@ -1269,8 +1301,9 @@
 
 .feed-picker-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  max-height: 220px;
+  min-height: 0;
   overflow-y: auto;
 }
 

@@ -658,11 +658,11 @@ function EmptyState({ icon, title, detail }: { icon: ReactNode; title: string; d
   );
 }
 
-export default function PaperAssistant() {
-  return <BackgroundTaskProvider><PaperAssistantWorkspace /></BackgroundTaskProvider>;
+export default function Stacks() {
+  return <BackgroundTaskProvider><StacksWorkspace /></BackgroundTaskProvider>;
 }
 
-function PaperAssistantWorkspace() {
+function StacksWorkspace() {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>(demoSnapshot);
   const [view, setView] = useState<ViewId>("home");
   const [query, setQuery] = useState("");

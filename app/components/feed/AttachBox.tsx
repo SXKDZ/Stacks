@@ -1,7 +1,7 @@
 "use client";
 
 import { BookOpen, Check, FileText, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
-import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useRef, useState } from "react";
+import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { ActionButton } from "@/app/components/ui/controls";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
@@ -66,8 +66,38 @@ export function AttachBox({
   const [pickerQuery, setPickerQuery] = useState("");
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const trayRef = useRef<HTMLDivElement>(null);
 
   const hasAttachments = files.length > 0 || papers.length > 0;
+
+  // Keep the newest chip in view when the (height-capped, scrollable) tray grows.
+  useEffect(() => {
+    const tray = trayRef.current;
+    if (tray) {
+      tray.scrollTop = tray.scrollHeight;
+    }
+  }, [files.length, papers.length]);
+
+  // Object URLs for image previews, one per image file. The ref lets us revoke
+  // URLs for removed files (and all of them on unmount) without stale closures.
+  const [previews, setPreviews] = useState<Map<File, string>>(new Map());
+  const previewsRef = useRef(previews);
+  previewsRef.current = previews;
+  useEffect(() => {
+    setPreviews((current) => {
+      const next = new Map<File, string>();
+      for (const file of files) {
+        if (file.type.startsWith("image/")) {
+          next.set(file, current.get(file) ?? URL.createObjectURL(file));
+        }
+      }
+      for (const [file, url] of current) {
+        if (!next.has(file)) URL.revokeObjectURL(url);
+      }
+      return next;
+    });
+  }, [files]);
+  useEffect(() => () => { previewsRef.current.forEach((url) => URL.revokeObjectURL(url)); }, []);
   const canSubmit = (text.trim().length > 0 || hasAttachments) && !submitting;
 
   function addFiles(list: Iterable<File> | null) {
@@ -126,7 +156,7 @@ export function AttachBox({
       {dragging ? <div className="feed-drop-hint"><Paperclip size={18} /> Drop files to attach</div> : null}
 
       {hasAttachments ? (
-        <div className="feed-attach-tray">
+        <div className="feed-attach-tray" ref={trayRef}>
           {papers.map((paper) => (
             <span key={paper.id} className="feed-chip">
               <BookOpen size={12} />
@@ -134,13 +164,18 @@ export function AttachBox({
               <button type="button" onClick={() => togglePaper(paper)} aria-label={`Remove ${paper.title}`}><X size={12} /></button>
             </span>
           ))}
-          {files.map((file, index) => (
-            <span key={`${file.name}-${index}`} className="feed-chip">
-              <FileText size={12} />
-              <span className="feed-chip-label">{file.name}</span>
-              <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} aria-label={`Remove ${file.name}`}><X size={12} /></button>
-            </span>
-          ))}
+          {files.map((file, index) => {
+            const preview = previews.get(file);
+            return (
+              <span key={`${file.name}-${index}`} className={`feed-chip ${preview ? "feed-chip-image" : ""}`}>
+                {preview
+                  ? <img src={preview} alt="" className="feed-chip-thumb" />
+                  : <FileText size={12} />}
+                <span className="feed-chip-label">{file.name || "image"}</span>
+                <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} aria-label={`Remove ${file.name || "image"}`}><X size={12} /></button>
+              </span>
+            );
+          })}
         </div>
       ) : null}
 
@@ -170,25 +205,31 @@ export function AttachBox({
       </div>
 
       {pickerOpen ? (
-        <div className="feed-picker">
-          <div className="feed-picker-search">
-            <Search size={14} />
-            <input value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search your library…" autoFocus />
-          </div>
-          <div className="feed-picker-list">
-            {library
-              .filter((paper) => paper.title.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
-              .slice(0, 40)
-              .map((paper) => {
-                const attached = papers.some((item) => item.id === paper.id);
-                return (
-                  <button type="button" key={paper.id} className={`feed-picker-item ${attached ? "is-attached" : ""}`} onClick={() => togglePaper(paper)}>
-                    {attached ? <Check size={14} /> : <BookOpen size={14} />}
-                    <span>{paper.title}</span>
-                  </button>
-                );
-              })}
-            {library.length === 0 ? <p className="feed-picker-empty">Your library is empty.</p> : null}
+        <div className="feed-picker-scrim" onClick={() => setPickerOpen(false)}>
+          <div className="feed-picker" onClick={(event) => event.stopPropagation()}>
+            <header className="feed-picker-head">
+              <strong>Attach from your library</strong>
+              <button type="button" className="feed-tool-btn" onClick={() => setPickerOpen(false)} aria-label="Close"><X size={16} /></button>
+            </header>
+            <div className="feed-picker-search">
+              <Search size={14} />
+              <input value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search your library…" autoFocus />
+            </div>
+            <div className="feed-picker-list">
+              {library
+                .filter((paper) => paper.title.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
+                .slice(0, 60)
+                .map((paper) => {
+                  const attached = papers.some((item) => item.id === paper.id);
+                  return (
+                    <button type="button" key={paper.id} className={`feed-picker-item ${attached ? "is-attached" : ""}`} onClick={() => togglePaper(paper)}>
+                      {attached ? <Check size={14} /> : <BookOpen size={14} />}
+                      <span>{paper.title}</span>
+                    </button>
+                  );
+                })}
+              {library.length === 0 ? <p className="feed-picker-empty">Your library is empty.</p> : null}
+            </div>
           </div>
         </div>
       ) : null}

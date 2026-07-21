@@ -8,7 +8,7 @@ test("ships the Stacks application shell and product metadata", async () => {
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(
-      new URL("../app/components/PaperAssistant.tsx", import.meta.url),
+      new URL("../app/components/Stacks.tsx", import.meta.url),
       "utf8",
     ),
     readFile(
@@ -30,7 +30,7 @@ test("ships the Stacks application shell and product metadata", async () => {
     readApplicationStyles(),
   ]);
 
-  assert.match(page, /<PaperAssistant \/>/);
+  assert.match(page, /<Stacks \/>/);
   assert.match(layout, /title: "Stacks"/);
   assert.match(layout, /@fontsource-variable\/inter/);
   assert.match(layout, /@fontsource-variable\/jetbrains-mono/);

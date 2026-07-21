@@ -1,5 +1,5 @@
-import PaperAssistant from "./components/PaperAssistant";
+import Stacks from "./components/Stacks";
 
 export default function Home() {
-  return <PaperAssistant />;
+  return <Stacks />;
 }
