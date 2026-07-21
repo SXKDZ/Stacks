@@ -167,8 +167,18 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDele
     <div className={`feed-row feed-row-${snippet.status} ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}`}>
       <button type="button" className="feed-row-main" onClick={onSelect} aria-current={active}>
         <span className={`feed-row-glyph feed-status-${snippet.status}`}><StatusGlyph status={snippet.status} /></span>
-        <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
-        <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>
+        <span className="feed-row-body">
+          <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
+          <span className="feed-row-meta">
+            <span className={`feed-row-status feed-status-${snippet.status}`}>{statusLabel(snippet.status)}</span>
+            <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>
+            {(() => {
+              const tokens = (snippet.inputTokens ?? 0) + (snippet.outputTokens ?? 0);
+              return tokens ? <span>{compactTokens(tokens)} tok</span> : null;
+            })()}
+            {snippet.turns ? <span>{snippet.turns} {snippet.turns === 1 ? "turn" : "turns"}</span> : null}
+          </span>
+        </span>
       </button>
       <div className="feed-row-menu" ref={menuRef}>
         <button type="button" className="feed-row-kebab" onClick={() => setMenuOpen((open) => !open)} aria-label="More actions" aria-haspopup="menu" aria-expanded={menuOpen}><MoreVertical size={15} /></button>

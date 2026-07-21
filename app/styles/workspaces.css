@@ -973,13 +973,13 @@
 }
 
 .feed-row-main {
-  align-items: center;
+  align-items: flex-start;
   background: transparent;
   border: 0;
   cursor: pointer;
   display: flex;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 10px 10px;
   text-align: left;
   width: 100%;
 }
@@ -989,11 +989,19 @@
   color: var(--soft);
   display: flex;
   flex-shrink: 0;
+  height: 18px;
+}
+
+.feed-row-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .feed-row-title {
   color: var(--muted);
-  flex: 1;
   font-size: var(--type-control);
   font-weight: 500;
   min-width: 0;
@@ -1011,19 +1019,45 @@
   font-weight: 600;
 }
 
-.feed-row-time {
+/* Second line: status, relative time, and usage, dot-separated. */
+.feed-row-meta {
+  align-items: center;
   color: var(--soft);
-  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
   font-size: var(--type-caption);
   font-variant-numeric: tabular-nums;
+  gap: 8px;
 }
 
-/* The kebab sits over the time; on hover/menu-open it replaces the time. */
+.feed-row-meta > span {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.feed-row-meta > span + span::before {
+  background: var(--soft);
+  border-radius: 50%;
+  content: "";
+  height: 3px;
+  opacity: 0.55;
+  width: 3px;
+}
+
+.feed-row-status {
+  font-weight: 600;
+}
+
+.feed-row-time {
+  color: var(--soft);
+}
+
+/* The kebab sits at the row's top-right, revealed on hover/menu-open. */
 .feed-row-menu {
   position: absolute;
   right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 6px;
 }
 
 .feed-row-kebab {
@@ -1044,9 +1078,10 @@
   display: flex;
 }
 
-.feed-row:hover .feed-row-time,
-.feed-row.menu-open .feed-row-time {
-  visibility: hidden;
+/* Give the kebab room so it doesn't cover the title on hover. */
+.feed-row:hover .feed-row-title,
+.feed-row.menu-open .feed-row-title {
+  padding-right: 24px;
 }
 
 .feed-row-kebab:hover {
