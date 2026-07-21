@@ -92,6 +92,10 @@ const schemaStatements = [
     working_dir TEXT,
     session_id TEXT,
     error TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    turns INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
@@ -244,6 +248,12 @@ async function initializeDatabase(): Promise<void> {
 
   if (!tableColumns(raw, "feed_messages").has("tool_use_id")) {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN tool_use_id TEXT").run();
+  }
+  const feedSnippetColumns = tableColumns(raw, "feed_snippets");
+  for (const column of ["input_tokens", "output_tokens", "duration_ms", "turns"]) {
+    if (!feedSnippetColumns.has(column)) {
+      raw.prepare(`ALTER TABLE feed_snippets ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();
+    }
   }
   if (existingPaperColumns.has("citation_count")) {
     raw.prepare("ALTER TABLE papers DROP COLUMN citation_count").run();

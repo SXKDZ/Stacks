@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { libraryRoot } from "@/db/library-paths";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
@@ -128,6 +128,31 @@ async function setSessionId(snippetId: string, sessionId: string): Promise<void>
     .update(feedSnippets)
     .set({ sessionId })
     .where(and(eq(feedSnippets.id, snippetId), eq(feedSnippets.sessionId, "")))
+    .run();
+}
+
+/** Accumulate a turn's usage from the stream-json `result` event. Tokens sum
+ *  across cache + input/output; duration and turn count add up over follow-ups. */
+async function recordUsage(snippetId: string, event: Record<string, unknown>): Promise<void> {
+  const usage = (event.usage ?? {}) as Record<string, unknown>;
+  const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+  const inputTokens = num(usage.input_tokens) + num(usage.cache_read_input_tokens) + num(usage.cache_creation_input_tokens);
+  const outputTokens = num(usage.output_tokens);
+  const durationMs = num(event.duration_ms);
+  const turns = num(event.num_turns) || 1;
+  if (!inputTokens && !outputTokens && !durationMs) {
+    return;
+  }
+  const database = await ensureDatabase();
+  database
+    .update(feedSnippets)
+    .set({
+      inputTokens: sql`${feedSnippets.inputTokens} + ${inputTokens}`,
+      outputTokens: sql`${feedSnippets.outputTokens} + ${outputTokens}`,
+      durationMs: sql`${feedSnippets.durationMs} + ${durationMs}`,
+      turns: sql`${feedSnippets.turns} + ${turns}`,
+    })
+    .where(eq(feedSnippets.id, snippetId))
     .run();
 }
 
@@ -268,6 +293,8 @@ export async function runFeedAgent(options: {
     if (event.type === "result") {
       const isError = Boolean(event.is_error);
       const text = typeof event.result === "string" ? event.result : "";
+      // Accumulate this turn's usage onto the snippet (tokens, duration, turns).
+      await recordUsage(snippetId, event);
       // The result event repeats the final assistant text. Only persist it when
       // it differs from the last assistant message (else the reply shows twice);
       // otherwise reuse that message as the anchor for parsed proposals.

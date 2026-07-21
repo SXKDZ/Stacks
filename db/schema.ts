@@ -176,6 +176,11 @@ export const feedSnippets = sqliteTable(
     // The claude -p session id, used with --resume for follow-up turns.
     sessionId: text("session_id"),
     error: text("error"),
+    // Cumulative agent usage across all turns, captured from the result event.
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    durationMs: integer("duration_ms").notNull().default(0),
+    turns: integer("turns").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

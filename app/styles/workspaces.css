@@ -1482,10 +1482,10 @@
 }
 
 .feed-detail-heading {
-  align-items: center;
   display: flex;
   flex: 1;
-  gap: 12px;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -1499,6 +1499,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Status + usage stats, shown as a compact dotted line under the title. */
+.feed-detail-meta {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--type-caption);
+  gap: 10px;
+}
+
+.feed-detail-stat {
+  align-items: center;
+  display: flex;
+  font-variant-numeric: tabular-nums;
+  gap: 10px;
+}
+
+.feed-detail-stat::before {
+  background: var(--soft);
+  border-radius: 50%;
+  content: "";
+  height: 3px;
+  opacity: 0.6;
+  width: 3px;
 }
 
 .feed-detail-badge {

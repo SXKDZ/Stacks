@@ -32,6 +32,10 @@ interface FeedSnippet {
   instruction: string;
   status: string;
   error: string | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  durationMs?: number;
+  turns?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,6 +98,30 @@ function renderToolContent(content: string): ReactNode {
     return <p className="feed-tool-empty">No output</p>;
   }
   return <MarkdownContent content={toolFence(content)} className="feed-tool-md" />;
+}
+
+/** Compact token count: 1234 → "1.2k", 20345 → "20.3k". */
+function compactTokens(value: number): string {
+  if (value < 1000) return String(value);
+  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}k`;
+}
+
+/** Duration in ms → "3.4s" / "1m 12s". */
+function formatDuration(ms: number): string {
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  const mins = Math.floor(seconds / 60);
+  return `${mins}m ${Math.round(seconds - mins * 60)}s`;
+}
+
+/** The stat line shown in the detail header: tokens, duration, turns. */
+function snippetStats(snippet: FeedSnippet): string[] {
+  const stats: string[] = [];
+  const tokens = (snippet.inputTokens ?? 0) + (snippet.outputTokens ?? 0);
+  if (tokens) stats.push(`${compactTokens(tokens)} tokens`);
+  if (snippet.durationMs) stats.push(formatDuration(snippet.durationMs));
+  if (snippet.turns) stats.push(`${snippet.turns} ${snippet.turns === 1 ? "turn" : "turns"}`);
+  return stats;
 }
 
 function relativeTime(iso: string): string {
@@ -238,10 +266,15 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
           <button type="button" className="feed-detail-back" onClick={onBack} aria-label="Back to list"><ArrowLeft size={16} /></button>
           <div className="feed-detail-heading">
             <h1>{snippet.title || snippet.instruction || "Untitled"}</h1>
-            <span className={`feed-status feed-status-${snippet.status}`}>
-              <StatusGlyph status={snippet.status} size={12} />
-              {statusLabel(snippet.status)}
-            </span>
+            <div className="feed-detail-meta">
+              <span className={`feed-status feed-status-${snippet.status}`}>
+                <StatusGlyph status={snippet.status} size={12} />
+                {statusLabel(snippet.status)}
+              </span>
+              {snippetStats(snippet).map((stat) => (
+                <span key={stat} className="feed-detail-stat">{stat}</span>
+              ))}
+            </div>
           </div>
           {pendingCount ? <span className="feed-detail-badge">{pendingCount} to approve</span> : null}
         </div>
