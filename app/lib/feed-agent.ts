@@ -21,7 +21,7 @@ import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 
 type FeedEvent =
   | { type: "status"; status: string }
-  | { type: "message"; id: string; role: string; kind: string; content: string; createdAt: string }
+  | { type: "message"; id: string; role: string; kind: string; content: string; toolUseId?: string | null; createdAt: string }
   | { type: "proposal"; id: string; operation: string; status: string; summary: string; createdAt: string }
   | { type: "done"; status: string };
 
@@ -88,12 +88,13 @@ async function persistMessage(
   role: string,
   kind: string,
   content: string,
+  toolUseId: string | null = null,
 ): Promise<FeedEvent> {
   const database = await ensureDatabase();
   const id = createId("msg");
   const createdAt = new Date().toISOString();
-  database.insert(feedMessages).values({ id, snippetId, role, kind, content, createdAt }).run();
-  return { type: "message", id, role, kind, content, createdAt };
+  database.insert(feedMessages).values({ id, snippetId, role, kind, content, toolUseId, createdAt }).run();
+  return { type: "message", id, role, kind, content, toolUseId, createdAt };
 }
 
 async function persistProposal(
@@ -145,6 +146,12 @@ function feedBaseUrl(): string {
   return process.env.STACKS_FEED_BASE_URL?.trim() || `http://127.0.0.1:${process.env.PORT?.trim() || "3000"}`;
 }
 
+/** Claude Code's config/transcript dir, kept inside the library so the raw
+ *  session JSONL is captured in the synced folder (not scattered in ~/.claude). */
+function claudeConfigDir(): string {
+  return join(libraryRoot(), "feed", ".claude");
+}
+
 async function agentEnv(feedToken: string): Promise<NodeJS.ProcessEnv> {
   const runtime = await resolveRuntimeValues();
   const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
@@ -152,6 +159,8 @@ async function agentEnv(feedToken: string): Promise<NodeJS.ProcessEnv> {
   return {
     ...process.env,
     ...(token ? { CLAUDE_CODE_USE_BEDROCK: "1", AWS_BEARER_TOKEN_BEDROCK: token, AWS_REGION: region } : {}),
+    // Keep the agent's session transcripts inside the (synced) library.
+    CLAUDE_CONFIG_DIR: claudeConfigDir(),
     // The agent uses these (via Bash + curl) to query and edit the library.
     STACKS_FEED_BASE_URL: feedBaseUrl(),
     STACKS_FEED_TOKEN: feedToken,
@@ -173,6 +182,7 @@ export async function runFeedAgent(options: {
   const { snippetId, sessionId, prompt, resume } = options;
   const workingDir = feedWorkingDir(snippetId);
   mkdirSync(workingDir, { recursive: true });
+  mkdirSync(claudeConfigDir(), { recursive: true });
 
   // Issue a per-run token the agent uses (via Bash + curl) to reach the
   // agent-facing library APIs. Reads run live; writes enqueue approvals.
@@ -238,7 +248,8 @@ export async function runFeedAgent(options: {
           emit(snippetId, persisted);
         } else if (block.type === "tool_use") {
           const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {}).slice(0, 800)}`;
-          emit(snippetId, await persistMessage(snippetId, "assistant", "tool_use", summary));
+          const toolUseId = typeof block.id === "string" ? block.id : null;
+          emit(snippetId, await persistMessage(snippetId, "assistant", "tool_use", summary, toolUseId));
         }
       }
       return;
@@ -248,7 +259,8 @@ export async function runFeedAgent(options: {
       const message = event.message as { content?: Array<Record<string, unknown>> } | undefined;
       for (const block of message?.content ?? []) {
         if (block.type === "tool_result") {
-          emit(snippetId, await persistMessage(snippetId, "tool", "tool_result", toolResultText(block.content)));
+          const toolUseId = typeof block.tool_use_id === "string" ? block.tool_use_id : null;
+          emit(snippetId, await persistMessage(snippetId, "tool", "tool_result", toolResultText(block.content), toolUseId));
         }
       }
       return;

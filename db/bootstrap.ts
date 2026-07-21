@@ -101,6 +101,7 @@ const schemaStatements = [
     role TEXT NOT NULL,
     kind TEXT NOT NULL DEFAULT 'text',
     content TEXT NOT NULL DEFAULT '',
+    tool_use_id TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS feed_proposals (
@@ -239,6 +240,10 @@ async function initializeDatabase(): Promise<void> {
     if (!existingPaperColumns.has(column)) {
       raw.prepare(statement).run();
     }
+  }
+
+  if (!tableColumns(raw, "feed_messages").has("tool_use_id")) {
+    raw.prepare("ALTER TABLE feed_messages ADD COLUMN tool_use_id TEXT").run();
   }
   if (existingPaperColumns.has("citation_count")) {
     raw.prepare("ALTER TABLE papers DROP COLUMN citation_count").run();

@@ -40,6 +40,7 @@ export async function GET(
           role: message.role,
           kind: message.kind,
           content: message.content,
+          toolUseId: message.toolUseId,
           createdAt: message.createdAt,
         }));
       }

@@ -194,6 +194,9 @@ export const feedMessages = sqliteTable(
     // text | tool_use | tool_result | result | error
     kind: text("kind").notNull().default("text"),
     content: text("content").notNull().default(""),
+    // Correlates a tool_use with its tool_result (Anthropic tool_use id), so the
+    // UI can pair them even when the agent issues tool calls in parallel.
+    toolUseId: text("tool_use_id"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("feed_messages_snippet_idx").on(table.snippetId, table.createdAt)],

@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, Home, LoaderCircle, Rss, Send, Square, Wrench, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleDot, Home, LoaderCircle, Plus, Rss, Send, Square, Wrench, X } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { ActionButton } from "@/app/components/ui/controls";
 
@@ -11,6 +11,7 @@ interface FeedMessage {
   role: string;
   kind: string;
   content: string;
+  toolUseId?: string | null;
   createdAt: string;
 }
 
@@ -43,38 +44,95 @@ function statusLabel(status: string): string {
   }
 }
 
-/** The agent's most useful line for the collapsed card summary. */
-function summaryText(messages: FeedMessage[]): string {
-  const spoken = messages.filter((m) => m.role === "assistant" && (m.kind === "text" || m.kind === "result"));
-  const last = spoken[spoken.length - 1];
-  if (!last) {
-    const err = messages.find((m) => m.kind === "error");
-    return err ? err.content : "";
+/** A compact glyph for the list row — conveys state at a glance in one column. */
+function StatusGlyph({ status }: { status: string }) {
+  if (status === "running" || status === "queued") {
+    return <LoaderCircle className="spin" size={13} />;
   }
-  return last.content.replace(/```[\s\S]*?```/g, "").replace(/[#*_`>]/g, "").replace(/\s+/g, " ").trim();
+  if (status === "error") {
+    return <CircleAlert size={13} />;
+  }
+  if (status === "done") {
+    return <Check size={13} />;
+  }
+  return <CircleDot size={13} />;
+}
+
+/**
+ * Guess a fence language from tool I/O so it highlights correctly. We label
+ * explicitly (rather than letting highlight.js auto-detect) because auto-detect
+ * mistakes JSON-with-URLs for JavaScript and renders `//host` as a comment.
+ */
+function guessLang(text: string): string {
+  const trimmed = text.trim();
+  if (/^[[{]/.test(trimmed) && /[:[\]{}]/.test(trimmed)) return "json";
+  if (/^(curl|cat|ls|cd|grep|rg|npm|npx|node|python3?|git|echo|mkdir|rm|mv|cp|sed|awk|find|which|export)\b/m.test(trimmed) || /\s\|\s|&&|\$\(/.test(trimmed)) return "bash";
+  return "";
+}
+
+/**
+ * Wrap raw tool I/O in a fenced code block so it renders (and highlights)
+ * through Markdown. The fence is longer than any backtick run in the content,
+ * so embedded backticks can't break out.
+ */
+function toolFence(content: string, lang = guessLang(content)): string {
+  const longest = (content.match(/`+/g) ?? []).reduce((max, run) => Math.max(max, run.length), 0);
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return `${fence}${lang}\n${content.replace(/\s+$/, "")}\n${fence}`;
+}
+
+/** Tool request/result body: highlighted markdown, or a muted note if empty. */
+function renderToolContent(content: string): ReactNode {
+  if (!content.trim()) {
+    return <p className="feed-tool-empty">No output</p>;
+  }
+  return <MarkdownContent content={toolFence(content)} className="feed-tool-md" />;
 }
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const diff = Date.now() - then;
   const mins = Math.round(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return `${hrs}h`;
   return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
 }
 
 /**
- * A single feed card. Collapsed, it shows the instruction + status + a one-line
- * summary of the agent's result. Expanded, it streams the full thread, shows
- * proposals to approve/reject, and offers a reply box. Each card owns its own
- * SSE connection so the feed can hold many cards independently.
+ * A single row in the left list: status glyph, title, and a relative timestamp,
+ * on one line so the console scales to dozens of interactions. Purely
+ * presentational — statuses stay fresh through the parent's poll.
  */
-function FeedCard({ snippet, expanded, onToggle, onChanged }: {
+function FeedRow({ snippet, active, onSelect }: {
   snippet: FeedSnippet;
-  expanded: boolean;
-  onToggle: () => void;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`feed-row feed-row-${snippet.status} ${active ? "is-active" : ""}`}
+      onClick={onSelect}
+      aria-current={active}
+    >
+      <span className={`feed-row-glyph feed-status-${snippet.status}`}><StatusGlyph status={snippet.status} /></span>
+      <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
+      <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>
+    </button>
+  );
+}
+
+/**
+ * The right detail pane: the selected snippet's full thread. Streams its own SSE
+ * (history is replayed on connect, so any snippet — live or long-finished — fills
+ * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
+ * `key` of the snippet id so switching selection resets its state cleanly.
+ */
+function FeedDetail({ snippet, onBack, onChanged }: {
+  snippet: FeedSnippet;
+  onBack: () => void;
   onChanged: () => void;
 }) {
   const [messages, setMessages] = useState<FeedMessage[]>([]);
@@ -86,12 +144,9 @@ function FeedCard({ snippet, expanded, onToggle, onChanged }: {
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
 
-  // Stream this card's events while it's expanded OR running (so a collapsed
-  // card still advances to done). Re-runs on reply (streamNonce) and status flip.
+  // Stream this snippet's events. The endpoint replays persisted history first,
+  // then live events if it's still running, then closes. Re-runs on reply.
   useEffect(() => {
-    if (!expanded && !running) {
-      return;
-    }
     const source = new EventSource(`/api/feed/snippets/${snippet.id}/events`);
     source.addEventListener("message", (event) => {
       const message = JSON.parse((event as MessageEvent).data) as FeedMessage;
@@ -107,7 +162,7 @@ function FeedCard({ snippet, expanded, onToggle, onChanged }: {
     });
     return () => source.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snippet.id, expanded, running, streamNonce]);
+  }, [snippet.id, streamNonce]);
 
   async function sendReply(event: FormEvent) {
     event.preventDefault();
@@ -162,126 +217,149 @@ function FeedCard({ snippet, expanded, onToggle, onChanged }: {
     }
   }
 
-  const summary = summaryText(messages);
   const pendingCount = proposals.filter((p) => p.status === "pending").length;
 
   return (
-    <article className={`feed-card feed-card-${snippet.status} ${expanded ? "is-expanded" : ""}`}>
-      <button type="button" className="feed-card-head" onClick={onToggle} aria-expanded={expanded}>
-        <div className="feed-card-head-main">
-          <strong>{snippet.title || snippet.instruction || "Untitled"}</strong>
-          {!expanded && summary ? <p className="feed-card-summary">{summary}</p> : null}
+    <section className="feed-detail">
+      <header className="feed-detail-head">
+        <div className="feed-detail-head-inner">
+          <button type="button" className="feed-detail-back" onClick={onBack} aria-label="Back to list"><ArrowLeft size={16} /></button>
+          <div className="feed-detail-heading">
+            <h1>{snippet.title || snippet.instruction || "Untitled"}</h1>
+            <span className={`feed-status feed-status-${snippet.status}`}>
+              {running ? <LoaderCircle className="spin" size={11} /> : snippet.status === "error" ? <CircleAlert size={11} /> : null}
+              {statusLabel(snippet.status)}
+            </span>
+          </div>
+          {pendingCount ? <span className="feed-detail-badge">{pendingCount} to approve</span> : null}
         </div>
-        <div className="feed-card-head-meta">
-          <span className={`feed-status feed-status-${snippet.status}`}>
-            {running ? <LoaderCircle className="spin" size={11} /> : snippet.status === "error" ? <CircleAlert size={11} /> : null}
-            {statusLabel(snippet.status)}
-          </span>
-          {pendingCount ? <span className="feed-card-badge">{pendingCount} to approve</span> : null}
-          <span className="feed-card-time">{relativeTime(snippet.updatedAt)}</span>
-        </div>
-      </button>
+      </header>
 
-      {expanded ? (
-        <div className="feed-card-body">
-          {snippet.instruction && snippet.instruction !== snippet.title ? (
-            <div className="feed-message feed-turn feed-turn-user">
-              <span className="feed-turn-label">You</span>
-              <MarkdownContent content={snippet.instruction} className="feed-bubble" />
-            </div>
-          ) : null}
-          <div className="feed-thread">
-            {messages.length === 0 && running ? <div className="typing chat-workspace-typing" role="status"><i /><i /><i /></div> : null}
-            {(() => {
-              const nodes: ReactNode[] = [];
-              for (let i = 0; i < messages.length; i += 1) {
-                const message = messages[i];
-                if (message.kind === "tool_use") {
+      <div className="feed-detail-body">
+        <div className="feed-detail-body-inner">
+        {snippet.instruction && snippet.instruction !== snippet.title ? (
+          <div className="feed-message feed-turn feed-turn-user">
+            <span className="feed-turn-label">You</span>
+            <MarkdownContent content={snippet.instruction} className="feed-bubble" />
+          </div>
+        ) : null}
+        <div className="feed-thread">
+          {messages.length === 0 && running ? <div className="typing chat-workspace-typing" role="status"><i /><i /><i /></div> : null}
+          {(() => {
+            const nodes: ReactNode[] = [];
+            // Pair each tool_use with its result by tool_use id — the agent can
+            // issue calls in parallel (use A, use B, result A, result B), so
+            // position alone mispairs them. Results claimed by id are skipped
+            // when the loop reaches them.
+            const resultById = new Map<string, FeedMessage>();
+            for (const message of messages) {
+              if (message.kind === "tool_result" && message.toolUseId) {
+                resultById.set(message.toolUseId, message);
+              }
+            }
+            const claimed = new Set<string>();
+            for (let i = 0; i < messages.length; i += 1) {
+              const message = messages[i];
+              if (message.kind === "tool_use") {
+                let resultMessage: FeedMessage | null = null;
+                if (message.toolUseId && resultById.has(message.toolUseId)) {
+                  resultMessage = resultById.get(message.toolUseId) ?? null;
+                  if (resultMessage) claimed.add(resultMessage.id);
+                } else {
+                  // Legacy rows without ids: fall back to the adjacent result.
                   const next = messages[i + 1];
-                  const resultMessage = next && next.kind === "tool_result" ? next : null;
-                  if (resultMessage) i += 1;
-                  const space = message.content.indexOf(" ");
-                  const toolName = space === -1 ? message.content : message.content.slice(0, space);
-                  const toolInput = space === -1 ? "" : message.content.slice(space + 1);
-                  nodes.push(
-                    <details key={message.id} className="feed-tool-call">
-                      <summary><Wrench size={12} /> <span>{toolName}</span></summary>
-                      <div className="feed-tool-io">
-                        {toolInput ? <code className="feed-tool-block">{toolInput}</code> : null}
-                        {resultMessage ? <code className="feed-tool-block feed-tool-result">{resultMessage.content}</code> : null}
-                      </div>
-                    </details>,
-                  );
-                  continue;
+                  if (next && next.kind === "tool_result" && !next.toolUseId) {
+                    resultMessage = next;
+                    claimed.add(next.id);
+                  }
                 }
-                if (message.kind === "tool_result") {
-                  nodes.push(
-                    <details key={message.id} className="feed-tool-call">
-                      <summary><ArrowLeft size={12} /> <span>tool result</span></summary>
-                      <div className="feed-tool-io"><code className="feed-tool-block feed-tool-result">{message.content}</code></div>
-                    </details>,
-                  );
-                  continue;
-                }
-                if (message.kind === "error") {
-                  nodes.push(
-                    <div key={message.id} className="feed-message feed-message-error">
-                      <div className="feed-error"><CircleAlert size={14} /> <span>{message.content}</span></div>
-                    </div>,
-                  );
+                const space = message.content.indexOf(" ");
+                const toolName = space === -1 ? message.content : message.content.slice(0, space);
+                const toolInput = space === -1 ? "" : message.content.slice(space + 1);
+                nodes.push(
+                  <details key={message.id} className="feed-tool-call">
+                    <summary><Wrench size={12} /> <span>{toolName}</span></summary>
+                    <div className="feed-tool-io">
+                      <span className="feed-tool-tag">Request</span>
+                      {renderToolContent(toolInput)}
+                      {resultMessage ? <><span className="feed-tool-tag">Result</span>{renderToolContent(resultMessage.content)}</> : null}
+                    </div>
+                  </details>,
+                );
+                continue;
+              }
+              if (message.kind === "tool_result") {
+                // Skip results already shown inside their matching tool_use.
+                if (claimed.has(message.id)) {
                   continue;
                 }
                 nodes.push(
-                  <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
-                    <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
-                    <MarkdownContent content={message.content} className="feed-bubble" />
+                  <details key={message.id} className="feed-tool-call">
+                    <summary><Wrench size={12} /> <span>tool result</span></summary>
+                    <div className="feed-tool-io"><span className="feed-tool-tag">Result</span>{renderToolContent(message.content)}</div>
+                  </details>,
+                );
+                continue;
+              }
+              if (message.kind === "error") {
+                nodes.push(
+                  <div key={message.id} className="feed-message feed-message-error">
+                    <div className="feed-error"><CircleAlert size={14} /> <span>{message.content}</span></div>
                   </div>,
                 );
+                continue;
               }
-              return nodes;
-            })()}
-          </div>
-
-          {proposals.length ? (
-            <div className="feed-proposals">
-              <h2>Proposed library changes</h2>
-              {proposals.map((proposal) => (
-                <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
-                  <div className="feed-proposal-body">
-                    <span className="feed-proposal-summary">{proposal.summary}</span>
-                    <span className="feed-proposal-status">{proposal.status}</span>
-                  </div>
-                  {proposal.status === "pending" ? (
-                    <div className="feed-proposal-actions">
-                      <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
-                      <ActionButton variant="primary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {error ? <div className="feed-error feed-error-banner"><CircleAlert size={14} /> <span>{error}</span></div> : null}
-
-          {running ? (
-            <div className="feed-card-actions">
-              <ActionButton variant="secondary" size="small" onClick={() => void stop()} icon={<Square size={14} />}>Stop</ActionButton>
-            </div>
-          ) : (
-            <form className="feed-reply" onSubmit={sendReply}>
-              <textarea
-                value={reply}
-                onChange={(event) => setReply(event.target.value)}
-                placeholder="Reply to continue this thread — the agent keeps its context…"
-                rows={2}
-              />
-              <ActionButton type="submit" variant="primary" disabled={!reply.trim() || replying} icon={replying ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>Reply</ActionButton>
-            </form>
-          )}
+              nodes.push(
+                <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
+                  <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
+                  <MarkdownContent content={message.content} className="feed-bubble" />
+                </div>,
+              );
+            }
+            return nodes;
+          })()}
         </div>
-      ) : null}
-    </article>
+
+        {proposals.length ? (
+          <div className="feed-proposals">
+            <h2><Check size={13} /> Proposed library changes</h2>
+            {proposals.map((proposal) => (
+              <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
+                <div className="feed-proposal-body">
+                  <span className="feed-proposal-summary">{proposal.summary}</span>
+                  <span className="feed-proposal-status">{proposal.status}</span>
+                </div>
+                {proposal.status === "pending" ? (
+                  <div className="feed-proposal-actions">
+                    <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
+                    <ActionButton variant="primary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {error ? <div className="feed-error feed-error-banner"><CircleAlert size={14} /> <span>{error}</span></div> : null}
+        </div>
+      </div>
+
+      <footer className="feed-detail-foot">
+        {running ? (
+          <ActionButton variant="secondary" size="small" onClick={() => void stop()} icon={<Square size={14} />}>Stop</ActionButton>
+        ) : (
+          <form className="feed-reply" onSubmit={sendReply}>
+            <textarea
+              value={reply}
+              onChange={(event) => setReply(event.target.value)}
+              placeholder="Reply to continue this thread — the agent keeps its context…"
+              rows={2}
+            />
+            <ActionButton type="submit" variant="primary" disabled={!reply.trim() || replying} icon={replying ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>Reply</ActionButton>
+          </form>
+        )}
+      </footer>
+    </section>
   );
 }
 
@@ -289,7 +367,8 @@ export default function FeedWorkspace() {
   const [ready, setReady] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [snippets, setSnippets] = useState<FeedSnippet[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -318,8 +397,8 @@ export default function FeedWorkspace() {
     return () => { cancelled = true; };
   }, [loadSnippets]);
 
-  // Poll while anything is running so statuses/summaries settle even if a card
-  // isn't expanded to stream its own events.
+  // Poll while anything is running so row statuses/summaries settle even when a
+  // snippet isn't the selected one streaming its own events.
   useEffect(() => {
     if (!snippets.some((snippet) => snippet.status === "running" || snippet.status === "queued")) {
       return;
@@ -328,7 +407,12 @@ export default function FeedWorkspace() {
     return () => window.clearInterval(timer);
   }, [snippets, loadSnippets]);
 
-  async function createSnippet(event: FormEvent) {
+  const selected = useMemo(
+    () => snippets.find((snippet) => snippet.id === selectedId) ?? null,
+    [snippets, selectedId],
+  );
+
+  async function createSnippet(event: FormEvent | ReactKeyboardEvent) {
     event.preventDefault();
     const text = instruction.trim();
     if (!text || submitting) {
@@ -344,8 +428,9 @@ export default function FeedWorkspace() {
       if (response.ok) {
         const { id } = await response.json() as { id: string };
         setInstruction("");
+        setComposing(false);
         await loadSnippets();
-        setExpandedId(id);
+        setSelectedId(id);
       }
     } finally {
       setSubmitting(false);
@@ -364,40 +449,65 @@ export default function FeedWorkspace() {
     );
   }
 
+  const showDetail = Boolean(selected) && !composing;
   return (
-    <main className="feed-page">
-      <div className="feed-column">
-        <header className="feed-column-header">
-          <Link href="/" aria-label="Return to Stacks" className="feed-brand"><img src="/favicon.svg" alt="" className="brand-logo compact" width={30} height={30} /><span><strong>Stacks</strong><small>AI feed</small></span></Link>
+    <main className={`feed-page ${showDetail || composing ? "has-selection" : ""}`}>
+      <aside className="feed-list-pane">
+        <header className="feed-list-head">
+          <Link href="/" aria-label="Return to Stacks" className="feed-brand"><img src="/favicon.svg" alt="" className="brand-logo compact" width={26} height={26} /><span><strong>Stacks</strong><small>AI feed</small></span></Link>
+          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New feed</ActionButton>
         </header>
-        <form className="feed-composer" onSubmit={createSnippet}>
-          <textarea
-            value={instruction}
-            onChange={(event) => setInstruction(event.target.value)}
-            placeholder="Capture anything — paste a link or note, and say what to do (e.g. summarize it, make a TODO list, add it to my library)…"
-            rows={3}
-          />
-          <div className="feed-composer-actions">
-            <ActionButton type="submit" variant="primary" disabled={!instruction.trim() || submitting} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>Add to feed</ActionButton>
-          </div>
-        </form>
-        <div className="feed-cards">
+        <div className="feed-list" role="list">
           {snippets.length === 0 ? (
-            <div className="feed-cards-empty">
-              <span className="message-avatar"><Rss size={24} /></span>
-              <p>Nothing captured yet. Paste a link or a note above and an agent will work on it — its result appears here as a card.</p>
-            </div>
-          ) : null}
-          {snippets.map((snippet) => (
-            <FeedCard
-              key={snippet.id}
-              snippet={snippet}
-              expanded={expandedId === snippet.id}
-              onToggle={() => setExpandedId((current) => (current === snippet.id ? null : snippet.id))}
-              onChanged={loadSnippets}
-            />
-          ))}
+            <p className="feed-list-empty">Nothing captured yet. Start a new feed and the agent goes to work.</p>
+          ) : (
+            snippets.map((snippet) => (
+              <FeedRow
+                key={snippet.id}
+                snippet={snippet}
+                active={snippet.id === selectedId && !composing}
+                onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+              />
+            ))
+          )}
         </div>
+      </aside>
+
+      <div className="feed-detail-pane">
+        {showDetail && selected ? (
+          <FeedDetail
+            key={selected.id}
+            snippet={selected}
+            onBack={() => setSelectedId(null)}
+            onChanged={loadSnippets}
+          />
+        ) : (
+          <div className="feed-compose">
+            <button type="button" className="feed-detail-back feed-compose-back" onClick={() => setComposing(false)} aria-label="Back to list"><ArrowLeft size={16} /></button>
+            <div className="feed-compose-hero">
+              <h2>What should the agent work on?</h2>
+              <p>Paste a link or a note and say what to do — summarize it, add it to your library, make a reading list. It proposes changes; you approve them.</p>
+            </div>
+            <form className="feed-dock" onSubmit={createSnippet}>
+              <textarea
+                value={instruction}
+                onChange={(event) => setInstruction(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                    void createSnippet(event);
+                  }
+                }}
+                placeholder="Capture anything — a link or a note, and what to do with it…"
+                rows={3}
+                autoFocus
+              />
+              <div className="feed-dock-actions">
+                <span className="feed-dock-hint">⌘↵ to send</span>
+                <ActionButton type="submit" variant="primary" disabled={!instruction.trim() || submitting} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>Add to feed</ActionButton>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </main>
   );
