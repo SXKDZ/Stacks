@@ -118,13 +118,14 @@
   padding: 13px 15px;
 }
 
-.settings-card-title > span,
+.settings-card-title > span:first-child,
 .integration-icon {
   align-items: center;
   background: #eef4f8;
   border-radius: 7px;
   color: var(--brand-blue-strong);
   display: flex;
+  flex-shrink: 0;
   height: 29px;
   justify-content: center;
   width: 29px;
@@ -161,6 +162,34 @@
   font-weight: 800;
   gap: 3px;
   padding: 4px 6px;
+}
+
+.connected-pill {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.connected-pill.is-off {
+  background: color-mix(in srgb, var(--soft) 16%, transparent);
+  color: var(--soft);
+}
+
+/* GitHub inbox sync card (Settings → Integrations). */
+.github-inbox-card {
+  margin-top: 13px;
+}
+
+.github-inbox-actions {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 11px;
+  padding: 13px 17px;
+}
+
+.github-inbox-actions small {
+  color: var(--soft);
+  font-size: var(--type-micro);
 }
 
 .settings-form-grid {

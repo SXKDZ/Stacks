@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Pencil, Plus, Rss, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
@@ -508,6 +508,9 @@ export default function FeedWorkspace() {
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
+  const [githubReady, setGithubReady] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   const loadSnippets = useCallback(async () => {
     const response = await fetch("/api/feed/snippets", { cache: "no-store" });
@@ -516,6 +519,41 @@ export default function FeedWorkspace() {
       setSnippets(data.snippets);
     }
   }, []);
+
+  // GitHub inbox sync is available only once a repo + token are configured.
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/local-settings", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { github?: { repo?: string; connected?: boolean } } | null) => {
+        if (!cancelled) setGithubReady(Boolean(data?.github?.repo && data.github.connected));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const syncGithub = useCallback(async () => {
+    setSyncing(true);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/feed/github/sync", { method: "POST" });
+      const data = (await response.json()) as { counts?: Record<string, number>; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "GitHub sync failed.");
+      const c = data.counts ?? {};
+      const parts = [
+        c.issuesCreated ? `${c.issuesCreated} issue${c.issuesCreated === 1 ? "" : "s"} created` : "",
+        c.commentsPosted ? `${c.commentsPosted} posted` : "",
+        c.feedsCreated ? `${c.feedsCreated} new feed${c.feedsCreated === 1 ? "" : "s"}` : "",
+        c.commentsIngested ? `${c.commentsIngested} pulled` : "",
+      ].filter(Boolean);
+      setNotice({ tone: "success", message: parts.length ? `Synced — ${parts.join(", ")}.` : "Synced — already up to date." });
+      await loadSnippets();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "GitHub sync failed." });
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadSnippets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -671,8 +709,14 @@ export default function FeedWorkspace() {
       <aside className="feed-list-pane">
         <header className="feed-list-head">
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
-          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New feed</ActionButton>
+          <div className="feed-list-head-actions">
+            {githubReady ? (
+              <ActionButton variant="ghost" size="icon" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync with GitHub inbox" title="Sync with GitHub inbox" icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} />
+            ) : null}
+            <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New feed</ActionButton>
+          </div>
         </header>
+        {notice ? <p className={`feed-sync-notice is-${notice.tone}`}>{notice.message}</p> : null}
         <div className="feed-list" role="list">
           {snippets.length === 0 ? (
             <p className="feed-list-empty">Nothing captured yet. Start a new feed and the agent goes to work.</p>

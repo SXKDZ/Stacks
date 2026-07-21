@@ -306,6 +306,33 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   assert.doesNotMatch(settings, /feedEnabled/);
 });
 
+test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", async () => {
+  const [client, sync, feed, settingsLib] = await Promise.all([
+    readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/local-settings.ts", import.meta.url), "utf8"),
+  ]);
+  // The client only ever talks to api.github.com and refuses redirects, so a
+  // malformed repo setting can't redirect requests elsewhere (SSRF guard).
+  assert.match(client, /https:\/\/api\.github\.com/);
+  assert.match(client, /redirect:\s*"error"/);
+  // Stacks-authored comments carry a marker so sync never re-ingests its own
+  // output as a new human instruction.
+  assert.match(client, /stacks:agent/);
+  assert.match(sync, /fromStacks/);
+  // Dedup is by stored comment id, and a busy feed defers its comments to the
+  // next pass rather than dropping them.
+  assert.match(sync, /githubCommentId/);
+  assert.match(sync, /isFeedRunning/);
+  // Settings persist a repo (non-secret) and token (secret) in settings.json.
+  assert.match(settingsLib, /STACKS_GITHUB_REPO/);
+  assert.match(settingsLib, /GITHUB_TOKEN/);
+  // A manual "Sync now" affordance exists, gated on being configured.
+  assert.match(feed, /githubReady/);
+  assert.match(feed, /\/api\/feed\/github\/sync/);
+});
+
 test("runs the library on a local SQLite file in the self-contained library folder", async () => {
   const [library, bootstrap, dbIndex, client, paths, localFiles] = await Promise.all([
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),

@@ -25,6 +25,7 @@ export interface SettingsPayload {
   remotePath?: string;
   autoSync?: boolean;
   autoSyncInterval?: string | number;
+  githubRepo?: string;
   secrets?: Record<string, string>;
 }
 
@@ -45,6 +46,9 @@ interface StructuredSettingsFile {
     remotePath: string;
     autoSync: string;
     autoSyncInterval: string;
+  };
+  github?: {
+    repo: string;
   };
   feedSkills?: Array<{ id: string; label: string; icon: string; prompt: string }>;
   secrets: Record<string, string>;
@@ -73,14 +77,17 @@ const environmentKeys = new Set([
   "STACKS_AUTO_SYNC",
   "STACKS_AUTO_SYNC_INTERVAL",
   "STACKS_ONEDRIVE_PATH",
+  "STACKS_GITHUB_REPO",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
+  "GITHUB_TOKEN",
 ]);
 
 const secretKeys = [
   "AWS_BEARER_TOKEN_BEDROCK",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
+  "GITHUB_TOKEN",
 ] as const;
 
 const bridgePath = join(process.cwd(), "scripts", "stacks_sync_bridge.py");
@@ -118,8 +125,10 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     STACKS_AUTO_SYNC: settings.sync.autoSync,
     STACKS_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
     STACKS_ONEDRIVE_PATH: settings.sync.remotePath,
+    STACKS_GITHUB_REPO: settings.github?.repo,
     SEMANTIC_SCHOLAR_API_KEY: settings.secrets.SEMANTIC_SCHOLAR_API_KEY,
     SERPAPI_KEY: settings.secrets.SERPAPI_KEY,
+    GITHUB_TOKEN: settings.secrets.GITHUB_TOKEN,
   };
   return values[key];
 }
@@ -139,8 +148,10 @@ const runtimeKeys = [
   "STACKS_EXTRACTION_SYSTEM_PROMPT",
   "STACKS_SUMMARY_SYSTEM_PROMPT",
   "STACKS_TEMPERATURE",
+  "STACKS_GITHUB_REPO",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
+  "GITHUB_TOKEN",
 ] as const;
 
 /** The persisted runtime values (from settings.json) for the AI routes. */
@@ -236,6 +247,9 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
       autoSync: envValue("STACKS_AUTO_SYNC", "false"),
       autoSyncInterval: envValue("STACKS_AUTO_SYNC_INTERVAL", "5"),
     },
+    github: {
+      repo: envValue("STACKS_GITHUB_REPO"),
+    },
     // Seed the secret baseline from the persisted settings file ONLY (no env
     // fallback). Otherwise a secret supplied purely through the environment
     // would be silently materialized into plaintext settings.json the first
@@ -274,6 +288,7 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "STACKS_ONEDRIVE_PATH": next.sync.remotePath = value; break;
       case "STACKS_AUTO_SYNC": next.sync.autoSync = value; break;
       case "STACKS_AUTO_SYNC_INTERVAL": next.sync.autoSyncInterval = value; break;
+      case "STACKS_GITHUB_REPO": next.github = { repo: value }; break;
       default:
         if (secretKeys.includes(key as typeof secretKeys[number])) {
           next.secrets[key] = value;
@@ -351,6 +366,10 @@ export function currentSettings() {
       lastResult: lastSyncResult,
       sourceExists: Boolean(databaseSource()),
     },
+    github: {
+      repo: envValue("STACKS_GITHUB_REPO"),
+      connected: Boolean(envValue("GITHUB_TOKEN")),
+    },
   };
 }
 
@@ -365,6 +384,7 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
     STACKS_ONEDRIVE_PATH: String(data.remotePath ?? envValue("STACKS_ONEDRIVE_PATH")).trim(),
     STACKS_AUTO_SYNC: data.autoSync ? "true" : "false",
     STACKS_AUTO_SYNC_INTERVAL: String(Math.min(3600, Math.max(5, Number(data.autoSyncInterval) || 5))),
+    STACKS_GITHUB_REPO: String(data.githubRepo ?? envValue("STACKS_GITHUB_REPO")).trim(),
   };
   for (const key of secretKeys) {
     const replacement = data.secrets?.[key]?.trim();

@@ -6,8 +6,10 @@ const runtimeKeys = [
   "STACKS_EXTRACTION_SYSTEM_PROMPT",
   "STACKS_SUMMARY_SYSTEM_PROMPT",
   "STACKS_TEMPERATURE",
+  "STACKS_GITHUB_REPO",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
+  "GITHUB_TOKEN",
 ] as const;
 
 export type RuntimeValues = Record<string, string>;

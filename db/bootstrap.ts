@@ -231,10 +231,19 @@ async function initializeDatabase(): Promise<void> {
     }
   }
 
-  if (!tableColumns(raw, "feed_messages").has("tool_use_id")) {
+  const feedMessageColumns = tableColumns(raw, "feed_messages");
+  if (!feedMessageColumns.has("tool_use_id")) {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN tool_use_id TEXT").run();
   }
+  // The GitHub inbox-sync columns: which issue a feed mirrors to, and which
+  // issue-comment a message came from / was posted as (nullable, no default).
+  if (!feedMessageColumns.has("github_comment_id")) {
+    raw.prepare("ALTER TABLE feed_messages ADD COLUMN github_comment_id INTEGER").run();
+  }
   const feedSnippetColumns = tableColumns(raw, "feed_snippets");
+  if (!feedSnippetColumns.has("issue_number")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_number INTEGER").run();
+  }
   for (const column of ["input_tokens", "output_tokens", "duration_ms", "turns"]) {
     if (!feedSnippetColumns.has(column)) {
       raw.prepare(`ALTER TABLE feed_snippets ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();

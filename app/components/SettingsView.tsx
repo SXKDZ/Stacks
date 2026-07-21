@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   DatabaseBackup,
+  Github,
   FileWarning,
   FolderOpen,
   FolderSync,
@@ -79,6 +80,10 @@ interface SettingsSnapshot {
     sourceExists: boolean;
     available?: boolean;
     unavailableReason?: string;
+  };
+  github?: {
+    repo: string;
+    connected: boolean;
   };
 }
 
@@ -217,6 +222,7 @@ const defaultSettings: SettingsSnapshot = {
       sourceExists: false,
       available: true,
   },
+  github: { repo: "", connected: false },
 };
 
 const secretFields = [
@@ -508,6 +514,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       remotePath: settings.sync.remotePath,
       autoSync: settings.sync.autoSync,
       autoSyncInterval: settings.sync.autoSyncInterval,
+      githubRepo: settings.github?.repo ?? "",
       secrets,
     };
   }
@@ -968,6 +975,14 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 return <div className="integration-row" key={field.key}><span className="integration-icon"><KeyRound size={16} /></span><div className="integration-name"><strong>{field.label}</strong><small>{field.detail}</small></div><span className={`integration-state ${configured ? "is-connected" : ""}`}>{configured ? <><Check size={11} /> Connected</> : "Not set"}</span><input type="password" value={secrets[field.key] ?? ""} onChange={(event) => setSecrets((current) => ({ ...current, [field.key]: event.target.value }))} placeholder={configured ? "Paste to replace current key" : "Paste API key"} autoComplete="new-password" /></div>;
               })}
             </div>
+            <GitHubInboxCard
+              repo={settings.github?.repo ?? ""}
+              connected={Boolean(settings.github?.connected)}
+              tokenDraft={secrets.GITHUB_TOKEN ?? ""}
+              onRepoChange={(value) => setSettings((current) => ({ ...current, github: { repo: value, connected: current.github?.connected ?? false } }))}
+              onTokenChange={(value) => setSecrets((current) => ({ ...current, GITHUB_TOKEN: value }))}
+              notify={notify}
+            />
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
         ) : null}
@@ -1027,6 +1042,77 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           </div>
         </>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * GitHub inbox sync: a private repo acts as a remote inbox so feeds can be read
+ * and replied to from a phone (via the GitHub app). Each feed maps to an issue,
+ * each message to a comment. This card configures the repo + token and offers a
+ * connection test; the actual sync is a "Sync now" button in the feed itself.
+ */
+function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenChange, notify }: {
+  repo: string;
+  connected: boolean;
+  tokenDraft: string;
+  onRepoChange: (value: string) => void;
+  onTokenChange: (value: string) => void;
+  notify: (message: string, tone?: "success" | "error" | "info") => void;
+}) {
+  const [testing, setTesting] = useState(false);
+
+  async function testConnection() {
+    setTesting(true);
+    try {
+      const response = await fetch("/api/feed/github/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo, token: tokenDraft || undefined }),
+      });
+      const data = (await response.json()) as { fullName?: string; private?: boolean; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "The connection could not be verified.");
+      }
+      notify(
+        data.private === false
+          ? `Connected to ${data.fullName}. Warning: this repo is public — use a private repo so your library stays private.`
+          : `Connected to ${data.fullName}.`,
+        data.private === false ? "info" : "success",
+      );
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The connection could not be verified.", "error");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="settings-card github-inbox-card">
+      <div className="settings-card-title">
+        <span><Github size={16} /></span>
+        <div>
+          <strong>GitHub inbox sync</strong>
+          <small>Mirror feeds to a private repo’s issues so you can read and reply from any device. One issue per feed; the agent posts and reads comments.</small>
+        </div>
+        <span className={`connected-pill ${connected ? "" : "is-off"}`}>{connected ? <><Check size={11} /> Connected</> : "Not set"}</span>
+      </div>
+      <div className="settings-form-grid">
+        <label className="span-2">
+          <span>Repository</span>
+          <input value={repo} onChange={(event) => onRepoChange(event.target.value)} placeholder="owner/name — e.g. octocat/stacks-inbox" autoComplete="off" spellCheck={false} />
+          <small>A private repository dedicated to Stacks. Its issues become your feed inbox.</small>
+        </label>
+        <label className="span-2">
+          <span>Access token</span>
+          <input type="password" value={tokenDraft} onChange={(event) => onTokenChange(event.target.value)} placeholder={connected ? "Paste to replace the saved token" : "Fine-grained PAT with Issues: read & write"} autoComplete="new-password" />
+          <small>A fine-grained personal access token scoped to just this repo, with Issues read/write. Stored in your library’s settings.json.</small>
+        </label>
+      </div>
+      <div className="github-inbox-actions">
+        <ActionButton variant="secondary" size="small" onClick={() => void testConnection()} disabled={testing || !repo.trim()} icon={testing ? <LoaderCircle className="spin" size={14} /> : <Github size={14} />}>Test connection</ActionButton>
+        <small>Save settings below to persist the repo and token.</small>
+      </div>
     </div>
   );
 }

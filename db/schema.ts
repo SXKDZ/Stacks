@@ -147,6 +147,9 @@ export const feedSnippets = sqliteTable(
     // The claude -p session id, used with --resume for follow-up turns.
     sessionId: text("session_id"),
     error: text("error"),
+    // The GitHub issue this feed is mirrored to (for remote/mobile access), if
+    // GitHub inbox sync is configured. Null until the feed is first synced.
+    issueNumber: integer("issue_number"),
     // Cumulative agent usage across all turns, captured from the result event.
     inputTokens: integer("input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),
@@ -173,6 +176,9 @@ export const feedMessages = sqliteTable(
     // Correlates a tool_use with its tool_result (Anthropic tool_use id), so the
     // UI can pair them even when the agent issues tool calls in parallel.
     toolUseId: text("tool_use_id"),
+    // The GitHub issue-comment id this message was mirrored to or ingested from,
+    // so sync neither double-posts nor re-ingests a comment. Null when local-only.
+    githubCommentId: integer("github_comment_id"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("feed_messages_snippet_idx").on(table.snippetId, table.createdAt)],
