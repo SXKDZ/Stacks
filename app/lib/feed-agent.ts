@@ -246,6 +246,13 @@ export async function runFeedAgent(options: {
     MAX_TURNS,
     "--add-dir",
     workingDir,
+    // Headless: with no user to answer prompts, the default mode auto-denies
+    // every Bash/network/temp-file call, so the agent can't even read the
+    // library. "auto" keeps the background safety classifier as a guardrail
+    // while letting normal operations run. Library WRITES stay safe regardless:
+    // the feed API only queues proposals for the user to approve.
+    "--permission-mode",
+    "auto",
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
   ];
 

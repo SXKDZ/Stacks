@@ -24,8 +24,42 @@ export const DEFAULT_EXTRACTION_SYSTEM_PROMPT = [
   "Use null for unavailable scalar values and an empty array for unavailable authors.",
   "For conferences, remove proceedings and ordinal wording from venueName and use the common conference acronym.",
   "For journals, use the full journal name and a conventional abbreviated venueAcronym when present.",
-  "\n\nFile: {{filename}}\nEmbedded metadata: {{embedded_metadata}}\n\nFirst two PDF pages:\n{{source_text}}",
+  "\n\nFile: {{filename}}\nEmbedded metadata: {{embedded_metadata}}\n\nPDF text:\n{{source_text[1:2]}}",
 ].join(" ");
+
+/** A 1-indexed, inclusive page range requested by a prompt placeholder. */
+export interface PageSlice {
+  start: number;
+  /** null means "to the end". */
+  end: number | null;
+}
+
+/**
+ * Read a Python-style page slice off a prompt placeholder so PDF page ranges
+ * are controlled in the prompt itself (not a global setting). For `token`:
+ *   {{token}}        → all pages          {{token[3]}}    → page 3 only
+ *   {{token[1:20]}}  → pages 1–20         {{token[5:]}}   → page 5 to the end
+ *   {{token[:10]}}   → pages 1–10
+ * Pages are 1-indexed and inclusive. Returns null if the token is absent.
+ */
+export function pageSliceFor(template: string, token: string): PageSlice | null {
+  const match = template.match(new RegExp(`\\{\\{\\s*${token}\\s*(?:\\[\\s*(\\d*)\\s*(:)?\\s*(\\d*)\\s*\\])?\\s*\\}\\}`));
+  if (!match) {
+    return null;
+  }
+  const [, a, colon, b] = match;
+  if (a === undefined && !colon && b === undefined) {
+    return { start: 1, end: null }; // plain {{token}}
+  }
+  if (!colon) {
+    const page = Number(a) || 1; // {{token[3]}} — single page
+    return { start: page, end: page };
+  }
+  return {
+    start: a ? Math.max(1, Number(a)) : 1,
+    end: b ? Number(b) : null,
+  };
+}
 
 export function renderPromptTemplate(
   template: string,
@@ -33,7 +67,8 @@ export function renderPromptTemplate(
 ): string {
   let rendered = template;
   for (const [key, value] of Object.entries(replacements)) {
-    rendered = rendered.replaceAll(`{{${key}}}`, value);
+    // Replace {{key}} and any sliced form {{key[a:b]}} with the resolved value.
+    rendered = rendered.replace(new RegExp(`\\{\\{\\s*${key}\\s*(?:\\[[^\\]]*\\])?\\s*\\}\\}`, "g"), () => value);
   }
   return rendered;
 }

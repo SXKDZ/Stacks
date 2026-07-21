@@ -91,7 +91,9 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   // The summary and extraction prompts survive chat removal; the discussion
   // prompt and its {{papers}}/{{paper1}} placeholders are gone.
   assert.match(prompts, /\{\{paper\}\}/);
-  assert.match(prompts, /\{\{source_text\}\}/);
+  // source_text now carries a page-range slice, e.g. {{source_text[1:2]}}.
+  assert.match(prompts, /\{\{source_text\[1:2\]\}\}/);
+  assert.match(prompts, /export function pageSliceFor/);
   assert.doesNotMatch(prompts, /\{\{papers\}\}|DEFAULT_CHAT_SYSTEM_PROMPT/);
   // Streaming robustness: mid-stream exception frames/events surface as errors
   // (both parsers) and the client abort is forwarded to Bedrock.

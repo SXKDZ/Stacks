@@ -1,5 +1,6 @@
 import {
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
+  pageSliceFor,
   renderPromptTemplate,
 } from "@/app/lib/ai-prompts";
 import {
@@ -122,9 +123,15 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     document = await getDocumentProxy(bytes);
-    const pageCount = Math.min(2, document.numPages);
+    const runtime = await resolveRuntimeValues();
+    const template = runtimeValue(runtime, "STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT);
+    // The {{source_text}} placeholder controls how many pages to read, e.g.
+    // {{source_text[1:2]}}. Default (no slice) reads the first two pages.
+    const slice = pageSliceFor(template, "source_text") ?? { start: 1, end: 2 };
+    const firstPage = Math.min(document.numPages, Math.max(1, slice.start));
+    const lastPage = Math.min(document.numPages, slice.end === null ? document.numPages : Math.max(firstPage, slice.end));
     const pages: string[] = [];
-    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
       const pageText = content.items
@@ -135,20 +142,19 @@ export async function POST(request: Request): Promise<Response> {
       pages.push(pageText);
       page.cleanup();
     }
-    const sourceText = pages.join("\n\n").slice(0, 16000);
+    const pageCount = pages.length;
+    const sourceText = pages.join("\n\n").slice(0, 32000);
     if (!sourceText) {
-      return Response.json({ error: "No selectable text was found in the first two PDF pages." }, { status: 422 });
+      return Response.json({ error: `No selectable text was found in PDF pages ${firstPage}-${lastPage}.` }, { status: 422 });
     }
     const embedded = await getMeta(document).catch(() => ({ info: {}, metadata: null }));
     const info = embedded.info ?? {};
     const fallback = fallbackMetadata(sourceText, info, filename);
-    const runtime = await resolveRuntimeValues();
     const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
     if (!token) {
       return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning: "Bedrock is not configured; PA used embedded PDF metadata and text heuristics." });
     }
 
-    const template = runtimeValue(runtime, "STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT);
     const prompt = renderPromptTemplate(template, {
       filename,
       embedded_metadata: JSON.stringify(info),

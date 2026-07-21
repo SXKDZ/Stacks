@@ -251,7 +251,7 @@ const summaryVariables: PromptVariableDefinition[] = [
 const extractionVariables: PromptVariableDefinition[] = [
   { token: "{{filename}}", description: "The local PDF filename being analyzed." },
   { token: "{{embedded_metadata}}", description: "Title, author, subject, and other metadata embedded in the PDF." },
-  { token: "{{source_text}}", description: "Text extracted from the first pages of the PDF." },
+  { token: "{{source_text}}", description: "Text extracted from the PDF. Add a page range like {{source_text[1:2]}}, {{source_text[1:]}} for all pages, or {{source_text[3]}} for a single page." },
 ];
 
 function timeLabel(value: string | null): string {
@@ -815,7 +815,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
               </details>
               <details className="prompt-template-section">
                 <summary><span><strong>PDF extraction system prompt</strong><small>Extract structured metadata from local PDF text.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the first pages, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the pages named by the {"{{source_text}}"} range, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
               </details>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
