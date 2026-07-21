@@ -892,6 +892,7 @@
   grid-template-columns: minmax(280px, 320px) 1fr;
   height: 100dvh;
   overflow: hidden;
+  position: relative;
 }
 
 /* Left pane: brand + New-feed button above a scrolling list of interactions.
@@ -914,24 +915,24 @@
   padding: 16px 14px 14px;
 }
 
-.feed-brand {
+/* Theme toggle pinned to the top-right of the feed page, vertically centered
+   within the same-height band as the detail/compose header so it never
+   overhangs the header's bottom border. */
+.feed-theme-toggle {
   align-items: center;
+  display: flex;
+  height: 57px;
+  position: absolute;
+  right: 18px;
+  top: 0;
+  z-index: 30;
+}
+
+/* The feed reuses the shared .brand lockup (same as the sidebar) as a link. */
+.feed-list-head .brand {
   color: var(--ink);
-  display: inline-flex;
-  gap: 10px;
   min-width: 0;
-}
-
-.feed-brand strong {
-  font-size: var(--type-body-large);
-  letter-spacing: -0.01em;
-}
-
-.feed-brand small {
-  color: var(--soft);
-  display: block;
-  font-size: var(--type-label);
-  letter-spacing: 0.02em;
+  text-decoration: none;
 }
 
 /* The scrolling list of interaction rows. */

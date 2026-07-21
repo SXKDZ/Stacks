@@ -52,6 +52,7 @@ import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
+import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton, ActionLink, Chip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
 import {
   downloadReferences,
@@ -884,11 +885,7 @@ function StacksWorkspace() {
       <aside className={`sidebar ${mobileNav ? "is-open" : ""}`}>
         <div className="brand-row">
           <button className="brand" onClick={() => changeView("home")} aria-label="Stacks home">
-            <img src="/favicon.svg" alt="" className="brand-logo" width={34} height={34} />
-            <span className="brand-copy">
-              <strong>Stacks</strong>
-              <span className="brand-slogan">Read deeper. Connect further.</span>
-            </span>
+            <Brand subtitle="Read deeper. Connect further." />
           </button>
           <ActionButton variant="ghost" size="icon" className="mobile-close" onClick={() => setMobileNav(false)} aria-label="Close navigation" icon={<X />} />
         </div>
