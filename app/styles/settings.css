@@ -551,3 +551,144 @@
 .spin {
   animation: spin 900ms linear infinite;
 }
+
+/* --- Feed skills editor (Settings → Feed skills) --- */
+.feed-skills-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feed-skill-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+}
+
+.feed-skill-row-head {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+}
+
+.feed-skill-icon-preview {
+  align-items: center;
+  background: var(--brand-blue-soft);
+  border-radius: var(--radius-sm);
+  color: var(--brand-blue-strong);
+  display: flex;
+  flex-shrink: 0;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.feed-skill-label-input {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  font-size: var(--type-control);
+  font-weight: 600;
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.feed-skill-label-input:focus,
+.feed-skill-prompt-input:focus {
+  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--brand-blue-soft);
+  outline: none;
+}
+
+.feed-skill-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.feed-skill-row-actions button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  min-width: 28px;
+}
+
+.feed-skill-row-actions button:hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.feed-skill-row-actions button:disabled {
+  opacity: 0.4;
+}
+
+.feed-skill-row-actions button.is-danger:hover {
+  background: var(--rose-soft);
+  border-color: color-mix(in srgb, var(--rose) 40%, var(--line));
+  color: var(--rose);
+}
+
+.feed-skill-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.feed-skill-icon-option {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.feed-skill-icon-option:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.feed-skill-icon-option.is-selected {
+  background: var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
+  color: var(--brand-blue-strong);
+}
+
+.feed-skill-prompt-input {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-control);
+  line-height: 1.5;
+  padding: 9px 11px;
+  resize: vertical;
+}
+
+.feed-skills-editor-actions {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.feed-skills-editor-save {
+  display: flex;
+  gap: 8px;
+}

@@ -46,6 +46,7 @@ interface StructuredSettingsFile {
     autoSync: string;
     autoSyncInterval: string;
   };
+  feedSkills?: Array<{ id: string; label: string; icon: string; prompt: string }>;
   secrets: Record<string, string>;
 }
 
@@ -240,10 +241,24 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
     // would be silently materialized into plaintext settings.json the first
     // time any unrelated setting is saved. Secrets are persisted only when the
     // user enters them in the UI (they then arrive via the request payload).
+    // Preserve any saved feed skills across unrelated settings writes.
+    feedSkills: existing?.feedSkills,
     secrets: Object.fromEntries(
       secretKeys.map((key) => [key, existing?.secrets?.[key]?.trim() ?? ""]),
     ),
   };
+}
+
+/** Read the user's saved feed skills (undefined if none saved yet). */
+export function readFeedSkills(): Array<{ id: string; label: string; icon: string; prompt: string }> | undefined {
+  return readStructuredSettings()?.feedSkills;
+}
+
+/** Persist the feed skills, preserving the rest of settings.json. */
+export function writeFeedSkills(skills: Array<{ id: string; label: string; icon: string; prompt: string }>): void {
+  const next = settingsFromCurrentValues(readStructuredSettings());
+  next.feedSkills = skills;
+  writeStructuredSettings(next);
 }
 
 function saveStructuredSettings(updates: Record<string, string>): void {
@@ -272,6 +287,11 @@ function saveStructuredSettings(updates: Record<string, string>): void {
     setValue(key, value);
     process.env[key] = value;
   }
+  writeStructuredSettings(next);
+}
+
+/** Atomically write the structured settings.json (temp file + rename). */
+function writeStructuredSettings(next: StructuredSettingsFile): void {
   next.updatedAt = new Date().toISOString();
   ensureLibraryDirectories();
   const path = settingsPath();

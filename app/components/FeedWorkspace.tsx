@@ -4,7 +4,7 @@ import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Download, GitBra
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
-import { FEED_SKILLS } from "@/app/lib/feed-skills";
+import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
@@ -451,6 +451,7 @@ export default function FeedWorkspace() {
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
+  const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
 
@@ -487,6 +488,18 @@ export default function FeedWorkspace() {
             setComposing(true);
           }
         }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load the pickable feed skills (user-editable in Settings → Feed skills).
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/feed/skills", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { skills?: FeedSkill[] } | null) => {
+        if (!cancelled && data?.skills?.length) setSkills(data.skills);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -642,8 +655,8 @@ export default function FeedWorkspace() {
               <h2>What should the agent work on?</h2>
               <p>Paste a link or a note, attach a paper or file, and say what to do. It proposes changes; you approve them.</p>
               <div className="feed-skills">
-                {FEED_SKILLS.map((skill) => {
-                  const Icon = skill.icon;
+                {skills.map((skill) => {
+                  const Icon = feedSkillIcon(skill.icon);
                   return (
                     <button type="button" key={skill.id} className="feed-skill" onClick={() => setInitialText(skill.prompt)}>
                       <Icon size={14} /> {skill.label}

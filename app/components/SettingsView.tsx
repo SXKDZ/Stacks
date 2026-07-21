@@ -19,10 +19,12 @@ import {
   MessageSquareText,
   Moon,
   Palette,
+  Plus,
   RefreshCw,
   Save,
   ScanSearch,
   ShieldCheck,
+  Sparkles,
   Sun,
   Trash2,
   Users,
@@ -35,11 +37,12 @@ import {
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
+import { DEFAULT_FEED_SKILLS, FEED_SKILL_ICONS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
 import type { Paper } from "@/app/lib/types";
 
-type SettingsTab = "appearance" | "model" | "prompts" | "storage" | "sync" | "integrations" | "about";
+type SettingsTab = "appearance" | "model" | "prompts" | "skills" | "storage" | "sync" | "integrations" | "about";
 type ThemeMode = "dark" | "light";
 
 interface SyncResult {
@@ -765,6 +768,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
         <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
         <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Pickable AI feed prompts</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
@@ -820,6 +824,13 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
+        ) : null}
+
+        {!loading && tab === "skills" ? (
+          <section>
+            <SettingsHeading icon={<Sparkles size={19} />} title="Feed skills" detail="Pickable starting prompts shown when you open a new AI feed. Add your own, edit the wording, and choose an icon." />
+            <FeedSkillsEditor notify={notify} />
+          </section>
         ) : null}
 
         {!loading && tab === "storage" ? (
@@ -991,6 +1002,104 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           </div>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "info") => void }) {
+  const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const iconNames = Object.keys(FEED_SKILL_ICONS);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/feed/skills", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { skills?: FeedSkill[] } | null) => {
+        if (!cancelled && data?.skills) setSkills(data.skills);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  function update(id: string, patch: Partial<FeedSkill>) {
+    setSkills((current) => current.map((skill) => (skill.id === id ? { ...skill, ...patch } : skill)));
+  }
+  function remove(id: string) {
+    setSkills((current) => current.filter((skill) => skill.id !== id));
+  }
+  function move(id: string, delta: number) {
+    setSkills((current) => {
+      const index = current.findIndex((skill) => skill.id === id);
+      const target = index + delta;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+  function add() {
+    setSkills((current) => [...current, { id: `skill-${Date.now()}`, label: "New skill", icon: "sparkles", prompt: "" }]);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/feed/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skills }),
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response));
+      }
+      const data = await response.json() as { skills: FeedSkill[] };
+      setSkills(data.skills);
+      notify("Feed skills saved.", "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Feed skills could not be saved.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="settings-card"><div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Loading feed skills…</span></div></div>;
+  }
+
+  return (
+    <div className="settings-card feed-skills-editor">
+      {skills.map((skill, index) => {
+        const Icon = feedSkillIcon(skill.icon);
+        return (
+          <div className="feed-skill-row" key={skill.id}>
+            <div className="feed-skill-row-head">
+              <span className="feed-skill-icon-preview"><Icon size={16} /></span>
+              <input className="feed-skill-label-input" value={skill.label} maxLength={60} placeholder="Skill name" onChange={(event) => update(skill.id, { label: event.target.value })} />
+              <div className="feed-skill-row-actions">
+                <button type="button" onClick={() => move(skill.id, -1)} disabled={index === 0} aria-label="Move up">↑</button>
+                <button type="button" onClick={() => move(skill.id, 1)} disabled={index === skills.length - 1} aria-label="Move down">↓</button>
+                <button type="button" className="is-danger" onClick={() => remove(skill.id)} aria-label="Remove skill"><Trash2 size={14} /></button>
+              </div>
+            </div>
+            <div className="feed-skill-icons">
+              {iconNames.map((name) => {
+                const OptionIcon = feedSkillIcon(name);
+                return <button type="button" key={name} className={`feed-skill-icon-option ${skill.icon === name ? "is-selected" : ""}`} onClick={() => update(skill.id, { icon: name })} aria-label={`Icon ${name}`} aria-pressed={skill.icon === name}><OptionIcon size={15} /></button>;
+              })}
+            </div>
+            <textarea className="feed-skill-prompt-input" value={skill.prompt} rows={3} placeholder="The prompt this skill drops into the composer…" onChange={(event) => update(skill.id, { prompt: event.target.value })} />
+          </div>
+        );
+      })}
+      <div className="feed-skills-editor-actions">
+        <ActionButton variant="secondary" size="small" onClick={add} icon={<Plus size={15} />}>Add skill</ActionButton>
+        <div className="feed-skills-editor-save">
+          <ActionButton variant="ghost" size="small" onClick={() => setSkills(DEFAULT_FEED_SKILLS)}>Restore defaults</ActionButton>
+          <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save skills</ActionButton>
+        </div>
+      </div>
     </div>
   );
 }
