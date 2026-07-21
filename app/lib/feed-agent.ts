@@ -1,12 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { libraryRoot } from "@/db/library-paths";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
-import { parseProposals, type ProposalOperation } from "@/app/lib/feed-prompt";
+import { buildForkPrompt, parseProposals, type ProposalOperation } from "@/app/lib/feed-prompt";
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 
 /**
@@ -131,6 +131,27 @@ async function setSessionId(snippetId: string, sessionId: string): Promise<void>
     .run();
 }
 
+/** Clear the session id so the fresh-session retry can claim a new one. */
+async function clearSessionId(snippetId: string): Promise<void> {
+  const database = await ensureDatabase();
+  database.update(feedSnippets).set({ sessionId: "" }).where(eq(feedSnippets.id, snippetId)).run();
+}
+
+/** A plain-text transcript of the thread so far (user + agent turns), used to
+ *  seed a fresh session when a resume can't find its original conversation. */
+async function threadTranscript(snippetId: string): Promise<string> {
+  const database = await ensureDatabase();
+  return database
+    .select()
+    .from(feedMessages)
+    .where(eq(feedMessages.snippetId, snippetId))
+    .orderBy(asc(feedMessages.createdAt))
+    .all()
+    .filter((message) => message.kind === "text" || message.kind === "result")
+    .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
+    .join("\n\n");
+}
+
 /** Accumulate a turn's usage from the stream-json `result` event. Tokens sum
  *  across cache + input/output; duration and turn count add up over follow-ups. */
 async function recordUsage(snippetId: string, event: Record<string, unknown>): Promise<void> {
@@ -203,8 +224,10 @@ export async function runFeedAgent(options: {
   sessionId: string;
   prompt: string;
   resume: boolean;
+  /** Internal: true on the fresh-session retry after a failed resume. */
+  resumeRetried?: boolean;
 }): Promise<void> {
-  const { snippetId, sessionId, prompt, resume } = options;
+  const { snippetId, sessionId, prompt, resume, resumeRetried = false } = options;
   const workingDir = feedWorkingDir(snippetId);
   mkdirSync(workingDir, { recursive: true });
   mkdirSync(claudeConfigDir(), { recursive: true });
@@ -243,6 +266,9 @@ export async function runFeedAgent(options: {
   let sessionCaptured = resume;
   let lastAssistantText = "";
   let lastAssistantId: string | null = null;
+  // Set when a --resume run fails because its session transcript is missing; the
+  // close handler then restarts the turn as a fresh session with the transcript.
+  let resumeFallback = false;
 
   const handleLine = async (line: string) => {
     const trimmed = line.trim();
@@ -307,6 +333,13 @@ export async function runFeedAgent(options: {
         emit(snippetId, message);
       }
       if (isError) {
+        // A resume can fail if the session transcript is missing (e.g. it was
+        // created under a different config dir). Rather than dead-end the
+        // thread, retry once as a fresh session seeded with the transcript.
+        if (resume && !resumeRetried && /no conversation found|session id/i.test(text)) {
+          resumeFallback = true;
+          return;
+        }
         emit(snippetId, await persistMessage(snippetId, "system", "error", text || "The agent reported an error."));
       } else if (text) {
         // Parse any proposed library changes and enqueue them for approval.
@@ -343,6 +376,19 @@ export async function runFeedAgent(options: {
     if (buffer.trim()) {
       await handleLine(buffer);
     }
+    revokeFeedToken(snippetId);
+    runs.delete(snippetId);
+
+    // The resume failed with a missing-session error: restart this turn as a
+    // fresh session seeded with the thread transcript, so the reply still lands.
+    if (resumeFallback) {
+      const transcript = await threadTranscript(snippetId);
+      const freshPrompt = buildForkPrompt({ reply: prompt, transcript });
+      await clearSessionId(snippetId);
+      void runFeedAgent({ snippetId, sessionId: crypto.randomUUID(), prompt: freshPrompt, resume: false, resumeRetried: true }).catch(() => {});
+      return;
+    }
+
     const stopped = signal === "SIGTERM" || signal === "SIGKILL";
     const status = stopped ? "stopped" : code === 0 ? "done" : "error";
     if (status === "error") {
@@ -352,11 +398,7 @@ export async function runFeedAgent(options: {
     } else {
       await setStatus(snippetId, status);
     }
-    // Emit the terminal event BEFORE dropping the run, so live subscribers (the
-    // SSE stream) are still reachable and can close cleanly. Deleting first
-    // would strand the "done" event and leave the client spinning forever.
+    // Emit the terminal event so live subscribers (the SSE stream) can close.
     emit(snippetId, { type: "done", status });
-    revokeFeedToken(snippetId);
-    runs.delete(snippetId);
   });
 }

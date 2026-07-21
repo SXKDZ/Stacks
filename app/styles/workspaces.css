@@ -1702,11 +1702,14 @@
 }
 
 /* The body is the full-width scroll container, so its scrollbar sits at the
-   pane's right edge; an inner wrapper caps and centers the reading column. */
+   pane's right edge; an inner wrapper caps and centers the reading column.
+   Reserve the scrollbar gutter on both edges so the centered column lines up
+   with the (non-scrolling) footer dock instead of shifting left. */
 .feed-detail-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
 }
 
 .feed-detail-body-inner {
@@ -1723,14 +1726,16 @@
   background: var(--surface-1);
   border-top: 1px solid var(--line);
   flex-shrink: 0;
-  padding: 14px 32px;
+  padding: 14px var(--feed-gutter);
 }
 
-/* The reply reuses the composer dock, compact and pinned in the footer with no
-   hero margin, aligned to the same reading column as the thread. */
+/* The reply reuses the composer dock, compact and pinned in the footer. It
+   aligns to the same reading column as the thread: the thread body caps at
+   --feed-col then insets by --feed-gutter each side, so the dock caps at the
+   same content width (col minus both gutters). */
 .feed-detail-foot .feed-dock {
   margin: 0 auto;
-  max-width: var(--feed-col);
+  max-width: calc(var(--feed-col) - 2 * var(--feed-gutter));
 }
 
 .feed-dock.is-compact {
