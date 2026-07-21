@@ -2378,6 +2378,7 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
   onImport: () => void;
   onSearchLibrary: () => void;
 }) {
+  const { runTask } = useBackgroundTasks();
   const [query, setQuery] = useState("");
   const [provider, setProvider] = useState<DiscoveryProvider>("semantic-scholar");
   const [results, setResults] = useState<DiscoveryResult[]>([]);
@@ -2414,22 +2415,30 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
     }
   }
 
-  async function addResult(result: DiscoveryResult) {
-    let paperData: Record<string, unknown> = { ...result };
-    if (hasAcquirableSource(paperData)) {
-      try {
-        paperData = withAcquiredSource(paperData, await acquirePaperSource(paperData));
-      } catch (error) {
-        notify(`The paper metadata can be saved, but its source could not be stored locally: ${error instanceof Error ? error.message : "download failed"}`, "info");
+  function addResult(result: DiscoveryResult) {
+    // Mark the row added immediately, then acquire the source (a slow PDF/HTML
+    // download) and create the paper in the background dock — the UI never
+    // blocks on the fetch, matching PaperCLI's async import.
+    setAdded((current) => [...current, result.sourceId || result.title]);
+    void runTask(`Add paper · ${result.title}`, async () => {
+      let paperData: Record<string, unknown> = { ...result };
+      if (hasAcquirableSource(paperData)) {
+        try {
+          paperData = withAcquiredSource(paperData, await acquirePaperSource(paperData));
+        } catch (error) {
+          notify(`The paper metadata can be saved, but its source could not be stored locally: ${error instanceof Error ? error.message : "download failed"}`, "info");
+        }
       }
-    }
-    const succeeded = await mutateLibrary(
-      { entity: "paper", action: "create", data: paperData },
-      "Paper added to your library.",
-    );
-    if (succeeded) {
-      setAdded([...added, result.sourceId || result.title]);
-    }
+      const succeeded = await mutateLibrary(
+        { entity: "paper", action: "create", data: paperData },
+        "Paper added to your library.",
+      );
+      if (!succeeded) {
+        // Roll back the optimistic "Added" marker so the user can retry.
+        setAdded((current) => current.filter((id) => id !== (result.sourceId || result.title)));
+        throw new Error("The paper could not be added.");
+      }
+    }).catch(() => {});
   }
 
   const pageCount = Math.max(1, Math.ceil(results.length / pageSize));
@@ -3098,12 +3107,17 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
     }
   }
 
-  async function addResult(result: DiscoveryResult) {
-    const data = await runTask(`Store source · ${result.title}`, () => acquireImportSource({ ...result }));
-    const succeeded = await mutateLibrary({ entity: "paper", action: "create", data }, "Paper added to your library.");
-    if (succeeded) {
-      setAdded([...added, result.sourceId || result.title]);
-    }
+  function addResult(result: DiscoveryResult) {
+    // Optimistic add; acquire the source and create in the background dock.
+    setAdded((current) => [...current, result.sourceId || result.title]);
+    void runTask(`Add paper · ${result.title}`, async () => {
+      const data = await acquireImportSource({ ...result });
+      const succeeded = await mutateLibrary({ entity: "paper", action: "create", data }, "Paper added to your library.");
+      if (!succeeded) {
+        setAdded((current) => current.filter((id) => id !== (result.sourceId || result.title)));
+        throw new Error("The paper could not be added.");
+      }
+    }).catch(() => {});
   }
 
   async function importUrl(event: FormEvent) {
