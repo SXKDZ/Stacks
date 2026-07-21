@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, CircleDot, LoaderCircle, Plus, Rss, Square, Wrench, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, LoaderCircle, Plus, Rss, Square, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
@@ -47,18 +47,22 @@ function statusLabel(status: string): string {
   }
 }
 
-/** A compact glyph for the list row — conveys state at a glance in one column. */
-function StatusGlyph({ status }: { status: string }) {
+/** A status glyph shared by the list row and the detail header, so each state
+ *  (working/queued/done/error/stopped) reads with the same icon everywhere. */
+function StatusGlyph({ status, size = 13 }: { status: string; size?: number }) {
   if (status === "running" || status === "queued") {
-    return <LoaderCircle className="spin" size={13} />;
+    return <LoaderCircle className="spin" size={size} />;
   }
   if (status === "error") {
-    return <CircleAlert size={13} />;
+    return <CircleAlert size={size} />;
+  }
+  if (status === "stopped") {
+    return <Square size={size} />;
   }
   if (status === "done") {
-    return <Check size={13} />;
+    return <CircleCheck size={size} />;
   }
-  return <CircleDot size={13} />;
+  return <CircleDot size={size} />;
 }
 
 /**
@@ -235,7 +239,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
           <div className="feed-detail-heading">
             <h1>{snippet.title || snippet.instruction || "Untitled"}</h1>
             <span className={`feed-status feed-status-${snippet.status}`}>
-              {running ? <LoaderCircle className="spin" size={11} /> : snippet.status === "error" ? <CircleAlert size={11} /> : null}
+              <StatusGlyph status={snippet.status} size={12} />
               {statusLabel(snippet.status)}
             </span>
           </div>

@@ -915,15 +915,15 @@
   padding: 16px 14px 14px;
 }
 
-/* Theme toggle pinned to the top-right of the feed page, vertically centered
-   within the same-height band as the detail/compose header so it never
-   overhangs the header's bottom border. */
+/* Theme toggle pinned to the top-right of the feed page, matching the main
+   app's topbar: same 62px band height and 34px right offset, vertically
+   centered so it aligns with the detail header row. */
 .feed-theme-toggle {
   align-items: center;
   display: flex;
-  height: 57px;
+  height: 62px;
   position: absolute;
-  right: 18px;
+  right: 34px;
   top: 0;
   z-index: 30;
 }
@@ -1443,11 +1443,17 @@
   height: 100%;
 }
 
+/* The detail header is the feed's topbar: same 62px height as the main app's
+   topbar, so it lines up with the theme toggle band. Reserve room on the right
+   for the toggle so the title/badge never sit under it. */
 .feed-detail-head {
+  align-items: center;
   background: var(--surface-1);
   border-bottom: 1px solid var(--line);
+  display: flex;
   flex-shrink: 0;
-  padding: 13px 0;
+  height: 62px;
+  padding: 0;
 }
 
 .feed-detail-head-inner {
@@ -1457,6 +1463,7 @@
   margin: 0 auto;
   max-width: var(--feed-col);
   padding: 0 var(--feed-gutter);
+  padding-right: 76px;
   width: 100%;
 }
 
