@@ -2159,10 +2159,10 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
       <PageSearch value={query} onChange={setQuery} placeholder={placeholder} />
       {selected ? (
         <div className="selection-actions">
-          <span>{selected} selected</span>
+          <span><CheckCircle2 size={15} /> {selected} selected</span>
           <ActionButton variant="ghost" size="small" onClick={onBulk} icon={<Pencil />}>Edit</ActionButton>
-          <ActionButton variant="danger" size="small" onClick={onDelete} icon={<Trash2 />}>Delete</ActionButton>
           <ActionButton variant="ghost" size="small" onClick={onClear} icon={<X />}>Clear</ActionButton>
+          <ActionButton variant="danger" size="small" onClick={onDelete} icon={<Trash2 />}>Delete</ActionButton>
         </div>
       ) : null}
       <ToolbarCreateButton label={createLabel} onClick={onCreate} />
