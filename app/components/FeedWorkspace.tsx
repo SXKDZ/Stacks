@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, CircleDot, Home, LoaderCircle, Plus, Rss, Send, Square, Wrench, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleDot, LoaderCircle, Plus, Rss, Square, Wrench, X } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { ActionButton } from "@/app/components/ui/controls";
 
@@ -130,14 +131,14 @@ function FeedRow({ snippet, active, onSelect }: {
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, onBack, onChanged }: {
+function FeedDetail({ snippet, library, onBack, onChanged }: {
   snippet: FeedSnippet;
+  library: LibraryPaper[];
   onBack: () => void;
   onChanged: () => void;
 }) {
   const [messages, setMessages] = useState<FeedMessage[]>([]);
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
-  const [reply, setReply] = useState("");
   const [replying, setReplying] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -164,30 +165,35 @@ function FeedDetail({ snippet, onBack, onChanged }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snippet.id, streamNonce]);
 
-  async function sendReply(event: FormEvent) {
-    event.preventDefault();
-    const text = reply.trim();
-    if (!text || replying) {
-      return;
-    }
+  async function sendReply(payload: AttachSubmit): Promise<boolean> {
     setReplying(true);
     setError(null);
     try {
-      const response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reply: text }),
-      });
+      let response: Response;
+      if (payload.files.length || payload.paperIds.length) {
+        const form = new FormData();
+        form.set("reply", payload.text);
+        for (const file of payload.files) form.append("files", file);
+        for (const paperId of payload.paperIds) form.append("paperIds", paperId);
+        response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, { method: "POST", body: form });
+      } else {
+        response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reply: payload.text }),
+        });
+      }
       if (response.ok) {
-        setReply("");
         setStreamNonce((nonce) => nonce + 1);
         onChanged();
-      } else {
-        const payload = await response.json().catch(() => ({})) as { error?: string };
-        setError(payload.error ?? `Reply failed (${response.status}).`);
+        return true;
       }
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      setError(body.error ?? `Reply failed (${response.status}).`);
+      return false;
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Reply failed.");
+      return false;
     } finally {
       setReplying(false);
     }
@@ -209,7 +215,7 @@ function FeedDetail({ snippet, onBack, onChanged }: {
       const nextStatus = response.ok ? (payload.status ?? decision) : "failed";
       setProposals((current) => current.map((proposal) =>
         proposal.id === proposalId
-          ? { ...proposal, status: nextStatus, summary: payload.error ? `${proposal.summary} — ${payload.error}` : proposal.summary }
+          ? { ...proposal, status: nextStatus, summary: payload.error ? `${proposal.summary}: ${payload.error}` : proposal.summary }
           : proposal,
       ));
     } finally {
@@ -348,15 +354,14 @@ function FeedDetail({ snippet, onBack, onChanged }: {
         {running ? (
           <ActionButton variant="secondary" size="small" onClick={() => void stop()} icon={<Square size={14} />}>Stop</ActionButton>
         ) : (
-          <form className="feed-reply" onSubmit={sendReply}>
-            <textarea
-              value={reply}
-              onChange={(event) => setReply(event.target.value)}
-              placeholder="Reply to continue this thread — the agent keeps its context…"
-              rows={2}
-            />
-            <ActionButton type="submit" variant="primary" disabled={!reply.trim() || replying} icon={replying ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>Reply</ActionButton>
-          </form>
+          <AttachBox
+            library={library}
+            placeholder="Reply to continue this thread. The agent keeps its context."
+            submitLabel="Reply"
+            submitting={replying}
+            compact
+            onSubmit={sendReply}
+          />
         )}
       </footer>
     </section>
@@ -365,12 +370,13 @@ function FeedDetail({ snippet, onBack, onChanged }: {
 
 export default function FeedWorkspace() {
   const [ready, setReady] = useState(false);
-  const [enabled, setEnabled] = useState(false);
   const [snippets, setSnippets] = useState<FeedSnippet[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
-  const [instruction, setInstruction] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [library, setLibrary] = useState<LibraryPaper[]>([]);
+  const [initialText, setInitialText] = useState("");
+  const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
 
   const loadSnippets = useCallback(async () => {
     const response = await fetch("/api/feed/snippets", { cache: "no-store" });
@@ -382,20 +388,33 @@ export default function FeedWorkspace() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/local-settings", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(async (data: { feedEnabled?: boolean } | null) => {
-        if (cancelled) return;
-        const on = Boolean(data?.feedEnabled);
-        setEnabled(on);
-        if (on) {
-          await loadSnippets();
-        }
-        setReady(true);
-      })
-      .catch(() => { if (!cancelled) setReady(true); });
+    void loadSnippets().finally(() => { if (!cancelled) setReady(true); });
     return () => { cancelled = true; };
   }, [loadSnippets]);
+
+  // Load the library once so papers can be attached (and the ?paper= param
+  // pre-attaches one, opening straight into the composer).
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/library", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { papers?: LibraryPaper[] } | null) => {
+        if (cancelled || !data?.papers) return;
+        setLibrary(data.papers);
+        const params = new URLSearchParams(window.location.search);
+        const paperId = params.get("paper");
+        if (paperId) {
+          const paper = data.papers.find((item) => item.id === paperId);
+          if (paper) {
+            setInitialPapers([paper]);
+            setInitialText("Discuss this paper with me. Read the attached file first.");
+            setComposing(true);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Poll while anything is running so row statuses/summaries settle even when a
   // snippet isn't the selected one streaming its own events.
@@ -412,26 +431,33 @@ export default function FeedWorkspace() {
     [snippets, selectedId],
   );
 
-  async function createSnippet(event: FormEvent | ReactKeyboardEvent) {
-    event.preventDefault();
-    const text = instruction.trim();
-    if (!text || submitting) {
-      return;
-    }
+  async function createSnippet(payload: AttachSubmit): Promise<boolean> {
     setSubmitting(true);
     try {
-      const response = await fetch("/api/feed/snippets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instruction: text }),
-      });
+      let response: Response;
+      if (payload.files.length || payload.paperIds.length) {
+        const form = new FormData();
+        form.set("instruction", payload.text);
+        for (const file of payload.files) form.append("files", file);
+        for (const paperId of payload.paperIds) form.append("paperIds", paperId);
+        response = await fetch("/api/feed/snippets", { method: "POST", body: form });
+      } else {
+        response = await fetch("/api/feed/snippets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instruction: payload.text }),
+        });
+      }
       if (response.ok) {
         const { id } = await response.json() as { id: string };
-        setInstruction("");
+        setInitialText("");
+        setInitialPapers([]);
         setComposing(false);
         await loadSnippets();
         setSelectedId(id);
+        return true;
       }
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -439,14 +465,6 @@ export default function FeedWorkspace() {
 
   if (!ready) {
     return <main className="chat-workspace-loading"><span className="assistant-orb"><Rss size={18} /></span><p>Opening your feed…</p></main>;
-  }
-  if (!enabled) {
-    return (
-      <main className="chat-workspace-loading">
-        <p>The AI feed is turned off. Enable it in Settings → AI &amp; models → AI feed.</p>
-        <Link href="/"><Home size={16} /> Return to library</Link>
-      </main>
-    );
   }
 
   const showDetail = Boolean(selected) && !composing;
@@ -478,6 +496,7 @@ export default function FeedWorkspace() {
           <FeedDetail
             key={selected.id}
             snippet={selected}
+            library={library}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
           />
@@ -486,26 +505,20 @@ export default function FeedWorkspace() {
             <button type="button" className="feed-detail-back feed-compose-back" onClick={() => setComposing(false)} aria-label="Back to list"><ArrowLeft size={16} /></button>
             <div className="feed-compose-hero">
               <h2>What should the agent work on?</h2>
-              <p>Paste a link or a note and say what to do — summarize it, add it to your library, make a reading list. It proposes changes; you approve them.</p>
+              <p>Paste a link or a note, attach a paper or file, and say what to do. It proposes changes; you approve them.</p>
             </div>
-            <form className="feed-dock" onSubmit={createSnippet}>
-              <textarea
-                value={instruction}
-                onChange={(event) => setInstruction(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                    void createSnippet(event);
-                  }
-                }}
-                placeholder="Capture anything — a link or a note, and what to do with it…"
-                rows={3}
-                autoFocus
-              />
-              <div className="feed-dock-actions">
-                <span className="feed-dock-hint">⌘↵ to send</span>
-                <ActionButton type="submit" variant="primary" disabled={!instruction.trim() || submitting} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>Add to feed</ActionButton>
-              </div>
-            </form>
+            <AttachBox
+              key={`${initialText}:${initialPapers.map((p) => p.id).join(",")}`}
+              library={library}
+              placeholder="Capture anything. A link or a note, and what to do with it."
+              submitLabel="Add to feed"
+              submitting={submitting}
+              autoFocus
+              initialText={initialText}
+              initialPapers={initialPapers}
+              hint="⌘↵ to send"
+              onSubmit={createSnippet}
+            />
           </div>
         )}
       </div>

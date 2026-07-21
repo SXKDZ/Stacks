@@ -47,7 +47,33 @@ RULES:
   pa-proposals block (a JSON array of the operations above) at the end of your
   reply, and Stacks will pick it up.`;
 
-export function buildSnippetPrompt(input: { instruction: string; freeText: string }): string {
+interface SnippetAttachment {
+  relativePath: string;
+  label: string;
+  kind: "paper-pdf" | "paper-html" | "upload";
+}
+
+function describeAttachments(attachments: SnippetAttachment[]): string {
+  const lines = attachments.map((attachment) => {
+    const origin = attachment.kind === "paper-pdf"
+      ? "library paper (PDF)"
+      : attachment.kind === "paper-html"
+        ? "library paper (HTML snapshot)"
+        : "uploaded file";
+    return `- ${attachment.relativePath} — ${attachment.label} (${origin})`;
+  });
+  return [
+    "Attached files are in your working directory. Read them directly (they are",
+    "relative to your current directory) to ground your work:",
+    ...lines,
+  ].join("\n");
+}
+
+export function buildSnippetPrompt(input: {
+  instruction: string;
+  freeText: string;
+  attachments?: SnippetAttachment[];
+}): string {
   const parts: string[] = [
     "You are the Stacks AI feed agent, working inside the Stacks research library app.",
     "The user captured the following into their feed. Do what they ask, concisely.",
@@ -60,6 +86,9 @@ export function buildSnippetPrompt(input: { instruction: string; freeText: strin
   if (input.freeText && input.freeText !== input.instruction) {
     parts.push(`\nCaptured content:\n${input.freeText}`);
   }
+  if (input.attachments?.length) {
+    parts.push(`\n${describeAttachments(input.attachments)}`);
+  }
   return parts.join("\n");
 }
 
@@ -68,6 +97,7 @@ export function buildFollowUpPrompt(input: {
   reply: string;
   appliedSummaries?: string[];
   rejectedSummaries?: string[];
+  attachments?: SnippetAttachment[];
 }): string {
   const parts: string[] = [];
   if (input.appliedSummaries?.length) {
@@ -78,6 +108,9 @@ export function buildFollowUpPrompt(input: {
   }
   if (input.reply.trim()) {
     parts.push(`\n${input.reply.trim()}`);
+  }
+  if (input.attachments?.length) {
+    parts.push(`\n${describeAttachments(input.attachments)}`);
   }
   parts.push("\nContinue. Use the same pa-proposals block format for any new changes.");
   return parts.join("\n");

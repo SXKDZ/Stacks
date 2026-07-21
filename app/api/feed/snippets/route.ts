@@ -1,24 +1,14 @@
 import { desc } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedSnippets } from "@/db/schema";
-import { runFeedAgent } from "@/app/lib/feed-agent";
+import { feedWorkingDir, runFeedAgent } from "@/app/lib/feed-agent";
 import { buildSnippetPrompt } from "@/app/lib/feed-prompt";
-import { requireFeedEnabled } from "@/app/lib/feed-access";
+import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-interface CreateSnippetRequest {
-  instruction?: string;
-  body?: string;
-  title?: string;
-}
-
 export async function GET(): Promise<Response> {
-  const blocked = requireFeedEnabled();
-  if (blocked) {
-    return blocked;
-  }
   const database = await ensureDatabase();
   const rows = database
     .select()
@@ -29,27 +19,52 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const blocked = requireFeedEnabled();
-  if (blocked) {
-    return blocked;
-  }
   try {
-    const body = (await request.json()) as CreateSnippetRequest;
-    const instruction = body.instruction?.trim() ?? "";
-    const freeText = body.body?.trim() ?? "";
-    if (!instruction && !freeText) {
-      return Response.json({ error: "Enter an instruction or some text for the agent." }, { status: 400 });
-    }
-    const database = await ensureDatabase();
     const id = `feed-${crypto.randomUUID()}`;
     const sessionId = crypto.randomUUID();
+    const workingDir = feedWorkingDir(id);
+
+    // The composer sends multipart/form-data when files are attached and JSON
+    // otherwise. Either way we end up with an instruction, optional captured
+    // text, attached library paper ids, and uploaded files staged on disk.
+    let instruction = "";
+    let freeText = "";
+    let title = "";
+    let paperIds: string[] = [];
+    let attachments: SnippetAttachment[] = [];
+
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.includes("multipart/form-data")) {
+      const form = await request.formData();
+      instruction = String(form.get("instruction") ?? "").trim();
+      freeText = String(form.get("body") ?? "").trim();
+      title = String(form.get("title") ?? "").trim();
+      paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
+      const files = form.getAll("files").filter((value): value is File => value instanceof File);
+      attachments = await collectSnippetAttachments(workingDir, files, paperIds);
+    } else {
+      const body = (await request.json()) as {
+        instruction?: string; body?: string; title?: string; paperIds?: string[];
+      };
+      instruction = body.instruction?.trim() ?? "";
+      freeText = body.body?.trim() ?? "";
+      title = body.title?.trim() ?? "";
+      paperIds = Array.isArray(body.paperIds) ? body.paperIds.filter(Boolean) : [];
+      attachments = await collectSnippetAttachments(workingDir, [], paperIds);
+    }
+
+    if (!instruction && !freeText && !attachments.length) {
+      return Response.json({ error: "Enter an instruction, some text, or an attachment for the agent." }, { status: 400 });
+    }
+
+    const database = await ensureDatabase();
     const now = new Date().toISOString();
-    const title = (body.title?.trim() || instruction || freeText).slice(0, 120);
+    const resolvedTitle = (title || instruction || freeText || attachments[0]?.label || "Untitled").slice(0, 120);
     database
       .insert(feedSnippets)
       .values({
         id,
-        title,
+        title: resolvedTitle,
         instruction: instruction || freeText,
         status: "queued",
         sessionId: "",
@@ -58,7 +73,7 @@ export async function POST(request: Request): Promise<Response> {
       })
       .run();
 
-    const prompt = buildSnippetPrompt({ instruction, freeText });
+    const prompt = buildSnippetPrompt({ instruction, freeText, attachments });
     // Fire-and-forget: the agent streams events into feed_messages and SSE.
     void runFeedAgent({ snippetId: id, sessionId, prompt, resume: false }).catch(() => {});
 

@@ -408,45 +408,6 @@ body {
   color: var(--brand-blue);
 }
 
-/* AI feed reads as its own workspace: a solid brand-blue button with clear
-   white text (override the muted .nav-item color on the label and icon). */
-.nav-item-feed,
-.nav-item-feed span,
-.nav-item-feed svg {
-  color: #fff;
-}
-
-.nav-item-feed,
-.nav-item-feed:hover {
-  background: var(--brand-cta);
-  border: 1px solid var(--brand-cta-border);
-  box-shadow: 0 4px 12px var(--brand-cta-shadow);
-  color: #fff;
-  font-weight: 650;
-  margin-top: 8px;
-}
-
-.nav-item-feed:hover {
-  background: var(--brand-cta-hover);
-  transform: translateY(-1px);
-}
-
-.nav-item-feed:hover span,
-.nav-item-feed:hover svg {
-  color: #fff;
-}
-
-.nav-item-badge {
-  background: color-mix(in srgb, #fff 20%, transparent);
-  border-radius: var(--radius-pill);
-  font-size: var(--type-micro);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  margin-left: auto;
-  padding: 2px 7px;
-  text-transform: uppercase;
-}
-
 .nav-count {
   color: #9b94a2;
   font-size: 10px;

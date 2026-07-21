@@ -95,21 +95,17 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(bedrock, /messageType === "exception"/);
   assert.match(bedrock, /parsed\.type === "error" \|\| parsed\.error/);
   assert.match(bedrock, /signal: options\.signal/);
-  // AI routes pin the Node runtime.
-  const chatRoute = await readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8");
-  assert.match(chatRoute, /export const runtime = "nodejs"/);
-  assert.match(chatRoute, /signal: request\.signal/);
-  // Grounding is fetched concurrently, not in a sequential await loop.
-  assert.match(chatRoute, /Promise\.all\(\s*papers\.map/);
+  // The summarize route pins the Node runtime and streams from Bedrock.
+  const summarizeRoute = await readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8");
+  assert.match(summarizeRoute, /export const runtime = "nodejs"/);
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {
-  const [bootstrap, settingsRoute, settingsStore, doctor, chat, grounding, settingsView, version] = await Promise.all([
+  const [bootstrap, settingsRoute, settingsStore, doctor, grounding, settingsView, version] = await Promise.all([
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/settings/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/settings-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/storage-management/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/document-grounding.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/version/route.ts", import.meta.url), "utf8"),
@@ -132,8 +128,6 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(doctor, /setLibraryRoot\(target\)/);
   assert.match(doctor, /folderMove: true/);
   assert.doesNotMatch(doctor, /Move the library folder from the filesystem/);
-  assert.match(chat, /STACKS_PDF_PAGES/);
-  assert.match(chat, /pdfStartPage/);
   assert.match(grounding, /getDocumentProxy/);
   // SSRF guards live in the shared url-safety module and are used on every
   // server-side fetch of a user-supplied URL (grounding + source acquisition).
@@ -265,12 +259,15 @@ test("combines exact linked-record filters with boolean relationships", async ()
   assert.doesNotMatch(application, /onOpen=\{\(collection\) => \{\s*setQuery\(collection\.name\)/);
 });
 
-test("tracks long-running work while persisting chat as separate discussions", async () => {
-  const [tasks, application, settings, chatWorkspace] = await Promise.all([
+test("tracks long-running work and drives the AI feed instead of a chat workspace", async () => {
+  const [tasks, application, settings, feed, attachBox, snippetsRoute, attachments] = await Promise.all([
     readFile(new URL("../app/components/BackgroundTasks.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/PaperAssistant.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/ChatWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-attachments.ts", import.meta.url), "utf8"),
   ]);
   assert.match(tasks, /runTask/);
   assert.match(tasks, /Activity log/);
@@ -278,14 +275,25 @@ test("tracks long-running work while persisting chat as separate discussions", a
   assert.match(application, /Generate summary ·/);
   assert.match(application, /Copy \$\{file\.name\} into PA storage/);
   assert.match(settings, /Back up Stacks library to OneDrive/);
-  assert.match(chatWorkspace, /pa-chat-sessions-v2/);
-  assert.match(chatWorkspace, /persistSessions/);
-  assert.match(chatWorkspace, /Discussion title/);
-  assert.match(chatWorkspace, /session\.titleMode === "auto" \? automaticTitle\(selected\) : session\.title/);
-  assert.match(chatWorkspace, /titleMode: titleDraft\.trim\(\) \? "custom" : "auto"/);
-  assert.match(chatWorkspace, /className="chat-history-close"[\s\S]*icon=\{<PanelLeftClose \/>\}/);
-  assert.match(chatWorkspace, /className="chat-context-close"[\s\S]*icon=\{<PanelRightClose \/>\}/);
-  assert.doesNotMatch(chatWorkspace, /runTask/);
+  // Chat is fully removed: no chat route, api, component, or entry points remain.
+  assert.doesNotMatch(application, /openChatWorkspace|\/chat/);
+  assert.match(application, /openFeedWorkspace/);
+  // The feed is the AI surface: it opens with a paper attached, and both the
+  // composer and reply share one AttachBox supporting files + library papers,
+  // clipboard paste, and drag-drop.
+  assert.match(feed, /\/feed\?paper=|params\.get\("paper"\)/);
+  assert.match(feed, /<AttachBox/);
+  assert.match(feed, /new FormData\(\)/);
+  assert.match(attachBox, /feed-attach-tray/);
+  assert.match(attachBox, /onPaste=/);
+  assert.match(attachBox, /onDrop=/);
+  assert.match(attachBox, /feed-picker/);
+  assert.match(snippetsRoute, /multipart\/form-data/);
+  assert.match(snippetsRoute, /collectSnippetAttachments/);
+  assert.match(attachments, /storedDirectory/);
+  // The feed is always on: no enable gate remains.
+  assert.doesNotMatch(feed, /feedEnabled/);
+  assert.doesNotMatch(settings, /feedEnabled/);
 });
 
 test("runs the library on a local SQLite file in the self-contained library folder", async () => {

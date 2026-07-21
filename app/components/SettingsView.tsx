@@ -78,7 +78,6 @@ interface SettingsSnapshot {
     available?: boolean;
     unavailableReason?: string;
   };
-  feedEnabled: boolean;
 }
 
 interface BedrockModelOption {
@@ -214,7 +213,6 @@ const defaultSettings: SettingsSnapshot = {
       sourceExists: false,
       available: true,
   },
-  feedEnabled: false,
 };
 
 const secretFields = [
@@ -398,10 +396,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     setSettings((current) => ({ ...current, sync: { ...current.sync, [key]: value } }));
   }
 
-  function updateFeedEnabled(value: boolean) {
-    setSettings((current) => ({ ...current, feedEnabled: value }));
-  }
-
   function updatePrompt<Key extends keyof SettingsSnapshot["prompts"]>(key: Key, value: SettingsSnapshot["prompts"][Key]) {
     setSettings((current) => ({ ...current, prompts: { ...current.prompts, [key]: value } }));
   }
@@ -515,7 +509,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       remotePath: settings.sync.remotePath,
       autoSync: settings.sync.autoSync,
       autoSyncInterval: settings.sync.autoSyncInterval,
-      feedEnabled: settings.feedEnabled,
       secrets,
     };
   }
@@ -808,7 +801,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <label><span>PDF grounding pages</span><input type="number" min="1" max="20" step="1" value={settings.ai.pdfPages} onChange={(event) => updateAi("pdfPages", Number(event.target.value))} /><small>Ask Stacks extracts this many opening pages from each attached PDF, up to a safe 20-page limit.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
-              <label className="settings-toggle"><input type="checkbox" checked={Boolean(settings.feedEnabled)} onChange={(event) => updateFeedEnabled(event.target.checked)} /><span /><div><strong>AI feed (experimental)</strong><small>Adds an AI feed workspace where snippets run a headless Claude agent. Every library change it proposes needs your approval.</small></div></label>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>

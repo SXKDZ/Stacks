@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedProposals } from "@/db/schema";
-import { requireFeedEnabled } from "@/app/lib/feed-access";
 import { applyLibraryMutation } from "@/app/lib/library-mutations";
 import type { ProposalOperation } from "@/app/lib/feed-prompt";
 
@@ -16,10 +15,6 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const blocked = requireFeedEnabled();
-  if (blocked) {
-    return blocked;
-  }
   const { id } = await context.params;
   const body = (await request.json().catch(() => ({}))) as ResolveRequest;
   const decision = body.decision === "reject" ? "reject" : "approve";

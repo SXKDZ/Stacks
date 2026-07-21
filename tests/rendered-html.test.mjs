@@ -51,7 +51,7 @@ test("ships the Stacks application shell and product metadata", async () => {
   assert.match(application, /DBLP/);
   assert.match(application, /Crossref/);
   assert.match(application, /OpenReview/);
-  assert.match(application, /openChatWorkspace/);
+  assert.match(application, /openFeedWorkspace/);
   assert.match(application, /PaperEditModal/);
   assert.doesNotMatch(application, /Read inside PA/);
   assert.match(application, /<ActionButton[\s\S]*?Read[\s\S]*?<\/ActionButton>/);

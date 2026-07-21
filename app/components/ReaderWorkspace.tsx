@@ -200,7 +200,7 @@ export default function ReaderWorkspace() {
           </span>
         </div>
         <div className="reader-actions">
-          <ActionButton variant="on-dark" size="small" onClick={() => window.open(`/chat?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer")} icon={<Sparkles />}>Ask PA</ActionButton>
+          <ActionButton variant="on-dark" size="small" onClick={() => window.open(`/feed?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer")} icon={<Sparkles />}>Discuss in feed</ActionButton>
           {paper.url ? <ActionLink variant="on-dark" size="small" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>Source</ActionLink> : null}
           <ActionLink variant="on-dark" size="small" href="/" icon={<Library />}>Library</ActionLink>
         </div>
@@ -248,7 +248,7 @@ export default function ReaderWorkspace() {
               onBlur={(event) => void saveNotes(event.target.value)}
             />
           </section>
-          <ActionButton variant="primary" className="mt-5 w-full" onClick={() => window.open(`/chat?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer")} icon={<Sparkles />}>Discuss this paper with PA</ActionButton>
+          <ActionButton variant="primary" className="mt-5 w-full" onClick={() => window.open(`/feed?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer")} icon={<Sparkles />}>Discuss this paper in the feed</ActionButton>
         </aside>
       </div>
     </main>

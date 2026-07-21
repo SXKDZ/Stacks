@@ -34,7 +34,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Rss,
   Save,
   Search,
   Settings2,
@@ -682,7 +681,6 @@ function PaperAssistantWorkspace() {
   const [themeReady, setThemeReady] = useState(false);
   const [libraryName, setLibraryName] = useState("My Paper Library");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilterClause[]>([]);
-  const [feedEnabled, setFeedEnabled] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const notify = useCallback((message: string, tone: ToastState["tone"] = "success") => {
@@ -759,21 +757,6 @@ function PaperAssistantWorkspace() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    void fetch("/api/local-settings", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (!cancelled && data && typeof data.feedEnabled === "boolean") {
-          setFeedEnabled(data.feedEnabled);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     const timer = window.setTimeout(() => {
       const savedTheme = window.localStorage.getItem("pa-theme");
       const documentTheme = document.documentElement.dataset.theme;
@@ -841,8 +824,8 @@ function PaperAssistantWorkspace() {
     setSelectedPaper(null);
   }
 
-  function openChatWorkspace(paper?: Paper | null) {
-    const target = paper ? `/chat?paper=${encodeURIComponent(paper.id)}` : "/chat";
+  function openFeedWorkspace(paper?: Paper | null) {
+    const target = paper ? `/feed?paper=${encodeURIComponent(paper.id)}` : "/feed";
     window.open(target, "_blank", "noopener,noreferrer");
   }
 
@@ -941,29 +924,19 @@ function PaperAssistantWorkspace() {
               </button>
             );
           })}
-          {feedEnabled ? (
-            <button
-              className="nav-item nav-item-feed"
-              onClick={() => window.open("/feed", "_blank", "noopener,noreferrer")}
-            >
-              <Rss size={17} strokeWidth={2} />
-              <span>AI feed</span>
-              <span className="nav-item-badge">beta</span>
-            </button>
-          ) : null}
         </nav>
 
         <div className="sidebar-spacer" />
 
         <BackgroundTaskDock />
 
-        <button className="assistant-card" onClick={() => openChatWorkspace(currentPaper)}>
+        <button className="assistant-card" onClick={() => openFeedWorkspace(currentPaper)}>
           <span className="assistant-orb">
             <Sparkles size={17} />
           </span>
           <span>
-            <strong>Ask PA</strong>
-            <small>Think with your library</small>
+            <strong>AI feed</strong>
+            <small>Work with an agent on your library</small>
           </span>
           <ArrowUpRight size={16} />
         </button>
@@ -1009,7 +982,7 @@ function PaperAssistantWorkspace() {
               currentPaper={currentPaper}
               openPaper={setSelectedPaper}
               setView={changeView}
-              openChat={openChatWorkspace}
+              openChat={openFeedWorkspace}
             />
           ) : view === "library" ? (
             <LibraryView
@@ -1103,7 +1076,7 @@ function PaperAssistantWorkspace() {
           suspendAutoClose={Boolean(modal)}
           onClose={() => setSelectedPaper(null)}
           onUpdate={updatePaper}
-          onChat={() => openChatWorkspace(selectedPaper)}
+          onChat={() => openFeedWorkspace(selectedPaper)}
           onRead={() => openReaderWorkspace(selectedPaper)}
           onEdit={() => setModal({ kind: "edit-paper", paper: selectedPaper })}
           onExport={() => setModal({ kind: "export", papers: [selectedPaper] })}
@@ -1275,7 +1248,7 @@ function Dashboard({
             </div>
             <div className="continue-actions">
               <ActionButton variant="primary" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
-              <ActionButton variant="on-dark" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Ask PA</ActionButton>
+              <ActionButton variant="on-dark" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Discuss in feed</ActionButton>
             </div>
           </div>
           <div className="continue-visual" aria-hidden="true">
@@ -2651,7 +2624,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           <div className="drawer-cta-row">
             {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />}>Read</ActionButton> : null}
             {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>Source</ActionLink> : null}
-            <ActionButton variant="secondary" onClick={onChat} icon={<Sparkles />}>Ask PA</ActionButton>
+            <ActionButton variant="secondary" onClick={onChat} icon={<Sparkles />}>Discuss in feed</ActionButton>
             <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />}>Edit</ActionButton>
             <ActionButton variant="secondary" onClick={onExport} icon={<Download />}>Export</ActionButton>
           </div>
