@@ -71,8 +71,6 @@ export async function POST(request: Request): Promise<Response> {
     const configuredPrompt = runtimeValue(runtime, "STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT);
     const templatedPrompt = renderPromptTemplate(configuredPrompt, {
       paper: context,
-      paper1: context,
-      paper_count: "1",
       title: paper.title,
       authors: (paper.authors ?? []).join(", ") || "Unknown",
       venue: paper.venue ?? "Unknown",

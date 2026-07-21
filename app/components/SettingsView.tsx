@@ -32,7 +32,6 @@ import {
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  DEFAULT_CHAT_SYSTEM_PROMPT,
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
@@ -59,11 +58,9 @@ interface SettingsSnapshot {
     region: string;
     maxTokens: number;
     temperature: number;
-    pdfPages: number;
   };
   integrations: Record<string, boolean>;
   prompts: {
-    chatSystem: string;
     extractionSystem: string;
     summarySystem: string;
   };
@@ -190,7 +187,7 @@ interface PromptVariableDefinition {
   description: string;
 }
 
-type PromptKey = "chatSystem" | "summarySystem" | "extractionSystem";
+type PromptKey = "summarySystem" | "extractionSystem";
 
 const defaultSettings: SettingsSnapshot = {
   local: true,
@@ -200,11 +197,9 @@ const defaultSettings: SettingsSnapshot = {
     region: "us-east-1",
     maxTokens: 1200,
     temperature: 0.25,
-    pdfPages: 10,
   },
   integrations: {},
   prompts: {
-    chatSystem: DEFAULT_CHAT_SYSTEM_PROMPT,
     extractionSystem: DEFAULT_EXTRACTION_SYSTEM_PROMPT,
     summarySystem: DEFAULT_SUMMARY_SYSTEM_PROMPT,
   },
@@ -242,22 +237,8 @@ function normalizedModelId(modelId: string): string {
   return modelId;
 }
 
-const discussionVariables: PromptVariableDefinition[] = [
-  { token: "{{papers}}", description: "All selected papers combined into numbered Paper 1, Paper 2, … sections." },
-  { token: "{{paper_count}}", description: "The number of papers currently selected for the discussion." },
-  { token: "{{paper1}}", description: "The complete context for the first selected paper." },
-  { token: "{{paper2}}", description: "The complete context for the second selected paper, or “Not selected.”" },
-  { token: "{{paper3}}", description: "The complete context for the third selected paper, or “Not selected.”" },
-  { token: "{{paper4}}", description: "The complete context for the fourth selected paper, or “Not selected.”" },
-  { token: "{{paper5}}", description: "The complete context for the fifth selected paper, or “Not selected.”" },
-  { token: "{{paper6}}", description: "The complete context for the sixth selected paper, or “Not selected.”" },
-  { token: "{{paper7}}", description: "The complete context for the seventh selected paper, or “Not selected.”" },
-  { token: "{{paper8}}", description: "The complete context for the eighth selected paper, or “Not selected.”" },
-];
-
 const summaryVariables: PromptVariableDefinition[] = [
   { token: "{{paper}}", description: "The complete selected-paper context: metadata, abstract, and extracted source text." },
-  { token: "{{paper1}}", description: "An exact alias of {{paper}} for Stacks’s numbered-paper convention." },
   { token: "{{title}}", description: "The selected paper’s title." },
   { token: "{{authors}}", description: "The selected paper’s author names, joined with commas." },
   { token: "{{venue}}", description: "The selected paper’s venue or publication source." },
@@ -335,7 +316,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [checkingVersion, setCheckingVersion] = useState(false);
   const promptEditors = useRef<Record<PromptKey, HTMLTextAreaElement | null>>({
-    chatSystem: null,
     summarySystem: null,
     extractionSystem: null,
   });
@@ -510,8 +490,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       region: settings.ai.region,
       maxTokens: settings.ai.maxTokens,
       temperature: settings.ai.temperature,
-      pdfPages: settings.ai.pdfPages,
-      chatSystemPrompt: settings.prompts.chatSystem,
       extractionSystemPrompt: settings.prompts.extractionSystem,
       summarySystemPrompt: settings.prompts.summarySystem,
       remotePath: settings.sync.remotePath,
@@ -793,7 +771,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <p>Configuration</p>
         <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
         <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Discussion, summaries, extraction</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
@@ -827,7 +805,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>Stacks sends this value to the selected model without imposing an artificial upper limit; the model’s own output limit still applies.</small></label>
-                <label><span>PDF grounding pages</span><input type="number" min="1" max="20" step="1" value={settings.ai.pdfPages} onChange={(event) => updateAi("pdfPages", Number(event.target.value))} /><small>Ask Stacks extracts this many opening pages from each attached PDF, up to a safe 20-page limit.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
             </div>
@@ -837,12 +814,8 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "prompts" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<MessageSquareText size={19} />} title="Prompt templates" detail="Shape discussion, summary, and PDF metadata extraction." />
+            <SettingsHeading icon={<MessageSquareText size={19} />} title="Prompt templates" detail="Shape paper summaries and PDF metadata extraction." />
             <div className="settings-card prompt-settings-card">
-              <details className="prompt-template-section">
-                <summary><span><strong>Discussion system prompt</strong><small>Ask Stacks with up to eight selected papers.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="chatSystem" value={settings.prompts.chatSystem} onChange={(value) => updatePrompt("chatSystem", value)} /><small>Stacks numbers discussion context as Paper 1, Paper 2, and so on. Insert a placeholder wherever that context should appear.</small><PromptVariables variables={discussionVariables} onInsert={(variable) => insertPromptVariable("chatSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("chatSystem", DEFAULT_CHAT_SYSTEM_PROMPT)}>Restore discussion default</ActionButton></div>
-              </details>
               <details className="prompt-template-section">
                 <summary><span><strong>Summary system prompt</strong><small>Create the reusable Stacks summary stored with a paper.</small></span><ChevronDown size={16} /></summary>
                 <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Summary placeholders are replaced with the selected paper’s current metadata and extracted content.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</ActionButton></div>
@@ -1081,7 +1054,7 @@ function PromptEditor({ inputRef, promptKey, value, onChange }: {
           highlightLayer.current.scrollLeft = event.currentTarget.scrollLeft;
         }}
         spellCheck={false}
-        aria-label={`${promptKey === "chatSystem" ? "Discussion" : promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
+        aria-label={`${promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
       />
     </div>
   );

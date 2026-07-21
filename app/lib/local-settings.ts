@@ -3,7 +3,6 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
-  DEFAULT_CHAT_SYSTEM_PROMPT,
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
@@ -21,8 +20,6 @@ export interface SettingsPayload {
   region?: string;
   maxTokens?: string | number;
   temperature?: string | number;
-  pdfPages?: string | number;
-  chatSystemPrompt?: string;
   extractionSystemPrompt?: string;
   summarySystemPrompt?: string;
   remotePath?: string;
@@ -39,10 +36,8 @@ interface StructuredSettingsFile {
     region: string;
     maxTokens: string;
     temperature: string;
-    pdfPages: string;
   };
   prompts: {
-    chatSystem: string;
     extractionSystem: string;
     summarySystem: string;
   };
@@ -71,8 +66,6 @@ const environmentKeys = new Set([
   "AWS_REGION",
   "BEDROCK_MODEL_ID",
   "STACKS_MAX_TOKENS",
-  "STACKS_PDF_PAGES",
-  "STACKS_CHAT_SYSTEM_PROMPT",
   "STACKS_EXTRACTION_SYSTEM_PROMPT",
   "STACKS_SUMMARY_SYSTEM_PROMPT",
   "STACKS_TEMPERATURE",
@@ -118,8 +111,6 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     AWS_REGION: settings.ai.region,
     BEDROCK_MODEL_ID: settings.ai.modelId,
     STACKS_MAX_TOKENS: settings.ai.maxTokens,
-    STACKS_PDF_PAGES: settings.ai.pdfPages,
-    STACKS_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
     STACKS_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
     STACKS_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
     STACKS_TEMPERATURE: settings.ai.temperature,
@@ -206,10 +197,8 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
       region: envValue("AWS_REGION", "us-east-1"),
       maxTokens: envValue("STACKS_MAX_TOKENS", "1200"),
       temperature: envValue("STACKS_TEMPERATURE", "0.25"),
-      pdfPages: envValue("STACKS_PDF_PAGES", "10"),
     },
     prompts: {
-      chatSystem: envValue("STACKS_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
       extractionSystem: envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
       summarySystem: envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
@@ -237,8 +226,6 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "AWS_REGION": next.ai.region = value; break;
       case "STACKS_MAX_TOKENS": next.ai.maxTokens = value; break;
       case "STACKS_TEMPERATURE": next.ai.temperature = value; break;
-      case "STACKS_PDF_PAGES": next.ai.pdfPages = value; break;
-      case "STACKS_CHAT_SYSTEM_PROMPT": next.prompts.chatSystem = value; break;
       case "STACKS_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
       case "STACKS_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
       case "STACKS_ONEDRIVE_PATH": next.sync.remotePath = value; break;
@@ -298,13 +285,11 @@ export function currentSettings() {
       region: envValue("AWS_REGION", "us-east-1"),
       maxTokens: Number(envValue("STACKS_MAX_TOKENS", "1200")) || 1200,
       temperature: Number(envValue("STACKS_TEMPERATURE", "0.25")) || 0,
-      pdfPages: Math.min(20, Math.max(1, Number(envValue("STACKS_PDF_PAGES", "10")) || 10)),
     },
     integrations: Object.fromEntries(
       secretKeys.map((key) => [key, Boolean(envValue(key))]),
     ),
     prompts: {
-      chatSystem: envValue("STACKS_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT),
       extractionSystem: envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
       summarySystem: envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT),
     },
@@ -326,8 +311,6 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
     BEDROCK_MODEL_ID: String(data.modelId ?? envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")).trim(),
     AWS_REGION: String(data.region ?? envValue("AWS_REGION", "us-east-1")).trim(),
     STACKS_MAX_TOKENS: String(Math.max(128, Number(data.maxTokens) || 1200)),
-    STACKS_PDF_PAGES: String(Math.min(20, Math.max(1, Number(data.pdfPages) || 10))),
-    STACKS_CHAT_SYSTEM_PROMPT: String(data.chatSystemPrompt ?? envValue("STACKS_CHAT_SYSTEM_PROMPT", DEFAULT_CHAT_SYSTEM_PROMPT)).trim(),
     STACKS_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
     STACKS_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
     STACKS_TEMPERATURE: String(Math.min(1, Math.max(0, Number(data.temperature) || 0))),

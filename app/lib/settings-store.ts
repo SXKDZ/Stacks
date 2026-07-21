@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import {
-  DEFAULT_CHAT_SYSTEM_PROMPT,
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
@@ -12,8 +11,8 @@ import { appSettings } from "@/db/schema";
 const SECRET_KEYS = ["AWS_BEARER_TOKEN_BEDROCK", "SEMANTIC_SCHOLAR_API_KEY", "SERPAPI_KEY"] as const;
 
 interface LibrarySettingsFile {
-  ai?: { modelId?: string; region?: string; maxTokens?: string; temperature?: string; pdfPages?: string };
-  prompts?: { chatSystem?: string; extractionSystem?: string; summarySystem?: string };
+  ai?: { modelId?: string; region?: string; maxTokens?: string; temperature?: string };
+  prompts?: { extractionSystem?: string; summarySystem?: string };
   sync?: { remotePath?: string; autoSync?: string; autoSyncInterval?: string };
   secrets?: Partial<Record<(typeof SECRET_KEYS)[number], string>>;
 }
@@ -46,8 +45,6 @@ export interface SettingsInput {
   region?: unknown;
   maxTokens?: unknown;
   temperature?: unknown;
-  pdfPages?: unknown;
-  chatSystemPrompt?: unknown;
   extractionSystemPrompt?: unknown;
   summarySystemPrompt?: unknown;
   remotePath?: unknown;
@@ -62,10 +59,8 @@ interface StoredSettings {
     region: string;
     maxTokens: number;
     temperature: number;
-    pdfPages: number;
   };
   prompts: {
-    chatSystem: string;
     extractionSystem: string;
     summarySystem: string;
   };
@@ -95,10 +90,8 @@ function environmentDefaults(): StoredSettings {
       region: process.env.AWS_REGION?.trim() || "us-east-1",
       maxTokens: number(process.env.STACKS_MAX_TOKENS, 1200, 128, 32_000),
       temperature: number(process.env.STACKS_TEMPERATURE, 0.25, 0, 1),
-      pdfPages: number(process.env.STACKS_PDF_PAGES, 10, 1, 20),
     },
     prompts: {
-      chatSystem: process.env.STACKS_CHAT_SYSTEM_PROMPT?.trim() || DEFAULT_CHAT_SYSTEM_PROMPT,
       extractionSystem: process.env.STACKS_EXTRACTION_SYSTEM_PROMPT?.trim() || DEFAULT_EXTRACTION_SYSTEM_PROMPT,
       summarySystem: process.env.STACKS_SUMMARY_SYSTEM_PROMPT?.trim() || DEFAULT_SUMMARY_SYSTEM_PROMPT,
     },
@@ -123,10 +116,8 @@ function normalizeStoredSettings(value: unknown): StoredSettings {
       region: text(candidate.ai?.region, fallback.ai.region),
       maxTokens: number(candidate.ai?.maxTokens, fallback.ai.maxTokens, 128, 32_000),
       temperature: number(candidate.ai?.temperature, fallback.ai.temperature, 0, 1),
-      pdfPages: number(candidate.ai?.pdfPages, fallback.ai.pdfPages, 1, 20),
     },
     prompts: {
-      chatSystem: text(candidate.prompts?.chatSystem, fallback.prompts.chatSystem),
       extractionSystem: text(candidate.prompts?.extractionSystem, fallback.prompts.extractionSystem),
       summarySystem: text(candidate.prompts?.summarySystem, fallback.prompts.summarySystem),
     },
@@ -164,10 +155,8 @@ export async function saveStoredSettings(input: SettingsInput): Promise<StoredSe
       region: input.region ?? current.ai.region,
       maxTokens: input.maxTokens ?? current.ai.maxTokens,
       temperature: input.temperature ?? current.ai.temperature,
-      pdfPages: input.pdfPages ?? current.ai.pdfPages,
     },
     prompts: {
-      chatSystem: input.chatSystemPrompt ?? current.prompts.chatSystem,
       extractionSystem: input.extractionSystemPrompt ?? current.prompts.extractionSystem,
       summarySystem: input.summarySystemPrompt ?? current.prompts.summarySystem,
     },
@@ -222,8 +211,6 @@ export async function storedRuntimeValues(): Promise<Record<string, string>> {
     BEDROCK_MODEL_ID: settings.ai.modelId,
     STACKS_MAX_TOKENS: String(settings.ai.maxTokens),
     STACKS_TEMPERATURE: String(settings.ai.temperature),
-    STACKS_PDF_PAGES: String(settings.ai.pdfPages),
-    STACKS_CHAT_SYSTEM_PROMPT: settings.prompts.chatSystem,
     STACKS_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
     STACKS_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
   };

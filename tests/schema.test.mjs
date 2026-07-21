@@ -88,8 +88,11 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(models, /inference-profiles/);
   assert.match(bedrock, /anthropic\/v1\/messages/);
   assert.match(bedrock, /\/converse/);
-  assert.match(prompts, /\{\{papers\}\}/);
-  assert.match(prompts, /\{\{paper1\}\}/);
+  // The summary and extraction prompts survive chat removal; the discussion
+  // prompt and its {{papers}}/{{paper1}} placeholders are gone.
+  assert.match(prompts, /\{\{paper\}\}/);
+  assert.match(prompts, /\{\{source_text\}\}/);
+  assert.doesNotMatch(prompts, /\{\{papers\}\}|DEFAULT_CHAT_SYSTEM_PROMPT/);
   // Streaming robustness: mid-stream exception frames/events surface as errors
   // (both parsers) and the client abort is forwarded to Bedrock.
   assert.match(bedrock, /messageType === "exception"/);
@@ -140,7 +143,8 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(grounding, /from "@\/app\/lib\/url-safety"/);
   assert.match(localFiles, /safeFetch/);
   assert.doesNotMatch(localFiles, /redirect: "follow"/);
-  assert.match(settingsView, /PDF grounding pages/);
+  // The dead PDF-grounding-pages control and Discussion prompt are gone.
+  assert.doesNotMatch(settingsView, /PDF grounding pages|Discussion system prompt|chatSystem/);
   assert.match(settingsView, /About & updates/);
   assert.match(version, /releases\/latest/);
 });
