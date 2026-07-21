@@ -886,7 +886,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                   <div className="storage-doctor-actions">
                     <p>Cleanup deletes only unlinked files from Stacks’s managed pdfs/ and html_snapshots/ folders. It requires two confirmations and never deletes linked assets.</p>
                     <div className="storage-doctor-action-buttons">
-                      <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage || !storageReport.capabilities?.repairs.length} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>{storageReport.mode === "hosted" ? "Repair database" : "Repair paths & filenames"}</ActionButton>
+                      <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage || !storageReport.capabilities?.repairs.length} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>{storageReport.mode === "hosted" ? "Repair database" : "Repair library"}</ActionButton>
                       <ActionButton variant="danger" onClick={() => void cleanStorage()} disabled={cleaningStorage || !storageReport.orphanedFiles} icon={cleaningStorage ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}>Clean unlinked assets</ActionButton>
                     </div>
                   </div>

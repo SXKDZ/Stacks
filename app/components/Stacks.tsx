@@ -2624,7 +2624,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           <div className="drawer-cta-row">
             {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />}>Read</ActionButton> : null}
             {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>Source</ActionLink> : null}
-            <ActionButton variant="brand-ghost" onClick={onChat} icon={<Sparkles />}>Discuss in feed</ActionButton>
+            <ActionButton variant="brand-ghost" onClick={onChat} icon={<Sparkles />}>Feed</ActionButton>
             <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />}>Edit</ActionButton>
             <ActionButton variant="secondary" onClick={onExport} icon={<Download />}>Export</ActionButton>
           </div>
