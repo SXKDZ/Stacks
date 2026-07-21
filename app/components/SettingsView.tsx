@@ -8,6 +8,7 @@ import {
   Cpu,
   CloudCog,
   ChevronDown,
+  ChevronUp,
   DatabaseBackup,
   FileWarning,
   FolderOpen,
@@ -153,7 +154,6 @@ interface StorageReport {
     orphanedAssociations: {
       paperAuthors: number;
       paperCollections: number;
-      paperTags: number;
     };
     orphanedEntities?: {
       authors: number;
@@ -256,6 +256,23 @@ const extractionVariables: PromptVariableDefinition[] = [
   { token: "{{embedded_metadata}}", description: "Title, author, subject, and other metadata embedded in the PDF." },
   { token: "{{source_text}}", description: "Text extracted from the PDF. Add a page range like {{source_text[1:2]}}, {{source_text[1:]}} for all pages, or {{source_text[3]}} for a single page." },
 ];
+
+/**
+ * Find the first `{{placeholder}}` in a prompt that the renderer can't fill, so
+ * a save can be blocked before it silently leaks an unfillable token into
+ * output (e.g. a stale `{{paper1}}`). An optional `[a:b]` page slice is allowed
+ * on any known token. Returns an error message, or null when every token is
+ * known.
+ */
+function unknownPlaceholder(prompt: string, variables: PromptVariableDefinition[], label: string): string | null {
+  const known = new Set(variables.map((variable) => variable.token.replace(/[{}]/g, "")));
+  for (const match of prompt.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*(?:\[[^\]]*\])?\s*\}\}/g)) {
+    if (!known.has(match[1])) {
+      return `The ${label} prompt uses an unknown placeholder {{${match[1]}}}. Use one of: ${variables.map((variable) => variable.token).join(", ")}.`;
+    }
+  }
+  return null;
+}
 
 function timeLabel(value: string | null): string {
   if (!value) {
@@ -497,6 +514,14 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
   async function save(event?: FormEvent) {
     event?.preventDefault();
+    const promptError =
+      unknownPlaceholder(settings.prompts.summarySystem, summaryVariables, "Summary") ??
+      unknownPlaceholder(settings.prompts.extractionSystem, extractionVariables, "PDF extraction");
+    if (promptError) {
+      setTab("prompts");
+      notify(promptError, "error");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/local-settings", {
@@ -819,7 +844,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
               </details>
               <details className="prompt-template-section">
                 <summary><span><strong>PDF extraction system prompt</strong><small>Extract structured metadata from local PDF text.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the pages named by the {"{{source_text}}"} range, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the pages named by the {"{{source_text}}"} range, then returns normalized paper fields. Add a page range in Python-slice style: <code>{"{{source_text[1:2]}}"}</code> reads pages 1–2, <code>{"{{source_text[3]}}"}</code> a single page, <code>{"{{source_text[2:]}}"}</code> page 2 to the end, and <code>{"{{source_text}}"}</code> the default first two pages.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
               </details>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
@@ -881,7 +906,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                       return (
                         <>
                           <DoctorMetric icon={<DatabaseBackup size={17} />} label="Library database" value={h ? h.integrityOk && !h.foreignKeyViolations ? "Healthy" : "Needs attention" : storageReport.databasePresent ? "Available" : "Missing"} detail={`${storageReport.paperRecords} papers · ${h?.foreignKeyViolations ?? 0} FK violations`} tone={h ? h.integrityOk && !h.foreignKeyViolations ? "good" : "bad" : storageReport.databasePresent ? "good" : "bad"} onClick={() => setDoctorModal({ label: "Library database", detail: `SQLite integrity check: ${h?.integrityOk ? "OK" : "problems found"}. ${h?.foreignKeyViolations ?? 0} foreign-key violations across ${storageReport.paperRecords} papers.${h?.integrityMessages?.length ? ` Messages: ${h.integrityMessages.join("; ")}.` : ""}` })} />
-                          <DoctorMetric icon={<DatabaseBackup size={17} />} label="Associations" value={`${assoc} orphaned`} detail={h?.foreignKeyEnforced ? "Foreign keys are enforced" : "Foreign-key enforcement unavailable"} tone={h && (h.foreignKeyViolations || Object.values(h.orphanedAssociations).some(Boolean)) ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Associations", detail: h ? `Dangling link rows whose paper or target no longer exists: ${h.orphanedAssociations.paperAuthors} author links, ${h.orphanedAssociations.paperCollections} collection links, ${h.orphanedAssociations.paperTags} tag links. Repair library removes these.` : "No database health data." })} />
+                          <DoctorMetric icon={<DatabaseBackup size={17} />} label="Associations" value={`${assoc} orphaned`} detail={h?.foreignKeyEnforced ? "Foreign keys are enforced" : "Foreign-key enforcement unavailable"} tone={h && (h.foreignKeyViolations || Object.values(h.orphanedAssociations).some(Boolean)) ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Associations", detail: h ? `Dangling link rows whose paper or target no longer exists: ${h.orphanedAssociations.paperAuthors} author links, ${h.orphanedAssociations.paperCollections} collection links. Repair library removes these.` : "No database health data." })} />
                           {entities ? (
                             <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${orphanTotal} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={orphanTotal ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Orphaned records", detail: "Authors, venues, and collections with no papers. Removing them deletes only these empty records — no paper is affected.", records: orphanList })} />
                           ) : null}
@@ -1008,16 +1033,21 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
 function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "info") => void }) {
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
+  const [selectedId, setSelectedId] = useState<string | null>(DEFAULT_FEED_SKILLS[0]?.id ?? null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const iconNames = Object.keys(FEED_SKILL_ICONS);
+  const selected = skills.find((skill) => skill.id === selectedId) ?? null;
 
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/feed/skills", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { skills?: FeedSkill[] } | null) => {
-        if (!cancelled && data?.skills) setSkills(data.skills);
+        if (!cancelled && data?.skills) {
+          setSkills(data.skills);
+          setSelectedId(data.skills[0]?.id ?? null);
+        }
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -1027,7 +1057,14 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
     setSkills((current) => current.map((skill) => (skill.id === id ? { ...skill, ...patch } : skill)));
   }
   function remove(id: string) {
-    setSkills((current) => current.filter((skill) => skill.id !== id));
+    setSkills((current) => {
+      const index = current.findIndex((skill) => skill.id === id);
+      const next = current.filter((skill) => skill.id !== id);
+      if (id === selectedId) {
+        setSelectedId(next[Math.min(index, next.length - 1)]?.id ?? null);
+      }
+      return next;
+    });
   }
   function move(id: string, delta: number) {
     setSkills((current) => {
@@ -1040,7 +1077,13 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
     });
   }
   function add() {
-    setSkills((current) => [...current, { id: `skill-${Date.now()}`, label: "New skill", icon: "sparkles", prompt: "" }]);
+    const id = `skill-${Date.now()}`;
+    setSkills((current) => [...current, { id, label: "New skill", icon: "sparkles", prompt: "" }]);
+    setSelectedId(id);
+  }
+  function restoreDefaults() {
+    setSkills(DEFAULT_FEED_SKILLS);
+    setSelectedId(DEFAULT_FEED_SKILLS[0]?.id ?? null);
   }
 
   async function save() {
@@ -1056,6 +1099,9 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
       }
       const data = await response.json() as { skills: FeedSkill[] };
       setSkills(data.skills);
+      if (!data.skills.some((skill) => skill.id === selectedId)) {
+        setSelectedId(data.skills[0]?.id ?? null);
+      }
       notify("Feed skills saved.", "success");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Feed skills could not be saved.", "error");
@@ -1068,39 +1114,57 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
     return <div className="settings-card"><div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Loading feed skills…</span></div></div>;
   }
 
+  const SelectedIcon = selected ? feedSkillIcon(selected.icon) : Sparkles;
+
   return (
-    <div className="settings-card feed-skills-editor">
-      {skills.map((skill, index) => {
-        const Icon = feedSkillIcon(skill.icon);
-        return (
-          <div className="feed-skill-row" key={skill.id}>
-            <div className="feed-skill-row-head">
-              <details className="feed-skill-icon-picker">
-                <summary aria-label="Choose an icon"><Icon size={16} /><ChevronDown size={13} /></summary>
-                <div className="feed-skill-icon-menu">
-                  {iconNames.map((name) => {
-                    const OptionIcon = feedSkillIcon(name);
-                    return <button type="button" key={name} className={`feed-skill-icon-option ${skill.icon === name ? "is-selected" : ""}`} onClick={(event) => { update(skill.id, { icon: name }); event.currentTarget.closest("details")?.removeAttribute("open"); }} aria-label={`Icon ${name}`} aria-pressed={skill.icon === name}><OptionIcon size={15} /></button>;
-                  })}
+    <div className="feed-skills-manager">
+      <div className="feed-skills-body">
+        <div className="feed-skills-list" role="listbox" aria-label="Feed skills">
+          {skills.map((skill, index) => {
+            const Icon = feedSkillIcon(skill.icon);
+            const active = skill.id === selectedId;
+            return (
+              <div className={`feed-skill-item ${active ? "is-active" : ""}`} key={skill.id}>
+                <button type="button" className="feed-skill-item-main" role="option" aria-selected={active} onClick={() => setSelectedId(skill.id)}>
+                  <span className="feed-skill-item-icon"><Icon size={15} /></span>
+                  <span className="feed-skill-item-label">{skill.label || "Untitled skill"}</span>
+                </button>
+                <div className="feed-skill-item-actions">
+                  <button type="button" onClick={() => move(skill.id, -1)} disabled={index === 0} aria-label="Move up"><ChevronUp size={14} /></button>
+                  <button type="button" onClick={() => move(skill.id, 1)} disabled={index === skills.length - 1} aria-label="Move down"><ChevronDown size={14} /></button>
+                  <button type="button" className="is-danger" onClick={() => remove(skill.id)} aria-label="Remove skill"><Trash2 size={13} /></button>
                 </div>
-              </details>
-              <input className="feed-skill-label-input" value={skill.label} maxLength={60} placeholder="Skill name" onChange={(event) => update(skill.id, { label: event.target.value })} />
-              <div className="feed-skill-row-actions">
-                <button type="button" onClick={() => move(skill.id, -1)} disabled={index === 0} aria-label="Move up">↑</button>
-                <button type="button" onClick={() => move(skill.id, 1)} disabled={index === skills.length - 1} aria-label="Move down">↓</button>
-                <button type="button" className="is-danger" onClick={() => remove(skill.id)} aria-label="Remove skill"><Trash2 size={14} /></button>
               </div>
-            </div>
-            <textarea className="feed-skill-prompt-input" value={skill.prompt} rows={3} placeholder="The prompt this skill drops into the composer…" onChange={(event) => update(skill.id, { prompt: event.target.value })} />
-          </div>
-        );
-      })}
-      <div className="feed-skills-editor-actions">
-        <ActionButton variant="secondary" size="small" onClick={add} icon={<Plus size={15} />}>Add skill</ActionButton>
-        <div className="feed-skills-editor-save">
-          <ActionButton variant="ghost" size="small" onClick={() => setSkills(DEFAULT_FEED_SKILLS)}>Restore defaults</ActionButton>
-          <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save skills</ActionButton>
+            );
+          })}
+          <button type="button" className="feed-skill-add" onClick={add}><Plus size={15} />Add skill</button>
         </div>
+        <div className="feed-skills-detail">
+          {selected ? (
+            <>
+              <div className="feed-skill-detail-head">
+                <details className="feed-skill-icon-picker">
+                  <summary aria-label="Choose an icon"><SelectedIcon size={16} /><ChevronDown size={13} /></summary>
+                  <div className="feed-skill-icon-menu">
+                    {iconNames.map((name) => {
+                      const OptionIcon = feedSkillIcon(name);
+                      return <button type="button" key={name} className={`feed-skill-icon-option ${selected.icon === name ? "is-selected" : ""}`} onClick={(event) => { update(selected.id, { icon: name }); event.currentTarget.closest("details")?.removeAttribute("open"); }} aria-label={`Icon ${name}`} aria-pressed={selected.icon === name}><OptionIcon size={15} /></button>;
+                    })}
+                  </div>
+                </details>
+                <input className="feed-skill-label-input" value={selected.label} maxLength={60} placeholder="Skill name" onChange={(event) => update(selected.id, { label: event.target.value })} />
+              </div>
+              <HighlightedPromptArea value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction this skill drops into the composer. Use {{paper}} to inline attached papers." />
+              <p className="feed-skill-detail-hint">This text seeds the composer when the skill is picked. Placeholders like <code>{"{{paper}}"}</code> and <code>{"{{paper[1:20]}}"}</code> inline attachments.</p>
+            </>
+          ) : (
+            <div className="feed-skill-empty"><Sparkles size={22} /><p>No skills yet. Add one to get started.</p></div>
+          )}
+        </div>
+      </div>
+      <div className="feed-skills-editor-actions">
+        <ActionButton variant="ghost" size="small" onClick={restoreDefaults}>Restore defaults</ActionButton>
+        <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save skills</ActionButton>
       </div>
     </div>
   );
@@ -1125,46 +1189,67 @@ function DoctorMetric({ icon, label, value, detail, tone, onClick }: {
   return <div className={`storage-doctor-metric is-${tone}`}>{body}</div>;
 }
 
+// A prompt is highlighted for its own "syntax": {{placeholder}} (with optional
+// [a:b] page slice), Markdown headings, `inline code`, and $math$.
+const PROMPT_TOKEN_RE = /(\{\{[a-zA-Z0-9_]+(?:\[[^\]]*\])?\}\}|^#{1,6}\s.+$|`[^`\n]+`|\${1,2}[^$\n]+\${1,2})/gm;
+
+function promptTokenClass(part: string): string | undefined {
+  if (/^\{\{.+\}\}$/.test(part)) return "is-variable";
+  if (/^#{1,6}\s/.test(part)) return "is-heading";
+  if (/^`.+`$/.test(part)) return "is-code";
+  if (/^\${1,2}.+\${1,2}$/.test(part)) return "is-math";
+  return undefined;
+}
+
+/** A bordered textarea with a synchronized, read-only syntax layer behind it. */
+function HighlightedPromptArea({ value, onChange, ariaLabel, placeholder, textareaRef }: {
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  placeholder?: string;
+  textareaRef?: (node: HTMLTextAreaElement | null) => void;
+}) {
+  const highlightLayer = useRef<HTMLPreElement | null>(null);
+  const parts = value.split(PROMPT_TOKEN_RE);
+
+  return (
+    <div className="prompt-code-editor">
+      <pre ref={highlightLayer} aria-hidden="true">
+        {parts.map((part, index) => (
+          <span className={promptTokenClass(part)} key={`${index}-${part.slice(0, 12)}`}>{part}</span>
+        ))}
+        {value.endsWith("\n") ? "\n" : null}
+      </pre>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onScroll={(event) => {
+          if (!highlightLayer.current) return;
+          highlightLayer.current.scrollTop = event.currentTarget.scrollTop;
+          highlightLayer.current.scrollLeft = event.currentTarget.scrollLeft;
+        }}
+        spellCheck={false}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+      />
+    </div>
+  );
+}
+
 function PromptEditor({ inputRef, promptKey, value, onChange }: {
   inputRef: RefObject<Record<PromptKey, HTMLTextAreaElement | null>>;
   promptKey: PromptKey;
   value: string;
   onChange: (value: string) => void;
 }) {
-  const highlightLayer = useRef<HTMLPreElement | null>(null);
-  const parts = value.split(/(\{\{[a-zA-Z0-9_]+\}\}|^#{1,6}\s.+$|`[^`\n]+`)/gm);
-
   return (
-    <div className="prompt-code-editor">
-      <pre ref={highlightLayer} aria-hidden="true">
-        {parts.map((part, index) => {
-          const className = /^\{\{.+\}\}$/.test(part)
-            ? "is-variable"
-            : /^#{1,6}\s/.test(part)
-              ? "is-heading"
-              : /^`.+`$/.test(part)
-                ? "is-code"
-                : undefined;
-          return <span className={className} key={`${index}-${part.slice(0, 12)}`}>{part}</span>;
-        })}
-        {value.endsWith("\n") ? "\n" : null}
-      </pre>
-      <textarea
-        ref={(node) => { inputRef.current[promptKey] = node; }}
-        rows={8}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onScroll={(event) => {
-          if (!highlightLayer.current) {
-            return;
-          }
-          highlightLayer.current.scrollTop = event.currentTarget.scrollTop;
-          highlightLayer.current.scrollLeft = event.currentTarget.scrollLeft;
-        }}
-        spellCheck={false}
-        aria-label={`${promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
-      />
-    </div>
+    <HighlightedPromptArea
+      value={value}
+      onChange={onChange}
+      textareaRef={(node) => { inputRef.current[promptKey] = node; }}
+      ariaLabel={`${promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
+    />
   );
 }
 

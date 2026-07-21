@@ -1064,7 +1064,7 @@ textarea::placeholder {
   background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 20%, transparent);
   border-radius: 6px;
-  color: #9dd3f7;
+  color: var(--brand-blue-strong);
   font-family: var(--font-mono);
   font-size: var(--type-label);
   padding: 5px 7px;

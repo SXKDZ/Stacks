@@ -11,7 +11,7 @@ import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 
 /**
  * Drives a headless `claude -p` agent for one feed snippet. The agent runs with
- * PA's Bedrock credentials, no Bash (so it cannot touch the machine or call PA's
+ * Stacks's Bedrock credentials, no Bash (so it cannot touch the machine or call Stacks's
  * API — it only proposes changes as structured output), and its own working
  * directory. Follow-up turns resume the same session so history carries forward.
  *
@@ -22,7 +22,7 @@ import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 type FeedEvent =
   | { type: "status"; status: string }
   | { type: "message"; id: string; role: string; kind: string; content: string; toolUseId?: string | null; createdAt: string }
-  | { type: "proposal"; id: string; operation: string; status: string; summary: string; createdAt: string }
+  | { type: "proposal"; id: string; messageId: string | null; operation: string; status: string; summary: string; createdAt: string }
   | { type: "done"; status: string };
 
 const MAX_TURNS = "40";
@@ -110,7 +110,7 @@ async function persistProposal(
     .insert(feedProposals)
     .values({ id, snippetId, messageId, operation: serialized, status: "pending", createdAt })
     .run();
-  return { type: "proposal", id, operation: serialized, status: "pending", summary: operation.summary ?? "Proposed change", createdAt };
+  return { type: "proposal", id, messageId, operation: serialized, status: "pending", summary: operation.summary ?? "Proposed change", createdAt };
 }
 
 async function setStatus(snippetId: string, status: string, error?: string): Promise<void> {

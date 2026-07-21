@@ -1298,6 +1298,17 @@ td.number-cell {
   gap: 9px;
 }
 
+/* Discover has no table to anchor a footer bar, so its paginator reads as a
+   self-contained card like the result cards around it — matching border,
+   radius, and panel, rather than the attached table-footer treatment. */
+.discovery-results > .table-pagination {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  min-height: 0;
+  padding: 10px 14px;
+}
+
 .discovery-result {
   align-items: flex-start;
   background: var(--panel);

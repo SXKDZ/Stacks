@@ -133,29 +133,6 @@ export const paperCollections = sqliteTable(
   (table) => [primaryKey({ columns: [table.paperId, table.collectionId] })],
 );
 
-export const tags = sqliteTable(
-  "tags",
-  {
-    id: text("id").primaryKey(),
-    name: text("name").notNull(),
-    color: text("color").notNull().default("slate"),
-  },
-  (table) => [uniqueIndex("tags_name_unique").on(table.name)],
-);
-
-export const paperTags = sqliteTable(
-  "paper_tags",
-  {
-    paperId: text("paper_id")
-      .notNull()
-      .references(() => papers.id, { onDelete: "cascade", onUpdate: "cascade" }),
-    tagId: text("tag_id")
-      .notNull()
-      .references(() => tags.id, { onDelete: "cascade", onUpdate: "cascade" }),
-  },
-  (table) => [primaryKey({ columns: [table.paperId, table.tagId] })],
-);
-
 // --- AI feed: an opt-in notebook driving headless claude -p agents ---
 
 export const feedSnippets = sqliteTable(

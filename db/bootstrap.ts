@@ -69,16 +69,6 @@ const schemaStatements = [
     collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (paper_id, collection_id)
   )`,
-  `CREATE TABLE IF NOT EXISTS tags (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    color TEXT NOT NULL DEFAULT 'slate'
-  )`,
-  `CREATE TABLE IF NOT EXISTS paper_tags (
-    paper_id TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    PRIMARY KEY (paper_id, tag_id)
-  )`,
   `CREATE TABLE IF NOT EXISTS feed_snippets (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL DEFAULT '',
@@ -253,6 +243,9 @@ async function initializeDatabase(): Promise<void> {
   // Settings now live solely in the library's settings.json; the old
   // app_settings table (a parallel source of truth) is retired.
   raw.prepare("DROP TABLE IF EXISTS app_settings").run();
+  // The tag system was never built; drop its scaffolded tables.
+  raw.prepare("DROP TABLE IF EXISTS paper_tags").run();
+  raw.prepare("DROP TABLE IF EXISTS tags").run();
   if (existingPaperColumns.has("citation_count")) {
     raw.prepare("ALTER TABLE papers DROP COLUMN citation_count").run();
   }

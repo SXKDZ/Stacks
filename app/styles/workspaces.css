@@ -1,5 +1,5 @@
 /* --- chat-workspace.css --- */
-/* Dedicated, persistent Ask PA workspace. */
+/* Dedicated, persistent Ask Stacks workspace. */
 .chat-workspace-page {
   background: var(--canvas);
   color: var(--ink);
@@ -1163,25 +1163,38 @@
    dock is pinned to the bottom and taken out of the hero's centering flow, so
    growing it (attachments) never shifts the hero. */
 .feed-compose {
+  /* Same reading column as the detail view, so the composer and the reply dock
+     share one width. */
+  --feed-col: 780px;
+  --feed-gutter: 32px;
   display: flex;
   flex-direction: column;
   height: 100%;
   margin: 0 auto;
-  max-width: 680px;
-  padding: 24px 24px 40px;
+  max-width: var(--feed-col);
+  padding: 24px var(--feed-gutter) 40px;
   position: relative;
   width: 100%;
 }
 
+/* The composer dock matches the reply dock's width exactly: both cap at
+   --feed-col inset by --feed-gutter each side. */
+.feed-compose .feed-dock {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: calc(var(--feed-col) - 2 * var(--feed-gutter));
+  width: 100%;
+}
+
 .feed-compose-hero {
-  bottom: 200px;
+  bottom: 268px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   justify-content: center;
-  left: 24px;
+  left: var(--feed-gutter);
   position: absolute;
-  right: 24px;
+  right: var(--feed-gutter);
   text-align: center;
   top: 0;
 }
@@ -1292,6 +1305,12 @@
   outline: none;
   padding: 4px 6px;
   resize: none;
+}
+
+/* The new-feed composer is the primary entry point, so give it more room than
+   the compact inline reply box. */
+.feed-compose .feed-dock textarea {
+  min-height: 128px;
 }
 
 .feed-dock textarea::placeholder {

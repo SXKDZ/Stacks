@@ -26,7 +26,7 @@ function documentIdentity(paper: Paper): { kind: string; value: string; url: str
     return {
       kind: "Local HTML snapshot",
       value: paper.htmlSnapshotPath,
-      url: `/pa-files/html/${encodeURIComponent(paper.htmlSnapshotPath)}`,
+      url: `/stacks-files/html/${encodeURIComponent(paper.htmlSnapshotPath)}`,
       isHtml: true,
     };
   }
@@ -34,7 +34,7 @@ function documentIdentity(paper: Paper): { kind: string; value: string; url: str
     return {
       kind: "Local PDF",
       value: paper.localPath,
-      url: `/pa-files/pdfs/${encodeURIComponent(paper.localPath)}`,
+      url: `/stacks-files/pdfs/${encodeURIComponent(paper.localPath)}`,
       isHtml: false,
     };
   }

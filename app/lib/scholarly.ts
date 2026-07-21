@@ -125,7 +125,7 @@ async function searchSemanticScholar(query: string, apiKeyOverride?: string): Pr
   if (!response?.ok) {
     const status = response?.status ?? 502;
     const message = status === 429
-      ? "Semantic Scholar is temporarily rate-limiting this API key. PA retried the request."
+      ? "Semantic Scholar is temporarily rate-limiting this API key. Stacks retried the request."
       : `Semantic Scholar returned ${status}.`;
     throw new ScholarlyProviderError(message, status);
   }

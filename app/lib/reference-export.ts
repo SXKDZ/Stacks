@@ -111,7 +111,7 @@ export function exportReferences(papers: Paper[], format: ReferenceExportFormat)
   if (format === "bibtex") return papers.map(bibtexEntry).join("\n\n");
   if (format === "ieee") return papers.map((paper, index) => ieeeEntry(paper, index, papers.length > 1)).join("\n\n");
   if (format === "markdown") return papers.map(markdownEntry).join("\n");
-  if (format === "html") return `<!doctype html><html><head><meta charset="utf-8"><title>PA references</title></head><body><ol>${papers.map(htmlEntry).join("")}</ol></body></html>`;
+  if (format === "html") return `<!doctype html><html><head><meta charset="utf-8"><title>Stacks references</title></head><body><ol>${papers.map(htmlEntry).join("")}</ol></body></html>`;
   return JSON.stringify(papers.map((paper) => ({
     id: paper.id,
     title: paper.title,

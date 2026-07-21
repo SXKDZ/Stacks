@@ -25,7 +25,7 @@ from pathlib import Path
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Back up a PA library to OneDrive")
+    parser = argparse.ArgumentParser(description="Back up a Stacks library to OneDrive")
     parser.add_argument("--local", required=True)
     parser.add_argument("--database", required=True)
     parser.add_argument("--remote", required=True)
@@ -119,14 +119,14 @@ def clear_stale_lock(path):
     except Exception:
         path.unlink()
         return
-    raise RuntimeError("Another PA backup is already running.")
+    raise RuntimeError("Another Stacks backup is already running.")
 
 
 @contextmanager
 def sync_locks(local_directory, remote_directory):
     lock_paths = [
-        local_directory / ".pa_sync.lock",
-        remote_directory / ".pa_sync.lock",
+        local_directory / ".stacks_sync.lock",
+        remote_directory / ".stacks_sync.lock",
     ]
     for path in lock_paths:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -153,7 +153,7 @@ def sync_locks(local_directory, remote_directory):
 
 def backup_database(local_database, remote_database, result):
     """Write a consistent copy of the live database to the backup folder."""
-    result["progress"].append({"message": "Backing up the PA database"})
+    result["progress"].append({"message": "Backing up the Stacks database"})
     if remote_database.exists() and database_hash(local_database) == database_hash(remote_database):
         return
     copy_database(local_database, remote_database)
@@ -208,7 +208,7 @@ def main():
     remote_database = remote_directory / "library.db"
     if not local_database.exists():
         raise FileNotFoundError(
-            "PA library database not found at {}".format(local_database)
+            "Stacks library database not found at {}".format(local_database)
         )
     if local_directory == remote_directory:
         raise ValueError("The backup folder must be different from the live library.")

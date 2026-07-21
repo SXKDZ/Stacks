@@ -8,7 +8,7 @@ import { safeFetch } from "@/app/lib/url-safety";
 import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
 
 /**
- * Local filesystem companion for PA's self-contained library folder. All PDF
+ * Local filesystem companion for Stacks's self-contained library folder. All PDF
  * and HTML snapshot assets live under `libraryRoot()/pdfs` and
  * `libraryRoot()/html_snapshots`; nothing is read from the legacy `.papercli`
  * or `.wrangler` locations.
@@ -47,7 +47,7 @@ export function storedFileExists(kind: AcquisitionKind, name: string | null): bo
 }
 
 /**
- * Delete a PA-managed asset by its stored (portable) filename. Only removes
+ * Delete a Stacks-managed asset by its stored (portable) filename. Only removes
  * files inside the managed pdfs/ or html_snapshots/ directory — a value that
  * isn't a bare filename (e.g. contains a path separator) is ignored, so this
  * can never reach outside the library folder. Returns true if a file was removed.
@@ -224,11 +224,11 @@ async function readRequestBytes(request: Request, maxBytes: number): Promise<Buf
 }
 
 export async function importLocalFile(request: Request): Promise<{ storedPath: string; fileUrl: string }> {
-  const kind = request.headers.get("x-pa-file-kind");
+  const kind = request.headers.get("x-stacks-file-kind");
   if (kind !== "pdf" && kind !== "html") {
     throw new Error("Choose whether this is a PDF or HTML snapshot.");
   }
-  const originalName = decodeURIComponent(request.headers.get("x-pa-file-name") ?? "");
+  const originalName = decodeURIComponent(request.headers.get("x-stacks-file-name") ?? "");
   const targetDirectory = join(libraryRoot(), kind === "pdf" ? "pdfs" : "html_snapshots");
   const allowedExtensions = kind === "pdf" ? new Set([".pdf"]) : new Set([".html", ".htm"]);
   const maxBytes = kind === "pdf" ? PDF_LIMIT : HTML_LIMIT;
@@ -241,7 +241,7 @@ export async function importLocalFile(request: Request): Promise<{ storedPath: s
   writeFileSync(join(targetDirectory, storedPath), contents, { flag: "wx" });
   return {
     storedPath,
-    fileUrl: `/pa-files/${kind === "pdf" ? "pdfs" : "html"}/${encodeURIComponent(storedPath)}`,
+    fileUrl: `/stacks-files/${kind === "pdf" ? "pdfs" : "html"}/${encodeURIComponent(storedPath)}`,
   };
 }
 
@@ -314,7 +314,7 @@ async function fetchWithLimit(
   }
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (declaredLength > maxBytes) {
-    throw new Error("The remote file exceeds PA’s storage limit.");
+    throw new Error("The remote file exceeds Stacks’s storage limit.");
   }
   if (!response.body) {
     throw new Error("The remote source returned an empty response.");
@@ -331,7 +331,7 @@ async function fetchWithLimit(
       received += value.byteLength;
       if (received > maxBytes) {
         await reader.cancel();
-        throw new Error("The remote file exceeds PA’s storage limit.");
+        throw new Error("The remote file exceeds Stacks’s storage limit.");
       }
       chunks.push(Buffer.from(value));
     }
@@ -385,7 +385,7 @@ async function acquirePdf(payload: SourceAcquisitionRequest): Promise<Acquisitio
       if (!existsSync(target)) {
         writeFileSync(target, contents, { flag: "wx" });
       }
-      return { kind: "pdf", storedPath, fileUrl: `/pa-files/pdfs/${encodeURIComponent(storedPath)}`, sourceUrl: candidate.href };
+      return { kind: "pdf", storedPath, fileUrl: `/stacks-files/pdfs/${encodeURIComponent(storedPath)}`, sourceUrl: candidate.href };
     } catch (error) {
       failures.push(`${candidate.hostname}: ${error instanceof Error ? error.message : "download failed"}`);
     }
@@ -412,7 +412,7 @@ async function acquireHtml(payload: SourceAcquisitionRequest): Promise<Acquisiti
   if (!existsSync(target)) {
     writeFileSync(target, snapshot.html, { flag: "wx" });
   }
-  return { kind: "html", storedPath, fileUrl: `/pa-files/html/${encodeURIComponent(storedPath)}`, sourceUrl: source.href };
+  return { kind: "html", storedPath, fileUrl: `/stacks-files/html/${encodeURIComponent(storedPath)}`, sourceUrl: source.href };
 }
 
 export async function acquireSource(payload: SourceAcquisitionRequest): Promise<unknown> {
@@ -447,7 +447,7 @@ export async function acquireSource(payload: SourceAcquisitionRequest): Promise<
 export function revealLocalFile(kind: AcquisitionKind, name: string): void {
   const target = join(storedDirectory(kind), name);
   if (!existsSync(target)) {
-    throw new Error("The stored PA file no longer exists.");
+    throw new Error("The stored Stacks file no longer exists.");
   }
   if (process.platform === "darwin") {
     spawn("open", ["-R", target], { detached: true, stdio: "ignore" }).unref();
@@ -460,7 +460,7 @@ export function revealLocalFile(kind: AcquisitionKind, name: string): void {
   spawn("xdg-open", [dirname(target)], { detached: true, stdio: "ignore" }).unref();
 }
 
-/** Resolve a `/pa-files/<pdfs|html>/<name>` request to a validated absolute path. */
+/** Resolve a `/stacks-files/<pdfs|html>/<name>` request to a validated absolute path. */
 export function resolveStoredFile(kind: string, requestedName: string): { path: string; kind: AcquisitionKind } | null {
   if (!requestedName || basename(requestedName) !== requestedName || (kind !== "pdfs" && kind !== "html")) {
     return null;
@@ -476,7 +476,7 @@ export function resolveStoredFile(kind: string, requestedName: string): { path: 
 
 export async function servePdfFile(filePath: string, rangeHeader: string | null): Promise<Response> {
   if (!existsSync(filePath)) {
-    return Response.json({ error: "The local PA file was not found." }, { status: 404 });
+    return Response.json({ error: "The local Stacks file was not found." }, { status: 404 });
   }
   const fileStat = statSync(filePath);
   const headers = new Headers({
@@ -538,7 +538,7 @@ const READER_STYLES = `<style id="paper-assistant-reader-style">
 
 export function serveHtmlSnapshot(filePath: string): Response {
   if (!existsSync(filePath)) {
-    return Response.json({ error: "The local PA HTML snapshot was not found." }, { status: 404 });
+    return Response.json({ error: "The local Stacks HTML snapshot was not found." }, { status: 404 });
   }
   let html = readFileSync(filePath, "utf8")
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")

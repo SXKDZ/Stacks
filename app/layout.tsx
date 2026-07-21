@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Stacks",
     description:
-      "Read, organize, summarize, and discuss your PA library in one modern workspace.",
+      "Read, organize, summarize, and discuss your Stacks library in one modern workspace.",
     type: "website",
     images: [{ url: "/og-paper-assistant.png", width: 1774, height: 887 }],
   },
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Stacks",
     description:
-      "Read, organize, summarize, and discuss your PA library in one modern workspace.",
+      "Read, organize, summarize, and discuss your Stacks library in one modern workspace.",
     images: ["/og-paper-assistant.png"],
   },
 };

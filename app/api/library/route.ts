@@ -168,13 +168,13 @@ async function readSnapshot() {
       url: paper.url,
       // pdfUrl is the real stored value (an editable/savable field, may be null).
       // pdfViewUrl is what the reader/grounding open — the stored URL, or a
-      // /pa-files path synthesized from the local PDF. Keeping these separate
+      // /stacks-files path synthesized from the local PDF. Keeping these separate
       // stops a synthesized relative path from being persisted or URL-validated.
       pdfUrl: paper.pdfUrl,
-      pdfViewUrl: paper.pdfUrl || (paper.localPath ? `/pa-files/pdfs/${encodeURIComponent(paper.localPath)}` : null),
+      pdfViewUrl: paper.pdfUrl || (paper.localPath ? `/stacks-files/pdfs/${encodeURIComponent(paper.localPath)}` : null),
       localPath: paper.localPath,
       htmlSnapshotPath: paper.htmlSnapshotPath,
-      htmlUrl: paper.htmlSnapshotPath ? `/pa-files/html/${encodeURIComponent(paper.htmlSnapshotPath)}` : null,
+      htmlUrl: paper.htmlSnapshotPath ? `/stacks-files/html/${encodeURIComponent(paper.htmlSnapshotPath)}` : null,
       summary: paper.summary,
       notes: paper.notes,
       readingStatus: paper.readingStatus,

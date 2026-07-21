@@ -553,30 +553,167 @@
 }
 
 /* --- Feed skills editor (Settings → Feed skills) --- */
-/* The rows are the cards, so the container is a plain flex column (no border/bg
-   of its own) to avoid a double border against each row. */
-.feed-skills-editor {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
+/* Master–detail: a compact list of skills on the left (select / reorder /
+   delete / add) and one centralized edit panel on the right. Only the selected
+   skill is expanded, so the page never fills with parallel bordered cards. */
+.feed-skills-manager {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0;
+  gap: 14px;
 }
 
-.feed-skill-row {
-  background: var(--surface-1);
+/* Stacked: the skill list sits in its own bordered panel on top, the editor
+   below. Two distinct-purpose panels, each clearly bounded. */
+.feed-skills-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feed-skills-list {
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--edge-highlight);
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  padding: 12px;
+  gap: 3px;
+  max-height: 292px;
+  overflow-y: auto;
+  padding: 8px;
 }
 
-.feed-skill-row-head {
+.feed-skill-item {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 4px;
+  padding-right: 6px;
+}
+
+.feed-skill-item:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.feed-skill-item.is-active {
+  background: var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 26%, transparent);
+}
+
+.feed-skill-item-main {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  gap: 9px;
+  min-width: 0;
+  padding: 9px 4px 9px 10px;
+  text-align: left;
+}
+
+.feed-skill-item-icon {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  flex-shrink: 0;
+}
+
+.feed-skill-item.is-active .feed-skill-item-icon {
+  color: var(--brand-blue-strong);
+}
+
+.feed-skill-item-label {
+  font-size: var(--type-label);
+  font-weight: 560;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-skill-item.is-active .feed-skill-item-label {
+  color: var(--brand-blue-strong);
+  font-weight: 640;
+}
+
+.feed-skill-item-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.feed-skill-item:hover .feed-skill-item-actions,
+.feed-skill-item.is-active .feed-skill-item-actions {
+  opacity: 1;
+}
+
+.feed-skill-item-actions button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.feed-skill-item-actions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+
+.feed-skill-item-actions button:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+.feed-skill-item-actions button.is-danger:hover {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+
+.feed-skill-add {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  gap: 7px;
+  font-size: var(--type-label);
+  font-weight: 560;
+  justify-content: center;
+  margin-top: 5px;
+  padding: 9px;
+}
+
+.feed-skill-add:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
+  color: var(--brand-blue-strong);
+}
+
+/* The one detail panel: the sole bordered card, so there's no repeated
+   card-on-card separation across the page. */
+.feed-skills-detail {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--edge-highlight);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 15px;
+}
+
+.feed-skill-detail-head {
   align-items: center;
   display: flex;
   gap: 9px;
@@ -598,10 +735,10 @@
   cursor: pointer;
   display: flex;
   gap: 3px;
-  height: 32px;
+  height: 34px;
   justify-content: center;
   list-style: none;
-  padding: 0 7px;
+  padding: 0 8px;
 }
 
 .feed-skill-icon-picker summary::-webkit-details-marker {
@@ -624,6 +761,8 @@
   z-index: 40;
 }
 
+/* The label is the skill's editable name — always show a border so it reads as
+   an input, not a heading. */
 .feed-skill-label-input {
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
@@ -631,51 +770,21 @@
   color: var(--ink);
   flex: 1;
   font: inherit;
-  font-size: var(--type-control);
-  font-weight: 600;
+  font-size: var(--type-body);
+  font-weight: 660;
+  letter-spacing: -0.01em;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 8px 11px;
 }
 
-.feed-skill-label-input:focus,
-.feed-skill-prompt-input:focus {
-  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--line-strong));
+.feed-skill-label-input:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 30%, var(--line-strong));
+}
+
+.feed-skill-label-input:focus {
+  border-color: color-mix(in srgb, var(--brand-blue) 60%, var(--line-strong));
   box-shadow: 0 0 0 3px var(--brand-blue-soft);
   outline: none;
-}
-
-.feed-skill-row-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 4px;
-}
-
-.feed-skill-row-actions button {
-  align-items: center;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  cursor: pointer;
-  display: flex;
-  height: 28px;
-  justify-content: center;
-  min-width: 28px;
-}
-
-.feed-skill-row-actions button:hover:not(:disabled) {
-  background: var(--panel);
-  color: var(--ink);
-}
-
-.feed-skill-row-actions button:disabled {
-  opacity: 0.4;
-}
-
-.feed-skill-row-actions button.is-danger:hover {
-  background: var(--rose-soft);
-  border-color: color-mix(in srgb, var(--rose) 40%, var(--line));
-  color: var(--rose);
 }
 
 .feed-skill-icon-option {
@@ -702,25 +811,46 @@
   color: var(--brand-blue-strong);
 }
 
-.feed-skill-prompt-input {
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--type-control);
+/* The centralized prompt editor fills the detail panel instead of a fixed box. */
+.feed-skills-detail .prompt-code-editor {
+  height: 320px;
+}
+
+.feed-skill-detail-hint {
+  color: var(--soft);
+  font-size: var(--type-micro);
   line-height: 1.5;
-  padding: 9px 11px;
-  resize: vertical;
+  margin: 0;
+}
+
+.feed-skill-detail-hint code {
+  background: var(--surface-2);
+  border-radius: 4px;
+  color: var(--brand-blue-strong);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 4px;
+}
+
+.feed-skill-empty {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  justify-content: center;
+  min-height: 220px;
+  text-align: center;
+}
+
+.feed-skill-empty p {
+  font-size: var(--type-label);
+  margin: 0;
 }
 
 .feed-skills-editor-actions {
   align-items: center;
   display: flex;
-  justify-content: space-between;
-}
-
-.feed-skills-editor-save {
-  display: flex;
   gap: 8px;
+  justify-content: flex-end;
 }

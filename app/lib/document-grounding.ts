@@ -25,7 +25,7 @@ function documentUrl(value: string | null | undefined, requestUrl: string, kind:
     return null;
   }
   if (url.origin === base.origin) {
-    const expectedPrefix = kind === "pdf" ? "/pa-files/pdfs/" : "/pa-files/html/";
+    const expectedPrefix = kind === "pdf" ? "/stacks-files/pdfs/" : "/stacks-files/html/";
     return url.pathname.startsWith(expectedPrefix) ? url : null;
   }
   if (!publicHttpsUrl(url)) {

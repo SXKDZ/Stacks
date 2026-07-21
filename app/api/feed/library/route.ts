@@ -37,13 +37,13 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Send a JSON body with a proposal." }, { status: 400 });
   }
   // Accept either a single {entity,action,...} operation or a { proposals: [...] }
-  // array, or a raw pa-proposals-style array; normalize through the parser.
+  // array, or a raw proposals array; normalize through the parser.
   const source = Array.isArray(body.proposals)
     ? JSON.stringify(body.proposals)
     : body.operation
       ? JSON.stringify([body.operation])
       : JSON.stringify([body]);
-  const operations = parseProposals(`\`\`\`pa-proposals\n${source}\n\`\`\``);
+  const operations = parseProposals(`\`\`\`stacks-proposals\n${source}\n\`\`\``);
   if (!operations.length) {
     return Response.json({ error: "No valid proposals found. Each needs entity, action, and (for update/delete) id." }, { status: 400 });
   }

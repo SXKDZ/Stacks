@@ -8,16 +8,13 @@ import { dirname, join, resolve } from "node:path";
  * database), `settings.json`, and the `pdfs/` and `html_snapshots/` asset
  * directories. OneDrive (if configured) receives a one-way backup of this
  * folder; it is never the live location. Resolution order:
- *   1. STACKS_LIBRARY_DIR (or legacy PA_LIBRARY_DIR) environment variable
- *   2. libraryRoot in ~/.stacks/storage.json (or the legacy ~/.paperassistant one)
+ *   1. STACKS_LIBRARY_DIR environment variable
+ *   2. libraryRoot in ~/.stacks/storage.json
  *   3. ~/.stacks/library (default local location)
  */
 
 const configDir = join(homedir(), ".stacks");
 const storageConfigPath = join(configDir, "storage.json");
-// Config from the previous "Paper Assistant" name; read as a fallback so an
-// existing install keeps working before the user migrates to ~/.stacks.
-const legacyStorageConfigPath = join(homedir(), ".paperassistant", "storage.json");
 const defaultLibraryRoot = join(configDir, "library");
 
 function expandLibraryPath(value: string): string {
@@ -42,11 +39,11 @@ function readStoredRoot(path: string): string | null {
 }
 
 export function libraryRoot(): string {
-  const envDir = process.env.STACKS_LIBRARY_DIR?.trim() || process.env.PA_LIBRARY_DIR?.trim();
+  const envDir = process.env.STACKS_LIBRARY_DIR?.trim();
   if (envDir) {
     return expandLibraryPath(envDir);
   }
-  return readStoredRoot(storageConfigPath) ?? readStoredRoot(legacyStorageConfigPath) ?? defaultLibraryRoot;
+  return readStoredRoot(storageConfigPath) ?? defaultLibraryRoot;
 }
 
 export function databasePath(): string {

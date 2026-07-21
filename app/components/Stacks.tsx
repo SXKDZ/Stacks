@@ -630,7 +630,7 @@ async function extractPdfMetadata(file: Blob, filename: string): Promise<PdfExtr
     method: "POST",
     headers: {
       "Content-Type": "application/pdf",
-      "X-PA-File-Name": encodeURIComponent(filename),
+      "X-Stacks-File-Name": encodeURIComponent(filename),
     },
     body: file,
   });
@@ -2472,7 +2472,7 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
         <div className="discovery-intro">
           <div className="discovery-orbit"><span /><span /><span /><Sparkles size={28} /></div>
           <h2>Search beyond your library.</h2>
-          <p>PA queries academic sources, preserves identifiers and author order, and normalizes new records as they enter your workspace.</p>
+          <p>Stacks queries academic sources, preserves identifiers and author order, and normalizes new records as they enter your workspace.</p>
           <div className="prompt-suggestions">
             {["long-context retrieval agents", "human AI literature review", "scholarly knowledge graphs"].map((suggestion) => (
               <Chip key={suggestion} tone="neutral" onClick={() => setQuery(suggestion)} icon={<WandSparkles />}>{suggestion}</Chip>
@@ -2615,8 +2615,8 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             <ActionButton variant="secondary" onClick={onExport} icon={<Download />}>Export</ActionButton>
           </div>
           <div className="detail-section summary-section">
-            <p className="eyebrow">PA summary</p>
-            {paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet. PA can ground one in the paper’s source and metadata.</p>}
+            <p className="eyebrow">Stacks summary</p>
+            {paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet. Stacks can ground one in the paper’s source and metadata.</p>}
           </div>
           <div className="detail-section">
             <p className="eyebrow">Abstract</p>
@@ -2805,13 +2805,13 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
     }
     setUploading(true);
     try {
-      const payload = await runTask(`Copy ${file.name} into PA storage`, async () => {
+      const payload = await runTask(`Copy ${file.name} into Stacks storage`, async () => {
         const response = await fetch("/api/local-file-import", {
           method: "POST",
           headers: {
             "Content-Type": file.type || "application/octet-stream",
-            "X-PA-File-Kind": kind,
-            "X-PA-File-Name": encodeURIComponent(file.name),
+            "X-Stacks-File-Kind": kind,
+            "X-Stacks-File-Name": encodeURIComponent(file.name),
           },
           body: file,
         });
@@ -2823,7 +2823,7 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
       if (pathInput.current) {
         pathInput.current.value = payload.storedPath;
       }
-      notify(`${file.name} copied into PA’s local ${kind === "pdf" ? "PDF" : "HTML snapshot"} storage.`);
+      notify(`${file.name} copied into Stacks’s local ${kind === "pdf" ? "PDF" : "HTML snapshot"} storage.`);
     } catch (error) {
       notify(error instanceof Error ? error.message : "The local file could not be loaded.", "error");
     } finally {
@@ -2847,7 +2847,7 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
           tabIndex={-1}
         />
       </div>
-      <small>Choose a local file to copy it into PA storage and save its portable relative location.</small>
+      <small>Choose a local file to copy it into Stacks storage and save its portable relative location.</small>
     </label>
   );
 }
@@ -3005,7 +3005,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
         field.dispatchEvent(new Event("input", { bubbles: true }));
         field.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      notify(`${result.kind === "pdf" ? "PDF" : "HTML snapshot"} downloaded into PA storage.`, "success");
+      notify(`${result.kind === "pdf" ? "PDF" : "HTML snapshot"} downloaded into Stacks storage.`, "success");
     } catch (error) {
       notify(error instanceof Error ? error.message : "The source could not be downloaded.", "error");
     } finally {
@@ -3021,7 +3021,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
       {visible.preprint ? <label><span>Category</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
       {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? paper?.arxivId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
-      {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div><small>PA downloads a PDF when one is available; otherwise it stores a local HTML snapshot.</small></label> : null}
+      {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div><small>Stacks downloads a PDF when one is available; otherwise it stores a local HTML snapshot.</small></label> : null}
       {visible.pdf ? <LocalFileField name="localPath" label="Local PDF path" kind="pdf" defaultValue={paper?.localPath ?? ""} notify={notify} /> : null}
       {visible.html ? <LocalFileField name="htmlSnapshotPath" label="Local HTML snapshot path" kind="html" defaultValue={paper?.htmlSnapshotPath ?? ""} notify={notify} /> : null}
     </>
@@ -3080,7 +3080,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
     try {
       return withAcquiredSource(data, await acquirePaperSource(data));
     } catch (error) {
-      notify(`Metadata will still be imported, but PA could not store a local source: ${error instanceof Error ? error.message : "download failed"}`, "info");
+      notify(`Metadata will still be imported, but Stacks could not store a local source: ${error instanceof Error ? error.message : "download failed"}`, "info");
       return data;
     }
   }
@@ -3234,7 +3234,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
       const succeeded = await runTask(`Import and extract ${pdfFile.name}`, async () => {
         const upload = await fetch("/api/local-file-import", {
           method: "POST",
-          headers: { "Content-Type": "application/pdf", "X-PA-File-Kind": "pdf", "X-PA-File-Name": encodeURIComponent(pdfFile.name) },
+          headers: { "Content-Type": "application/pdf", "X-Stacks-File-Kind": "pdf", "X-Stacks-File-Name": encodeURIComponent(pdfFile.name) },
           body: pdfFile,
         });
         if (!upload.ok) {
@@ -3293,7 +3293,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
     }
     const assetStatus = await checkPaperAssets(data);
     if ((assetStatus.localPath && !assetStatus.pdfExists) || (assetStatus.htmlSnapshotPath && !assetStatus.htmlExists)) {
-      notify("The local file path does not exist in PA storage. Choose a file or clear the invalid path.", "error");
+      notify("The local file path does not exist in Stacks storage. Choose a file or clear the invalid path.", "error");
       return;
     }
     data = await runTask(`Store source · ${paperValue(data, "title")}`, () => acquireImportSource(data));
@@ -3330,7 +3330,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             <span>Search in</span>
             {discoveryProviders.map((item) => <TabButton variant="pill" active={provider === item.id} onClick={() => setProvider(item.id)} key={item.id}>{item.label}</TabButton>)}
           </div>
-          {!results.length && !loading ? <div className="modal-placeholder"><span><Compass size={22} /></span><h3>Find a paper anywhere.</h3><p>PA will preserve authors, identifiers, venue metadata, and open-access links.</p></div> : null}
+          {!results.length && !loading ? <div className="modal-placeholder"><span><Compass size={22} /></span><h3>Find a paper anywhere.</h3><p>Stacks will preserve authors, identifiers, venue metadata, and open-access links.</p></div> : null}
           <div className="modal-results">
             {results.map((result) => {
               const key = result.sourceId || result.title;
@@ -3388,7 +3388,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             <div><strong>RIS</strong><small>Imports journal or conference metadata, ordered authors, DOI, URL, and page range.</small></div>
           </div>
           <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />} disabled={loading || !bibliographyFile}>Import bibliography</ActionButton>
-          <p className="identifier-footnote">Every valid record is normalized into PA’s library with linked author and venue records.</p>
+          <p className="identifier-footnote">Every valid record is normalized into Stacks’s library with linked author and venue records.</p>
         </form>
       ) : tab === "pdf" ? (
         <form className="modal-body bibliography-import-form" onSubmit={importLocalPdf}>
@@ -3399,20 +3399,20 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             onDrop={(event) => { event.preventDefault(); setPdfDragActive(false); acceptDroppedPdf(event.dataTransfer.files?.[0]); }}
           >
             <span className="bibliography-upload-icon">{pdfFile ? <Check size={23} /> : <FileSearch size={23} />}</span>
-            <span><strong>{pdfFile?.name ?? "Choose or drop a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : "Drag a PDF here or click to browse. PA copies it locally and extracts metadata from its first pages."}</small></span>
+            <span><strong>{pdfFile?.name ?? "Choose or drop a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : "Drag a PDF here or click to browse. Stacks copies it locally and extracts metadata from its first pages."}</small></span>
             <input type="file" accept=".pdf,application/pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setPdfFile(event.target.files?.[0] ?? null)} />
           </label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <FileSearch size={16} />} disabled={loading || !pdfFile}>Import and extract PDF</ActionButton>
-          <p className="identifier-footnote">Extracted fields remain editable after import. The PDF is served from PA’s local storage.</p>
+          <p className="identifier-footnote">Extracted fields remain editable after import. The PDF is served from Stacks’s local storage.</p>
         </form>
       ) : tab === "url" ? (
         <form className="modal-body import-form" onSubmit={importUrl}>
           <div className="import-illustration"><Upload size={28} /><span /></div>
           <h3>Import from the web</h3>
-          <p>Paste a public article, arXiv, publisher, or PDF URL. Jina Reader extracts clean content and metadata for PA.</p>
+          <p>Paste a public article, arXiv, publisher, or PDF URL. Jina Reader extracts clean content and metadata for Stacks.</p>
           <label className="large-field"><Link2 size={17} /><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://arxiv.org/abs/…" required autoFocus /></label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <WandSparkles size={16} />} disabled={loading || !url.trim()}>Read and import</ActionButton>
-          <small className="privacy-note">Only the URL is sent to Jina Reader. Your local notes stay in PA.</small>
+          <small className="privacy-note">Only the URL is sent to Jina Reader. Your local notes stay in Stacks.</small>
         </form>
       ) : (
         <form className="modal-body entity-form" onSubmit={addManual}>
@@ -3524,7 +3524,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
     setExtracting(true);
     try {
       const payload = await runTask(`Extract PDF metadata · ${paper.title}`, async () => {
-        const fileResponse = await fetch(`/pa-files/pdfs/${encodeURIComponent(path)}`);
+        const fileResponse = await fetch(`/stacks-files/pdfs/${encodeURIComponent(path)}`);
         if (!fileResponse.ok) {
           throw new Error("The stored PDF could not be opened.");
         }
@@ -3623,7 +3623,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
   }
 
   return (
-    <ModalFrame title="Edit paper" subtitle="Update the complete PA record, linked authors, venue, files, summary, and notes." onClose={onClose} className="add-modal edit-paper-modal">
+    <ModalFrame title="Edit paper" subtitle="Update the complete Stacks record, linked authors, venue, files, summary, and notes." onClose={onClose} className="add-modal edit-paper-modal">
       <form ref={formRef} className="edit-paper-modal-form" onSubmit={submit}>
         <div className="modal-body entity-form edit-paper-fields">
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
@@ -3632,7 +3632,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         <AuthorNamesField authors={authors} defaultValue={paper.authors.map((author) => author.displayName).join(", ")} />
         <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} />
         <CollectionNamesField collections={collections} value={collectionNames} onChange={setCollectionNames} />
-        <label className="field-span-2 summary-field"><span className="field-label-action"><span>PA summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><textarea name="summary" rows={5} value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
+        <label className="field-span-2 summary-field"><span className="field-label-action"><span>Stacks summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><textarea name="summary" rows={5} value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
         <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} defaultValue={paper.abstract} /></label>
         <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={4} defaultValue={paper.notes} /></label>
         </div>
@@ -3660,7 +3660,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
             <div className="asset-acquisition-icon"><Download size={22} /></div>
             <div>
               <h3 id="asset-acquisition-title">No local source is available</h3>
-              <p id="asset-acquisition-description">The saved PDF or HTML filename is missing from PA storage. Store a fresh local copy before saving this record?</p>
+              <p id="asset-acquisition-description">The saved PDF or HTML filename is missing from Stacks storage. Store a fresh local copy before saving this record?</p>
             </div>
             <div className="asset-acquisition-actions">
               <ActionButton variant="secondary" onClick={() => setPendingSave(null)} disabled={saving} icon={<X />}>Cancel</ActionButton>
@@ -4007,7 +4007,7 @@ function CommandPalette({ snapshot, onClose, setView, openPaper, addPaper }: {
             );
           }) : <p className="command-empty">No matches for “{query}”.</p>}
         </div>
-        <div className="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>↵</kbd> Open</span><span>PA command palette</span></div>
+        <div className="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>↵</kbd> Open</span><span>Stacks command palette</span></div>
       </section>
     </div>
   );

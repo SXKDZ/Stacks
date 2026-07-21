@@ -1,6 +1,6 @@
-# PA stylesheet architecture
+# Stacks stylesheet architecture
 
-PA uses Tailwind for layout, Lucide for icons, shared React controls for behavior,
+Stacks uses Tailwind for layout, Lucide for icons, shared React controls for behavior,
 and these responsibility-based CSS modules for the application skin. `globals.css`
 is only the ordered import manifest.
 

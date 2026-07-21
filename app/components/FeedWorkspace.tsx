@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Download, GitBranch, LoaderCircle, MoreVertical, Pencil, Plus, Rss, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Pencil, Plus, Rss, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
@@ -21,6 +21,7 @@ interface FeedMessage {
 
 interface FeedProposal {
   id: string;
+  messageId?: string | null;
   operation: string;
   status: string;
   summary: string;
@@ -39,6 +40,23 @@ interface FeedSnippet {
   turns?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// The agent emits its proposed changes as a fenced ```stacks-proposals JSON
+// block. That block is machine markup already parsed into the approve/reject
+// cards, so it doesn't belong inline in the prose bubble. Split it out: render
+// the prose normally, and offer the raw JSON in a collapsible block (like a
+// tool call) for anyone who wants to inspect it.
+function splitProposalBlock(content: string): { prose: string; raw: string | null } {
+  const blocks: string[] = [];
+  const prose = content
+    .replace(/```(?:stacks|pa)-proposals\s*([\s\S]*?)```/gi, (_match, body: string) => {
+      blocks.push(body.trim());
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { prose, raw: blocks.length ? blocks.join("\n\n") : null };
 }
 
 function statusLabel(status: string): string {
@@ -296,6 +314,45 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
 
   const pendingCount = proposals.filter((p) => p.status === "pending").length;
 
+  // Anchor each proposal to the assistant message that produced it, so it renders
+  // inline in the thread instead of always pinned to the bottom. Proposals with
+  // no (or an unknown) message id — e.g. legacy rows or API-created ones — fall
+  // back to a trailing block.
+  const proposalsByMessage = new Map<string, FeedProposal[]>();
+  for (const proposal of proposals) {
+    if (!proposal.messageId) continue;
+    const group = proposalsByMessage.get(proposal.messageId) ?? [];
+    group.push(proposal);
+    proposalsByMessage.set(proposal.messageId, group);
+  }
+  const messageIds = new Set(messages.map((message) => message.id));
+  // Proposals with no anchor message (legacy rows, or ones created via the
+  // library API) can't be interleaved, so they render in a trailing block.
+  const unanchoredProposals = proposals.filter((proposal) => !proposal.messageId || !messageIds.has(proposal.messageId));
+
+  function renderProposals(list: FeedProposal[], key: string): ReactNode {
+    if (!list.length) return null;
+    return (
+      <div className="feed-proposals" key={key}>
+        <h2><Check size={13} /> Proposed library changes</h2>
+        {list.map((proposal) => (
+          <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
+            <div className="feed-proposal-body">
+              <span className="feed-proposal-summary">{proposal.summary}</span>
+              <span className="feed-proposal-status">{proposal.status}</span>
+            </div>
+            {proposal.status === "pending" ? (
+              <div className="feed-proposal-actions">
+                <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
+                <ActionButton variant="primary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <section className="feed-detail">
       <header className="feed-detail-head">
@@ -391,36 +448,33 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                 );
                 continue;
               }
-              nodes.push(
-                <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
-                  <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
-                  <MarkdownContent content={message.content} className="feed-bubble" />
-                </div>,
-              );
+              const { prose, raw } = message.role === "user" ? { prose: message.content, raw: null } : splitProposalBlock(message.content);
+              if (prose) {
+                nodes.push(
+                  <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
+                    <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
+                    <MarkdownContent content={prose} className="feed-bubble" />
+                  </div>,
+                );
+              }
+              if (raw) {
+                nodes.push(
+                  <details key={`${message.id}-raw`} className="feed-tool-call feed-proposal-raw">
+                    <summary><Code2 size={12} /> <span>Proposed changes (raw)</span></summary>
+                    <div className="feed-tool-io"><span className="feed-tool-tag">stacks-proposals</span>{renderToolContent(raw)}</div>
+                  </details>,
+                );
+              }
+              const anchored = proposalsByMessage.get(message.id);
+              if (anchored) {
+                nodes.push(renderProposals(anchored, `props-${message.id}`));
+              }
             }
             return nodes;
           })()}
         </div>
 
-        {proposals.length ? (
-          <div className="feed-proposals">
-            <h2><Check size={13} /> Proposed library changes</h2>
-            {proposals.map((proposal) => (
-              <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
-                <div className="feed-proposal-body">
-                  <span className="feed-proposal-summary">{proposal.summary}</span>
-                  <span className="feed-proposal-status">{proposal.status}</span>
-                </div>
-                {proposal.status === "pending" ? (
-                  <div className="feed-proposal-actions">
-                    <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
-                    <ActionButton variant="primary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {renderProposals(unanchoredProposals, "props-unanchored")}
 
         {error ? <div className="feed-error feed-error-banner"><CircleAlert size={14} /> <span>{error}</span></div> : null}
         </div>

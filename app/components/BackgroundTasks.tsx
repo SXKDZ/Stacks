@@ -24,7 +24,7 @@ interface BackgroundTaskContextValue {
 }
 
 const BackgroundTaskContext = createContext<BackgroundTaskContextValue | null>(null);
-const TASK_HISTORY_KEY = "pa-activity-log-v1";
+const TASK_HISTORY_KEY = "stacks-activity-log-v1";
 
 function readTaskHistory(): BackgroundTask[] {
   if (typeof window === "undefined") {

@@ -10,7 +10,7 @@ import { publicHttpsUrl } from "@/app/lib/url-safety";
  * SECURITY NOTE: a real browser makes its own network requests, so it is NOT
  * covered by the SSRF guards in url-safety — the guards are applied to the
  * top-level URL here (public https only), but sub-resource fetches the page
- * issues are the browser's. PA is a local single-user tool; this is an accepted
+ * issues are the browser's. Stacks is a local single-user tool; this is an accepted
  * trade for full-page fidelity. Do not expose this to untrusted multi-tenant use.
  */
 

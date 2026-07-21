@@ -53,6 +53,7 @@ export async function GET(
         }
         controller.enqueue(frame("proposal", {
           id: proposal.id,
+          messageId: proposal.messageId,
           operation: proposal.operation,
           status: proposal.status,
           summary,

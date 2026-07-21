@@ -45,7 +45,7 @@ test("persists local settings atomically and backs up the normalized library", a
     readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/local-sync/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/local-directory-picker/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../scripts/pa_sync_bridge.py", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/stacks_sync_bridge.py", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../.gitignore", import.meta.url), "utf8"),
   ]);
@@ -63,7 +63,7 @@ test("persists local settings atomically and backs up the normalized library", a
   // Atomic write: temp file + rename.
   assert.match(settings, /settings\.json\.tmp/);
   assert.match(settings, /renameSync\(temporaryPath, path\)/);
-  assert.match(bridge, /pa_sync\.lock/);
+  assert.match(bridge, /stacks_sync\.lock/);
   assert.match(bridge, /html_snapshots/);
   // The backup destination is created if missing and must be outside the live
   // library, but need not pre-exist or be empty.
@@ -281,9 +281,9 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   ]);
   assert.match(tasks, /runTask/);
   assert.match(tasks, /Activity log/);
-  assert.match(tasks, /pa-activity-log-v1/);
+  assert.match(tasks, /stacks-activity-log-v1/);
   assert.match(application, /Generate summary ·/);
-  assert.match(application, /Copy \$\{file\.name\} into PA storage/);
+  assert.match(application, /Copy \$\{file\.name\} into Stacks storage/);
   assert.match(settings, /Back up Stacks library to OneDrive/);
   // Chat is fully removed: no chat route, api, component, or entry points remain.
   assert.doesNotMatch(application, /openChatWorkspace|\/chat/);
@@ -370,7 +370,7 @@ test("backs up the local library one-way to OneDrive without replacing the live 
     await mkdir(remote, { recursive: true });
     await writeFile(join(remote, "unrelated-user-file.txt"), "keep me");
 
-    const bridgePath = fileURLToPath(new URL("../scripts/pa_sync_bridge.py", import.meta.url));
+    const bridgePath = fileURLToPath(new URL("../scripts/stacks_sync_bridge.py", import.meta.url));
     const { stdout } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
     const result = JSON.parse(stdout.trim());
     assert.equal(result.ok, true);

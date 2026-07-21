@@ -83,7 +83,7 @@ const secretKeys = [
   "SERPAPI_KEY",
 ] as const;
 
-const bridgePath = join(process.cwd(), "scripts", "pa_sync_bridge.py");
+const bridgePath = join(process.cwd(), "scripts", "stacks_sync_bridge.py");
 const repositoryRoot = resolve(process.cwd(), "..");
 
 let syncRunning = false;
@@ -193,10 +193,10 @@ function commandOutput(command: string, args: string[]): Promise<string | null> 
 
 export async function chooseDirectory(target: "local" | "remote" | "storage"): Promise<string | null> {
   const prompt = target === "remote"
-    ? "Choose the OneDrive folder for PA sync"
+    ? "Choose the OneDrive folder for Stacks sync"
     : target === "storage"
-      ? "Choose the destination folder for the PA library"
-      : "Choose the local PA data folder containing papers.db";
+      ? "Choose the destination folder for the Stacks library"
+      : "Choose the local Stacks data folder containing papers.db";
   let selected: string | null;
   if (process.platform === "darwin") {
     selected = await commandOutput("osascript", ["-e", `POSIX path of (choose folder with prompt ${JSON.stringify(prompt)})`]);
@@ -391,12 +391,12 @@ function pythonExecutable(): string {
 
 export async function runSync(auto = false): Promise<SyncResult> {
   if (syncRunning) {
-    throw new Error("A PA backup is already running.");
+    throw new Error("A Stacks backup is already running.");
   }
   const localDatabase = databaseSource();
   const remoteDirectory = envValue("STACKS_ONEDRIVE_PATH");
   if (!localDatabase) {
-    throw new Error("The local PA database is not available yet.");
+    throw new Error("The local Stacks database is not available yet.");
   }
   if (!remoteDirectory) {
     throw new Error("Choose a OneDrive backup folder first.");
@@ -469,14 +469,14 @@ export async function runSync(auto = false): Promise<SyncResult> {
       child.on("close", () => {
         clearTimeout(killTimer);
         if (timedOut) {
-          rejectResult(new Error("PA sync timed out after 5 minutes."));
+          rejectResult(new Error("Stacks sync timed out after 5 minutes."));
           return;
         }
         try {
           const lines = output.trim().split(/\r?\n/).filter(Boolean);
           const parsed = JSON.parse(lines.at(-1) ?? "{}") as SyncResult;
           if (!parsed.summary) {
-            throw new Error(errorOutput.trim() || "PA sync returned no result.");
+            throw new Error(errorOutput.trim() || "Stacks sync returned no result.");
           }
           resolveResult(parsed);
         } catch (error) {

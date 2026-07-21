@@ -106,7 +106,7 @@ function fallbackMetadata(text: string, info: Record<string, unknown>, filename:
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const filename = decodeURIComponent(request.headers.get("X-PA-File-Name") || "paper.pdf");
+  const filename = decodeURIComponent(request.headers.get("X-Stacks-File-Name") || "paper.pdf");
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (declaredLength > 50 * 1024 * 1024) {
     return Response.json({ error: "The PDF exceeds the 50 MB extraction limit." }, { status: 413 });
@@ -152,7 +152,7 @@ export async function POST(request: Request): Promise<Response> {
     const fallback = fallbackMetadata(sourceText, info, filename);
     const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
     if (!token) {
-      return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning: "Bedrock is not configured; PA used embedded PDF metadata and text heuristics." });
+      return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning: "Bedrock is not configured; Stacks used embedded PDF metadata and text heuristics." });
     }
 
     const prompt = renderPromptTemplate(template, {

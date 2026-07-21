@@ -132,7 +132,7 @@
   color: var(--muted);
 }
 
-/* Paper details and Ask PA behave as persistent third panels, never modal scrims. */
+/* Paper details and Ask Stacks behave as persistent third panels, never modal scrims. */
 .drawer-layer {
   pointer-events: none;
 }
@@ -484,6 +484,10 @@
 
 .prompt-code-editor .is-code {
   color: var(--amber);
+}
+
+.prompt-code-editor .is-math {
+  color: var(--green);
 }
 
 /* Responsive pagination must not inherit a 520px vertical flex basis. */

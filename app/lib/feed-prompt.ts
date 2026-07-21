@@ -2,8 +2,8 @@
  * Builds the prompt sent to the headless feed agent and parses the library
  * changes it proposes. The agent has no Bash and no API access, so it can never
  * mutate the Stacks library directly. Instead, when a task implies library changes, it emits a
- * fenced ```pa-proposals JSON block; Stacks parses that into proposals the user
- * approves or rejects. Approved proposals are applied through the library route.
+ * fenced ```stacks-proposals JSON block; Stacks parses that into proposals the
+ * user approves or rejects. Approved proposals are applied through the library route.
  */
 
 export interface ProposalOperation {
@@ -44,8 +44,8 @@ RULES:
 - Never claim a change was applied — writes only queue a proposal for approval.
 - Only propose changes the user actually asked for.
 - If curl is unavailable for any reason, fall back to emitting one fenced
-  pa-proposals block (a JSON array of the operations above) at the end of your
-  reply, and Stacks will pick it up.`;
+  stacks-proposals block (a JSON array of the operations above) at the end of
+  your reply, and Stacks will pick it up.`;
 
 interface SnippetAttachment {
   relativePath: string;
@@ -112,7 +112,7 @@ export function buildFollowUpPrompt(input: {
   if (input.attachments?.length) {
     parts.push(`\n${describeAttachments(input.attachments)}`);
   }
-  parts.push("\nContinue. Use the same pa-proposals block format for any new changes.");
+  parts.push("\nContinue. Use the same stacks-proposals block format for any new changes.");
   return parts.join("\n");
 }
 
@@ -146,12 +146,13 @@ export function buildForkPrompt(input: {
 }
 
 /**
- * Extract proposals from an assistant result. Reads the last ```pa-proposals
- * block; tolerates a plain ```json block that is an array of ops as a fallback.
- * Returns validated operations only.
+ * Extract proposals from an assistant result. Reads the last ```stacks-proposals
+ * block (accepting the legacy ```pa-proposals label too); tolerates a plain
+ * ```json block that is an array of ops as a fallback. Returns validated
+ * operations only.
  */
 export function parseProposals(text: string): ProposalOperation[] {
-  const blocks = [...text.matchAll(/```pa-proposals\s*([\s\S]*?)```/gi)].map((match) => match[1]);
+  const blocks = [...text.matchAll(/```(?:stacks|pa)-proposals\s*([\s\S]*?)```/gi)].map((match) => match[1]);
   let raw = blocks.length ? blocks[blocks.length - 1] : "";
   if (!raw) {
     // Fallback: a fenced json block whose content parses to an array of ops.

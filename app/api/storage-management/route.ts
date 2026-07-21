@@ -66,7 +66,7 @@ async function moveLibrary(targetDirectory: string): Promise<string> {
   const target = resolve(targetDirectory.trim());
   const current = resolve(libraryRoot());
   if (!target) {
-    throw new Error("Choose a destination folder for the PA library.");
+    throw new Error("Choose a destination folder for the Stacks library.");
   }
   if (target === current) {
     throw new Error("The destination is already the current library folder.");
@@ -83,7 +83,7 @@ async function moveLibrary(targetDirectory: string): Promise<string> {
       throw new Error("The destination path is a file. Choose a folder.");
     }
     if (existsSync(join(target, "library.db"))) {
-      throw new Error("The destination already contains a PA library (library.db). Choose an empty or new folder.");
+      throw new Error("The destination already contains a Stacks library (library.db). Choose an empty or new folder.");
     }
   }
 
@@ -107,7 +107,7 @@ async function moveLibrary(targetDirectory: string): Promise<string> {
     }
   }
 
-  // Repoint PA at the new folder. getLibraryDb reopens on the changed path.
+  // Repoint Stacks at the new folder. getLibraryDb reopens on the changed path.
   setLibraryRoot(target);
   await ensureDatabase();
   return target;
@@ -120,8 +120,6 @@ const countedTables = [
   "collections",
   "paper_authors",
   "paper_collections",
-  "tags",
-  "paper_tags",
 ] as const;
 
 function absolutePath(value: string | null): boolean {
@@ -146,9 +144,6 @@ function cleanOrphans(raw: import("better-sqlite3").Database): void {
     raw.prepare(`DELETE FROM paper_collections
       WHERE paper_id NOT IN (SELECT id FROM papers)
          OR collection_id NOT IN (SELECT id FROM collections)`).run();
-    raw.prepare(`DELETE FROM paper_tags
-      WHERE paper_id NOT IN (SELECT id FROM papers)
-         OR tag_id NOT IN (SELECT id FROM tags)`).run();
     // Then drop entities left with no papers (dangling associations are gone,
     // so these NOT IN checks see the reconciled join tables).
     raw.prepare("DELETE FROM authors WHERE id NOT IN (SELECT author_id FROM paper_authors)").run();
@@ -194,10 +189,6 @@ async function databaseDiagnostic(clean: boolean) {
     LEFT JOIN papers p ON p.id = pc.paper_id
     LEFT JOIN collections c ON c.id = pc.collection_id
     WHERE p.id IS NULL OR c.id IS NULL`).get() as { count: number };
-  const orphanedTags = raw.prepare(`SELECT COUNT(*) AS count FROM paper_tags pt
-    LEFT JOIN papers p ON p.id = pt.paper_id
-    LEFT JOIN tags t ON t.id = pt.tag_id
-    WHERE p.id IS NULL OR t.id IS NULL`).get() as { count: number };
   const tableCounts = Object.fromEntries(countedTables.map((table) => {
     const result = raw.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
     return [table, Number(result?.count ?? 0)] as const;
@@ -215,7 +206,6 @@ async function databaseDiagnostic(clean: boolean) {
     orphanedAssociations: {
       paperAuthors: Number(orphanedAuthors?.count ?? 0),
       paperCollections: Number(orphanedCollections?.count ?? 0),
-      paperTags: Number(orphanedTags?.count ?? 0),
     },
     orphanedEntities,
     orphanRecords,
@@ -232,7 +222,7 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ error: "Moving the library requires explicit confirmation." }, { status: 400 });
       }
       if (!body.targetDirectory?.trim()) {
-        return Response.json({ error: "Choose a destination folder for the PA library." }, { status: 400 });
+        return Response.json({ error: "Choose a destination folder for the Stacks library." }, { status: 400 });
       }
       await moveLibrary(body.targetDirectory);
       // Fall through to return a fresh inspection of the now-current library.
@@ -313,7 +303,7 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "PA storage could not be inspected." },
+      { error: error instanceof Error ? error.message : "Stacks storage could not be inspected." },
       { status: 400 },
     );
   }
