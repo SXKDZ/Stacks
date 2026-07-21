@@ -27,6 +27,7 @@ import {
   Trash2,
   Users,
   Wrench,
+  X,
 } from "lucide-react";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -36,7 +37,7 @@ import {
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
-import { ActionButton, ActionLink, SelectCard, TabButton } from "@/app/components/ui/controls";
+import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
 import type { Paper } from "@/app/lib/types";
 
 type SettingsTab = "appearance" | "model" | "prompts" | "storage" | "sync" | "integrations" | "about";
@@ -158,6 +159,11 @@ interface StorageReport {
       authors: number;
       venues: number;
       collections: number;
+    };
+    orphanRecords?: {
+      authors: Array<{ id: string; label: string }>;
+      venues: Array<{ id: string; label: string }>;
+      collections: Array<{ id: string; label: string }>;
     };
     absolutePdfPaths: string[];
     absoluteHtmlPaths: string[];
@@ -318,6 +324,8 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [selectingStorageDirectory, setSelectingStorageDirectory] = useState(false);
   const [storageTarget, setStorageTarget] = useState("");
   const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
+  const [doctorModal, setDoctorModal] = useState<{ label: string; detail: string; records?: Array<{ id: string; label: string; kind: string }> } | null>(null);
+  const [removingOrphans, setRemovingOrphans] = useState(false);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
   const [endpoint, setEndpoint] = useState("/api/local-settings");
   const [models, setModels] = useState<BedrockModelOption[]>([]);
@@ -699,6 +707,27 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
   }
 
+  async function removeOrphans() {
+    setRemovingOrphans(true);
+    try {
+      const response = await fetch("/api/storage-management", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "clean-orphans", confirmed: true }),
+      });
+      if (!response.ok) {
+        throw new Error(await errorMessage(response));
+      }
+      setStorageReport(await response.json() as StorageReport);
+      setDoctorModal(null);
+      notify("Removed orphaned records.", "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Stacks could not remove the orphaned records.", "error");
+    } finally {
+      setRemovingOrphans(false);
+    }
+  }
+
   async function moveLibrary() {
     const targetPath = storageTarget.trim();
     if (!targetPath) {
@@ -862,9 +891,17 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                     <DoctorMetric icon={<DatabaseBackup size={17} />} label="Library database" value={storageReport.databaseHealth ? storageReport.databaseHealth.integrityOk && !storageReport.databaseHealth.foreignKeyViolations ? "Healthy" : "Needs attention" : storageReport.databasePresent ? "Available" : "Missing"} detail={`${storageReport.paperRecords} papers · ${storageReport.databaseHealth?.foreignKeyViolations ?? 0} FK violations`} tone={storageReport.databaseHealth ? storageReport.databaseHealth.integrityOk && !storageReport.databaseHealth.foreignKeyViolations ? "good" : "bad" : storageReport.databasePresent ? "good" : "bad"} />
                     <DoctorMetric icon={<DatabaseBackup size={17} />} label="Associations" value={`${storageReport.databaseHealth ? Object.values(storageReport.databaseHealth.orphanedAssociations).reduce((sum, count) => sum + count, 0) : 0} orphaned`} detail={storageReport.databaseHealth?.foreignKeyEnforced ? "Foreign keys are enforced" : "Foreign-key enforcement unavailable"} tone={storageReport.databaseHealth && (storageReport.databaseHealth.foreignKeyViolations || Object.values(storageReport.databaseHealth.orphanedAssociations).some(Boolean)) ? "bad" : "good"} />
                     {storageReport.databaseHealth?.orphanedEntities ? (() => {
-                      const entities = storageReport.databaseHealth.orphanedEntities;
+                      const entities = storageReport.databaseHealth!.orphanedEntities!;
                       const total = entities.authors + entities.venues + entities.collections;
-                      return <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${total} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={total ? "warn" : "good"} />;
+                      const records = storageReport.databaseHealth?.orphanRecords;
+                      const list = records
+                        ? [
+                            ...records.authors.map((item) => ({ ...item, kind: "author" })),
+                            ...records.venues.map((item) => ({ ...item, kind: "venue" })),
+                            ...records.collections.map((item) => ({ ...item, kind: "collection" })),
+                          ]
+                        : [];
+                      return <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${total} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={total ? "warn" : "good"} onClick={total ? () => setDoctorModal({ label: "Orphaned records", detail: "Authors, venues, and collections with no papers. Removing them deletes only these empty records — no paper is affected.", records: list }) : undefined} />;
                     })() : null}
                     <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedPdfFiles} referenced` : `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}`} tone={storageReport.missingPdfFiles ? "bad" : "good"} />
                     <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={storageReport.capabilities?.fileChecks === false ? `${storageReport.referencedHtmlFiles} referenced` : `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked`} detail={storageReport.capabilities?.fileChecks === false ? "Physical-file checks require local mode" : `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}`} tone={storageReport.missingHtmlFiles ? "bad" : "good"} />
@@ -948,6 +985,35 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           </section>
         ) : null}
       </div>
+
+      {doctorModal ? (
+        <>
+          <Scrim onClick={() => setDoctorModal(null)} label="Close dialog" fixed />
+          <div className="doctor-modal" role="dialog" aria-modal="true" aria-label={doctorModal.label}>
+            <header className="doctor-modal-head">
+              <h2>{doctorModal.label}</h2>
+              <button type="button" className="doctor-modal-close" onClick={() => setDoctorModal(null)} aria-label="Close"><X size={16} /></button>
+            </header>
+            <p className="doctor-modal-detail">{doctorModal.detail}</p>
+            {doctorModal.records && doctorModal.records.length ? (
+              <ul className="doctor-modal-list">
+                {doctorModal.records.map((record) => (
+                  <li key={`${record.kind}-${record.id}`}>
+                    <span className="doctor-modal-kind">{record.kind}</span>
+                    <span>{record.label}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {doctorModal.records ? (
+              <footer className="doctor-modal-foot">
+                <ActionButton variant="secondary" size="small" onClick={() => setDoctorModal(null)}>Close</ActionButton>
+                <ActionButton variant="danger" size="small" disabled={removingOrphans || !doctorModal.records.length} onClick={() => void removeOrphans()} icon={removingOrphans ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}>Remove orphaned records</ActionButton>
+              </footer>
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -956,14 +1022,19 @@ function SettingsHeading({ icon, title, detail }: { icon: ReactNode; title: stri
   return <div className="settings-heading"><span>{icon}</span><div><h2>{title}</h2><p>{detail}</p></div></div>;
 }
 
-function DoctorMetric({ icon, label, value, detail, tone }: {
+function DoctorMetric({ icon, label, value, detail, tone, onClick }: {
   icon: ReactNode;
   label: string;
   value: string;
   detail: string;
   tone: "good" | "warn" | "bad";
+  onClick?: () => void;
 }) {
-  return <div className={`storage-doctor-metric is-${tone}`}><span>{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></div>;
+  const body = <><span>{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></>;
+  if (onClick) {
+    return <button type="button" className={`storage-doctor-metric is-${tone} is-clickable`} onClick={onClick}>{body}</button>;
+  }
+  return <div className={`storage-doctor-metric is-${tone}`}>{body}</div>;
 }
 
 function DoctorPaths({ label, paths }: { label: string; paths: string[] }) {

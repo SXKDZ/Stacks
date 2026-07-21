@@ -42,10 +42,18 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface StorageManagementRequest {
-  operation?: "inspect" | "clean" | "repair" | "move";
+  operation?: "inspect" | "clean" | "repair" | "clean-orphans" | "move";
   confirmed?: boolean;
   targetDirectory?: string;
 }
+
+// The actual orphaned entity records (id + label), so the Doctor can list them
+// before the user removes them — not just a count.
+const orphanRecordQueries = {
+  authors: "SELECT id, display_name AS label FROM authors WHERE id NOT IN (SELECT author_id FROM paper_authors) ORDER BY display_name",
+  venues: "SELECT id, name AS label FROM venues WHERE id NOT IN (SELECT venue_id FROM papers WHERE venue_id IS NOT NULL) ORDER BY name",
+  collections: "SELECT id, name AS label FROM collections WHERE id NOT IN (SELECT collection_id FROM paper_collections) ORDER BY name",
+} as const;
 
 /**
  * Move the whole library to `targetDirectory`: a transactionally-consistent
@@ -130,30 +138,42 @@ const orphanedEntityQueries = {
   collections: "SELECT COUNT(*) AS count FROM collections WHERE id NOT IN (SELECT collection_id FROM paper_collections)",
 } as const;
 
+/** Remove dangling associations and then any entities left with no papers. */
+function cleanOrphans(raw: import("better-sqlite3").Database): void {
+  const cleanup = raw.transaction(() => {
+    raw.prepare(`DELETE FROM paper_authors
+      WHERE paper_id NOT IN (SELECT id FROM papers)
+         OR author_id NOT IN (SELECT id FROM authors)`).run();
+    raw.prepare(`DELETE FROM paper_collections
+      WHERE paper_id NOT IN (SELECT id FROM papers)
+         OR collection_id NOT IN (SELECT id FROM collections)`).run();
+    raw.prepare(`DELETE FROM paper_tags
+      WHERE paper_id NOT IN (SELECT id FROM papers)
+         OR tag_id NOT IN (SELECT id FROM tags)`).run();
+    // Then drop entities left with no papers (dangling associations are gone,
+    // so these NOT IN checks see the reconciled join tables).
+    raw.prepare("DELETE FROM authors WHERE id NOT IN (SELECT author_id FROM paper_authors)").run();
+    raw.prepare("DELETE FROM venues WHERE id NOT IN (SELECT venue_id FROM papers WHERE venue_id IS NOT NULL)").run();
+    raw.prepare("DELETE FROM collections WHERE id NOT IN (SELECT collection_id FROM paper_collections)").run();
+  });
+  cleanup();
+}
+
 async function databaseDiagnostic(clean: boolean) {
   const database = await ensureDatabase();
   // PRAGMAs, orphan cleanup, and per-table counts are maintenance SQL that maps
   // cleanly to the raw connection Drizzle owns; run them there.
   const raw = database.$client;
   if (clean) {
-    const cleanup = raw.transaction(() => {
-      raw.prepare(`DELETE FROM paper_authors
-        WHERE paper_id NOT IN (SELECT id FROM papers)
-           OR author_id NOT IN (SELECT id FROM authors)`).run();
-      raw.prepare(`DELETE FROM paper_collections
-        WHERE paper_id NOT IN (SELECT id FROM papers)
-           OR collection_id NOT IN (SELECT id FROM collections)`).run();
-      raw.prepare(`DELETE FROM paper_tags
-        WHERE paper_id NOT IN (SELECT id FROM papers)
-           OR tag_id NOT IN (SELECT id FROM tags)`).run();
-      // Then drop entities left with no papers (dangling associations are gone,
-      // so these NOT IN checks see the reconciled join tables).
-      raw.prepare("DELETE FROM authors WHERE id NOT IN (SELECT author_id FROM paper_authors)").run();
-      raw.prepare("DELETE FROM venues WHERE id NOT IN (SELECT venue_id FROM papers WHERE venue_id IS NOT NULL)").run();
-      raw.prepare("DELETE FROM collections WHERE id NOT IN (SELECT collection_id FROM paper_collections)").run();
-    });
-    cleanup();
+    cleanOrphans(raw);
   }
+  // The actual orphaned records (capped), so the Doctor can list them.
+  const orphanRecords = Object.fromEntries(
+    Object.entries(orphanRecordQueries).map(([key, query]) => {
+      const rows = raw.prepare(`${query} LIMIT 200`).all() as Array<{ id: string; label: string }>;
+      return [key, rows] as const;
+    }),
+  ) as Record<keyof typeof orphanRecordQueries, Array<{ id: string; label: string }>>;
   const orphanedEntities = Object.fromEntries(
     Object.entries(orphanedEntityQueries).map(([key, query]) => {
       const row = raw.prepare(query).get() as { count: number };
@@ -199,6 +219,7 @@ async function databaseDiagnostic(clean: boolean) {
       paperTags: Number(orphanedTags?.count ?? 0),
     },
     orphanedEntities,
+    orphanRecords,
     absolutePdfPaths,
     absoluteHtmlPaths,
   };
@@ -216,6 +237,15 @@ export async function POST(request: Request): Promise<Response> {
       }
       await moveLibrary(body.targetDirectory);
       // Fall through to return a fresh inspection of the now-current library.
+    }
+    // A targeted orphan cleanup: remove dangling associations + entities with no
+    // papers, without the full path-repair pass.
+    if (body.operation === "clean-orphans") {
+      if (!body.confirmed) {
+        return Response.json({ error: "Removing orphaned records requires explicit confirmation." }, { status: 400 });
+      }
+      const database = await ensureDatabase();
+      cleanOrphans(database.$client);
     }
     const clean = body.operation === "clean" || body.operation === "repair";
     if (clean && !body.confirmed) {

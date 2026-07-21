@@ -171,6 +171,117 @@
   margin: 4px 0 0;
 }
 
+/* A clickable metric opens a detail modal; it reads as interactive on hover. */
+.storage-doctor-metric.is-clickable {
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--motion-control), background var(--motion-control);
+  width: 100%;
+}
+
+.storage-doctor-metric.is-clickable:hover {
+  background: color-mix(in srgb, var(--panel) 88%, var(--brand-blue-soft));
+  border-color: color-mix(in srgb, var(--brand-blue) 34%, var(--line-strong));
+}
+
+/* Library Doctor detail modal: a centered dialog listing the affected records. */
+.doctor-modal {
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  left: 50%;
+  max-height: min(600px, 84vh);
+  max-width: 520px;
+  padding: 18px 20px;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 48px);
+  z-index: 1100;
+}
+
+.doctor-modal-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.doctor-modal-head h2 {
+  color: var(--ink);
+  font-size: var(--type-heading-small);
+  font-weight: 640;
+  margin: 0;
+}
+
+.doctor-modal-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.doctor-modal-close:hover {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.doctor-modal-detail {
+  color: var(--muted);
+  font-size: var(--type-control);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.doctor-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.doctor-modal-list li {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  display: flex;
+  font-size: var(--type-control);
+  gap: 10px;
+  padding: 7px 9px;
+}
+
+.doctor-modal-list li:nth-child(odd) {
+  background: var(--panel);
+}
+
+.doctor-modal-kind {
+  color: var(--soft);
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  min-width: 74px;
+  text-transform: uppercase;
+}
+
+.doctor-modal-foot {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .storage-doctor-paths {
   border-top: 1px solid var(--line);
   padding: 0 16px;
