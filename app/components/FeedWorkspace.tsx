@@ -711,9 +711,9 @@ export default function FeedWorkspace() {
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
           <div className="feed-list-head-actions">
             {githubReady ? (
-              <ActionButton variant="ghost" size="icon" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync with GitHub inbox" title="Sync with GitHub inbox" icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} />
+              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} title="Sync with the GitHub inbox" icon={syncing ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}>Sync</ActionButton>
             ) : null}
-            <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New feed</ActionButton>
+            <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New</ActionButton>
           </div>
         </header>
         {notice ? <p className={`feed-sync-notice is-${notice.tone}`}>{notice.message}</p> : null}

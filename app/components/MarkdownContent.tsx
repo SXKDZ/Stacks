@@ -37,8 +37,13 @@ function normalizeLatexDelimiters(source: string): string {
         return part;
       }
       return normalizeLatexLists(part)
-        .replace(/\\\[([\s\S]*?)\\\]/g, (_, expression: string) => `\n$$\n${expression.trim()}\n$$\n`)
-        .replace(/\\\((.*?)\\\)/g, (_, expression: string) => `$${expression.trim()}$`);
+        .replace(/\\\[([\s\S]*?)\\\]/g, (_, expression: string) => `\n\n$$\n${expression.trim()}\n$$\n\n`)
+        .replace(/\\\((.*?)\\\)/g, (_, expression: string) => `$${expression.trim()}$`)
+        // remark-math only treats $$…$$ as *display* math when the fences sit on
+        // their own lines. Agents routinely write $$…$$ inline, which parses as
+        // inline math (small, left-aligned), so hoist any inline $$…$$ onto its
+        // own lines to render as a centered display block.
+        .replace(/(^|[^$])\$\$([^$\n][\s\S]*?)\$\$(?!\$)/g, (_, before: string, expression: string) => `${before}\n\n$$\n${expression.trim()}\n$$\n\n`);
     })
     .join("");
 }
