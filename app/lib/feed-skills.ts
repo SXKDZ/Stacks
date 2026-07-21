@@ -1,4 +1,4 @@
-import { BookmarkPlus, FileText, GitCompare, ListChecks, type LucideIcon, Sparkles, Tag, Wand2, Wrench } from "lucide-react";
+import { BookmarkPlus, BookOpen, Brain, FileSearch, FileText, FlaskConical, GitCompare, Highlighter, Languages, Lightbulb, ListChecks, type LucideIcon, MessageSquareText, NotebookPen, Quote, Scale, Sigma, Sparkles, Tag, Telescope, Wand2, Wrench } from "lucide-react";
 
 /**
  * Feed skills: pickable starting prompts for common tasks. Users can add, edit,
@@ -25,6 +25,19 @@ export const FEED_SKILL_ICONS: Record<string, LucideIcon> = {
   tag: Tag,
   wand: Wand2,
   wrench: Wrench,
+  read: BookOpen,
+  brain: Brain,
+  search: FileSearch,
+  experiment: FlaskConical,
+  highlight: Highlighter,
+  translate: Languages,
+  idea: Lightbulb,
+  discuss: MessageSquareText,
+  note: NotebookPen,
+  quote: Quote,
+  weigh: Scale,
+  math: Sigma,
+  explore: Telescope,
 };
 
 export const DEFAULT_FEED_SKILL_ICON = "sparkles";

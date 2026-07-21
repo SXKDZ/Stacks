@@ -1075,19 +1075,21 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
         return (
           <div className="feed-skill-row" key={skill.id}>
             <div className="feed-skill-row-head">
-              <span className="feed-skill-icon-preview"><Icon size={16} /></span>
+              <details className="feed-skill-icon-picker">
+                <summary aria-label="Choose an icon"><Icon size={16} /><ChevronDown size={13} /></summary>
+                <div className="feed-skill-icon-menu">
+                  {iconNames.map((name) => {
+                    const OptionIcon = feedSkillIcon(name);
+                    return <button type="button" key={name} className={`feed-skill-icon-option ${skill.icon === name ? "is-selected" : ""}`} onClick={(event) => { update(skill.id, { icon: name }); event.currentTarget.closest("details")?.removeAttribute("open"); }} aria-label={`Icon ${name}`} aria-pressed={skill.icon === name}><OptionIcon size={15} /></button>;
+                  })}
+                </div>
+              </details>
               <input className="feed-skill-label-input" value={skill.label} maxLength={60} placeholder="Skill name" onChange={(event) => update(skill.id, { label: event.target.value })} />
               <div className="feed-skill-row-actions">
                 <button type="button" onClick={() => move(skill.id, -1)} disabled={index === 0} aria-label="Move up">↑</button>
                 <button type="button" onClick={() => move(skill.id, 1)} disabled={index === skills.length - 1} aria-label="Move down">↓</button>
                 <button type="button" className="is-danger" onClick={() => remove(skill.id)} aria-label="Remove skill"><Trash2 size={14} /></button>
               </div>
-            </div>
-            <div className="feed-skill-icons">
-              {iconNames.map((name) => {
-                const OptionIcon = feedSkillIcon(name);
-                return <button type="button" key={name} className={`feed-skill-icon-option ${skill.icon === name ? "is-selected" : ""}`} onClick={() => update(skill.id, { icon: name })} aria-label={`Icon ${name}`} aria-pressed={skill.icon === name}><OptionIcon size={15} /></button>;
-              })}
             </div>
             <textarea className="feed-skill-prompt-input" value={skill.prompt} rows={3} placeholder="The prompt this skill drops into the composer…" onChange={(event) => update(skill.id, { prompt: event.target.value })} />
           </div>

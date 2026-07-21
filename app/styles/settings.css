@@ -553,15 +553,23 @@
 }
 
 /* --- Feed skills editor (Settings → Feed skills) --- */
+/* The rows are the cards, so the container is a plain flex column (no border/bg
+   of its own) to avoid a double border against each row. */
 .feed-skills-editor {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 0;
 }
 
 .feed-skill-row {
+  background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
+  box-shadow: var(--edge-highlight);
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -574,16 +582,46 @@
   gap: 9px;
 }
 
-.feed-skill-icon-preview {
+/* Icon picker: a compact dropdown (the current icon + a chevron) that opens a
+   grid popover, instead of always showing every icon inline. */
+.feed-skill-icon-picker {
+  flex-shrink: 0;
+  position: relative;
+}
+
+.feed-skill-icon-picker summary {
   align-items: center;
   background: var(--brand-blue-soft);
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 30%, transparent);
   border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
+  cursor: pointer;
   display: flex;
-  flex-shrink: 0;
-  height: 30px;
+  gap: 3px;
+  height: 32px;
   justify-content: center;
-  width: 30px;
+  list-style: none;
+  padding: 0 7px;
+}
+
+.feed-skill-icon-picker summary::-webkit-details-marker {
+  display: none;
+}
+
+.feed-skill-icon-menu {
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(6, 1fr);
+  left: 0;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 6px);
+  width: max-content;
+  z-index: 40;
 }
 
 .feed-skill-label-input {
@@ -638,12 +676,6 @@
   background: var(--rose-soft);
   border-color: color-mix(in srgb, var(--rose) 40%, var(--line));
   color: var(--rose);
-}
-
-.feed-skill-icons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
 }
 
 .feed-skill-icon-option {
