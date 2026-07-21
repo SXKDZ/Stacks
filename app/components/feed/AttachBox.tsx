@@ -214,28 +214,30 @@ export function AttachBox({
         </div>
       ) : null}
 
-      <textarea
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            void submit(event);
-          }
-        }}
-        placeholder={placeholder}
-        rows={compact ? 2 : 3}
-        autoFocus={autoFocus}
-      />
+      <div className="feed-dock-input">
+        <textarea
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              void submit(event);
+            }
+          }}
+          placeholder={placeholder}
+          rows={compact ? 2 : 3}
+          autoFocus={autoFocus}
+        />
 
-      <div className="feed-dock-actions">
-        <div className="feed-dock-tools">
-          <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
-          <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file"><Paperclip size={16} /></button>
-          <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library"><BookOpen size={16} /></button>
-        </div>
-        <div className="feed-dock-send">
-          {hint ? <span className="feed-dock-hint">{hint}</span> : null}
-          <ActionButton type="submit" variant="primary" size={compact ? "small" : undefined} disabled={!canSubmit} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>{submitLabel}</ActionButton>
+        <div className="feed-dock-actions">
+          <div className="feed-dock-tools">
+            <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
+            <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file"><Paperclip size={16} /></button>
+            <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library"><BookOpen size={16} /></button>
+          </div>
+          <div className="feed-dock-send">
+            {hint ? <span className="feed-dock-hint">{hint}</span> : null}
+            <ActionButton type="submit" variant="primary" size={compact ? "small" : undefined} disabled={!canSubmit} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>{submitLabel}</ActionButton>
+          </div>
         </div>
       </div>
 

@@ -1253,31 +1253,38 @@
   color: var(--ink);
 }
 
-/* The docked composer: a single elevated input with a subtle brand ring on
-   focus. Sits at the bottom of the compose column. */
+/* The docked composer: the attachment tray and the text input are two separate
+   boxes stacked with a gap, so the tray reads as its own space rather than
+   being crammed inside the input frame. */
 .feed-dock {
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   gap: 8px;
   margin-top: 24px;
-  padding: 12px 12px 10px;
   position: relative;
+}
+
+/* The text input + action row: the elevated, focus-ringed box. */
+.feed-dock-input {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 10px;
   transition: border-color var(--motion-control), box-shadow var(--motion-control);
 }
 
-.feed-dock:focus-within {
+.feed-dock-input:focus-within {
   border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--line-strong));
   box-shadow: 0 0 0 4px var(--brand-blue-soft);
 }
 
-.feed-dock.is-dragging {
+.feed-dock.is-dragging .feed-dock-input {
   border-color: var(--brand-blue);
   border-style: dashed;
-  position: relative;
 }
 
 .feed-drop-hint {
@@ -1369,12 +1376,15 @@
 /* Attachment chips above the composer input. Capped at two rows so a large
    selection scrolls instead of pushing the textarea off-screen. */
 .feed-attach-tray {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 68px;
+  max-height: 78px;
   overflow-y: auto;
-  padding: 2px 4px 4px;
+  padding: 8px;
 }
 
 .feed-chip {
