@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, LoaderCircle, Plus, Rss, Square, Wrench, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Download, GitBranch, LoaderCircle, MoreVertical, Pencil, Plus, Rss, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { Brand } from "@/app/components/ui/Brand";
@@ -137,25 +137,51 @@ function relativeTime(iso: string): string {
 
 /**
  * A single row in the left list: status glyph, title, and a relative timestamp,
- * on one line so the console scales to dozens of interactions. Purely
- * presentational — statuses stay fresh through the parent's poll.
+ * on one line so the console scales to dozens of interactions, plus an overflow
+ * menu (rename / fork / export / delete). Statuses stay fresh via the poll.
  */
-function FeedRow({ snippet, active, onSelect }: {
+function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDelete }: {
   snippet: FeedSnippet;
   active: boolean;
   onSelect: () => void;
+  onRename: () => void;
+  onFork: () => void;
+  onExport: () => void;
+  onDelete: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+    };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  const run = (action: () => void) => () => { setMenuOpen(false); action(); };
+
   return (
-    <button
-      type="button"
-      className={`feed-row feed-row-${snippet.status} ${active ? "is-active" : ""}`}
-      onClick={onSelect}
-      aria-current={active}
-    >
-      <span className={`feed-row-glyph feed-status-${snippet.status}`}><StatusGlyph status={snippet.status} /></span>
-      <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
-      <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>
-    </button>
+    <div className={`feed-row feed-row-${snippet.status} ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}`}>
+      <button type="button" className="feed-row-main" onClick={onSelect} aria-current={active}>
+        <span className={`feed-row-glyph feed-status-${snippet.status}`}><StatusGlyph status={snippet.status} /></span>
+        <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
+        <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>
+      </button>
+      <div className="feed-row-menu" ref={menuRef}>
+        <button type="button" className="feed-row-kebab" onClick={() => setMenuOpen((open) => !open)} aria-label="More actions" aria-haspopup="menu" aria-expanded={menuOpen}><MoreVertical size={15} /></button>
+        {menuOpen ? (
+          <div className="feed-row-menu-list" role="menu">
+            <button type="button" role="menuitem" onClick={run(onRename)}><Pencil size={14} /> Rename</button>
+            <button type="button" role="menuitem" onClick={run(onFork)}><GitBranch size={14} /> Fork</button>
+            <button type="button" role="menuitem" onClick={run(onExport)}><Download size={14} /> Export</button>
+            <button type="button" role="menuitem" className="is-danger" onClick={run(onDelete)}><Trash2 size={14} /> Delete</button>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -502,6 +528,58 @@ export default function FeedWorkspace() {
     }
   }
 
+  async function renameSnippet(snippet: FeedSnippet) {
+    const next = window.prompt("Rename this feed", snippet.title || snippet.instruction || "")?.trim();
+    if (!next || next === snippet.title) return;
+    const response = await fetch(`/api/feed/snippets/${snippet.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: next }),
+    });
+    if (response.ok) await loadSnippets();
+  }
+
+  async function forkSnippet(snippet: FeedSnippet) {
+    const response = await fetch(`/api/feed/snippets/${snippet.id}/fork`, { method: "POST" });
+    if (response.ok) {
+      const { id } = await response.json() as { id: string };
+      await loadSnippets();
+      setComposing(false);
+      setSelectedId(id);
+    }
+  }
+
+  async function deleteSnippet(snippet: FeedSnippet) {
+    if (!window.confirm(`Delete "${snippet.title || snippet.instruction || "this feed"}"? This cannot be undone.`)) return;
+    const response = await fetch(`/api/feed/snippets/${snippet.id}`, { method: "DELETE" });
+    if (response.ok) {
+      if (selectedId === snippet.id) setSelectedId(null);
+      await loadSnippets();
+    }
+  }
+
+  async function exportSnippet(snippet: FeedSnippet) {
+    const response = await fetch(`/api/feed/snippets/${snippet.id}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json() as { messages: FeedMessage[] };
+    const title = snippet.title || snippet.instruction || "feed";
+    const lines = [`# ${title}`, ""];
+    for (const message of data.messages) {
+      if (message.kind === "text" || message.kind === "result") {
+        lines.push(`**${message.role === "user" ? "You" : "Agent"}:** ${message.content}`, "");
+      } else if (message.kind === "tool_use") {
+        lines.push(`> \`${message.content}\``, "");
+      }
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${title.replace(/[^\w.-]+/g, "_").slice(0, 80) || "feed"}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!ready) {
     return <main className="chat-workspace-loading"><span className="assistant-orb"><Rss size={18} /></span><p>Opening your feed…</p></main>;
   }
@@ -527,6 +605,10 @@ export default function FeedWorkspace() {
                 snippet={snippet}
                 active={snippet.id === selectedId && !composing}
                 onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                onRename={() => void renameSnippet(snippet)}
+                onFork={() => void forkSnippet(snippet)}
+                onExport={() => void exportSnippet(snippet)}
+                onDelete={() => void deleteSnippet(snippet)}
               />
             ))
           )}

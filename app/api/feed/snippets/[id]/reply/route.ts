@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
-import { buildFollowUpPrompt } from "@/app/lib/feed-prompt";
+import { buildFollowUpPrompt, buildForkPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 
 export const dynamic = "force-dynamic";
@@ -42,9 +42,6 @@ export async function POST(
   if (!snippet) {
     return Response.json({ error: "Snippet not found." }, { status: 404 });
   }
-  if (!snippet.sessionId) {
-    return Response.json({ error: "This snippet has no resumable session yet." }, { status: 409 });
-  }
   if (isFeedRunning(id)) {
     return Response.json({ error: "The agent is still working on this snippet." }, { status: 409 });
   }
@@ -69,8 +66,25 @@ export async function POST(
     .values({ id: `msg-${crypto.randomUUID()}`, snippetId: id, role: "user", kind: "text", content: displayReply, createdAt: new Date().toISOString() })
     .run();
 
-  const prompt = buildFollowUpPrompt({ reply, appliedSummaries, rejectedSummaries, attachments });
-  void runFeedAgent({ snippetId: id, sessionId: snippet.sessionId, prompt, resume: true }).catch(() => {});
+  if (snippet.sessionId) {
+    // Existing session: resume it with the follow-up.
+    const prompt = buildFollowUpPrompt({ reply, appliedSummaries, rejectedSummaries, attachments });
+    void runFeedAgent({ snippetId: id, sessionId: snippet.sessionId, prompt, resume: true }).catch(() => {});
+  } else {
+    // No session yet (a forked thread): start a fresh session seeded with the
+    // copied conversation as a transcript so the branch keeps its context.
+    const history = database
+      .select()
+      .from(feedMessages)
+      .where(eq(feedMessages.snippetId, id))
+      .orderBy(asc(feedMessages.createdAt))
+      .all()
+      .filter((message) => message.kind === "text" || message.kind === "result")
+      .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
+      .join("\n\n");
+    const prompt = buildForkPrompt({ reply, transcript: history, attachments });
+    void runFeedAgent({ snippetId: id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
+  }
 
   return Response.json({ ok: true });
 }

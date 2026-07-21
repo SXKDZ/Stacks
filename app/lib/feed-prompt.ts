@@ -117,6 +117,35 @@ export function buildFollowUpPrompt(input: {
 }
 
 /**
+ * Prompt for the first turn of a FORKED thread. The fork runs in a fresh agent
+ * session, so it has no built-in memory of the parent conversation; we seed it
+ * with a transcript of the copied history, then the user's new message.
+ */
+export function buildForkPrompt(input: {
+  reply: string;
+  transcript: string;
+  attachments?: SnippetAttachment[];
+}): string {
+  const parts: string[] = [
+    "You are the Stacks AI feed agent. This is a forked continuation of an earlier",
+    "conversation. Here is the transcript so far, for context:",
+    "",
+    input.transcript,
+    "",
+    PROPOSAL_INSTRUCTIONS,
+    "",
+    "The user now continues the conversation:",
+  ];
+  if (input.reply.trim()) {
+    parts.push(input.reply.trim());
+  }
+  if (input.attachments?.length) {
+    parts.push(`\n${describeAttachments(input.attachments)}`);
+  }
+  return parts.join("\n");
+}
+
+/**
  * Extract proposals from an assistant result. Reads the last ```pa-proposals
  * block; tolerates a plain ```json block that is an array of ops as a fallback.
  * Returns validated operations only.

@@ -955,20 +955,13 @@
   padding: 16px 8px;
 }
 
-/* A single-line row: status glyph, title, relative time. Dense so a dozen-plus
-   interactions stay scannable; the active row reads as selected with a flat tint. */
+/* A single-line row: status glyph, title, relative time, plus an overflow menu
+   revealed on hover. Dense so a dozen-plus interactions stay scannable; the
+   active row reads as selected with a flat tint. */
 .feed-row {
-  align-items: center;
-  background: transparent;
-  border: 0;
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  display: flex;
-  gap: 10px;
-  padding: 9px 10px;
-  text-align: left;
+  position: relative;
   transition: background var(--motion-fast);
-  width: 100%;
 }
 
 .feed-row:hover {
@@ -977,6 +970,18 @@
 
 .feed-row.is-active {
   background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+.feed-row-main {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 9px 10px;
+  text-align: left;
+  width: 100%;
 }
 
 .feed-row-glyph {
@@ -1011,6 +1016,95 @@
   flex-shrink: 0;
   font-size: var(--type-caption);
   font-variant-numeric: tabular-nums;
+}
+
+/* The kebab sits over the time; on hover/menu-open it replaces the time. */
+.feed-row-menu {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.feed-row-kebab {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--soft);
+  cursor: pointer;
+  display: none;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.feed-row:hover .feed-row-kebab,
+.feed-row.menu-open .feed-row-kebab {
+  display: flex;
+}
+
+.feed-row:hover .feed-row-time,
+.feed-row.menu-open .feed-row-time {
+  visibility: hidden;
+}
+
+.feed-row-kebab:hover {
+  background: var(--line-strong);
+  color: var(--ink);
+}
+
+.feed-row-menu-list {
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 150px;
+  padding: 5px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+}
+
+.feed-row-menu-list button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--type-control);
+  gap: 9px;
+  padding: 7px 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.feed-row-menu-list button svg {
+  color: var(--soft);
+}
+
+.feed-row-menu-list button:hover {
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue-strong);
+}
+
+.feed-row-menu-list button:hover svg {
+  color: var(--brand-blue-strong);
+}
+
+.feed-row-menu-list button.is-danger:hover {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+
+.feed-row-menu-list button.is-danger:hover svg {
+  color: var(--rose);
 }
 
 /* Right pane: the selected thread, or an empty prompt. */
