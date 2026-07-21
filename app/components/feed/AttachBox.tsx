@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, FileText, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { BookOpen, Check, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { ActionButton } from "@/app/components/ui/controls";
 
@@ -68,7 +68,12 @@ export function AttachBox({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const trayRef = useRef<HTMLDivElement>(null);
 
-  const hasAttachments = files.length > 0 || papers.length > 0;
+  // Pasted long text becomes an editable text attachment (chip), not textarea fill.
+  const [texts, setTexts] = useState<Array<{ id: string; name: string; content: string }>>([]);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<{ id: string; name: string; content: string } | null>(null);
+
+  const hasAttachments = files.length > 0 || papers.length > 0 || texts.length > 0;
 
   // Keep the newest chip in view when the (height-capped, scrollable) tray grows.
   useEffect(() => {
@@ -117,14 +122,23 @@ export function AttachBox({
   async function submit(event: FormEvent | ReactKeyboardEvent) {
     event.preventDefault();
     if (!canSubmit) return;
-    const cleared = await onSubmit({ text: text.trim(), files, paperIds: papers.map((p) => p.id) });
+    // Text attachments ride along as .txt files the agent reads from its dir.
+    const textFiles = texts.map((entry, index) =>
+      new File([entry.content], `pasted-${index + 1}.txt`, { type: "text/plain" }),
+    );
+    const cleared = await onSubmit({ text: text.trim(), files: [...files, ...textFiles], paperIds: papers.map((p) => p.id) });
     if (cleared) {
       setText("");
       setFiles([]);
       setPapers([]);
+      setTexts([]);
       setPickerOpen(false);
       setPickerQuery("");
     }
+  }
+
+  function addText(content: string, name = "Pasted text") {
+    setTexts((current) => [...current, { id: `txt-${current.length}-${content.length}`, name, content }]);
   }
 
   function handlePaste(event: ReactClipboardEvent) {
@@ -132,6 +146,14 @@ export function AttachBox({
     if (pasted.length) {
       event.preventDefault();
       addFiles(pasted);
+      return;
+    }
+    // A very long paste is treated as a text attachment rather than filling the
+    // input, so the composer stays readable. Short pastes fall through normally.
+    const pastedText = event.clipboardData?.getData("text/plain") ?? "";
+    if (pastedText.length > 1500) {
+      event.preventDefault();
+      addText(pastedText);
     }
   }
 
@@ -164,14 +186,27 @@ export function AttachBox({
               <button type="button" onClick={() => togglePaper(paper)} aria-label={`Remove ${paper.title}`}><X size={12} /></button>
             </span>
           ))}
+          {texts.map((entry) => (
+            <span key={entry.id} className="feed-chip">
+              <button type="button" className="feed-chip-open" onClick={() => setEditingText(entry)} title="Edit text">
+                <FileText size={12} />
+                <span className="feed-chip-label">{entry.name}</span>
+              </button>
+              <button type="button" onClick={() => setTexts((current) => current.filter((item) => item.id !== entry.id))} aria-label={`Remove ${entry.name}`}><X size={12} /></button>
+            </span>
+          ))}
           {files.map((file, index) => {
             const preview = previews.get(file);
             return (
-              <span key={`${file.name}-${index}`} className={`feed-chip ${preview ? "feed-chip-image" : ""}`}>
-                {preview
-                  ? <img src={preview} alt="" className="feed-chip-thumb" />
-                  : <FileText size={12} />}
-                <span className="feed-chip-label">{file.name || "image"}</span>
+              <span key={`${file.name}-${index}`} className="feed-chip">
+                {preview ? (
+                  <button type="button" className="feed-chip-open" onClick={() => setZoomedImage(preview)} title="View image">
+                    <span className="feed-chip-preview"><ImageIcon size={12} /><img src={preview} alt="" /></span>
+                    <span className="feed-chip-label">{file.name || "image"}</span>
+                  </button>
+                ) : (
+                  <><FileText size={12} /><span className="feed-chip-label">{file.name}</span></>
+                )}
                 <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} aria-label={`Remove ${file.name || "image"}`}><X size={12} /></button>
               </span>
             );
@@ -229,6 +264,39 @@ export function AttachBox({
                   );
                 })}
               {library.length === 0 ? <p className="feed-picker-empty">Your library is empty.</p> : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {zoomedImage ? (
+        <div className="feed-picker-scrim" onClick={() => setZoomedImage(null)}>
+          <img src={zoomedImage} alt="" className="feed-image-zoom" onClick={(event) => event.stopPropagation()} />
+        </div>
+      ) : null}
+
+      {editingText ? (
+        <div className="feed-picker-scrim" onClick={() => setEditingText(null)}>
+          <div className="feed-picker feed-text-editor" onClick={(event) => event.stopPropagation()}>
+            <header className="feed-picker-head">
+              <strong>{editingText.name}</strong>
+              <button type="button" className="feed-tool-btn" onClick={() => setEditingText(null)} aria-label="Close"><X size={16} /></button>
+            </header>
+            <textarea
+              className="feed-text-editor-area"
+              value={editingText.content}
+              onChange={(event) => setEditingText((current) => (current ? { ...current, content: event.target.value } : current))}
+              autoFocus
+            />
+            <div className="feed-picker-foot">
+              <ActionButton
+                variant="primary"
+                size="small"
+                onClick={() => {
+                  setTexts((current) => current.map((item) => (item.id === editingText.id ? editingText : item)));
+                  setEditingText(null);
+                }}
+              >Done</ActionButton>
             </div>
           </div>
         </div>

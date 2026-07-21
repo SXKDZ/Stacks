@@ -1196,21 +1196,9 @@
   padding: 4px 6px 4px 10px;
 }
 
-.feed-chip svg:first-child {
+.feed-chip > svg:first-child {
   color: var(--brand-blue-strong);
   flex-shrink: 0;
-}
-
-.feed-chip-image {
-  padding-left: 4px;
-}
-
-.feed-chip-thumb {
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  height: 22px;
-  object-fit: cover;
-  width: 22px;
 }
 
 .feed-chip-label {
@@ -1220,7 +1208,54 @@
   white-space: nowrap;
 }
 
-.feed-chip button {
+/* The chip's clickable label area (opens a preview/edit modal). */
+.feed-chip-open {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+}
+
+.feed-chip-open svg {
+  color: var(--brand-blue-strong);
+  flex-shrink: 0;
+}
+
+.feed-chip-open:hover .feed-chip-label {
+  text-decoration: underline;
+}
+
+/* An image chip shows a generic icon; the real image floats in on hover. */
+.feed-chip-preview {
+  align-items: center;
+  display: inline-flex;
+  position: relative;
+}
+
+.feed-chip-preview img {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  bottom: calc(100% + 8px);
+  box-shadow: var(--shadow-2);
+  display: none;
+  left: 0;
+  max-height: 220px;
+  max-width: 280px;
+  position: absolute;
+  z-index: 20;
+}
+
+.feed-chip-preview:hover img {
+  display: block;
+}
+
+/* The round remove (X) button on a chip. */
+.feed-chip > button:last-child {
   align-items: center;
   background: transparent;
   border: 0;
@@ -1234,9 +1269,42 @@
   width: 18px;
 }
 
-.feed-chip button:hover {
+.feed-chip > button:last-child:hover {
   background: var(--line-strong);
   color: var(--ink);
+}
+
+/* Full-size image zoom + text editor modals (reuse the picker scrim). */
+.feed-image-zoom {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  max-height: 88vh;
+  max-width: 88vw;
+  object-fit: contain;
+}
+
+.feed-text-editor {
+  width: min(680px, 100%);
+}
+
+.feed-text-editor-area {
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  line-height: 1.6;
+  min-height: 300px;
+  outline: none;
+  padding: 12px 14px;
+  resize: vertical;
+  white-space: pre-wrap;
+}
+
+.feed-picker-foot {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* Library paper picker: a search box + scrollable list under the composer. */
