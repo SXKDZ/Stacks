@@ -29,7 +29,6 @@ import {
   ListFilter,
   LoaderCircle,
   Menu,
-  Moon,
   PanelRightClose,
   Pencil,
   Plus,
@@ -39,7 +38,6 @@ import {
   Settings2,
   Sparkles,
   Star,
-  Sun,
   Trash2,
   Upload,
   UsersRound,
@@ -53,7 +51,9 @@ import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
+import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 import { ActionButton, ActionLink, Chip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
+import { useTheme } from "@/app/lib/use-theme";
 import {
   downloadReferences,
   exportReferences,
@@ -271,7 +271,6 @@ interface ToastState {
   tone: "success" | "error" | "info";
 }
 
-type ThemeMode = "dark" | "light";
 type LibraryFilterKind = "author" | "venue" | "collection" | "year";
 type LibraryFilterJoin = "AND" | "OR";
 type LibraryFilterOption = { id: string; label: string };
@@ -678,8 +677,7 @@ function StacksWorkspace() {
   const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
   const [selectedVenues, setSelectedVenues] = useState<string[]>([]);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [themeReady, setThemeReady] = useState(false);
+  const { theme, setTheme } = useTheme();
   const [libraryName, setLibraryName] = useState("My Paper Library");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilterClause[]>([]);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -757,34 +755,23 @@ function StacksWorkspace() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  // Theme is owned by the shared useTheme store; only the library name is
+  // persisted locally here.
+  const [libraryNameReady, setLibraryNameReady] = useState(false);
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const savedTheme = window.localStorage.getItem("pa-theme");
-      const documentTheme = document.documentElement.dataset.theme;
-      const nextTheme = savedTheme === "light" || savedTheme === "dark"
-        ? savedTheme
-        : documentTheme === "light"
-          ? "light"
-          : "dark";
-      setTheme(nextTheme);
-      const savedLibraryName = window.localStorage.getItem("pa-library-name")?.trim();
-      if (savedLibraryName) {
-        setLibraryName(savedLibraryName);
-      }
-      setThemeReady(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
+    const savedLibraryName = window.localStorage.getItem("pa-library-name")?.trim();
+    if (savedLibraryName) {
+      setLibraryName(savedLibraryName);
+    }
+    setLibraryNameReady(true);
   }, []);
 
   useEffect(() => {
-    if (!themeReady) {
+    if (!libraryNameReady) {
       return;
     }
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem("pa-theme", theme);
     window.localStorage.setItem("pa-library-name", libraryName.trim() || "My Paper Library");
-  }, [libraryName, theme, themeReady]);
+  }, [libraryName, libraryNameReady]);
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
@@ -959,14 +946,7 @@ function StacksWorkspace() {
             <span className="shortcut"><Command size={12} /> K</span>
           </button>
           <div className="topbar-actions">
-            <ActionButton
-              variant="secondary"
-              size="icon"
-              onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
-              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-              title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-              icon={theme === "dark" ? <Sun /> : <Moon />}
-            />
+            <ThemeToggle />
           </div>
         </header>
 

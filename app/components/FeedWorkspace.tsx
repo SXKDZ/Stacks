@@ -1,13 +1,13 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, CircleDot, LoaderCircle, Moon, Plus, Rss, Square, Sun, Wrench, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleDot, LoaderCircle, Plus, Rss, Square, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
-import { useTheme } from "@/app/lib/use-theme";
+import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 
 interface FeedMessage {
   id: string;
@@ -371,7 +371,6 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
 }
 
 export default function FeedWorkspace() {
-  const { theme, toggleTheme } = useTheme();
   const [ready, setReady] = useState(false);
   const [snippets, setSnippets] = useState<FeedSnippet[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -474,7 +473,7 @@ export default function FeedWorkspace() {
   return (
     <main className={`feed-page ${showDetail || composing ? "has-selection" : ""}`}>
       <div className="feed-theme-toggle">
-        <ActionButton variant="secondary" size="icon" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} icon={theme === "dark" ? <Sun /> : <Moon />} />
+        <ThemeToggle />
       </div>
       <aside className="feed-list-pane">
         <header className="feed-list-head">
