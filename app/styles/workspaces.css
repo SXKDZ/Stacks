@@ -1028,26 +1028,36 @@
   top: 16px;
 }
 
-/* Empty state: a centered hero prompt above a bottom-docked composer, so
-   starting a new feed reads like a chat entry point (Paper Scout style). */
+/* Empty state: a centered hero prompt with a bottom-docked composer, so
+   starting a new feed reads like a chat entry point (Paper Scout style). The
+   dock is pinned to the bottom and taken out of the hero's centering flow, so
+   growing it (attachments) never shifts the hero. */
 .feed-compose {
   display: flex;
   flex-direction: column;
   height: 100%;
-  justify-content: center;
   margin: 0 auto;
   max-width: 680px;
   padding: 24px 24px 40px;
+  position: relative;
   width: 100%;
 }
 
 .feed-compose-hero {
-  flex: 1;
+  bottom: 200px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   justify-content: center;
+  left: 24px;
+  position: absolute;
+  right: 24px;
   text-align: center;
+  top: 0;
+}
+
+.feed-compose .feed-dock {
+  margin-top: auto;
 }
 
 .feed-compose-hero h2 {
@@ -1582,6 +1592,13 @@
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
   color: #fff;
   padding: 9px 13px;
+}
+
+/* On the blue user bubble the global brand-tint selection is invisible; use a
+   white wash so selected text stays readable. */
+.feed-turn-user .feed-bubble ::selection {
+  background: rgba(255, 255, 255, 0.32);
+  color: #fff;
 }
 
 /* Links and inline code stay legible on the blue user bubble. */
