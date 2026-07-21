@@ -1389,15 +1389,15 @@ body.is-resizing-chat {
 
 .pagination-jump input {
   background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   color: var(--ink);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   height: 30px;
   outline: 0;
   padding: 0 6px;
   text-align: center;
-  width: 48px;
+  width: 46px;
 }
 
 .pagination-jump input:focus {

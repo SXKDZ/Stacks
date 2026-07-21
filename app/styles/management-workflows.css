@@ -1582,7 +1582,7 @@
   border-top: 1px solid var(--line);
   color: var(--muted);
   display: flex;
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   justify-content: space-between;
   min-height: 46px;
   padding: 7px 14px;
@@ -1597,10 +1597,10 @@
 
 .table-pagination-controls select {
   background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   color: var(--ink);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   height: 30px;
   padding: 0 25px 0 8px;
 }
