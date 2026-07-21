@@ -4,6 +4,7 @@ import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Download, GitBra
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
+import { FEED_SKILLS } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
@@ -640,6 +641,16 @@ export default function FeedWorkspace() {
             <div className="feed-compose-hero">
               <h2>What should the agent work on?</h2>
               <p>Paste a link or a note, attach a paper or file, and say what to do. It proposes changes; you approve them.</p>
+              <div className="feed-skills">
+                {FEED_SKILLS.map((skill) => {
+                  const Icon = skill.icon;
+                  return (
+                    <button type="button" key={skill.id} className="feed-skill" onClick={() => setInitialText(skill.prompt)}>
+                      <Icon size={14} /> {skill.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <AttachBox
               key={`${initialText}:${initialPapers.map((p) => p.id).join(",")}`}

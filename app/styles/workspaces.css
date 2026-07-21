@@ -1206,6 +1206,40 @@
   max-width: 480px;
 }
 
+/* Pickable starter skills: click one to seed the composer with its prompt. */
+.feed-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.feed-skill {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--type-control);
+  font-weight: 550;
+  gap: 6px;
+  padding: 6px 12px;
+  transition: border-color var(--motion-control), background var(--motion-control), color var(--motion-control);
+}
+
+.feed-skill svg {
+  color: var(--brand-blue-strong);
+}
+
+.feed-skill:hover {
+  background: var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 40%, var(--line-strong));
+  color: var(--ink);
+}
+
 /* The docked composer: a single elevated input with a subtle brand ring on
    focus. Sits at the bottom of the compose column. */
 .feed-dock {
