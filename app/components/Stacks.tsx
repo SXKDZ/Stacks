@@ -1248,7 +1248,7 @@ function Dashboard({
             </div>
             <div className="continue-actions">
               <ActionButton variant="primary" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
-              <ActionButton variant="light" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Discuss in feed</ActionButton>
+              <ActionButton variant="secondary" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Discuss in feed</ActionButton>
             </div>
           </div>
           <div className="continue-visual" aria-hidden="true">
