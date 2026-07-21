@@ -127,6 +127,34 @@ function envValue(key: string, fallback = ""): string {
   return (structuredValue(readStructuredSettings(), key) ?? process.env[key] ?? fallback).trim();
 }
 
+// The runtime keys the AI routes read (model, prompts, secrets, region, etc.).
+// This is the single source that resolveRuntimeValues layers over process.env,
+// resolved from settings.json — there is no separate app_settings store.
+const runtimeKeys = [
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "AWS_REGION",
+  "BEDROCK_MODEL_ID",
+  "STACKS_MAX_TOKENS",
+  "STACKS_EXTRACTION_SYSTEM_PROMPT",
+  "STACKS_SUMMARY_SYSTEM_PROMPT",
+  "STACKS_TEMPERATURE",
+  "SEMANTIC_SCHOLAR_API_KEY",
+  "SERPAPI_KEY",
+] as const;
+
+/** The persisted runtime values (from settings.json) for the AI routes. */
+export function runtimeValues(): Record<string, string> {
+  const settings = readStructuredSettings();
+  const values: Record<string, string> = {};
+  for (const key of runtimeKeys) {
+    const value = structuredValue(settings, key);
+    if (value?.trim()) {
+      values[key] = value.trim();
+    }
+  }
+  return values;
+}
+
 function truthy(value: string): boolean {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }

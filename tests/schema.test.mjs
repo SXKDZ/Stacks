@@ -104,20 +104,24 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {
-  const [bootstrap, settingsRoute, settingsStore, doctor, grounding, settingsView, version] = await Promise.all([
+  const [bootstrap, localSettings, runtimeConfig, doctor, grounding, settingsView, version] = await Promise.all([
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/settings/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/lib/settings-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/local-settings.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/runtime-config.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/storage-management/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/document-grounding.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/version/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS app_settings/);
-  assert.match(settingsRoute, /saveStoredSettings/);
-  assert.doesNotMatch(settingsRoute, /501|Not implemented/i);
-  // Preferences persist to the app_settings table through the Drizzle ORM.
-  assert.match(settingsStore, /appSettings/);
+  // Settings have one source of truth: settings.json (local-settings). The
+  // parallel app_settings DB table and settings-store are retired.
+  assert.doesNotMatch(bootstrap, /CREATE TABLE IF NOT EXISTS app_settings/);
+  assert.match(bootstrap, /DROP TABLE IF EXISTS app_settings/);
+  assert.match(localSettings, /export function runtimeValues/);
+  assert.match(runtimeConfig, /runtimeValues/);
+  assert.doesNotMatch(runtimeConfig, /settings-store/);
+  assert.match(settingsView, /"\/api\/local-settings"/);
+  assert.doesNotMatch(settingsView, /"\/api\/settings"/);
   assert.match(doctor, /PRAGMA quick_check/);
   assert.match(doctor, /PRAGMA foreign_key_check/);
   assert.match(doctor, /orphanedAssociations/);

@@ -122,7 +122,6 @@ const countedTables = [
   "paper_collections",
   "tags",
   "paper_tags",
-  "app_settings",
 ] as const;
 
 function absolutePath(value: string | null): boolean {

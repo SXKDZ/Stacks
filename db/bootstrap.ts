@@ -79,11 +79,6 @@ const schemaStatements = [
     tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (paper_id, tag_id)
   )`,
-  `CREATE TABLE IF NOT EXISTS app_settings (
-    id TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`,
   `CREATE TABLE IF NOT EXISTS feed_snippets (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL DEFAULT '',
@@ -255,6 +250,9 @@ async function initializeDatabase(): Promise<void> {
       raw.prepare(`ALTER TABLE feed_snippets ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();
     }
   }
+  // Settings now live solely in the library's settings.json; the old
+  // app_settings table (a parallel source of truth) is retired.
+  raw.prepare("DROP TABLE IF EXISTS app_settings").run();
   if (existingPaperColumns.has("citation_count")) {
     raw.prepare("ALTER TABLE papers DROP COLUMN citation_count").run();
   }

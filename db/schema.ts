@@ -156,12 +156,6 @@ export const paperTags = sqliteTable(
   (table) => [primaryKey({ columns: [table.paperId, table.tagId] })],
 );
 
-export const appSettings = sqliteTable("app_settings", {
-  id: text("id").primaryKey(),
-  value: text("value").notNull(),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
-
 // --- AI feed: an opt-in notebook driving headless claude -p agents ---
 
 export const feedSnippets = sqliteTable(

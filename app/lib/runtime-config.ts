@@ -25,8 +25,8 @@ export async function resolveRuntimeValues(): Promise<RuntimeValues> {
   // no host/localhost gating — the AI routes get the token wherever they run.
   const values = environmentValues();
   try {
-    const { storedRuntimeValues } = await import("@/app/lib/settings-store");
-    Object.assign(values, await storedRuntimeValues());
+    const { runtimeValues } = await import("@/app/lib/local-settings");
+    Object.assign(values, runtimeValues());
   } catch {
     // A settings-free runtime can still use deployment environment values.
   }

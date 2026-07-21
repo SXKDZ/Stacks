@@ -308,7 +308,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [doctorModal, setDoctorModal] = useState<{ label: string; detail: string; records?: Array<{ id: string; label: string; kind: string }> } | null>(null);
   const [removingOrphans, setRemovingOrphans] = useState(false);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
-  const [endpoint, setEndpoint] = useState("/api/local-settings");
   const [models, setModels] = useState<BedrockModelOption[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [testingModel, setTestingModel] = useState(false);
@@ -327,19 +326,13 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      let response = await fetch("/api/local-settings", { cache: "no-store" });
-      let selectedEndpoint = "/api/local-settings";
-      if (!response.ok) {
-        response = await fetch("/api/settings", { cache: "no-store" });
-        selectedEndpoint = "/api/settings";
-      }
+      const response = await fetch("/api/local-settings", { cache: "no-store" });
       if (!response.ok) {
         throw new Error(await errorMessage(response));
       }
       const payload = (await response.json()) as SettingsSnapshot;
       setSettings({ ...payload, ai: { ...payload.ai, modelId: normalizedModelId(payload.ai.modelId) } });
       setModelAccess(null);
-      setEndpoint(selectedEndpoint);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Settings could not be loaded.", "error");
     } finally {
@@ -503,7 +496,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     event?.preventDefault();
     setSaving(true);
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/local-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: settingsData() }),
