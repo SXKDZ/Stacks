@@ -11,6 +11,7 @@ import {
   getCommentBody,
   listComments,
   listOpenIssues,
+  patchIssueState,
   patchIssueTitle,
   postComment,
   uploadAttachment,
@@ -113,7 +114,7 @@ export async function POST(): Promise<Response> {
   const config: GitHubConfig = { repo, token };
 
   const database = await ensureDatabase();
-  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0 };
+  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0, issuesClosed: 0, issuesReopened: 0 };
   const since = readGithubLastSyncedAt();
   // Stamp the high-water mark from BEFORE the network calls, so anything that
   // changes mid-sync is re-examined next time rather than skipped.
@@ -141,6 +142,20 @@ export async function POST(): Promise<Response> {
         database.update(feedSnippets).set({ issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
         feed.issueTitleSynced = feed.title;
         counts.titlesRenamed += 1;
+      }
+
+      // Mirror the collapsed flag to the issue's open/closed state, but only when
+      // it changed since the last sync (issueStateSynced is the 3-way base). A
+      // freshly created issue is already open, so it baselines without an API call.
+      const desiredState = feed.collapsed ? "closed" : "open";
+      const stateBase = feed.issueStateSynced ?? "open";
+      if (desiredState !== stateBase) {
+        await patchIssueState(config, issueNumber, desiredState);
+        counts[desiredState === "closed" ? "issuesClosed" : "issuesReopened"] += 1;
+      }
+      if (feed.issueStateSynced !== desiredState) {
+        database.update(feedSnippets).set({ issueStateSynced: desiredState }).where(eq(feedSnippets.id, feed.id)).run();
+        feed.issueStateSynced = desiredState;
       }
       const messages = database
         .select()

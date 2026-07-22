@@ -80,6 +80,8 @@ const schemaStatements = [
     error TEXT,
     issue_number INTEGER,
     issue_title_synced TEXT,
+    collapsed INTEGER NOT NULL DEFAULT 0,
+    issue_state_synced TEXT,
     attachments TEXT,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
@@ -232,6 +234,13 @@ async function initializeDatabase(): Promise<void> {
   }
   if (feedSnippetColumns.has("workflow_steps")) {
     raw.prepare("ALTER TABLE feed_snippets DROP COLUMN workflow_steps").run();
+  }
+  // Add the collapse-feature columns to feeds created before it existed.
+  if (!feedSnippetColumns.has("collapsed")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0").run();
+  }
+  if (!feedSnippetColumns.has("issue_state_synced")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_state_synced TEXT").run();
   }
   // Backfill a spread of accent colors onto any collections created before the
   // color column existed (deterministic from the id, so it never shifts).

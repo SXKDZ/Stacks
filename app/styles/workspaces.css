@@ -417,6 +417,46 @@
   padding: 16px 8px;
 }
 
+/* Collapsed feeds group under a collapsible section header, just below the
+   active feeds (not pinned to the bottom). */
+.feed-collapsed-group {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 6px;
+  padding-top: 4px;
+}
+
+.feed-collapsed-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--type-label);
+  font-weight: 600;
+  gap: 6px;
+  letter-spacing: 0.02em;
+  padding: 8px 10px;
+  text-transform: uppercase;
+}
+
+.feed-collapsed-toggle:hover {
+  color: var(--ink);
+}
+
+.feed-collapsed-count {
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  margin-left: auto;
+  padding: 1px 7px;
+}
+
 /* A single-line row: status glyph, title, relative time, plus an overflow menu
    revealed on hover. Dense so a dozen-plus interactions stay scannable; the
    active row reads as selected with a flat tint. */
@@ -1258,6 +1298,40 @@
   height: 3px;
   opacity: 0.6;
   width: 3px;
+}
+
+/* Timestamp stats show the exact date/time in a floating tip on hover/focus.
+   It drops downward (the pane clips upward overflow) from the stat's left edge. */
+.feed-time-tip {
+  cursor: default;
+  position: relative;
+}
+
+.feed-time-tip::after {
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  content: attr(data-tip);
+  font-size: var(--type-label);
+  font-variant-numeric: normal;
+  left: 0;
+  opacity: 0;
+  padding: 5px 9px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  transform: translateY(-3px);
+  transition: opacity var(--motion-fast), transform var(--motion-fast);
+  white-space: nowrap;
+  z-index: 40;
+}
+
+.feed-time-tip:hover::after,
+.feed-time-tip:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .feed-detail-badge {

@@ -188,6 +188,15 @@ export async function patchIssueTitle(config: GitHubConfig, issueNumber: number,
   });
 }
 
+/** Close or reopen a feed's issue, mirroring a collapsed/expanded feed. */
+export async function patchIssueState(config: GitHubConfig, issueNumber: number, state: "open" | "closed"): Promise<void> {
+  const { owner, name } = parseRepo(config.repo);
+  await githubFetch(config, `/repos/${owner}/${name}/issues/${issueNumber}`, {
+    method: "PATCH",
+    body: JSON.stringify({ state }),
+  });
+}
+
 /** Open a new issue for a feed. Returns the created issue number. */
 export async function createIssue(
   config: GitHubConfig,

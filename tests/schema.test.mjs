@@ -389,6 +389,31 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   // A manual "Sync now" affordance exists, gated on being configured.
   assert.match(feed, /githubReady/);
   assert.match(feed, /\/api\/feed\/github\/sync/);
+  // Collapsing a feed closes its issue on sync (reopened when expanded), tracked
+  // by a 3-way base so the API is only called on a real state change.
+  assert.match(client, /patchIssueState/);
+  assert.match(sync, /issueStateSynced/);
+  assert.match(sync, /issuesClosed/);
+});
+
+test("feeds can be collapsed without reordering the list", async () => {
+  const [schema, bootstrap, patchRoute, feed] = await Promise.all([
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
+  // The collapsed flag is a real column, present in CREATE TABLE and back-filled.
+  assert.match(schema, /collapsed: integer\("collapsed"/);
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS feed_snippets[\s\S]*?collapsed INTEGER NOT NULL DEFAULT 0/);
+  assert.match(bootstrap, /ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0/);
+  // Collapsing must NOT bump updatedAt (only a rename does), so the feed keeps
+  // its list position when expanded again.
+  assert.match(patchRoute, /Collapsing\/expanding is a shelving action/);
+  assert.match(patchRoute, /changes\.updatedAt = new Date/);
+  // The sidebar renders a dedicated collapsed section.
+  assert.match(feed, /feed-collapsed-group/);
+  assert.match(feed, /Collapsed feeds/);
 });
 
 test("runs the library on a local SQLite file in the self-contained library folder", async () => {

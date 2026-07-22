@@ -156,6 +156,13 @@ export const feedSnippets = sqliteTable(
     // The title last reconciled with GitHub — the 3-way base for rename sync, so
     // we can tell whether a divergence came from a local or a remote rename.
     issueTitleSynced: text("issue_title_synced"),
+    // A finished feed the user tucked away: hidden under "Collapsed feeds" in the
+    // sidebar, and its GitHub issue is closed on the next sync (reopened if the
+    // feed is expanded again).
+    collapsed: integer("collapsed", { mode: "boolean" }).notNull().default(false),
+    // The issue state (open|closed) last pushed to GitHub, so collapse-sync only
+    // calls the API when the collapsed flag actually changed. Null until synced.
+    issueStateSynced: text("issue_state_synced"),
     // JSON array of the files attached to the opening turn ({label, relativePath,
     // kind}), staged under the feed working dir, so the UI can list and link them.
     attachments: text("attachments"),

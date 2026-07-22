@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -69,6 +69,7 @@ interface FeedSnippet {
   turns?: number;
   attachments?: string | null;
   pendingProposals?: number;
+  collapsed?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -319,22 +320,28 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
 }
 
+/** Full local date+time, for the exact-timestamp tooltips. */
+function fullTime(iso: string): string {
+  return new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+}
+
 /**
  * A single row in the left list: status glyph, title, and a relative timestamp,
  * on one line so the console scales to dozens of interactions, plus an overflow
  * menu (rename / fork / export / delete). Statuses stay fresh via the poll.
  */
-function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDelete }: {
+function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onCollapse, onDelete }: {
   snippet: FeedSnippet;
   active: boolean;
   onSelect: () => void;
   onRename: () => void;
   onFork: () => void;
   onExport: () => void;
+  onCollapse: () => void;
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const kebabRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -365,7 +372,17 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDele
       return;
     }
     const rect = kebabRef.current?.getBoundingClientRect();
-    if (rect) setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    if (rect) {
+      // Open downward, but flip above the kebab when the menu (~5 items) would
+      // run past the viewport bottom, so the last item is never clipped.
+      const menuHeight = 210;
+      const right = window.innerWidth - rect.right;
+      if (rect.bottom + 4 + menuHeight > window.innerHeight) {
+        setMenuPos({ bottom: window.innerHeight - rect.top + 4, right });
+      } else {
+        setMenuPos({ top: rect.bottom + 4, right });
+      }
+    }
     setMenuOpen(true);
   }
 
@@ -395,10 +412,11 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDele
         <button ref={kebabRef} type="button" className="feed-row-kebab" onClick={toggleMenu} aria-label="More actions" aria-haspopup="menu" aria-expanded={menuOpen}><MoreVertical size={15} /></button>
         {menuOpen && menuPos
           ? createPortal(
-              <div ref={listRef} className="feed-row-menu-list" role="menu" style={{ position: "fixed", top: menuPos.top, right: menuPos.right }}>
+              <div ref={listRef} className="feed-row-menu-list" role="menu" style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }}>
                 <button type="button" role="menuitem" onClick={run(onRename)}><Pencil size={14} /> Rename</button>
                 <button type="button" role="menuitem" onClick={run(onFork)}><GitBranch size={14} /> Fork</button>
                 <button type="button" role="menuitem" onClick={run(onExport)}><Download size={14} /> Export</button>
+                <button type="button" role="menuitem" onClick={run(onCollapse)}>{snippet.collapsed ? <><ChevronUp size={14} /> Expand</> : <><ChevronDown size={14} /> Collapse</>}</button>
                 <button type="button" role="menuitem" className="is-danger" onClick={run(onDelete)}><Trash2 size={14} /> Delete</button>
               </div>,
               document.body,
@@ -603,6 +621,8 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
               {snippetStats(snippet).map((stat) => (
                 <span key={stat} className="feed-detail-stat">{stat}</span>
               ))}
+              <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Created ${fullTime(snippet.createdAt)}`}>Created {relativeTime(snippet.createdAt)}</span>
+              <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Updated ${fullTime(snippet.updatedAt)}`}>Updated {relativeTime(snippet.updatedAt)}</span>
             </div>
           </div>
           {pendingCount ? <span className="feed-detail-badge">{pendingCount} to approve</span> : null}
@@ -807,11 +827,25 @@ export default function FeedWorkspace() {
   }, []);
   const clearSyncLog = useCallback(() => { setSyncLog([]); writeSyncLog([]); }, []);
 
+  // Collapse toggles that haven't been confirmed by the server yet. The 4s poll
+  // reloads the whole list, so without this a poll firing mid-PATCH would revert
+  // an optimistic collapse; loadSnippets re-applies these until the row's server
+  // value matches (then the entry is cleared).
+  const pendingCollapse = useRef<Map<string, boolean>>(new Map());
+
   const loadSnippets = useCallback(async () => {
     const response = await fetch("/api/feed/snippets", { cache: "no-store" });
     if (response.ok) {
       const data = await response.json() as { snippets: FeedSnippet[] };
-      setSnippets(data.snippets);
+      const pending = pendingCollapse.current;
+      const merged = data.snippets.map((snippet) => {
+        if (!pending.has(snippet.id)) return snippet;
+        const want = pending.get(snippet.id);
+        // Server has caught up to the desired value → drop the override.
+        if (Boolean(snippet.collapsed) === want) { pending.delete(snippet.id); return snippet; }
+        return { ...snippet, collapsed: want };
+      });
+      setSnippets(merged);
     }
   }, []);
 
@@ -945,6 +979,34 @@ export default function FeedWorkspace() {
     return snippets.filter((snippet) => `${snippet.title} ${snippet.instruction}`.toLowerCase().includes(term));
   }, [snippets, query]);
 
+  // Split the list: active feeds up top, collapsed ones tucked into their own
+  // section at the bottom (still searchable).
+  const activeSnippets = useMemo(() => filteredSnippets.filter((snippet) => !snippet.collapsed), [filteredSnippets]);
+  const collapsedSnippets = useMemo(() => filteredSnippets.filter((snippet) => snippet.collapsed), [filteredSnippets]);
+  const [showCollapsed, setShowCollapsed] = useState(false);
+
+  async function toggleCollapse(snippet: FeedSnippet) {
+    const next = !snippet.collapsed;
+    // Optimistic: flip locally and record the intent so a concurrent poll can't
+    // revert it before the server confirms. The GitHub issue is closed/reopened
+    // on the next sync (see the sync route), not inline.
+    pendingCollapse.current.set(snippet.id, next);
+    setSnippets((current) => current.map((item) => (item.id === snippet.id ? { ...item, collapsed: next } : item)));
+    if (selectedId === snippet.id && next) setSelectedId(null);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippet.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collapsed: next }),
+      });
+      if (!response.ok) throw new Error("collapse failed");
+    } catch {
+      // Roll back the optimistic flip if the server rejected it.
+      pendingCollapse.current.delete(snippet.id);
+      setSnippets((current) => current.map((item) => (item.id === snippet.id ? { ...item, collapsed: snippet.collapsed } : item)));
+    }
+  }
+
   async function createSnippet(payload: AttachSubmit): Promise<boolean> {
     setSubmitting(true);
     try {
@@ -1057,18 +1119,43 @@ export default function FeedWorkspace() {
           ) : filteredSnippets.length === 0 ? (
             <p className="feed-list-empty">No feeds match “{query}”.</p>
           ) : (
-            filteredSnippets.map((snippet) => (
-              <FeedRow
-                key={snippet.id}
-                snippet={snippet}
-                active={snippet.id === selectedId && !composing}
-                onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
-                onRename={() => void renameSnippet(snippet)}
-                onFork={() => void forkSnippet(snippet)}
-                onExport={() => void exportSnippet(snippet)}
-                onDelete={() => void deleteSnippet(snippet)}
-              />
-            ))
+            <>
+              {activeSnippets.map((snippet) => (
+                <FeedRow
+                  key={snippet.id}
+                  snippet={snippet}
+                  active={snippet.id === selectedId && !composing}
+                  onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                  onRename={() => void renameSnippet(snippet)}
+                  onFork={() => void forkSnippet(snippet)}
+                  onExport={() => void exportSnippet(snippet)}
+                  onCollapse={() => void toggleCollapse(snippet)}
+                  onDelete={() => void deleteSnippet(snippet)}
+                />
+              ))}
+              {collapsedSnippets.length ? (
+                <div className="feed-collapsed-group">
+                  <button type="button" className="feed-collapsed-toggle" onClick={() => setShowCollapsed((open) => !open)} aria-expanded={showCollapsed}>
+                    {showCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    Collapsed feeds
+                    <span className="feed-collapsed-count">{collapsedSnippets.length}</span>
+                  </button>
+                  {showCollapsed ? collapsedSnippets.map((snippet) => (
+                    <FeedRow
+                      key={snippet.id}
+                      snippet={snippet}
+                      active={snippet.id === selectedId && !composing}
+                      onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                      onRename={() => void renameSnippet(snippet)}
+                      onFork={() => void forkSnippet(snippet)}
+                      onExport={() => void exportSnippet(snippet)}
+                      onCollapse={() => void toggleCollapse(snippet)}
+                      onDelete={() => void deleteSnippet(snippet)}
+                    />
+                  )) : null}
+                </div>
+              ) : null}
+            </>
           )}
         </div>
         {githubReady ? (
