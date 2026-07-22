@@ -1,6 +1,6 @@
 import { GET as libraryGet } from "@/app/api/library/route";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedProposals } from "@/db/schema";
+import { feedMessages, feedProposals } from "@/db/schema";
 import { snippetForToken } from "@/app/lib/feed-token";
 import { parseProposals, type ProposalOperation } from "@/app/lib/feed-prompt";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  */
 
 function authSnippet(request: Request): string | null {
-  return snippetForToken(request.headers.get("authorization") ?? request.headers.get("x-pa-feed-token"));
+  return snippetForToken(request.headers.get("authorization") ?? request.headers.get("x-stacks-feed-token"));
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -49,12 +49,28 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const database = await ensureDatabase();
+  const now = new Date().toISOString();
+  // Record the agent's request as a collapsible tool-call message and anchor the
+  // proposals to it, so the raw request is visible in the thread (and the
+  // approve/reject cards render inline instead of in the trailing block).
+  const messageId = `msg-${crypto.randomUUID()}`;
+  database
+    .insert(feedMessages)
+    .values({
+      id: messageId,
+      snippetId,
+      role: "assistant",
+      kind: "tool_use",
+      content: `LibraryChange ${JSON.stringify(operations, null, 2)}`,
+      createdAt: now,
+    })
+    .run();
   const created: Array<{ id: string; summary: string }> = [];
   for (const operation of operations as ProposalOperation[]) {
     const id = `prop-${crypto.randomUUID()}`;
     database
       .insert(feedProposals)
-      .values({ id, snippetId, operation: JSON.stringify(operation), status: "pending", createdAt: new Date().toISOString() })
+      .values({ id, snippetId, messageId, operation: JSON.stringify(operation), status: "pending", createdAt: now })
       .run();
     created.push({ id, summary: operation.summary ?? `${operation.action} ${operation.entity}` });
   }

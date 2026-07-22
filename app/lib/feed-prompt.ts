@@ -37,12 +37,21 @@ Or send several at once: {"proposals":[{...},{...}]}. Each operation:
     "data": { ...fields... },
     "summary": "<one short human-readable line describing the change>" }
 For a paper, data may include: title, abstract, year, authors (array of names),
-venueName, doi, arxivId, url, pdfUrl, collectionNames (array), notes.
+venueName, venueAcronym, paperType, doi, arxivId, url, pdfUrl,
+collectionNames (array), notes.
+- paperType MUST be one of: "conference", "journal", "workshop", "preprint",
+  or "other". Choose the most specific fit (an arXiv-only paper is "preprint";
+  a blog post or tech report with no venue is "other").
+- Always set venueName when the work has one (conference/journal name; drop
+  "Proceedings of" and ordinals, e.g. "NeurIPS", "Nature Machine Intelligence"),
+  and venueAcronym when there's a common one. Leave venueName empty only for
+  genuinely un-venued items (blog posts, standalone reports).
 
 RULES:
 - Always READ first to check current state before proposing changes.
 - Never claim a change was applied — writes only queue a proposal for approval.
 - Only propose changes the user actually asked for.
+- Fill paperType and venue for every paper you add; don't leave them blank/"other" out of laziness.
 - If curl is unavailable for any reason, fall back to emitting one fenced
   stacks-proposals block (a JSON array of the operations above) at the end of
   your reply, and Stacks will pick it up.`;

@@ -2870,7 +2870,7 @@ function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; d
   return (
     <label className="field-span-2 autocomplete-field">
       <span>Authors</span>
-      <input name="authors" value={value} onChange={(event) => { setValue(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
+      <input name="authors" value={value} onChange={(event) => { setValue(event.target.value); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
       {open && matches.length ? <div className="metadata-autocomplete-options" id={listboxId} role="listbox">{matches.map((author) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</div> : null}
       <small>Separate names with commas. Choose a match to reuse its canonical author record.</small>
     </label>
@@ -2894,12 +2894,12 @@ function VenueFields({ venues, label, defaultName = "", defaultAcronym = "", pla
     <div className={`venue-field-pair ${span ? "field-span-2" : ""} ${showAcronym ? "has-acronym" : ""}`}>
       <label className="autocomplete-field">
         <span>{label}</span>
-        <input name="venueName" value={name} onChange={(event) => { setName(event.target.value); setActiveField("name"); setOpen(true); }} onFocus={() => { setActiveField("name"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "name" && Boolean(matches.length)} aria-controls={listboxId} placeholder={placeholder} />
+        <input name="venueName" value={name} onChange={(event) => { setName(event.target.value); setActiveField("name"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("name"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "name" && Boolean(matches.length)} aria-controls={listboxId} placeholder={placeholder} />
       </label>
       {showAcronym ? (
         <label className="autocomplete-field">
           <span>Venue acronym</span>
-          <input name="venueAcronym" value={acronym} onChange={(event) => { setAcronym(event.target.value); setActiveField("acronym"); setOpen(true); }} onFocus={() => { setActiveField("acronym"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "acronym" && Boolean(matches.length)} aria-controls={listboxId} placeholder="NeurIPS" />
+          <input name="venueAcronym" value={acronym} onChange={(event) => { setAcronym(event.target.value); setActiveField("acronym"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("acronym"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "acronym" && Boolean(matches.length)} aria-controls={listboxId} placeholder="NeurIPS" />
         </label>
       ) : null}
       {open && matches.length ? <div className="metadata-autocomplete-options venue-autocomplete-options" id={listboxId} role="listbox">{matches.map((venue) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(venue)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</div> : null}

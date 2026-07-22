@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -191,8 +191,10 @@ function SyncActivityDock({ log, onClear, syncing, onSync }: {
   return (
     <div className="feed-sync-bar">
       <ActionButton variant="primary" size="small" className="feed-sync-run" onClick={onSync} disabled={syncing} icon={syncing ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}>{syncing ? "Syncing…" : "Sync inbox"}</ActionButton>
-      <button type="button" className={`feed-sync-toggle ${open ? "is-open" : ""}`} onClick={() => setOpen((value) => !value)} aria-expanded={open} title="Sync activity">
-        <ChevronUp size={15} />
+      <button type="button" className={`feed-sync-toggle ${open ? "is-open" : ""}`} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        <ListChecks size={15} />
+        <span>Activity</span>
+        <ChevronUp size={14} />
       </button>
       {panel}
     </div>

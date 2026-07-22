@@ -920,7 +920,8 @@
   justify-content: center;
 }
 
-/* The activity toggle: a compact square button beside Sync; chevron flips open. */
+/* The activity toggle: an outlined pill (icon + "Activity" + chevron), matching
+   the main-page Activity control. */
 .feed-sync-toggle {
   align-items: center;
   background: var(--surface-2);
@@ -930,13 +931,19 @@
   cursor: pointer;
   display: flex;
   flex-shrink: 0;
-  justify-content: center;
-  width: 34px;
+  font-size: var(--type-control);
+  font-weight: 560;
+  gap: 6px;
+  padding: 0 11px;
 }
 
 .feed-sync-toggle:hover {
   background: var(--panel-strong);
   color: var(--ink);
+}
+
+.feed-sync-toggle > svg:first-child {
+  color: var(--brand-blue-strong);
 }
 
 .feed-sync-toggle svg {
