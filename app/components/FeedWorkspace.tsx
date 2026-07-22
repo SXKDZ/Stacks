@@ -36,14 +36,15 @@ interface FeedProposal {
   createdAt: string;
 }
 
-/** Parse a proposal's raw operation JSON into the label chips shown on its card
- *  (entity + action, plus a paper's type/venue) so the change is legible without
- *  expanding the raw block. */
+/** Parse a paper proposal's raw operation JSON into the meta chips shown on its
+ *  card — the paper type and venue, which the summary line doesn't carry. The
+ *  entity/action is already conveyed by the summary ("Add '…'"), so it's omitted
+ *  to avoid a redundant "create paper" chip. */
 function proposalTags(operation: string): string[] {
   try {
-    const op = JSON.parse(operation) as { entity?: string; action?: string; data?: Record<string, unknown> };
+    const op = JSON.parse(operation) as { entity?: string; data?: Record<string, unknown> };
+    if (op.entity !== "paper") return [];
     const tags: string[] = [];
-    if (op.action && op.entity) tags.push(`${op.action} ${op.entity}`);
     const type = typeof op.data?.paperType === "string" ? op.data.paperType : "";
     if (type) tags.push(type);
     const venue = typeof op.data?.venueAcronym === "string" && op.data.venueAcronym
