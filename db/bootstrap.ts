@@ -61,6 +61,7 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS collections (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
+    color TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
@@ -77,6 +78,10 @@ const schemaStatements = [
     working_dir TEXT,
     session_id TEXT,
     error TEXT,
+    workflow_steps TEXT,
+    issue_number INTEGER,
+    issue_title_synced TEXT,
+    attachments TEXT,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     duration_ms INTEGER NOT NULL DEFAULT 0,
@@ -91,6 +96,8 @@ const schemaStatements = [
     kind TEXT NOT NULL DEFAULT 'text',
     content TEXT NOT NULL DEFAULT '',
     tool_use_id TEXT,
+    github_comment_id INTEGER,
+    attachments TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS feed_proposals (
@@ -100,6 +107,8 @@ const schemaStatements = [
     operation TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     result_summary TEXT,
+    github_comment_id INTEGER,
+    github_status_synced TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at TEXT
   )`,
@@ -112,16 +121,6 @@ const schemaStatements = [
   "CREATE INDEX IF NOT EXISTS feed_messages_snippet_idx ON feed_messages(snippet_id, created_at)",
   "CREATE INDEX IF NOT EXISTS feed_proposals_snippet_idx ON feed_proposals(snippet_id)",
 ];
-
-const paperColumnUpgrades = [
-  ["volume", "ALTER TABLE papers ADD COLUMN volume TEXT"],
-  ["issue", "ALTER TABLE papers ADD COLUMN issue TEXT"],
-  ["pages", "ALTER TABLE papers ADD COLUMN pages TEXT"],
-  ["category", "ALTER TABLE papers ADD COLUMN category TEXT"],
-  ["preprint_id", "ALTER TABLE papers ADD COLUMN preprint_id TEXT"],
-  ["html_snapshot_path", "ALTER TABLE papers ADD COLUMN html_snapshot_path TEXT"],
-  ["summary", "ALTER TABLE papers ADD COLUMN summary TEXT NOT NULL DEFAULT ''"],
-] as const;
 
 const seedStatements = [
   [
@@ -224,81 +223,19 @@ async function initializeDatabase(): Promise<void> {
     raw.prepare(statement).run();
   }
 
-  const existingPaperColumns = tableColumns(raw, "papers");
-  for (const [column, statement] of paperColumnUpgrades) {
-    if (!existingPaperColumns.has(column)) {
-      raw.prepare(statement).run();
-    }
+  // The schema above is the authoritative, final shape; all historical column
+  // migrations have been folded into the CREATE TABLE statements. The one live
+  // exception is the short-lived editable-note column, dropped where it exists.
+  if (tableColumns(raw, "feed_snippets").has("note")) {
+    raw.prepare("ALTER TABLE feed_snippets DROP COLUMN note").run();
   }
-
-  const feedMessageColumns = tableColumns(raw, "feed_messages");
-  if (!feedMessageColumns.has("tool_use_id")) {
-    raw.prepare("ALTER TABLE feed_messages ADD COLUMN tool_use_id TEXT").run();
-  }
-  // The GitHub inbox-sync columns: which issue a feed mirrors to, and which
-  // issue-comment a message came from / was posted as (nullable, no default).
-  if (!feedMessageColumns.has("github_comment_id")) {
-    raw.prepare("ALTER TABLE feed_messages ADD COLUMN github_comment_id INTEGER").run();
-  }
-  if (!feedMessageColumns.has("attachments")) {
-    raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments TEXT").run();
-  }
-  const feedSnippetColumns = tableColumns(raw, "feed_snippets");
-  if (!feedSnippetColumns.has("note")) {
-    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN note TEXT NOT NULL DEFAULT ''").run();
-  }
-  if (!feedSnippetColumns.has("workflow_steps")) {
-    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN workflow_steps TEXT").run();
-  }
-  if (!feedSnippetColumns.has("issue_number")) {
-    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_number INTEGER").run();
-  }
-  if (!feedSnippetColumns.has("issue_title_synced")) {
-    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_title_synced TEXT").run();
-  }
-  if (!feedSnippetColumns.has("attachments")) {
-    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN attachments TEXT").run();
-  }
-  const feedProposalColumns = tableColumns(raw, "feed_proposals");
-  if (!feedProposalColumns.has("github_comment_id")) {
-    raw.prepare("ALTER TABLE feed_proposals ADD COLUMN github_comment_id INTEGER").run();
-  }
-  if (!feedProposalColumns.has("github_status_synced")) {
-    raw.prepare("ALTER TABLE feed_proposals ADD COLUMN github_status_synced TEXT").run();
-  }
-  for (const column of ["input_tokens", "output_tokens", "duration_ms", "turns"]) {
-    if (!feedSnippetColumns.has(column)) {
-      raw.prepare(`ALTER TABLE feed_snippets ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();
-    }
-  }
-  // Settings now live solely in the library's settings.json; the old
-  // app_settings table (a parallel source of truth) is retired.
-  raw.prepare("DROP TABLE IF EXISTS app_settings").run();
-  // The tag system was never built; drop its scaffolded tables.
-  raw.prepare("DROP TABLE IF EXISTS paper_tags").run();
-  raw.prepare("DROP TABLE IF EXISTS tags").run();
-  if (existingPaperColumns.has("citation_count")) {
-    raw.prepare("ALTER TABLE papers DROP COLUMN citation_count").run();
-  }
-
-  const collectionColumns = tableColumns(raw, "collections");
-  if (collectionColumns.has("description")) {
-    raw.prepare("ALTER TABLE collections DROP COLUMN description").run();
-  }
-  // A named accent from the fixed palette; every collection has one (blue is the
-  // client default). On first add, existing collections get a color spread across
-  // the palette so the library looks varied rather than uniformly blue. The
-  // assignment is deterministic (derived from each id) so it never shifts.
-  if (!collectionColumns.has("color")) {
-    raw.prepare("ALTER TABLE collections ADD COLUMN color TEXT").run();
-    const palette = [
-      "blue", "indigo", "violet", "pink", "rose", "orange",
-      "amber", "lime", "green", "teal", "cyan", "slate",
-    ];
-    const existing = raw.prepare("SELECT id FROM collections").all() as Array<{ id: string }>;
+  // Backfill a spread of accent colors onto any collections created before the
+  // color column existed (deterministic from the id, so it never shifts).
+  const uncolored = raw.prepare("SELECT id FROM collections WHERE color IS NULL").all() as Array<{ id: string }>;
+  if (uncolored.length) {
+    const palette = ["blue", "indigo", "violet", "pink", "rose", "orange", "amber", "lime", "green", "teal", "cyan", "slate"];
     const assign = raw.prepare("UPDATE collections SET color = ? WHERE id = ?");
-    for (const { id } of existing) {
-      // FNV-1a-ish hash of the id → a stable palette index (no Math.random).
+    for (const { id } of uncolored) {
       let hash = 2166136261;
       for (let i = 0; i < id.length; i += 1) {
         hash ^= id.charCodeAt(i);
@@ -306,14 +243,6 @@ async function initializeDatabase(): Promise<void> {
       }
       assign.run(palette[Math.abs(hash) % palette.length], id);
     }
-  }
-
-  const existingAuthorColumns = tableColumns(raw, "authors");
-  if (existingAuthorColumns.has("affiliation")) {
-    raw.prepare("ALTER TABLE authors DROP COLUMN affiliation").run();
-  }
-  if (existingAuthorColumns.has("h_index")) {
-    raw.prepare("ALTER TABLE authors DROP COLUMN h_index").run();
   }
 
   const paperCount = raw.prepare("SELECT COUNT(*) AS count FROM papers").get() as { count: number };

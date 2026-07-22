@@ -1353,45 +1353,6 @@
   width: 100%;
 }
 
-/* An editable note at the top of the thread — the user's own text, kept
-   separate from (and above) the agent conversation. */
-.feed-note {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.feed-note-head {
-  align-items: center;
-  color: var(--soft);
-  display: flex;
-  font-size: 10.5px;
-  font-weight: 700;
-  justify-content: space-between;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.feed-note-editor {
-  background: color-mix(in srgb, var(--panel) 60%, transparent);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1.55;
-  min-height: 52px;
-  outline: 0;
-  padding: 10px 12px;
-  resize: vertical;
-  width: 100%;
-}
-
-.feed-note-editor:focus {
-  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--line-strong));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-blue) 10%, transparent);
-}
-
 .feed-detail-foot {
   background: var(--surface-1);
   border-top: 1px solid var(--line);

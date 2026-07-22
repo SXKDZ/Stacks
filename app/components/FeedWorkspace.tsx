@@ -62,7 +62,6 @@ interface FeedSnippet {
   id: string;
   title: string;
   instruction: string;
-  note: string;
   workflowSteps: string | null;
   status: string;
   error: string | null;
@@ -430,24 +429,6 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const [resolving, setResolving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [streamNonce, setStreamNonce] = useState(0);
-  const [noteState, setNoteState] = useState<"idle" | "saving" | "saved">("idle");
-
-  // Persist the editable note on blur (notes-app style), then refresh the list.
-  const saveNote = useCallback(async (next: string) => {
-    if (next === (snippet.note ?? "")) return;
-    setNoteState("saving");
-    try {
-      const response = await fetch(`/api/feed/snippets/${snippet.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note: next }),
-      });
-      setNoteState(response.ok ? "saved" : "idle");
-      if (response.ok) onChanged();
-    } catch {
-      setNoteState("idle");
-    }
-  }, [snippet.id, snippet.note, onChanged]);
   const running = snippet.status === "running" || snippet.status === "queued";
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -656,20 +637,6 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
 
       <div className="feed-detail-body" ref={bodyRef}>
         <div className="feed-detail-body-inner">
-        <div className="feed-note">
-          <div className="feed-note-head">
-            <span>Note</span>
-            <span aria-live="polite">{noteState === "saving" ? "Saving…" : noteState === "saved" ? "Saved" : ""}</span>
-          </div>
-          <textarea
-            key={`${snippet.id}:note`}
-            className="feed-note-editor"
-            defaultValue={snippet.note ?? ""}
-            placeholder="Jot anything about this feed — it stays with the note, separate from the agent thread."
-            onFocus={() => setNoteState("idle")}
-            onBlur={(event) => void saveNote(event.target.value)}
-          />
-        </div>
         {(() => {
           const openingAttachments = parseAttachments(snippet.attachments);
           const showOpening = (snippet.instruction && snippet.instruction !== snippet.title) || openingAttachments.length > 0;

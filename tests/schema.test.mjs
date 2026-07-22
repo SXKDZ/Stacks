@@ -115,9 +115,10 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
     readFile(new URL("../app/api/version/route.ts", import.meta.url), "utf8"),
   ]);
   // Settings have one source of truth: settings.json (local-settings). The
-  // parallel app_settings DB table and settings-store are retired.
-  assert.doesNotMatch(bootstrap, /CREATE TABLE IF NOT EXISTS app_settings/);
-  assert.match(bootstrap, /DROP TABLE IF EXISTS app_settings/);
+  // parallel app_settings DB table and settings-store are retired — the schema
+  // never creates app_settings or the scaffolded tag tables.
+  assert.doesNotMatch(bootstrap, /app_settings/);
+  assert.doesNotMatch(bootstrap, /CREATE TABLE IF NOT EXISTS (tags|paper_tags)/);
   assert.match(localSettings, /export function runtimeValues/);
   assert.match(runtimeConfig, /runtimeValues/);
   assert.doesNotMatch(runtimeConfig, /settings-store/);
@@ -233,9 +234,9 @@ test("persists collection membership through the paper-collection composite key"
   const collectionSchema = schema.slice(schema.indexOf("export const collections"), schema.indexOf("export const paperCollections"));
   assert.doesNotMatch(collectionSchema, /description: text\("description"\)/);
   assert.match(collectionSchema, /color: text\("color"\)/);
-  // Bootstrap adds the color column (idempotent) and spreads a color across
-  // existing collections on first add rather than dropping it.
-  assert.match(bootstrap, /ALTER TABLE collections ADD COLUMN color TEXT/);
+  // The collections table declares color in its CREATE statement; bootstrap
+  // backfills a spread of colors onto any pre-existing uncolored rows.
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS collections[\s\S]*?color TEXT/);
   assert.match(bootstrap, /UPDATE collections SET color = \? WHERE id = \?/);
   // Colors are a fixed 12-hue palette (blue default), validated on read + write.
   assert.match(types, /"blue", "indigo", "violet", "pink", "rose", "orange"/);
@@ -315,29 +316,22 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   // The feed is always on: no enable gate remains.
   assert.doesNotMatch(feed, /feedEnabled/);
   assert.doesNotMatch(settings, /feedEnabled/);
-  // Each feed carries an editable note (notes-app style), saved on blur through
-  // the snippet PATCH route and migrated in bootstrap.
-  const [schema, bootstrap, snippetIdRoute] = await Promise.all([
-    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
-    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/feed/snippets/[id]/route.ts", import.meta.url), "utf8"),
-  ]);
-  assert.match(schema, /note: text\("note"\)/);
-  assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN note TEXT/);
-  assert.match(snippetIdRoute, /typeof body\.note === "string"/);
-  assert.match(feed, /feed-note-editor/);
-  assert.match(feed, /onBlur=\{\(event\) => void saveNote\(event\.target\.value\)\}/);
   // Multi-step workflows: an editable, JS/JSON-importable chain run across turns
   // with an approval gate between steps.
-  const [workflowsLib, workflowsRoute] = await Promise.all([
+  const [schema, bootstrap, workflowsLib, workflowsRoute] = await Promise.all([
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-workflows.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/workflows/route.ts", import.meta.url), "utf8"),
   ]);
+  // The retired editable-note column is gone from the schema.
+  assert.doesNotMatch(schema, /note: text\("note"\)/);
+  assert.doesNotMatch(feed, /feed-note-editor/);
   assert.match(workflowsLib, /export function normalizeFeedWorkflows/);
   assert.match(workflowsLib, /export function parseWorkflowFile/);
   assert.match(workflowsRoute, /normalizeFeedWorkflows/);
   assert.match(schema, /workflowSteps: text\("workflow_steps"\)/);
-  assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN workflow_steps TEXT/);
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS feed_snippets[\s\S]*?workflow_steps TEXT/);
   // The composer queues the remaining steps and the thread offers the next one.
   assert.match(feed, /pendingWorkflowSteps/);
   assert.match(feed, /runNextWorkflowStep/);
