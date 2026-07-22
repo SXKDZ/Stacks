@@ -57,7 +57,7 @@ import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-import { ActionButton, ActionLink, Chip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
+import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
 import { useTheme } from "@/app/lib/use-theme";
 import {
   downloadReferences,
@@ -1592,13 +1592,7 @@ function LibraryView({
                         {paper.collections.length ? (
                           <span className="paper-collection-line" aria-label="Collections">
                             {paper.collections.slice(0, 3).map((collection) => (
-                              <Chip
-                                key={collection.id}
-                                size="small"
-                                tone="neutral"
-                                className={`collection-chip swatch-${collection.color}`}
-                                icon={<span className="collection-chip-dot" />}
-                              >{collection.name}</Chip>
+                              <CollectionChip key={collection.id} size="small" name={collection.name} color={collection.color} />
                             ))}
                           </span>
                         ) : null}
@@ -2648,7 +2642,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             </div>
             <div className="paper-field">
               <span className="paper-field-label">Collections</span>
-              <div className="collection-chips">{paper.collections.length ? paper.collections.map((collection) => <Chip key={collection.id} tone="neutral" className={`collection-chip swatch-${collection.color}`} icon={<span className="collection-chip-dot" />} onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</Chip>) : <span className="row-muted paper-field-empty">No collections yet</span>}</div>
+              <div className="collection-chips">{paper.collections.length ? paper.collections.map((collection) => <CollectionChip key={collection.id} name={collection.name} color={collection.color} onClick={() => onOpenCollection(collection.id, collection.name)} />) : <span className="row-muted paper-field-empty">No collections yet</span>}</div>
             </div>
           </div>
           {hasViewer || paper.url ? (
@@ -3033,9 +3027,7 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
       <span className="paper-collection-label">Collections</span>
       <div className="collection-tag-editor" ref={editorRef}>
         {value.map((name) => (
-          <Chip key={name} tone="neutral" className={`collection-chip swatch-${colorFor(name)}`} icon={<span className="collection-chip-dot" />} onRemove={() => onChange(value.filter((candidate) => candidate !== name))} removeIcon={<X />} removeLabel={`Remove ${name}`}>
-            {name}
-          </Chip>
+          <CollectionChip key={name} name={name} color={colorFor(name)} onRemove={() => onChange(value.filter((candidate) => candidate !== name))} />
         ))}
         <input
           value={query}

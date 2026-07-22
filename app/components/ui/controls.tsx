@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Clock3, Inbox } from "lucide-react";
+import { CheckCircle2, Clock3, Inbox, X } from "lucide-react";
 import { cva } from "class-variance-authority";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import { twMerge } from "tailwind-merge";
@@ -341,6 +341,30 @@ export function Chip({ tone = "brand", size = "medium", icon, onRemove, removeIc
     );
   }
   return <span className={cx(chipVariants({ tone, size, interactive: false, className }))} title={title}>{content}</span>;
+}
+
+/** A collection chip: a neutral Chip carrying the collection's accent color as a
+ *  leading dot (via the swatch-<color> class). One source for every place a
+ *  collection is shown as a chip — paper rows, the detail drawer, the tag editor. */
+export function CollectionChip({ name, color, size, onClick, onRemove }: {
+  name: string;
+  color: string;
+  size?: "small" | "medium";
+  onClick?: () => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <Chip
+      tone="neutral"
+      size={size}
+      className={`collection-chip swatch-${color}`}
+      icon={<span className="collection-chip-dot" />}
+      onClick={onClick}
+      onRemove={onRemove}
+      removeIcon={onRemove ? <X /> : undefined}
+      removeLabel={onRemove ? `Remove ${name}` : undefined}
+    >{name}</Chip>
+  );
 }
 
 /* --- TextButton: borderless inline text action, optional link underline --- */
