@@ -2895,7 +2895,9 @@ function AnchoredOptions({ anchorRef, open, className, id, children }: {
       const node = anchorRef.current;
       if (!node) return;
       const r = node.getBoundingClientRect();
-      setRect({ top: r.bottom - 14, left: r.left, width: r.width });
+      // Sit just below the anchor's full height (a wrapped tag-editor can be
+      // several rows tall), so the list never overlaps the input.
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width });
     };
     measure();
     window.addEventListener("scroll", measure, true);
@@ -2980,6 +2982,10 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
   const matches = query.trim() ? collections
     .filter((collection) => collection.name.toLowerCase().includes(query.trim().toLowerCase()) && !selectedNames.has(collection.name.toLowerCase()))
     .slice(0, 8) : [];
+  // Look up each selected name's color so the chips match the paper list. A
+  // brand-new name (not yet a collection) falls back to the default blue.
+  const colorByName = new Map(collections.map((collection) => [collection.name.toLowerCase(), collection.color]));
+  const colorFor = (name: string) => colorByName.get(name.toLowerCase()) ?? DEFAULT_COLLECTION_COLOR;
 
   function addName(name: string) {
     const cleaned = name.trim();
@@ -2997,7 +3003,7 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
       <span className="paper-collection-label">Collections</span>
       <div className="collection-tag-editor" ref={editorRef}>
         {value.map((name) => (
-          <Chip key={name} onRemove={() => onChange(value.filter((candidate) => candidate !== name))} removeIcon={<X />} removeLabel={`Remove ${name}`}>
+          <Chip key={name} tone="neutral" className={`collection-chip swatch-${colorFor(name)}`} icon={<span className="collection-chip-dot" />} onRemove={() => onChange(value.filter((candidate) => candidate !== name))} removeIcon={<X />} removeLabel={`Remove ${name}`}>
             {name}
           </Chip>
         ))}
@@ -3023,7 +3029,7 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
         />
       </div>
       <AnchoredOptions anchorRef={editorRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options collection-autocomplete-options" id={listboxId}>
-        {matches.map((collection) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => addName(collection.name)} key={collection.id}><FolderOpen size={14} /><span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}
+        {matches.map((collection) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => addName(collection.name)} key={collection.id}><span className={`collection-option-dot swatch-${collection.color}`} /><span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}
       </AnchoredOptions>
       <small>Choose an existing collection or type a new name and press Enter.</small>
     </div>

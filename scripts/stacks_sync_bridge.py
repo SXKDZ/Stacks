@@ -152,21 +152,27 @@ def sync_locks(local_directory, remote_directory):
 
 
 def backup_database(local_database, remote_database, result):
-    """Write a consistent copy of the live database to the backup folder."""
+    """Write a consistent copy of the live database to the backup folder.
+
+    The library is a single SQLite file, so a backup either copies it (one
+    change) or skips it when the content hash is unchanged (no change). The
+    paper count is only descriptive detail, never the change count — otherwise
+    every backup of an edited DB would report "N papers changed" when in fact
+    one file was copied."""
     result["progress"].append({"message": "Backing up the Stacks database"})
     if remote_database.exists() and database_hash(local_database) == database_hash(remote_database):
         return
+    existed = remote_database.exists()
     copy_database(local_database, remote_database)
     count = paper_count(local_database)
-    if remote_database.exists():
-        result["changes"]["papers_updated"] += count
-        result["details"]["papers_updated"].append(
-            "Backed up database with {} papers".format(count)
+    result["changes"]["database"] += 1
+    if existed:
+        result["details"]["database"].append(
+            "Updated the library backup ({} papers)".format(count)
         )
     else:
-        result["changes"]["papers_added"] += count
-        result["details"]["papers_added"].append(
-            "Initialized backup with {} papers".format(count)
+        result["details"]["database"].append(
+            "Created the library backup ({} papers)".format(count)
         )
 
 
@@ -237,8 +243,7 @@ def main():
         raise ValueError("The backup folder must be different from the live library.")
 
     detail_keys = (
-        "papers_added",
-        "papers_updated",
+        "database",
         "pdfs_copied",
         "html_snapshots_copied",
         "feed_files_copied",
@@ -281,7 +286,7 @@ def main():
 
     total = sum(result["changes"].values())
     if total:
-        result["summary"] = "Backup completed with {} changes".format(total)
+        result["summary"] = "Backup completed with {} {}".format(total, "change" if total == 1 else "changes")
     else:
         result["summary"] = "The OneDrive backup is already up to date"
     result["logs"].append(
