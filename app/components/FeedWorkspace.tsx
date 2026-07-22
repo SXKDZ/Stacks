@@ -150,47 +150,38 @@ function writeSyncLog(entries: SyncLogEntry[]): void {
 }
 
 /**
- * The feed sidebar's static bottom banner: a Sync button beside the shared
- * activity dock (reusing the exact .background-task-* chrome from the main-page
- * Activity, so the two match). The dock's popover opens upward, in-flow.
+ * The feed's Sync activity dock: the exact .background-task-* chrome from the
+ * main-page Activity (its own row, popover opens upward), so the two match.
  */
-function SyncActivityDock({ log, onClear, syncing, onSync }: {
-  log: SyncLogEntry[];
-  onClear: () => void;
-  syncing: boolean;
-  onSync: () => void;
-}) {
+function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="feed-sync-bar">
-      <ActionButton variant="primary" size="small" className="feed-sync-run" onClick={onSync} disabled={syncing} icon={syncing ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}>{syncing ? "Syncing…" : "Sync inbox"}</ActionButton>
-      <aside className={`background-task-dock ${open ? "is-open" : ""}`} aria-label="Sync activity">
-        {open ? (
-          <div className="background-task-panel">
-            <header>
-              <span><ListChecks size={16} /><strong>Sync activity</strong></span>
-              <div>
-                <button type="button" className="activity-clear" onClick={onClear} disabled={!log.length}>Clear</button>
-                <button type="button" onClick={() => setOpen(false)} aria-label="Collapse sync activity"><X size={15} /></button>
-              </div>
-            </header>
-            <div className="background-task-list">
-              {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
-                <div className={`background-task-row is-${entry.status === "success" ? "complete" : "error"}`} key={entry.id}>
-                  {entry.status === "success" ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
-                  <span><strong>{entry.summary}</strong><small>{new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></span>
-                </div>
-              ))}
+    <aside className={`background-task-dock ${open ? "is-open" : ""}`} aria-label="Sync activity">
+      {open ? (
+        <div className="background-task-panel">
+          <header>
+            <span><ListChecks size={16} /><strong>Sync activity</strong></span>
+            <div>
+              <button type="button" className="activity-clear" onClick={onClear} disabled={!log.length}>Clear</button>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Collapse sync activity"><X size={15} /></button>
             </div>
+          </header>
+          <div className="background-task-list">
+            {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
+              <div className={`background-task-row is-${entry.status === "success" ? "complete" : "error"}`} key={entry.id}>
+                {entry.status === "success" ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
+                <span><strong>{entry.summary}</strong><small>{new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></span>
+              </div>
+            ))}
           </div>
-        ) : null}
-        <button type="button" className="background-task-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
-          <ListChecks size={17} />
-          <span>Activity</span>
-          <ChevronUp size={14} />
-        </button>
-      </aside>
-    </div>
+        </div>
+      ) : null}
+      <button type="button" className="background-task-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <ListChecks size={17} />
+        <span>Activity</span>
+        <ChevronUp size={14} />
+      </button>
+    </aside>
   );
 }
 
@@ -712,6 +703,7 @@ export default function FeedWorkspace() {
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [libraryName, setLibraryName] = useState("My Paper Library");
 
   // Restore the persisted (draggable) sidebar width.
   useEffect(() => {
@@ -764,13 +756,16 @@ export default function FeedWorkspace() {
     }
   }, []);
 
-  // GitHub inbox sync is available only once a repo + token are configured.
+  // Read the authoritative settings: the library name and whether GitHub inbox
+  // sync is configured (repo + token).
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/local-settings", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { github?: { repo?: string; connected?: boolean } } | null) => {
-        if (!cancelled) setGithubReady(Boolean(data?.github?.repo && data.github.connected));
+      .then((data: { libraryName?: string; github?: { repo?: string; connected?: boolean } } | null) => {
+        if (cancelled || !data) return;
+        if (data.libraryName?.trim()) setLibraryName(data.libraryName.trim());
+        setGithubReady(Boolean(data.github?.repo && data.github.connected));
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -984,9 +979,15 @@ export default function FeedWorkspace() {
           )}
         </div>
         {githubReady ? (
-          <div className="feed-sidebar-sync">
-            {notice ? <p className={`feed-sync-notice is-${notice.tone}`}>{notice.message}</p> : null}
-            <SyncActivityDock log={syncLog} onClear={clearSyncLog} syncing={syncing} onSync={() => void syncGithub()} />
+          <div className="feed-sidebar-foot">
+            <SyncActivityDock log={syncLog} onClear={clearSyncLog} />
+            <div className="sync-card">
+              <span>
+                <strong>{libraryName}</strong>
+                <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
+              </span>
+              <ActionButton variant="ghost" size="icon" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" title="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} />
+            </div>
           </div>
         ) : null}
       </aside>

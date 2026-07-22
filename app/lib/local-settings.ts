@@ -16,6 +16,7 @@ import { databasePath, ensureLibraryDirectories, libraryRoot, settingsPath } fro
  */
 
 export interface SettingsPayload {
+  libraryName?: string;
   modelId?: string;
   region?: string;
   maxTokens?: string | number;
@@ -32,6 +33,8 @@ export interface SettingsPayload {
 interface StructuredSettingsFile {
   version: 1;
   updatedAt: string;
+  /** The user-facing library name shown in the sidebar status. */
+  libraryName?: string;
   ai: {
     modelId: string;
     region: string;
@@ -69,6 +72,7 @@ export interface SyncResult {
 }
 
 const environmentKeys = new Set([
+  "STACKS_LIBRARY_NAME",
   "AWS_BEARER_TOKEN_BEDROCK",
   "AWS_REGION",
   "BEDROCK_MODEL_ID",
@@ -117,6 +121,7 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     return undefined;
   }
   const values: Record<string, string | undefined> = {
+    STACKS_LIBRARY_NAME: settings.libraryName,
     AWS_BEARER_TOKEN_BEDROCK: settings.secrets.AWS_BEARER_TOKEN_BEDROCK,
     AWS_REGION: settings.ai.region,
     BEDROCK_MODEL_ID: settings.ai.modelId,
@@ -234,6 +239,8 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
   return {
     version: 1,
     updatedAt: new Date().toISOString(),
+    // Preserve the library name across unrelated settings writes.
+    libraryName: existing?.libraryName,
     ai: {
       modelId: envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
       region: envValue("AWS_REGION", "us-east-1"),
@@ -305,6 +312,7 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "STACKS_AUTO_SYNC": next.sync.autoSync = value; break;
       case "STACKS_AUTO_SYNC_INTERVAL": next.sync.autoSyncInterval = value; break;
       case "STACKS_GITHUB_REPO": next.github = { repo: value }; break;
+      case "STACKS_LIBRARY_NAME": next.libraryName = value; break;
       default:
         if (secretKeys.includes(key as typeof secretKeys[number])) {
           next.secrets[key] = value;
@@ -358,6 +366,7 @@ function detectOneDrivePaths(): string[] {
 export function currentSettings() {
   return {
     local: true,
+    libraryName: readStructuredSettings()?.libraryName?.trim() || "My Paper Library",
     ai: {
       provider: "bedrock",
       modelId: envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
@@ -391,6 +400,7 @@ export function currentSettings() {
 
 function sanitizeSettings(data: SettingsPayload): Record<string, string> {
   const updates: Record<string, string> = {
+    STACKS_LIBRARY_NAME: String(data.libraryName ?? envValue("STACKS_LIBRARY_NAME", "My Paper Library")).trim().slice(0, 60) || "My Paper Library",
     BEDROCK_MODEL_ID: String(data.modelId ?? envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")).trim(),
     AWS_REGION: String(data.region ?? envValue("AWS_REGION", "us-east-1")).trim(),
     STACKS_MAX_TOKENS: String(Math.max(128, Number(data.maxTokens) || 1200)),

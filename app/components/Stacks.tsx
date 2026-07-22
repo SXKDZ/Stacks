@@ -756,23 +756,28 @@ function StacksWorkspace() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Theme is owned by the shared useTheme store; only the library name is
-  // persisted locally here.
-  const [libraryNameReady, setLibraryNameReady] = useState(false);
+  // The library name is a real setting (settings.json), loaded from the API so
+  // it's consistent with the feed and survives a localStorage clear. The
+  // localStorage read is a one-time migration fallback for pre-setting installs.
   useEffect(() => {
-    const savedLibraryName = window.localStorage.getItem("stacks-library-name")?.trim();
-    if (savedLibraryName) {
-      setLibraryName(savedLibraryName);
-    }
-    setLibraryNameReady(true);
+    let cancelled = false;
+    void fetch("/api/local-settings", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { libraryName?: string } | null) => {
+        if (cancelled) return;
+        const fromSettings = data?.libraryName?.trim();
+        const fromLocal = window.localStorage.getItem("stacks-library-name")?.trim();
+        if (fromSettings && fromSettings !== "My Paper Library") {
+          setLibraryName(fromSettings);
+        } else if (fromLocal) {
+          setLibraryName(fromLocal);
+        } else if (fromSettings) {
+          setLibraryName(fromSettings);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => {
-    if (!libraryNameReady) {
-      return;
-    }
-    window.localStorage.setItem("stacks-library-name", libraryName.trim() || "My Paper Library");
-  }, [libraryName, libraryNameReady]);
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {

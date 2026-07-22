@@ -506,6 +506,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
   function settingsData() {
     return {
+      libraryName,
       modelId: settings.ai.modelId,
       region: settings.ai.region,
       maxTokens: settings.ai.maxTokens,
