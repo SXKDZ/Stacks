@@ -2214,7 +2214,7 @@
 }
 
 .sync-card {
-  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .sync-card > span:first-child {

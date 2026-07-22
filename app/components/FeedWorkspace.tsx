@@ -835,8 +835,11 @@ export default function FeedWorkspace() {
     setNotice(null);
     try {
       const response = await fetch("/api/feed/github/sync", { method: "POST" });
-      const data = (await response.json()) as { counts?: Record<string, number>; truncated?: boolean; error?: string };
-      if (!response.ok) throw new Error(data.error ?? "GitHub sync failed.");
+      // Read the body defensively: a stale/misrouted server can answer with an
+      // HTML error page, which would otherwise blow up JSON.parse with a cryptic
+      // "Unexpected token '<'" instead of a legible failure.
+      const data = (await response.json().catch(() => ({}))) as { counts?: Record<string, number>; truncated?: boolean; error?: string };
+      if (!response.ok) throw new Error(data.error ?? `GitHub sync failed (${response.status}).`);
       const c = data.counts ?? {};
       const parts = [
         c.issuesCreated ? `${c.issuesCreated} issue${c.issuesCreated === 1 ? "" : "s"} created` : "",
@@ -1076,7 +1079,9 @@ export default function FeedWorkspace() {
                 <strong>{libraryName}</strong>
                 <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
               </span>
-              <ActionButton variant="ghost" size="icon" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" title="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} />
+              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" title="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />}>
+                {syncing ? "Syncing…" : "Sync"}
+              </ActionButton>
             </div>
           </div>
         ) : null}
