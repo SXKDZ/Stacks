@@ -10,8 +10,7 @@ import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
 /**
  * Local filesystem companion for Stacks's self-contained library folder. All PDF
  * and HTML snapshot assets live under `libraryRoot()/pdfs` and
- * `libraryRoot()/html_snapshots`; nothing is read from the legacy `.papercli`
- * or `.wrangler` locations.
+ * `libraryRoot()/html_snapshots`.
  */
 
 export const PDF_LIMIT = 150 * 1024 * 1024;

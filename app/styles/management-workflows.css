@@ -1326,7 +1326,9 @@
 
 .research-grid .star-button {
   border-radius: 6px;
-  color: color-mix(in srgb, var(--muted) 58%, transparent);
+  /* A dimmed amber at rest (the star's own hue), not a neutral grey, so it reads
+     as a star affordance; it brightens to full amber on hover/starred. */
+  color: color-mix(in srgb, var(--amber) 60%, var(--muted));
   height: 28px;
   width: 28px;
 }
