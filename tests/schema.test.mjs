@@ -349,7 +349,9 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   assert.match(bootstrap, /DROP COLUMN workflow_steps/);
   assert.doesNotMatch(feed, /feed-note-editor/);
   assert.doesNotMatch(feed, /pendingWorkflowSteps|runNextWorkflowStep/);
-  assert.doesNotMatch(settings, /FeedWorkflowsEditor|feed-workflow-schedule/);
+  // The prompt-chain scheduler UI is gone (the current Workflows editor is a
+  // different feature — running whole .js scripts, covered by its own test).
+  assert.doesNotMatch(settings, /feed-workflow-schedule|workflow-step-index/);
   for (const gone of [
     "../app/lib/feed-workflows.ts",
     "../app/lib/feed-scheduler.ts",

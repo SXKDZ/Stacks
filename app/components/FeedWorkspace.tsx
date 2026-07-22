@@ -912,6 +912,19 @@ export default function FeedWorkspace() {
     return () => { cancelled = true; };
   }, [loadSnippets]);
 
+  // Deep-link: /feed?snippet=<id> opens straight to that thread (e.g. after
+  // launching a workflow). Runs once the snippets have loaded.
+  const openedSnippetParam = useRef(false);
+  useEffect(() => {
+    if (openedSnippetParam.current || !snippets.length) return;
+    const wanted = new URLSearchParams(window.location.search).get("snippet");
+    if (wanted && snippets.some((snippet) => snippet.id === wanted)) {
+      setSelectedId(wanted);
+      setComposing(false);
+      openedSnippetParam.current = true;
+    }
+  }, [snippets]);
+
   // Load the library once so papers can be attached (and the ?paper= param
   // pre-attaches one, opening straight into the composer).
   useEffect(() => {

@@ -29,7 +29,9 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Upload,
   Users,
+  Workflow,
   Wrench,
   X,
 } from "lucide-react";
@@ -46,7 +48,7 @@ import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
 import type { Paper } from "@/app/lib/types";
 
-type SettingsTab = "appearance" | "model" | "prompts" | "skills" | "storage" | "sync" | "integrations" | "about";
+type SettingsTab = "appearance" | "model" | "prompts" | "skills" | "workflows" | "storage" | "sync" | "integrations" | "about";
 type ThemeMode = "dark" | "light";
 
 interface SyncResult {
@@ -797,6 +799,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
         <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
         <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Ready-made feed prompts</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Workflow />}><span><strong>Feed workflows</strong><small>Claude Code scripts for the feed</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
@@ -858,6 +861,13 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           <section>
             <SettingsHeading icon={<Sparkles size={19} />} title="Feed skills" detail="Starting prompts for a new AI feed. Add your own, edit the wording, and pick an icon." />
             <FeedSkillsEditor notify={notify} />
+          </section>
+        ) : null}
+
+        {!loading && tab === "workflows" ? (
+          <section>
+            <SettingsHeading icon={<Workflow size={19} />} title="Feed workflows" detail="Save Claude Code workflow scripts and run them against your library. Every change a workflow proposes is approved in the feed, just like a normal agent." />
+            <FeedWorkflowsEditor notify={notify} />
           </section>
         ) : null}
 
@@ -1236,8 +1246,7 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
                 </details>
                 <input className="feed-skill-label-input" value={selected.label} maxLength={60} placeholder="Skill name" onChange={(event) => update(selected.id, { label: event.target.value })} />
               </div>
-              <MarkdownCodeEditor value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} variables ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction this skill drops into the composer. Use {{paper}} to inline attached papers." />
-              <p className="feed-skill-detail-hint">This text seeds the composer when the skill is picked. Placeholders like <code>{"{{paper}}"}</code> and <code>{"{{paper[1:20]}}"}</code> inline attachments.</p>
+              <MarkdownCodeEditor value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction this skill drops into the composer." />
             </>
           ) : (
             <div className="feed-skill-empty"><Sparkles size={22} /><p>No skills yet. Add one to get started.</p></div>
@@ -1245,8 +1254,159 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
         </div>
       </div>
       <div className="feed-skills-editor-actions">
-        <ActionButton variant="ghost" size="small" onClick={restoreDefaults}>Restore defaults</ActionButton>
+        <ActionButton variant="secondary" size="small" onClick={restoreDefaults} icon={<RefreshCw size={14} />}>Restore defaults</ActionButton>
         <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save skills</ActionButton>
+      </div>
+    </div>
+  );
+}
+
+interface StoredWorkflow { id: string; name: string; description: string; script: string }
+
+const WORKFLOW_STARTER = `export const meta = {
+  name: 'Tag untagged papers',
+  description: 'Suggest a collection for each paper that has none',
+}
+
+phase('Scan')
+const result = await agent(
+  'List papers in my library that are not in any collection, then propose ' +
+  'adding each to a fitting collection (create one if needed).',
+)
+log('Proposed collection changes — approve them above.')
+`;
+
+function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "info") => void }) {
+  const [workflows, setWorkflows] = useState<StoredWorkflow[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
+  const importRef = useRef<HTMLInputElement | null>(null);
+  const selected = workflows.find((workflow) => workflow.id === selectedId) ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/feed/workflows", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { workflows?: StoredWorkflow[] } | null) => {
+        if (!cancelled && data?.workflows) {
+          setWorkflows(data.workflows);
+          setSelectedId(data.workflows[0]?.id ?? null);
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  function update(id: string, script: string) {
+    setWorkflows((current) => current.map((workflow) => (workflow.id === id ? { ...workflow, script } : workflow)));
+  }
+  function remove(id: string) {
+    setWorkflows((current) => {
+      const index = current.findIndex((workflow) => workflow.id === id);
+      const next = current.filter((workflow) => workflow.id !== id);
+      if (id === selectedId) setSelectedId(next[Math.min(index, next.length - 1)]?.id ?? null);
+      return next;
+    });
+  }
+  function add(script = WORKFLOW_STARTER) {
+    const id = `wf-${Date.now()}`;
+    setWorkflows((current) => [...current, { id, name: "New workflow", description: "", script }]);
+    setSelectedId(id);
+  }
+  async function onImport(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    add(await file.text());
+  }
+
+  async function save(): Promise<StoredWorkflow[] | null> {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/feed/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workflows }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const data = await response.json() as { workflows: StoredWorkflow[] };
+      setWorkflows(data.workflows);
+      if (!data.workflows.some((workflow) => workflow.id === selectedId)) setSelectedId(data.workflows[0]?.id ?? null);
+      notify("Workflows saved.", "success");
+      return data.workflows;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Workflows could not be saved.", "error");
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function run() {
+    if (!selected) return;
+    setRunning(true);
+    try {
+      await save();
+      const response = await fetch("/api/feed/workflows/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: selected.script }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const { id } = await response.json() as { id: string };
+      notify("Workflow started — follow it in the feed.", "success");
+      window.open(`/feed?snippet=${encodeURIComponent(id)}`, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The workflow could not be started.", "error");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="settings-card"><div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Loading workflows…</span></div></div>;
+  }
+
+  return (
+    <div className="feed-skills-manager">
+      <div className="feed-skills-body">
+        <div className="feed-skills-list" role="listbox" aria-label="Workflows">
+          {workflows.map((workflow) => {
+            const active = workflow.id === selectedId;
+            return (
+              <div className={`feed-skill-item ${active ? "is-active" : ""}`} key={workflow.id}>
+                <button type="button" className="feed-skill-item-main" role="option" aria-selected={active} onClick={() => setSelectedId(workflow.id)}>
+                  <span className="feed-skill-item-icon"><Workflow size={15} /></span>
+                  <span className="feed-skill-item-label">{workflow.name || "Untitled workflow"}</span>
+                </button>
+                <div className="feed-skill-item-actions">
+                  <button type="button" className="is-danger" onClick={() => remove(workflow.id)} aria-label="Remove workflow"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            );
+          })}
+          <button type="button" className="feed-skill-add" onClick={() => add()}><Plus size={15} />Add workflow</button>
+          <button type="button" className="feed-skill-add" onClick={() => importRef.current?.click()}><Upload size={15} />Import .js</button>
+          <input ref={importRef} type="file" accept=".js,.mjs,text/javascript" className="hidden" onChange={(event) => void onImport(event)} />
+        </div>
+        <div className="feed-skills-detail">
+          {selected ? (
+            <>
+              <div className="feed-skill-detail-head">
+                <span className="feed-skill-label-input" aria-live="polite"><strong>{selected.name || "Untitled workflow"}</strong>{selected.description ? ` — ${selected.description}` : ""}</span>
+              </div>
+              <MarkdownCodeEditor value={selected.script} onChange={(value) => update(selected.id, value)} ariaLabel={`${selected.name || "Workflow"} script`} rows={16} placeholder="A Claude Code workflow: export const meta = { name, description } then use agent()/parallel()/pipeline()/log()/phase()." />
+            </>
+          ) : (
+            <div className="feed-skill-empty"><Workflow size={22} /><p>No workflows yet. Add one or import a .js file.</p></div>
+          )}
+        </div>
+      </div>
+      <div className="feed-skills-editor-actions">
+        <ActionButton variant="secondary" size="small" onClick={() => void run()} disabled={running || !selected} icon={running ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}>Run in feed</ActionButton>
+        <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save workflows</ActionButton>
       </div>
     </div>
   );
