@@ -316,37 +316,25 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   // The feed is always on: no enable gate remains.
   assert.doesNotMatch(feed, /feedEnabled/);
   assert.doesNotMatch(settings, /feedEnabled/);
-  // Multi-step workflows: an editable, JS/JSON-importable chain run across turns
-  // with an approval gate between steps.
-  const [schema, bootstrap, workflowsLib, workflowsRoute] = await Promise.all([
+  // The abandoned editable-note and prompt-chain-workflow experiments are fully
+  // removed: no schema columns, no lib/route files, no UI, no scheduler.
+  const [schema, bootstrap] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/lib/feed-workflows.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/feed/workflows/route.ts", import.meta.url), "utf8"),
   ]);
-  // The retired editable-note column is gone from the schema.
   assert.doesNotMatch(schema, /note: text\("note"\)/);
+  assert.doesNotMatch(schema, /workflowSteps/);
   assert.doesNotMatch(feed, /feed-note-editor/);
-  assert.match(workflowsLib, /export function normalizeFeedWorkflows/);
-  assert.match(workflowsLib, /export function parseWorkflowFile/);
-  assert.match(workflowsRoute, /normalizeFeedWorkflows/);
-  assert.match(schema, /workflowSteps: text\("workflow_steps"\)/);
-  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS feed_snippets[\s\S]*?workflow_steps TEXT/);
-  // The composer queues the remaining steps and the thread offers the next one.
-  assert.match(feed, /pendingWorkflowSteps/);
-  assert.match(feed, /runNextWorkflowStep/);
-  assert.match(settings, /FeedWorkflowsEditor/);
-  // Workflows can be scheduled: an always-on server scheduler auto-starts them,
-  // registered from instrumentation, and only ever queues approval-gated writes.
-  const [scheduler, instrumentation] = await Promise.all([
-    readFile(new URL("../app/lib/feed-scheduler.ts", import.meta.url), "utf8"),
-    readFile(new URL("../instrumentation.ts", import.meta.url), "utf8"),
-  ]);
-  assert.match(workflowsLib, /intervalMinutes/);
-  assert.match(scheduler, /export function startFeedScheduler/);
-  assert.match(scheduler, /export async function startWorkflowRun/);
-  assert.match(instrumentation, /startFeedScheduler/);
-  assert.match(settings, /feed-workflow-schedule/);
+  assert.doesNotMatch(feed, /pendingWorkflowSteps|runNextWorkflowStep/);
+  assert.doesNotMatch(settings, /FeedWorkflowsEditor|feed-workflow-schedule/);
+  for (const gone of [
+    "../app/lib/feed-workflows.ts",
+    "../app/lib/feed-scheduler.ts",
+    "../app/api/feed/workflows/route.ts",
+    "../instrumentation.ts",
+  ]) {
+    await assert.rejects(readFile(new URL(gone, import.meta.url), "utf8"));
+  }
 });
 
 test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", async () => {

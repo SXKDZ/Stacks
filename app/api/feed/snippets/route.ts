@@ -8,27 +8,6 @@ import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/fee
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Validate a queued-workflow-steps JSON string down to [{label, prompt}]; the
- *  agent never sees this directly, so it just needs to be well-formed. Returns
- *  null (store nothing) when there are no valid remaining steps. */
-function normalizeWorkflowSteps(raw: string): string | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return null;
-    const steps = parsed
-      .filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === "object")
-      .map((step) => ({
-        label: typeof step.label === "string" ? step.label.slice(0, 60) : "",
-        prompt: typeof step.prompt === "string" ? step.prompt.trim().slice(0, 4000) : "",
-      }))
-      .filter((step) => step.prompt);
-    return steps.length ? JSON.stringify(steps) : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(): Promise<Response> {
   const database = await ensureDatabase();
   const rows = database
@@ -63,9 +42,6 @@ export async function POST(request: Request): Promise<Response> {
     let title = "";
     let paperIds: string[] = [];
     let attachments: SnippetAttachment[] = [];
-    // Remaining workflow steps queued after this opening turn (JSON string), when
-    // the feed was started from a multi-step workflow.
-    let workflowSteps = "";
 
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("multipart/form-data")) {
@@ -74,18 +50,16 @@ export async function POST(request: Request): Promise<Response> {
       freeText = String(form.get("body") ?? "").trim();
       title = String(form.get("title") ?? "").trim();
       paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
-      workflowSteps = String(form.get("workflowSteps") ?? "").trim();
       const files = form.getAll("files").filter((value): value is File => value instanceof File);
       attachments = await collectSnippetAttachments(workingDir, files, paperIds);
     } else {
       const body = (await request.json()) as {
-        instruction?: string; body?: string; title?: string; paperIds?: string[]; workflowSteps?: unknown;
+        instruction?: string; body?: string; title?: string; paperIds?: string[];
       };
       instruction = body.instruction?.trim() ?? "";
       freeText = body.body?.trim() ?? "";
       title = body.title?.trim() ?? "";
       paperIds = Array.isArray(body.paperIds) ? body.paperIds.filter(Boolean) : [];
-      workflowSteps = Array.isArray(body.workflowSteps) ? JSON.stringify(body.workflowSteps) : "";
       attachments = await collectSnippetAttachments(workingDir, [], paperIds);
     }
 
@@ -105,7 +79,6 @@ export async function POST(request: Request): Promise<Response> {
         status: "queued",
         sessionId: "",
         attachments: attachments.length ? JSON.stringify(attachments) : null,
-        workflowSteps: normalizeWorkflowSteps(workflowSteps),
         createdAt: now,
         updatedAt: now,
       })

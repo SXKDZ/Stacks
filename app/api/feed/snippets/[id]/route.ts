@@ -29,33 +29,28 @@ export async function GET(
   return Response.json({ snippet, messages, proposals });
 }
 
-/** Update a feed's editable fields: its title (rename) and workflow-step queue. */
+/** Rename a feed (update its title). */
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as { title?: string; workflowSteps?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { title?: string };
+  const title = body.title?.trim();
+  if (!title) {
+    return Response.json({ error: "Enter a title." }, { status: 400 });
+  }
   const database = await ensureDatabase();
   const snippet = database.select().from(feedSnippets).where(eq(feedSnippets.id, id)).get();
   if (!snippet) {
     return Response.json({ error: "Snippet not found." }, { status: 404 });
   }
-  const changes: { title?: string; workflowSteps?: string | null; updatedAt: string } = { updatedAt: new Date().toISOString() };
-  if (typeof body.title === "string") {
-    const title = body.title.trim();
-    if (!title) {
-      return Response.json({ error: "Enter a title." }, { status: 400 });
-    }
-    changes.title = title.slice(0, 200);
-  }
-  // Advancing a workflow rewrites the remaining-steps queue (empty array clears
-  // it once the last step has run).
-  if (Array.isArray(body.workflowSteps)) {
-    changes.workflowSteps = body.workflowSteps.length ? JSON.stringify(body.workflowSteps) : null;
-  }
-  database.update(feedSnippets).set(changes).where(eq(feedSnippets.id, id)).run();
-  return Response.json({ ok: true, title: changes.title ?? snippet.title });
+  database
+    .update(feedSnippets)
+    .set({ title: title.slice(0, 200), updatedAt: new Date().toISOString() })
+    .where(eq(feedSnippets.id, id))
+    .run();
+  return Response.json({ ok: true, title: title.slice(0, 200) });
 }
 
 /** Delete a feed and its messages/proposals (cascade). */

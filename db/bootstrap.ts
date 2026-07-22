@@ -78,7 +78,6 @@ const schemaStatements = [
     working_dir TEXT,
     session_id TEXT,
     error TEXT,
-    workflow_steps TEXT,
     issue_number INTEGER,
     issue_title_synced TEXT,
     attachments TEXT,
@@ -224,10 +223,15 @@ async function initializeDatabase(): Promise<void> {
   }
 
   // The schema above is the authoritative, final shape; all historical column
-  // migrations have been folded into the CREATE TABLE statements. The one live
-  // exception is the short-lived editable-note column, dropped where it exists.
-  if (tableColumns(raw, "feed_snippets").has("note")) {
+  // migrations have been folded into the CREATE TABLE statements. Drop the two
+  // short-lived columns from the abandoned editable-note + prompt-chain-workflow
+  // experiments where they linger.
+  const feedSnippetColumns = tableColumns(raw, "feed_snippets");
+  if (feedSnippetColumns.has("note")) {
     raw.prepare("ALTER TABLE feed_snippets DROP COLUMN note").run();
+  }
+  if (feedSnippetColumns.has("workflow_steps")) {
+    raw.prepare("ALTER TABLE feed_snippets DROP COLUMN workflow_steps").run();
   }
   // Backfill a spread of accent colors onto any collections created before the
   // color column existed (deterministic from the id, so it never shifts).
