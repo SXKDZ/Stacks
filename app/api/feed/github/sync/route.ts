@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedSnippets } from "@/db/schema";
@@ -9,6 +11,7 @@ import {
   listOpenIssues,
   patchIssueTitle,
   postComment,
+  uploadAttachment,
   GitHubError,
   type GitHubConfig,
 } from "@/app/lib/github-sync";
@@ -21,9 +24,49 @@ export const runtime = "nodejs";
 // Only prose turns are mirrored to GitHub — tool calls and raw proposal blocks
 // are local implementation detail, not something to read on a phone.
 const MIRRORED_KINDS = new Set(["text", "result"]);
+// Cap the size Stacks will push to the repo per attachment (base64 via the
+// Contents API); larger files stay local-only rather than bloating the repo.
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 function mirrorLabel(role: string): string {
   return role === "user" ? "**You:**" : "**Agent:**";
+}
+
+interface StoredAttachment { relativePath: string; label: string }
+
+/**
+ * Upload a turn's attachments into the repo and return a Markdown link list to
+ * append to the mirrored comment, so a phone can download them. Files are staged
+ * at feed/<id>/attachments/<name> locally and mirrored to the same repo path.
+ */
+async function mirrorAttachments(
+  config: GitHubConfig,
+  snippetId: string,
+  attachmentsJson: string | null,
+  counts: { attachmentsUploaded: number },
+): Promise<string> {
+  if (!attachmentsJson) return "";
+  let parsed: StoredAttachment[];
+  try {
+    parsed = JSON.parse(attachmentsJson) as StoredAttachment[];
+  } catch {
+    return "";
+  }
+  const links: string[] = [];
+  for (const attachment of parsed) {
+    const name = basename(attachment.relativePath);
+    const localPath = join(feedWorkingDir(snippetId), "attachments", name);
+    if (!existsSync(localPath)) continue;
+    const bytes = readFileSync(localPath);
+    if (bytes.length > MAX_UPLOAD_BYTES) {
+      links.push(`- ${attachment.label} (too large to upload; kept local)`);
+      continue;
+    }
+    const url = await uploadAttachment(config, `feed/${snippetId}/attachments/${name}`, bytes);
+    links.push(`- [${attachment.label}](${url})`);
+    counts.attachmentsUploaded += 1;
+  }
+  return links.length ? `Attachments:\n${links.join("\n")}` : "";
 }
 
 /**
@@ -48,7 +91,7 @@ export async function POST(): Promise<Response> {
   const config: GitHubConfig = { repo, token };
 
   const database = await ensureDatabase();
-  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0 };
+  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0 };
   const since = readGithubLastSyncedAt();
   // Stamp the high-water mark from BEFORE the network calls, so anything that
   // changes mid-sync is re-examined next time rather than skipped.
@@ -86,8 +129,10 @@ export async function POST(): Promise<Response> {
       for (const message of messages) {
         if (message.githubCommentId || !MIRRORED_KINDS.has(message.kind)) continue;
         const content = message.content.trim();
-        if (!content) continue;
-        const commentId = await postComment(config, issueNumber, `${mirrorLabel(message.role)}\n\n${content}`);
+        const attachmentLinks = await mirrorAttachments(config, feed.id, message.attachments, counts);
+        if (!content && !attachmentLinks) continue;
+        const body = [`${mirrorLabel(message.role)}\n\n${content}`, attachmentLinks].filter(Boolean).join("\n\n");
+        const commentId = await postComment(config, issueNumber, body);
         database.update(feedMessages).set({ githubCommentId: commentId }).where(eq(feedMessages.id, message.id)).run();
         counts.commentsPosted += 1;
       }

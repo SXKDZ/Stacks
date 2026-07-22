@@ -334,6 +334,10 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   assert.match(client, /patchIssueTitle/);
   assert.match(sync, /issueTitleSynced/);
   assert.match(sync, /commentsUpdated/);
+  // Attachments are uploaded to the repo (Contents API) and linked in comments.
+  assert.match(client, /uploadAttachment/);
+  assert.match(client, /\/contents\//);
+  assert.match(sync, /mirrorAttachments/);
   // Settings persist a repo (non-secret) and token (secret) in settings.json.
   assert.match(settingsLib, /STACKS_GITHUB_REPO/);
   assert.match(settingsLib, /GITHUB_TOKEN/);

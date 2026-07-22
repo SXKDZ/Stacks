@@ -204,6 +204,46 @@ export async function createIssue(
   return data.number;
 }
 
+/**
+ * Upload an attachment file into the repo via the Contents API (GitHub has no
+ * issue-attachment REST endpoint), so a mobile reader can download it from the
+ * private repo. Idempotent: if the path already holds identical bytes it's left
+ * alone. Returns the repo blob URL to link in the mirrored comment.
+ */
+export async function uploadAttachment(
+  config: GitHubConfig,
+  repoPath: string,
+  bytes: Buffer,
+): Promise<string> {
+  const { owner, name } = parseRepo(config.repo);
+  const encodedPath = repoPath.split("/").map(encodeURIComponent).join("/");
+  const contentsUrl = `/repos/${owner}/${name}/contents/${encodedPath}`;
+  // Look up an existing file's sha (required to update, and lets us skip a
+  // no-op re-upload of the same content).
+  let existingSha: string | undefined;
+  try {
+    const existing = (await githubFetch(config, contentsUrl)) as { sha?: string; content?: string } | null;
+    if (existing?.sha) {
+      existingSha = existing.sha;
+      const remoteB64 = (existing.content ?? "").replace(/\n/g, "");
+      if (remoteB64 && remoteB64 === bytes.toString("base64")) {
+        return `https://github.com/${owner}/${name}/blob/HEAD/${encodedPath}`;
+      }
+    }
+  } catch {
+    // 404 (not yet uploaded) is expected; fall through to create it.
+  }
+  const data = (await githubFetch(config, contentsUrl, {
+    method: "PUT",
+    body: JSON.stringify({
+      message: `stacks: attachment ${repoPath}`,
+      content: bytes.toString("base64"),
+      ...(existingSha ? { sha: existingSha } : {}),
+    }),
+  })) as { content?: { html_url?: string } };
+  return data.content?.html_url ?? `https://github.com/${owner}/${name}/blob/HEAD/${encodedPath}`;
+}
+
 /** Post a Stacks-authored comment (marked so sync skips it on ingest). */
 export async function postComment(
   config: GitHubConfig,

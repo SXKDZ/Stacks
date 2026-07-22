@@ -770,6 +770,7 @@ export default function FeedWorkspace() {
         c.commentsIngested ? `${c.commentsIngested} pulled` : "",
         c.commentsUpdated ? `${c.commentsUpdated} edited` : "",
         c.titlesRenamed ? `${c.titlesRenamed} renamed` : "",
+        c.attachmentsUploaded ? `${c.attachmentsUploaded} file${c.attachmentsUploaded === 1 ? "" : "s"} uploaded` : "",
       ].filter(Boolean);
       const base = parts.length ? `Synced: ${parts.join(", ")}.` : "Synced. Already up to date.";
       const message = data.truncated ? `${base} More remain; sync again to continue.` : base;
