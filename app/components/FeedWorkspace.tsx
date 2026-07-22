@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -117,6 +118,84 @@ function AttachmentChips({ snippetId, attachments }: { snippetId: string; attach
         </div>
       ) : null}
     </>
+  );
+}
+
+// Persistent GitHub-sync activity log (localStorage, survives reloads) so the
+// user can review past sync outcomes, not just the last transient notice.
+interface SyncLogEntry {
+  id: string;
+  at: number;
+  status: "success" | "error";
+  summary: string;
+}
+const SYNC_LOG_KEY = "stacks-sync-log-v1";
+
+function readSyncLog(): SyncLogEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SYNC_LOG_KEY) || "[]") as SyncLogEntry[];
+    return Array.isArray(parsed) ? parsed.slice(0, 50) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSyncLog(entries: SyncLogEntry[]): void {
+  try {
+    window.localStorage.setItem(SYNC_LOG_KEY, JSON.stringify(entries.slice(0, 50)));
+  } catch {
+    // A full/blocked storage quota must not break syncing.
+  }
+}
+
+/**
+ * The feed sidebar's bottom bar: a highlighted Sync button plus a collapsible
+ * activity log of past syncs. One row; the log panel is portaled to <body> so
+ * the sidebar's overflow:hidden can't clip it.
+ */
+function SyncActivityDock({ log, onClear, syncing, onSync }: {
+  log: SyncLogEntry[];
+  onClear: () => void;
+  syncing: boolean;
+  onSync: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  const panel = open && mounted ? createPortal(
+    <>
+      <div className="feed-sync-scrim" onClick={() => setOpen(false)} />
+      <div className="feed-sync-panel" role="dialog" aria-label="Sync activity">
+        <header>
+          <span><RefreshCw size={15} /><strong>Sync activity</strong></span>
+          <div>
+            <button type="button" className="activity-clear" onClick={onClear} disabled={!log.length}>Clear</button>
+            <button type="button" onClick={() => setOpen(false)} aria-label="Collapse sync activity"><X size={15} /></button>
+          </div>
+        </header>
+        <div className="feed-sync-panel-list">
+          {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
+            <div className={`feed-sync-log-row is-${entry.status}`} key={entry.id}>
+              {entry.status === "success" ? <CircleCheck size={15} /> : <CircleAlert size={15} />}
+              <span><strong>{entry.summary}</strong><small>{new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>,
+    document.body,
+  ) : null;
+
+  return (
+    <div className="feed-sync-bar">
+      <ActionButton variant="primary" size="small" className="feed-sync-run" onClick={onSync} disabled={syncing} icon={syncing ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}>{syncing ? "Syncing…" : "Sync inbox"}</ActionButton>
+      <button type="button" className={`feed-sync-toggle ${open ? "is-open" : ""}`} onClick={() => setOpen((value) => !value)} aria-expanded={open} title="Sync activity">
+        <ChevronUp size={15} />
+      </button>
+      {panel}
+    </div>
   );
 }
 
@@ -637,6 +716,18 @@ export default function FeedWorkspace() {
   const [githubReady, setGithubReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [syncLog, setSyncLog] = useState<SyncLogEntry[]>([]);
+
+  useEffect(() => { setSyncLog(readSyncLog()); }, []);
+
+  const recordSync = useCallback((status: "success" | "error", summary: string) => {
+    setSyncLog((current) => {
+      const next = [{ id: crypto.randomUUID(), at: Date.now(), status, summary }, ...current].slice(0, 50);
+      writeSyncLog(next);
+      return next;
+    });
+  }, []);
+  const clearSyncLog = useCallback(() => { setSyncLog([]); writeSyncLog([]); }, []);
 
   const loadSnippets = useCallback(async () => {
     const response = await fetch("/api/feed/snippets", { cache: "no-store" });
@@ -674,15 +765,19 @@ export default function FeedWorkspace() {
         c.commentsUpdated ? `${c.commentsUpdated} edited` : "",
         c.titlesRenamed ? `${c.titlesRenamed} renamed` : "",
       ].filter(Boolean);
-      const base = parts.length ? `Synced — ${parts.join(", ")}.` : "Synced — already up to date.";
-      setNotice({ tone: "success", message: data.truncated ? `${base} More remain — sync again to continue.` : base });
+      const base = parts.length ? `Synced: ${parts.join(", ")}.` : "Synced. Already up to date.";
+      const message = data.truncated ? `${base} More remain; sync again to continue.` : base;
+      setNotice({ tone: "success", message });
+      recordSync("success", message);
       await loadSnippets();
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "GitHub sync failed." });
+      const message = error instanceof Error ? error.message : "GitHub sync failed.";
+      setNotice({ tone: "error", message });
+      recordSync("error", message);
     } finally {
       setSyncing(false);
     }
-  }, [loadSnippets]);
+  }, [loadSnippets, recordSync]);
 
   useEffect(() => {
     let cancelled = false;
@@ -838,14 +933,8 @@ export default function FeedWorkspace() {
       <aside className="feed-list-pane">
         <header className="feed-list-head">
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
-          <div className="feed-list-head-actions">
-            {githubReady ? (
-              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} title="Sync with the GitHub inbox" icon={syncing ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}>Sync</ActionButton>
-            ) : null}
-            <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New</ActionButton>
-          </div>
+          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New</ActionButton>
         </header>
-        {notice ? <p className={`feed-sync-notice is-${notice.tone}`}>{notice.message}</p> : null}
         <div className="feed-list" role="list">
           {snippets.length === 0 ? (
             <p className="feed-list-empty">Nothing captured yet. Start a new feed and the agent goes to work.</p>
@@ -864,6 +953,12 @@ export default function FeedWorkspace() {
             ))
           )}
         </div>
+        {githubReady ? (
+          <div className="feed-sidebar-sync">
+            {notice ? <p className={`feed-sync-notice is-${notice.tone}`}>{notice.message}</p> : null}
+            <SyncActivityDock log={syncLog} onClear={clearSyncLog} syncing={syncing} onSync={() => void syncGithub()} />
+          </div>
+        ) : null}
       </aside>
 
       <div className="feed-detail-pane">

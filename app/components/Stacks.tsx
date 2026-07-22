@@ -2644,8 +2644,8 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                 {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
                 {paper.doi ? <span><b>DOI</b>{paper.doi}</span> : null}
                 {paper.preprintId || paper.arxivId ? <span><b>Preprint</b>{paper.preprintId || paper.arxivId}</span> : null}
-                {paper.localPath ? <span className="publication-file-row"><b>File</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("pdf", paper.localPath!)} title={`${paper.localPath} — show the stored PDF in its folder`}>{paper.localPath}</TextButton></span> : null}
-                {paper.htmlSnapshotPath ? <span className="publication-file-row"><b>HTML</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("html", paper.htmlSnapshotPath!)} title={`${paper.htmlSnapshotPath} — show the stored HTML snapshot in its folder`}>{paper.htmlSnapshotPath}</TextButton></span> : null}
+                {paper.localPath ? <span className="publication-file-row"><b>File</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("pdf", paper.localPath!)} title={`${paper.localPath}: show the stored PDF in its folder`}>{paper.localPath}</TextButton></span> : null}
+                {paper.htmlSnapshotPath ? <span className="publication-file-row"><b>HTML</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("html", paper.htmlSnapshotPath!)} title={`${paper.htmlSnapshotPath}: show the stored HTML snapshot in its folder`}>{paper.htmlSnapshotPath}</TextButton></span> : null}
               </div>
             </div>
           ) : null}
@@ -3494,7 +3494,20 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
     const setField = (name: string, value: string | number | null | undefined) => {
       const field = form.elements.namedItem(name);
       if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
-        field.value = value === null || value === undefined ? "" : String(value);
+        const next = value === null || value === undefined ? "" : String(value);
+        // These inputs are React-controlled. Assigning field.value directly
+        // also updates React's internal value tracker, so the dispatched event
+        // looks like a no-op and onChange never fires — leaving component state
+        // empty, which then wipes the field on the next render (e.g. on focus).
+        // Set through the NATIVE prototype setter to bypass React's tracker, so
+        // the input event is seen as a real change and state updates.
+        const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const nativeSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+        if (nativeSetter) {
+          nativeSetter.call(field, next);
+        } else {
+          field.value = next;
+        }
         field.dispatchEvent(new Event("input", { bubbles: true }));
         field.dispatchEvent(new Event("change", { bubbles: true }));
       }

@@ -126,7 +126,7 @@ export default function ReaderWorkspace() {
         }
         if (active) {
           setPaper(selected);
-          document.title = `${selected.title} — Reader`;
+          document.title = `${selected.title} · Reader`;
         }
       } catch (nextError) {
         if (active) {

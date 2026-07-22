@@ -266,8 +266,9 @@
   font-size: var(--type-micro);
   font-style: normal;
   position: absolute;
-  right: 9px;
-  top: 10px;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .field-ok { color: var(--green) !important; }
