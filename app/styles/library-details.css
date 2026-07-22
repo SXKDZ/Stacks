@@ -1092,6 +1092,42 @@ td.number-cell {
   margin: 9px 0 0;
 }
 
+/* An eyebrow label with a trailing action button (e.g. Summary + Generate),
+   matching the edit window's field-label-action row. */
+.eyebrow-action {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.eyebrow-generate {
+  align-items: center;
+  background: var(--brand-blue-soft);
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line));
+  border-radius: 7px;
+  color: var(--brand-blue-strong);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 750;
+  gap: 5px;
+  height: 26px;
+  letter-spacing: 0.04em;
+  padding: 0 9px;
+  text-transform: none;
+  transition: background var(--motion-control);
+}
+
+.eyebrow-generate:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-blue) 18%, transparent);
+}
+
+.eyebrow-generate:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .detail-section textarea {
   background: white;
   border: 1px solid var(--line);

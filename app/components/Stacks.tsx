@@ -2512,6 +2512,39 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
 }) {
   const hasViewer = Boolean(paper.pdfViewUrl || paper.htmlUrl);
   const detailPanelRef = useRef<HTMLElement>(null);
+  const { runTask } = useBackgroundTasks();
+  const [summarizing, setSummarizing] = useState(false);
+
+  async function generateSummary() {
+    setSummarizing(true);
+    try {
+      const payload = await runTask(`Generate summary · ${paper.title}`, async () => {
+        const response = await fetch("/api/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paper: {
+              title: paper.title,
+              abstract: paper.abstract,
+              authors: paper.authors.map((author) => author.displayName),
+              venue: venueLine(paper),
+              year: paper.year,
+              url: paper.url,
+              doi: paper.doi,
+              localPath: paper.localPath,
+            },
+          }),
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        return response.json() as Promise<{ summary: string }>;
+      });
+      await onUpdate(paper, { summary: payload.summary }, "Summary generated and saved.");
+    } catch {
+      // runTask surfaces the failure in the Activity dock.
+    } finally {
+      setSummarizing(false);
+    }
+  }
 
   useEffect(() => {
     if (suspendAutoClose) {
@@ -2599,7 +2632,13 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             <ActionButton variant="secondary" onClick={onExport} icon={<Download />}>Export</ActionButton>
           </div>
           <div className="detail-section summary-section">
-            <p className="eyebrow">Summary</p>
+            <p className="eyebrow eyebrow-action">
+              <span>Summary</span>
+              <button type="button" className="eyebrow-generate" onClick={() => void generateSummary()} disabled={summarizing}>
+                {summarizing ? <LoaderCircle className="spin" size={13} /> : <WandSparkles size={13} />}
+                {paper.summary ? "Regenerate" : "Generate"}
+              </button>
+            </p>
             {paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet. Stacks can create one from the paper.</p>}
           </div>
           <div className="detail-section">

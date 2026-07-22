@@ -880,7 +880,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                   <ActionButton variant="secondary" onClick={() => void chooseStorageDirectory()} disabled={storageReport?.capabilities?.folderMove === false || selectingStorageDirectory || movingStorage} icon={selectingStorageDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Browse</ActionButton>
                   <ActionButton variant="secondary" onClick={() => void moveLibrary()} disabled={storageReport?.capabilities?.folderMove === false || movingStorage || !storageTarget.trim()} icon={movingStorage ? <LoaderCircle className="spin" size={15} /> : <ArrowRightLeft size={15} />}>Move</ActionButton>
                 </div>
-                <small>Copies your files to the new folder, then removes the old one — only after two confirmations.</small>
+                <small>Copies your files to the new folder, then removes the old one. Asks twice first.</small>
               </label>
             </div>
             <div className="settings-card storage-doctor-card">
