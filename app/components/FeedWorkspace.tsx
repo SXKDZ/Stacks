@@ -47,6 +47,7 @@ interface FeedSnippet {
   durationMs?: number;
   turns?: number;
   attachments?: string | null;
+  pendingProposals?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -346,7 +347,10 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDele
       <button type="button" className="feed-row-main" onClick={onSelect} aria-current={active}>
         <span className={`feed-row-glyph feed-status-${snippet.status}`}><StatusGlyph status={snippet.status} /></span>
         <span className="feed-row-body">
-          <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
+          <span className="feed-row-title-line">
+            <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
+            {snippet.pendingProposals ? <span className="feed-row-pending" title={`${snippet.pendingProposals} change${snippet.pendingProposals === 1 ? "" : "s"} to approve`}>{snippet.pendingProposals}</span> : null}
+          </span>
           <span className="feed-row-meta">
             <span className={`feed-row-status feed-status-${snippet.status}`}>{statusLabel(snippet.status)}</span>
             <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>

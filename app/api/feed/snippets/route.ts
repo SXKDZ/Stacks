@@ -1,6 +1,6 @@
-import { desc } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedSnippets } from "@/db/schema";
+import { feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, runFeedAgent } from "@/app/lib/feed-agent";
 import { buildSnippetPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
@@ -15,7 +15,17 @@ export async function GET(): Promise<Response> {
     .from(feedSnippets)
     .orderBy(desc(feedSnippets.updatedAt))
     .all();
-  return Response.json({ snippets: rows });
+  // Count pending proposals per snippet so the list can badge feeds awaiting
+  // approval (the detail view has this, but the sidebar row didn't show it).
+  const pendingRows = database
+    .select({ snippetId: feedProposals.snippetId, count: sql<number>`count(*)` })
+    .from(feedProposals)
+    .where(eq(feedProposals.status, "pending"))
+    .groupBy(feedProposals.snippetId)
+    .all();
+  const pendingBySnippet = new Map(pendingRows.map((row) => [row.snippetId, Number(row.count)]));
+  const snippets = rows.map((row) => ({ ...row, pendingProposals: pendingBySnippet.get(row.id) ?? 0 }));
+  return Response.json({ snippets });
 }
 
 export async function POST(request: Request): Promise<Response> {

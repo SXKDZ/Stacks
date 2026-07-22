@@ -1198,6 +1198,13 @@
   min-width: 0;
 }
 
+.feed-row-title-line {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+}
+
 .feed-row-title {
   color: var(--muted);
   font-size: var(--type-control);
@@ -1206,6 +1213,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Count of library changes awaiting approval in this feed. */
+.feed-row-pending {
+  align-items: center;
+  background: var(--amber-soft, color-mix(in srgb, var(--amber) 18%, transparent));
+  border-radius: var(--radius-pill);
+  color: var(--amber);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  font-weight: 800;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 6px;
 }
 
 .feed-row:hover .feed-row-title,
