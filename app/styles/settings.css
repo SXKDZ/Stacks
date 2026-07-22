@@ -746,6 +746,43 @@
   gap: 9px;
 }
 
+/* A workflow's steps: a vertical stack of numbered prompt blocks. */
+.feed-workflow-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.feed-workflow-step {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.feed-workflow-step-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.feed-workflow-step-index {
+  align-items: center;
+  background: var(--brand-blue-soft);
+  border-radius: 50%;
+  color: var(--brand-blue-strong);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: var(--type-label);
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
 /* Icon picker: a compact dropdown (the current icon + a chevron) that opens a
    grid popover, instead of always showing every icon inline. */
 .feed-skill-icon-picker {

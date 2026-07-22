@@ -247,6 +247,9 @@ async function initializeDatabase(): Promise<void> {
   if (!feedSnippetColumns.has("note")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN note TEXT NOT NULL DEFAULT ''").run();
   }
+  if (!feedSnippetColumns.has("workflow_steps")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN workflow_steps TEXT").run();
+  }
   if (!feedSnippetColumns.has("issue_number")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_number INTEGER").run();
   }

@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wand2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
+import { DEFAULT_FEED_WORKFLOWS, type FeedWorkflow } from "@/app/lib/feed-workflows";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
@@ -62,6 +63,7 @@ interface FeedSnippet {
   title: string;
   instruction: string;
   note: string;
+  workflowSteps: string | null;
   status: string;
   error: string | null;
   inputTokens?: number;
@@ -538,6 +540,30 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
     await fetch(`/api/feed/snippets/${snippet.id}/stop`, { method: "POST" });
   }
 
+  // The remaining workflow steps queued on this feed (empty for a normal feed).
+  const remainingWorkflowSteps: Array<{ label: string; prompt: string }> = (() => {
+    try {
+      const parsed = JSON.parse(snippet.workflowSteps ?? "[]") as unknown;
+      return Array.isArray(parsed) ? parsed as Array<{ label: string; prompt: string }> : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  // Send the next queued workflow step as a reply, then persist the shortened
+  // queue so the button advances and disappears when the workflow is done.
+  async function runNextWorkflowStep() {
+    const [next, ...rest] = remainingWorkflowSteps;
+    if (!next) return;
+    await fetch(`/api/feed/snippets/${snippet.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflowSteps: rest }),
+    });
+    await sendReply({ text: next.prompt, files: [], paperIds: [] });
+    onChanged();
+  }
+
   async function resolveProposal(proposalId: string, decision: "approve" | "reject") {
     setResolving(proposalId);
     try {
@@ -766,6 +792,13 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
             <ArrowDown size={16} />
           </button>
         ) : null}
+        {remainingWorkflowSteps.length && !running ? (
+          <button type="button" className="feed-workflow-next" onClick={() => void runNextWorkflowStep()} disabled={replying}>
+            <Wand2 size={14} />
+            <span>Next step: <strong>{remainingWorkflowSteps[0].label}</strong></span>
+            <span className="feed-workflow-next-count">{remainingWorkflowSteps.length} left</span>
+          </button>
+        ) : null}
         <AttachBox
           library={library}
           placeholder={running ? "The agent is working. Send to interrupt and steer it." : "Reply to continue this thread. The agent keeps its context."}
@@ -822,8 +855,11 @@ export default function FeedWorkspace() {
   }, [sidebarWidth]);
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
+  const [workflows, setWorkflows] = useState<FeedWorkflow[]>(DEFAULT_FEED_WORKFLOWS);
   const [initialText, setInitialText] = useState("");
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
+  // Steps queued behind the composer's opening turn when a workflow is picked.
+  const [pendingWorkflowSteps, setPendingWorkflowSteps] = useState<FeedWorkflow["steps"]>([]);
   const [githubReady, setGithubReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
@@ -938,6 +974,18 @@ export default function FeedWorkspace() {
     return () => { cancelled = true; };
   }, []);
 
+  // Load the pickable multi-step workflows (user-editable in Settings).
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/feed/workflows", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { workflows?: FeedWorkflow[] } | null) => {
+        if (!cancelled && data?.workflows?.length) setWorkflows(data.workflows);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // Poll while anything is running so row statuses/summaries settle even when a
   // snippet isn't the selected one streaming its own events.
   useEffect(() => {
@@ -978,24 +1026,28 @@ export default function FeedWorkspace() {
   async function createSnippet(payload: AttachSubmit): Promise<boolean> {
     setSubmitting(true);
     try {
+      // Steps queued behind this opening turn if a workflow was picked.
+      const steps = pendingWorkflowSteps;
       let response: Response;
       if (payload.files.length || payload.paperIds.length) {
         const form = new FormData();
         form.set("instruction", payload.text);
         for (const file of payload.files) form.append("files", file);
         for (const paperId of payload.paperIds) form.append("paperIds", paperId);
+        if (steps.length) form.set("workflowSteps", JSON.stringify(steps));
         response = await fetch("/api/feed/snippets", { method: "POST", body: form });
       } else {
         response = await fetch("/api/feed/snippets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instruction: payload.text }),
+          body: JSON.stringify({ instruction: payload.text, workflowSteps: steps.length ? steps : undefined }),
         });
       }
       if (response.ok) {
         const { id } = await response.json() as { id: string };
         setInitialText("");
         setInitialPapers([]);
+        setPendingWorkflowSteps([]);
         setComposing(false);
         await loadSnippets();
         setSelectedId(id);
@@ -1143,12 +1195,37 @@ export default function FeedWorkspace() {
                 {skills.map((skill) => {
                   const Icon = feedSkillIcon(skill.icon);
                   return (
-                    <button type="button" key={skill.id} className="feed-skill" onClick={() => setInitialText(skill.prompt)}>
+                    <button type="button" key={skill.id} className="feed-skill" onClick={() => { setInitialText(skill.prompt); setPendingWorkflowSteps([]); }}>
                       <Icon size={14} /> {skill.label}
                     </button>
                   );
                 })}
               </div>
+              {workflows.length ? (
+                <div className="feed-workflows">
+                  <span className="feed-workflows-label">Workflows</span>
+                  <div className="feed-skills">
+                    {workflows.map((workflow) => {
+                      const Icon = feedSkillIcon(workflow.icon);
+                      const active = pendingWorkflowSteps.length > 0 && initialText === workflow.steps[0]?.prompt;
+                      return (
+                        <button
+                          type="button"
+                          key={workflow.id}
+                          className={`feed-skill feed-skill-workflow ${active ? "is-active" : ""}`}
+                          title={workflow.steps.map((step, index) => `${index + 1}. ${step.label}`).join("\n")}
+                          onClick={() => { setInitialText(workflow.steps[0]?.prompt ?? ""); setPendingWorkflowSteps(workflow.steps.slice(1)); }}
+                        >
+                          <Icon size={14} /> {workflow.label} <span className="feed-workflow-count">{workflow.steps.length}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {pendingWorkflowSteps.length ? (
+                    <p className="feed-workflow-queued">{pendingWorkflowSteps.length} more step{pendingWorkflowSteps.length === 1 ? "" : "s"} will be offered after each turn.</p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <AttachBox
               key={`${initialText}:${initialPapers.map((p) => p.id).join(",")}`}

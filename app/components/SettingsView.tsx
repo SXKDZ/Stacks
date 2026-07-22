@@ -29,7 +29,9 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  Upload,
   Users,
+  Wand2,
   Wrench,
   X,
 } from "lucide-react";
@@ -40,12 +42,13 @@ import {
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 import { DEFAULT_FEED_SKILLS, FEED_SKILL_ICONS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
+import { DEFAULT_FEED_WORKFLOWS, type FeedWorkflow, parseWorkflowFile } from "@/app/lib/feed-workflows";
 import { readError } from "@/app/lib/http";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
 import type { Paper } from "@/app/lib/types";
 
-type SettingsTab = "appearance" | "model" | "prompts" | "skills" | "storage" | "sync" | "integrations" | "about";
+type SettingsTab = "appearance" | "model" | "prompts" | "skills" | "workflows" | "storage" | "sync" | "integrations" | "about";
 type ThemeMode = "dark" | "light";
 
 interface SyncResult {
@@ -796,6 +799,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
         <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
         <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Pickable AI feed prompts</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Wand2 />}><span><strong>Feed workflows</strong><small>Multi-step agent chains</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
@@ -857,6 +861,13 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           <section>
             <SettingsHeading icon={<Sparkles size={19} />} title="Feed skills" detail="Pickable starting prompts shown when you open a new AI feed. Add your own, edit the wording, and choose an icon." />
             <FeedSkillsEditor notify={notify} />
+          </section>
+        ) : null}
+
+        {!loading && tab === "workflows" ? (
+          <section>
+            <SettingsHeading icon={<Wand2 size={19} />} title="Feed workflows" detail="Multi-step chains the agent runs across turns, with an approval gate between each step. Add steps, reorder them, or import a workflow from a JS or JSON file." />
+            <FeedWorkflowsEditor notify={notify} />
           </section>
         ) : null}
 
@@ -1246,6 +1257,199 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
       <div className="feed-skills-editor-actions">
         <ActionButton variant="ghost" size="small" onClick={restoreDefaults}>Restore defaults</ActionButton>
         <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save skills</ActionButton>
+      </div>
+    </div>
+  );
+}
+
+function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "info") => void }) {
+  const [workflows, setWorkflows] = useState<FeedWorkflow[]>(DEFAULT_FEED_WORKFLOWS);
+  const [selectedId, setSelectedId] = useState<string | null>(DEFAULT_FEED_WORKFLOWS[0]?.id ?? null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
+  const iconNames = Object.keys(FEED_SKILL_ICONS);
+  const selected = workflows.find((workflow) => workflow.id === selectedId) ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/feed/workflows", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { workflows?: FeedWorkflow[] } | null) => {
+        if (!cancelled && data?.workflows) {
+          setWorkflows(data.workflows);
+          setSelectedId(data.workflows[0]?.id ?? null);
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  function update(id: string, patch: Partial<FeedWorkflow>) {
+    setWorkflows((current) => current.map((workflow) => (workflow.id === id ? { ...workflow, ...patch } : workflow)));
+  }
+  function updateStep(index: number, patch: Partial<FeedWorkflow["steps"][number]>) {
+    if (!selected) return;
+    update(selected.id, { steps: selected.steps.map((step, i) => (i === index ? { ...step, ...patch } : step)) });
+  }
+  function addStep() {
+    if (!selected) return;
+    update(selected.id, { steps: [...selected.steps, { label: `Step ${selected.steps.length + 1}`, prompt: "" }] });
+  }
+  function removeStep(index: number) {
+    if (!selected) return;
+    update(selected.id, { steps: selected.steps.filter((_, i) => i !== index) });
+  }
+  function moveStep(index: number, delta: number) {
+    if (!selected) return;
+    const target = index + delta;
+    if (target < 0 || target >= selected.steps.length) return;
+    const steps = [...selected.steps];
+    [steps[index], steps[target]] = [steps[target], steps[index]];
+    update(selected.id, { steps });
+  }
+  function remove(id: string) {
+    setWorkflows((current) => {
+      const index = current.findIndex((workflow) => workflow.id === id);
+      const next = current.filter((workflow) => workflow.id !== id);
+      if (id === selectedId) setSelectedId(next[Math.min(index, next.length - 1)]?.id ?? null);
+      return next;
+    });
+  }
+  function move(id: string, delta: number) {
+    setWorkflows((current) => {
+      const index = current.findIndex((workflow) => workflow.id === id);
+      const target = index + delta;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+  function add() {
+    const id = `workflow-${Date.now()}`;
+    setWorkflows((current) => [...current, { id, label: "New workflow", icon: "wand", steps: [{ label: "Step 1", prompt: "" }] }]);
+    setSelectedId(id);
+  }
+  function restoreDefaults() {
+    setWorkflows(DEFAULT_FEED_WORKFLOWS);
+    setSelectedId(DEFAULT_FEED_WORKFLOWS[0]?.id ?? null);
+  }
+
+  async function importFile(file: File) {
+    try {
+      const parsed = parseWorkflowFile(await file.text());
+      if (!parsed.length) {
+        notify("No workflows found in that file.", "error");
+        return;
+      }
+      // Give imported workflows fresh ids so they never collide with existing ones.
+      const imported = parsed.map((workflow, index) => ({ ...workflow, id: `workflow-${Date.now()}-${index}` }));
+      setWorkflows((current) => [...current, ...imported]);
+      setSelectedId(imported[0].id);
+      notify(`Imported ${imported.length} workflow${imported.length === 1 ? "" : "s"}. Review and save.`, "success");
+    } catch {
+      notify("That file could not be parsed as a workflow.", "error");
+    }
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/feed/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workflows }),
+      });
+      if (!response.ok) {
+        throw new Error(await readError(response));
+      }
+      const data = await response.json() as { workflows: FeedWorkflow[] };
+      setWorkflows(data.workflows);
+      if (!data.workflows.some((workflow) => workflow.id === selectedId)) {
+        setSelectedId(data.workflows[0]?.id ?? null);
+      }
+      notify("Feed workflows saved.", "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Feed workflows could not be saved.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="settings-card"><div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Loading feed workflows…</span></div></div>;
+  }
+
+  const SelectedIcon = selected ? feedSkillIcon(selected.icon) : Wand2;
+
+  return (
+    <div className="feed-skills-manager">
+      <div className="feed-skills-body">
+        <div className="feed-skills-list" role="listbox" aria-label="Feed workflows">
+          {workflows.map((workflow, index) => {
+            const Icon = feedSkillIcon(workflow.icon);
+            const active = workflow.id === selectedId;
+            return (
+              <div className={`feed-skill-item ${active ? "is-active" : ""}`} key={workflow.id}>
+                <button type="button" className="feed-skill-item-main" role="option" aria-selected={active} onClick={() => setSelectedId(workflow.id)}>
+                  <span className="feed-skill-item-icon"><Icon size={15} /></span>
+                  <span className="feed-skill-item-label">{workflow.label || "Untitled workflow"}</span>
+                  <span className="feed-workflow-count">{workflow.steps.length}</span>
+                </button>
+                <div className="feed-skill-item-actions">
+                  <button type="button" onClick={() => move(workflow.id, -1)} disabled={index === 0} aria-label="Move up"><ChevronUp size={14} /></button>
+                  <button type="button" onClick={() => move(workflow.id, 1)} disabled={index === workflows.length - 1} aria-label="Move down"><ChevronDown size={14} /></button>
+                  <button type="button" className="is-danger" onClick={() => remove(workflow.id)} aria-label="Remove workflow"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            );
+          })}
+          <button type="button" className="feed-skill-add" onClick={add}><Plus size={15} />Add workflow</button>
+        </div>
+        <div className="feed-skills-detail">
+          {selected ? (
+            <>
+              <div className="feed-skill-detail-head">
+                <details className="feed-skill-icon-picker">
+                  <summary aria-label="Choose an icon"><SelectedIcon size={16} /><ChevronDown size={13} /></summary>
+                  <div className="feed-skill-icon-menu">
+                    {iconNames.map((name) => {
+                      const OptionIcon = feedSkillIcon(name);
+                      return <button type="button" key={name} className={`feed-skill-icon-option ${selected.icon === name ? "is-selected" : ""}`} onClick={(event) => { update(selected.id, { icon: name }); event.currentTarget.closest("details")?.removeAttribute("open"); }} aria-label={`Icon ${name}`} aria-pressed={selected.icon === name}><OptionIcon size={15} /></button>;
+                    })}
+                  </div>
+                </details>
+                <input className="feed-skill-label-input" value={selected.label} maxLength={60} placeholder="Workflow name" onChange={(event) => update(selected.id, { label: event.target.value })} />
+              </div>
+              <div className="feed-workflow-steps">
+                {selected.steps.map((step, index) => (
+                  <div className="feed-workflow-step" key={index}>
+                    <div className="feed-workflow-step-head">
+                      <span className="feed-workflow-step-index">{index + 1}</span>
+                      <input className="feed-skill-label-input" value={step.label} maxLength={60} placeholder={`Step ${index + 1} name`} onChange={(event) => updateStep(index, { label: event.target.value })} />
+                      <div className="feed-skill-item-actions">
+                        <button type="button" onClick={() => moveStep(index, -1)} disabled={index === 0} aria-label="Move step up"><ChevronUp size={14} /></button>
+                        <button type="button" onClick={() => moveStep(index, 1)} disabled={index === selected.steps.length - 1} aria-label="Move step down"><ChevronDown size={14} /></button>
+                        <button type="button" className="is-danger" onClick={() => removeStep(index)} disabled={selected.steps.length <= 1} aria-label="Remove step"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                    <HighlightedPromptArea value={step.prompt} onChange={(value) => updateStep(index, { prompt: value })} ariaLabel={`${step.label || `Step ${index + 1}`} prompt`} placeholder="What the agent should do in this step. Use {{paper}} to inline attached papers." />
+                  </div>
+                ))}
+                <button type="button" className="feed-skill-add" onClick={addStep}><Plus size={15} />Add step</button>
+              </div>
+            </>
+          ) : (
+            <div className="feed-skill-empty"><Wand2 size={22} /><p>No workflows yet. Add one or import a file.</p></div>
+          )}
+        </div>
+      </div>
+      <div className="feed-skills-editor-actions">
+        <input ref={importRef} type="file" accept=".js,.mjs,.json,.txt,text/plain,application/json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.target.value = ""; }} />
+        <ActionButton variant="secondary" size="small" onClick={() => importRef.current?.click()} icon={<Upload size={15} />}>Import file</ActionButton>
+        <ActionButton variant="ghost" size="small" onClick={restoreDefaults}>Restore defaults</ActionButton>
+        <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save workflows</ActionButton>
       </div>
     </div>
   );

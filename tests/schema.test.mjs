@@ -327,6 +327,21 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   assert.match(snippetIdRoute, /typeof body\.note === "string"/);
   assert.match(feed, /feed-note-editor/);
   assert.match(feed, /onBlur=\{\(event\) => void saveNote\(event\.target\.value\)\}/);
+  // Multi-step workflows: an editable, JS/JSON-importable chain run across turns
+  // with an approval gate between steps.
+  const [workflowsLib, workflowsRoute] = await Promise.all([
+    readFile(new URL("../app/lib/feed-workflows.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/workflows/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workflowsLib, /export function normalizeFeedWorkflows/);
+  assert.match(workflowsLib, /export function parseWorkflowFile/);
+  assert.match(workflowsRoute, /normalizeFeedWorkflows/);
+  assert.match(schema, /workflowSteps: text\("workflow_steps"\)/);
+  assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN workflow_steps TEXT/);
+  // The composer queues the remaining steps and the thread offers the next one.
+  assert.match(feed, /pendingWorkflowSteps/);
+  assert.match(feed, /runNextWorkflowStep/);
+  assert.match(settings, /FeedWorkflowsEditor/);
 });
 
 test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", async () => {

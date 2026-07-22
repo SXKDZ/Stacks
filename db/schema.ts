@@ -147,6 +147,10 @@ export const feedSnippets = sqliteTable(
     // A free-text note the user can edit anytime (notes-app style), separate
     // from the fixed opening instruction. Shown pinned above the agent thread.
     note: text("note").notNull().default(""),
+    // JSON array of the remaining workflow steps ({label, prompt}) queued after
+    // the opening turn, when this feed was started from a multi-step workflow.
+    // The next step is offered as a one-click reply once a turn settles.
+    workflowSteps: text("workflow_steps"),
     // queued | running | awaiting_input | done | error | stopped
     status: text("status").notNull().default("queued"),
     workingDir: text("working_dir"),

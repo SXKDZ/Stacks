@@ -56,6 +56,7 @@ interface StructuredSettingsFile {
     lastSyncedAt?: string;
   };
   feedSkills?: Array<{ id: string; label: string; icon: string; prompt: string }>;
+  feedWorkflows?: Array<{ id: string; label: string; icon: string; steps: Array<{ label: string; prompt: string }> }>;
   secrets: Record<string, string>;
 }
 
@@ -266,8 +267,9 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
     // would be silently materialized into plaintext settings.json the first
     // time any unrelated setting is saved. Secrets are persisted only when the
     // user enters them in the UI (they then arrive via the request payload).
-    // Preserve any saved feed skills across unrelated settings writes.
+    // Preserve any saved feed skills + workflows across unrelated settings writes.
     feedSkills: existing?.feedSkills,
+    feedWorkflows: existing?.feedWorkflows,
     secrets: Object.fromEntries(
       secretKeys.map((key) => [key, existing?.secrets?.[key]?.trim() ?? ""]),
     ),
@@ -283,6 +285,18 @@ export function readFeedSkills(): Array<{ id: string; label: string; icon: strin
 export function writeFeedSkills(skills: Array<{ id: string; label: string; icon: string; prompt: string }>): void {
   const next = settingsFromCurrentValues(readStructuredSettings());
   next.feedSkills = skills;
+  writeStructuredSettings(next);
+}
+
+/** Read the user's saved feed workflows (undefined if none saved yet). */
+export function readFeedWorkflows(): StructuredSettingsFile["feedWorkflows"] {
+  return readStructuredSettings()?.feedWorkflows;
+}
+
+/** Persist the feed workflows, preserving the rest of settings.json. */
+export function writeFeedWorkflows(workflows: NonNullable<StructuredSettingsFile["feedWorkflows"]>): void {
+  const next = settingsFromCurrentValues(readStructuredSettings());
+  next.feedWorkflows = workflows;
   writeStructuredSettings(next);
 }
 
