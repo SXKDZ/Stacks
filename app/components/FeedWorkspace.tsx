@@ -568,12 +568,12 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         {list.map((proposal) => (
           <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
             <div className="feed-proposal-body">
-              <span className="feed-proposal-summary">{proposal.summary}</span>
               {proposalTags(proposal.operation).length ? (
                 <div className="feed-proposal-tags">
                   {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
                 </div>
               ) : null}
+              <span className="feed-proposal-summary">{proposal.summary}</span>
               <span className="feed-proposal-status">{proposal.status}</span>
             </div>
             {proposal.status === "pending" ? (
