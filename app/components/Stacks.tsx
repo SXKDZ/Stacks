@@ -760,7 +760,7 @@ function StacksWorkspace() {
   // persisted locally here.
   const [libraryNameReady, setLibraryNameReady] = useState(false);
   useEffect(() => {
-    const savedLibraryName = window.localStorage.getItem("pa-library-name")?.trim();
+    const savedLibraryName = window.localStorage.getItem("stacks-library-name")?.trim();
     if (savedLibraryName) {
       setLibraryName(savedLibraryName);
     }
@@ -771,7 +771,7 @@ function StacksWorkspace() {
     if (!libraryNameReady) {
       return;
     }
-    window.localStorage.setItem("pa-library-name", libraryName.trim() || "My Paper Library");
+    window.localStorage.setItem("stacks-library-name", libraryName.trim() || "My Paper Library");
   }, [libraryName, libraryNameReady]);
 
   useEffect(() => {
@@ -866,7 +866,7 @@ function StacksWorkspace() {
   }, [snapshot.papers]);
 
   return (
-    <div className="pa-shell">
+    <div className="stacks-shell">
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
 
@@ -1336,7 +1336,7 @@ function LibraryView({
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       try {
-      const saved = JSON.parse(window.localStorage.getItem("pa-paper-grid-widths-v3") ?? "null") as Partial<Record<PaperColumnKey, number>> | null;
+      const saved = JSON.parse(window.localStorage.getItem("stacks-paper-grid-widths-v3") ?? "null") as Partial<Record<PaperColumnKey, number>> | null;
         if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value))) {
           setColumnWidths((current) => ({ ...current, ...saved }));
         }
@@ -1440,7 +1440,7 @@ function LibraryView({
       const percentage = Number(((width / tableWidth) * 100).toFixed(2));
       setColumnWidths((current) => {
         const next = { ...current, [key]: percentage };
-        window.localStorage.setItem("pa-paper-grid-widths-v3", JSON.stringify(next));
+        window.localStorage.setItem("stacks-paper-grid-widths-v3", JSON.stringify(next));
         return next;
       });
     };
@@ -1459,7 +1459,7 @@ function LibraryView({
     event.stopPropagation();
     setColumnWidths((current) => {
       const next = { ...current, [key]: defaultPaperColumnWidths[key] };
-      window.localStorage.setItem("pa-paper-grid-widths-v3", JSON.stringify(next));
+      window.localStorage.setItem("stacks-paper-grid-widths-v3", JSON.stringify(next));
       return next;
     });
   }
@@ -1723,7 +1723,7 @@ function AuthorsView({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<AuthorColumnKey>(
-    "pa-author-grid-widths-v3",
+    "stacks-author-grid-widths-v3",
     defaultAuthorColumnWidths,
     { author: 260, papers: 80, latest: 80 },
   );
@@ -1852,7 +1852,7 @@ function VenuesView({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<VenueColumnKey>(
-    "pa-venue-grid-widths-v2",
+    "stacks-venue-grid-widths-v2",
     defaultVenueColumnWidths,
     { venue: 220, type: 100, publisher: 150, papers: 80, latest: 80 },
   );

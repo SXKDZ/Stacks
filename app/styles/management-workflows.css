@@ -2403,18 +2403,18 @@
   white-space: nowrap;
 }
 
-:where(.pa-shell button, .pa-shell a, .pa-shell [role="button"]) {
+:where(.stacks-shell button, .stacks-shell a, .stacks-shell [role="button"]) {
   transition-duration: 140ms;
   transition-property: background-color, border-color, box-shadow, color, opacity, transform;
   transition-timing-function: ease;
 }
 
-:where(.pa-shell button, .pa-shell a, .pa-shell [role="button"]):active:not(:disabled) {
+:where(.stacks-shell button, .stacks-shell a, .stacks-shell [role="button"]):active:not(:disabled) {
   transform: translateY(1px) scale(0.985);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(.pa-shell button, .pa-shell a, .pa-shell [role="button"]) {
+  :where(.stacks-shell button, .stacks-shell a, .stacks-shell [role="button"]) {
     transition: none;
   }
 }

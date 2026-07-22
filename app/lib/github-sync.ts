@@ -257,3 +257,24 @@ export async function postComment(
   })) as { id: number };
   return data.id;
 }
+
+/** Read a single comment's raw body (used to backfill without clobbering it). */
+export async function getCommentBody(config: GitHubConfig, commentId: number): Promise<string | null> {
+  const { owner, name } = parseRepo(config.repo);
+  try {
+    const data = (await githubFetch(config, `/repos/${owner}/${name}/issues/comments/${commentId}`)) as { body?: string };
+    return data.body ?? "";
+  } catch {
+    return null; // Deleted upstream; caller skips it.
+  }
+}
+
+/** Replace a Stacks-authored comment's body (keeps the agent marker). */
+export async function editComment(config: GitHubConfig, commentId: number, body: string): Promise<void> {
+  const { owner, name } = parseRepo(config.repo);
+  const marked = body.includes(STACKS_MARKER) ? body : `${STACKS_MARKER}\n${body}`;
+  await githubFetch(config, `/repos/${owner}/${name}/issues/comments/${commentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ body: marked.slice(0, 60000) }),
+  });
+}

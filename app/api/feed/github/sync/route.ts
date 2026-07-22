@@ -7,6 +7,8 @@ import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { readGithubLastSyncedAt, writeGithubLastSyncedAt } from "@/app/lib/local-settings";
 import {
   createIssue,
+  editComment,
+  getCommentBody,
   listComments,
   listOpenIssues,
   patchIssueTitle,
@@ -127,7 +129,19 @@ export async function POST(): Promise<Response> {
         .orderBy(asc(feedMessages.createdAt))
         .all();
       for (const message of messages) {
-        if (message.githubCommentId || !MIRRORED_KINDS.has(message.kind)) continue;
+        if (!MIRRORED_KINDS.has(message.kind)) continue;
+        // Backfill: a message mirrored before attachment upload existed has a
+        // comment but no "Attachments:" section. Upload its files and edit the
+        // comment to add the links, once.
+        if (message.githubCommentId) {
+          if (!message.attachments) continue;
+          const existing = await getCommentBody(config, message.githubCommentId);
+          if (existing === null || existing.includes("Attachments:")) continue;
+          const links = await mirrorAttachments(config, feed.id, message.attachments, counts);
+          if (!links) continue;
+          await editComment(config, message.githubCommentId, `${existing.replace(/\s+$/, "")}\n\n${links}`);
+          continue;
+        }
         const content = message.content.trim();
         const attachmentLinks = await mirrorAttachments(config, feed.id, message.attachments, counts);
         if (!content && !attachmentLinks) continue;

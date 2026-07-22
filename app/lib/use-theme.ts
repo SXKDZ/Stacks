@@ -6,7 +6,7 @@ export type ThemeMode = "dark" | "light";
 
 // A single module-level store so every useTheme() consumer in the document
 // (topbar toggle, settings picker, feed toggle) shares one source of truth and
-// re-renders together. Persisted to localStorage ("pa-theme") and applied to
+// re-renders together. Persisted to localStorage ("stacks-theme") and applied to
 // <html data-theme>; a pre-hydration inline script in the layout sets the
 // initial attribute to avoid a flash.
 const listeners = new Set<() => void>();
@@ -17,7 +17,7 @@ function readInitial(): ThemeMode {
   if (typeof document === "undefined") {
     return "dark";
   }
-  const saved = window.localStorage.getItem("pa-theme");
+  const saved = window.localStorage.getItem("stacks-theme");
   if (saved === "light" || saved === "dark") {
     return saved;
   }
@@ -27,7 +27,7 @@ function readInitial(): ThemeMode {
 function apply(theme: ThemeMode) {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
-  window.localStorage.setItem("pa-theme", theme);
+  window.localStorage.setItem("stacks-theme", theme);
 }
 
 function ensureInitialized() {

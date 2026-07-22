@@ -1105,8 +1105,8 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
         </label>
         <label className="span-2">
           <span>Access token</span>
-          <input type="password" value={tokenDraft} onChange={(event) => onTokenChange(event.target.value)} placeholder={connected ? "Paste to replace the saved token" : "Fine-grained PAT with Issues: read & write"} autoComplete="new-password" />
-          <small>A fine-grained personal access token scoped to just this repo, with Issues read/write. Stored in your library’s settings.json.</small>
+          <input type="password" value={tokenDraft} onChange={(event) => onTokenChange(event.target.value)} placeholder={connected ? "Paste to replace the saved token" : "Fine-grained PAT with Issues + Contents write"} autoComplete="new-password" />
+          <small>A fine-grained personal access token scoped to just this repo, with Issues read/write (and Contents read/write to upload attachments). Stored in your library’s settings.json.</small>
         </label>
       </div>
       <div className="github-inbox-actions">

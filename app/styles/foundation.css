@@ -98,7 +98,7 @@
   box-sizing: border-box;
 }
 
-.pa-shell svg {
+.stacks-shell svg {
   flex-shrink: 0;
 }
 
@@ -177,7 +177,7 @@ body {
   background-clip: padding-box;
 }
 
-.pa-shell {
+.stacks-shell {
   min-height: 100vh;
   isolation: isolate;
 }
