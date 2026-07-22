@@ -380,7 +380,7 @@
   height: var(--code-editor-height, 248px);
   overflow: hidden;
   position: relative;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
 }
 
 .prompt-code-editor:focus-within {
@@ -512,7 +512,7 @@
   list-style: none;
   min-width: 62px;
   padding: 0 9px;
-  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  transition: border-color var(--motion-control), background var(--motion-control), box-shadow var(--motion-control);
 }
 
 .page-size-picker summary::-webkit-details-marker {

@@ -293,7 +293,7 @@
   border-radius: 20px;
   height: 19px;
   position: relative;
-  transition: 160ms ease;
+  transition: var(--motion-control);
   width: 34px;
 }
 
@@ -306,7 +306,7 @@
   left: 2px;
   position: absolute;
   top: 2px;
-  transition: 160ms ease;
+  transition: var(--motion-control);
   width: 15px;
 }
 
@@ -670,7 +670,7 @@
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity var(--motion-fast);
 }
 
 .feed-skill-item:hover .feed-skill-item-actions,

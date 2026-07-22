@@ -114,6 +114,11 @@
   /* Motion scale. --motion-control is the shared control transition. */
   --motion-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
   --motion-control: 160ms cubic-bezier(0.2, 0, 0, 1);
+  /* Gap between an eyebrow section label and the content below it. */
+  --space-eyebrow-gap: 10px;
+  /* Bordered section-divider rhythm (gap above + padding below the rule). */
+  --space-section-gap: 23px;
+  --space-section-pad: 20px;
 }
 
 * {
@@ -358,7 +363,7 @@ body {
   gap: 10px;
   padding: 8px 9px;
   text-align: left;
-  transition: 140ms ease;
+  transition: var(--motion-fast);
   width: 100%;
 }
 
@@ -418,7 +423,7 @@ body {
   display: flex;
   height: 31px;
   justify-content: center;
-  transition: transform 180ms ease;
+  transition: transform var(--motion-control);
   width: 31px;
 }
 

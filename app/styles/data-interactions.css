@@ -329,15 +329,15 @@
   border-radius: 0;
   border-top: 1px solid var(--line);
   box-shadow: none;
-  margin-top: 23px;
-  padding: 20px 0 0;
+  margin-top: var(--space-section-gap);
+  padding: var(--space-section-pad) 0 0;
 }
 
 .summary-copy,
 .abstract-copy {
   color: var(--ink);
   line-height: 1.58;
-  margin-top: 10px;
+  margin-top: var(--space-eyebrow-gap);
 }
 
 .field-label-action {
@@ -897,7 +897,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   padding-inline: 7px;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
 
 .collection-card .collection-papers > button:hover {
@@ -1056,7 +1056,7 @@
 }
 
 .prompt-template-section > summary svg {
-  transition: transform 140ms ease;
+  transition: transform var(--motion-fast);
 }
 
 .prompt-template-section[open] > summary svg {

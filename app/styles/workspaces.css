@@ -338,6 +338,7 @@
   gap: 7px;
   margin: 12px 12px 8px;
   padding: 0 9px;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
 }
 
 .feed-search:focus-within {
@@ -1059,6 +1060,7 @@
   outline: none;
   padding: 12px 14px;
   resize: none;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
   white-space: pre-wrap;
 }
 

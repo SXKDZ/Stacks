@@ -675,7 +675,7 @@ textarea::placeholder {
 .summary-copy.markdown-content,
 .abstract-copy.markdown-content,
 .notes-copy.markdown-content {
-  margin-top: 11px;
+  margin-top: var(--space-eyebrow-gap);
 }
 
 .reader-summary > .markdown-content {

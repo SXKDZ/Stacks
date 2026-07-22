@@ -231,10 +231,11 @@ test("imports BibTeX and RIS files into normalized paper records", async () => {
 });
 
 test("persists collection membership through the paper-collection composite key", async () => {
-  const [schema, library, application, collectionMigration, bootstrap, types] = await Promise.all([
+  const [schema, library, application, controls, collectionMigration, bootstrap, types] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0003_blushing_preak.sql", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/types.ts", import.meta.url), "utf8"),
@@ -261,9 +262,11 @@ test("persists collection membership through the paper-collection composite key"
   assert.match(types, /DEFAULT_COLLECTION_COLOR: CollectionColor = "blue"/);
   assert.match(types, /export function normalizeCollectionColor/);
   assert.match(library, /normalizeCollectionColor\(data\.color\)/);
-  // The picker and the paper-list color dot are wired in the UI.
+  // The picker lives in Stacks; the paper-list color dot moved into the shared
+  // CollectionChip control, which Stacks renders for every collection tag.
   assert.match(application, /collection-color-swatch/);
-  assert.match(application, /collection-chip-dot/);
+  assert.match(application, /CollectionChip/);
+  assert.match(controls, /collection-chip-dot/);
 });
 
 test("uses integrated sortable table headers without a detached sort control", async () => {

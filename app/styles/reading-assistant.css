@@ -138,6 +138,8 @@
   white-space: normal;
 }
 
+/* Reader intentionally runs a tighter divider rhythm than .detail-section's
+   --space-section-* (denser reading surface). */
 .reader-summary {
   border-top: 1px solid var(--line);
   color: #5d5562;
@@ -150,7 +152,7 @@
 
 .reader-summary .eyebrow {
   font-family: var(--font-ui);
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-eyebrow-gap);
 }
 
 /* The summary fills the space between the paper header and the notes/Discuss
@@ -285,7 +287,7 @@
 }
 
 .reader-page :where(button, .reader-actions a, .reader-page-state a) {
-  transition-duration: 150ms;
+  transition-duration: 140ms;
   transition-property: background-color, border-color, box-shadow, color, opacity, transform;
   transition-timing-function: ease;
 }
