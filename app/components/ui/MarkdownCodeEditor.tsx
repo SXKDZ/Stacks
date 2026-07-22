@@ -26,6 +26,7 @@ function tokenClass(part: string): string | undefined {
 export function MarkdownCodeEditor({
   value,
   onChange,
+  onBlur,
   ariaLabel,
   placeholder,
   rows = 5,
@@ -35,6 +36,7 @@ export function MarkdownCodeEditor({
 }: {
   value: string;
   onChange?: (value: string) => void;
+  onBlur?: () => void;
   ariaLabel: string;
   placeholder?: string;
   rows?: number;
@@ -46,9 +48,12 @@ export function MarkdownCodeEditor({
   const highlightLayer = useRef<HTMLPreElement | null>(null);
   const pattern = variables ? VARIABLE_TOKEN_RE : MARKDOWN_TOKEN_RE;
   const parts = value.split(pattern);
+  // Reuse .prompt-code-editor wholesale; only its height varies, via a CSS var
+  // derived from rows (shared 1.58 line-height at 12px + 26px vertical padding).
+  const height = `calc(${rows} * 1.58 * 12px + 26px)`;
 
   return (
-    <div className="prompt-code-editor" style={{ minHeight: `${rows * 1.6 + 1.4}em` }}>
+    <div className="prompt-code-editor" style={{ ["--code-editor-height" as string]: height }}>
       <pre ref={highlightLayer} aria-hidden="true">
         {parts.map((part, index) => (
           <span className={tokenClass(part)} key={`${index}-${part.slice(0, 12)}`}>{part}</span>
@@ -60,13 +65,13 @@ export function MarkdownCodeEditor({
         name={name}
         value={value}
         onChange={(event) => onChange?.(event.target.value)}
+        onBlur={onBlur}
         onScroll={(event) => {
           if (!highlightLayer.current) return;
           highlightLayer.current.scrollTop = event.currentTarget.scrollTop;
           highlightLayer.current.scrollLeft = event.currentTarget.scrollLeft;
         }}
         spellCheck={false}
-        rows={rows}
         placeholder={placeholder}
         aria-label={ariaLabel}
       />

@@ -827,6 +827,12 @@ export default function FeedWorkspace() {
   }, []);
   const clearSyncLog = useCallback(() => { setSyncLog([]); writeSyncLog([]); }, []);
 
+  // ⌘ on macOS, Ctrl elsewhere. Set after mount so SSR and client agree.
+  const [modKey, setModKey] = useState("⌃");
+  useEffect(() => {
+    setModKey(/mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent) ? "⌘" : "⌃");
+  }, []);
+
   // Collapse toggles that haven't been confirmed by the server yet. The 4s poll
   // reloads the whole list, so without this a poll firing mid-PATCH would revert
   // an optimistic collapse; loadSnippets re-applies these until the row's server
@@ -952,15 +958,29 @@ export default function FeedWorkspace() {
     return () => window.clearInterval(timer);
   }, [snippets, loadSnippets]);
 
-  // Type-anywhere: a printable keypress with no input focused jumps into the
-  // visible composer/reply textarea, so you can just start typing.
+  // Command shortcuts: ⌘M (Ctrl+M) starts a new feed — ⌘N is avoided because the
+  // browser owns it (new window) — and ⌘S (Ctrl+S) syncs the GitHub inbox. Both
+  // use a modifier so they never interfere with typing (a bare key would be
+  // captured by type-anywhere below).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "m") { event.preventDefault(); setComposing(true); setSelectedId(null); }
+      else if (key === "s" && githubReady && !syncing) { event.preventDefault(); void syncGithub(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [githubReady, syncing, syncGithub]);
+
+  // Type-anywhere: a printable keypress with no field focused jumps into the
+  // visible composer/reply textarea so you can just start typing.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key.length !== 1) return; // ignore Enter, arrows, etc.
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
-      // Prefer the reply/compose dock textarea; fall back to any dock textarea.
       const textarea = document.querySelector<HTMLTextAreaElement>(".feed-detail-foot .feed-dock textarea, .feed-compose .feed-dock textarea");
       if (textarea) textarea.focus();
     };
@@ -1104,7 +1124,7 @@ export default function FeedWorkspace() {
       <aside className="feed-list-pane">
         <header className="feed-list-head">
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
-          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New</ActionButton>
+          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />} kbd={`${modKey}M`}>New</ActionButton>
         </header>
         {snippets.length ? (
           <div className="feed-search">
@@ -1166,7 +1186,7 @@ export default function FeedWorkspace() {
                 <strong>{libraryName}</strong>
                 <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
               </span>
-              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" title="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />}>
+              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" title="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} kbd={`${modKey}S`}>
                 {syncing ? "Syncing…" : "Sync"}
               </ActionButton>
             </div>

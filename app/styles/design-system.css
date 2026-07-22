@@ -1,5 +1,26 @@
 /* Shared controls consume the palette from foundation.css/themes.css. */
 
+/* Keyboard-shortcut badge inside a button/link. Uses currentColor so it adapts
+   to any button variant (white on the brand primary, ink on secondary/ghost). */
+.action-kbd {
+  align-items: center;
+  align-self: center;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1;
+  /* No extra margin — the button's own flex gap already spaces it from the
+     label; a margin here would double the gap (badge drifting far right). */
+  min-width: 17px;
+  opacity: 0.85;
+  padding: 3px 5px;
+}
+
 .discover-search-box > button,
 .modal-results article > button,
 .toast,
@@ -385,7 +406,9 @@
   background: color-mix(in srgb, var(--panel) 90%, var(--canvas));
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  height: 248px;
+  /* Default height matches the prompt editors; callers can shorten it with the
+     --code-editor-height var without any other style changes. */
+  height: var(--code-editor-height, 248px);
   overflow: hidden;
   position: relative;
   transition: border-color 140ms ease, box-shadow 140ms ease;

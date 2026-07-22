@@ -334,8 +334,10 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   // The feed is always on: no enable gate remains.
   assert.doesNotMatch(feed, /feedEnabled/);
   assert.doesNotMatch(settings, /feedEnabled/);
-  // The abandoned editable-note and prompt-chain-workflow experiments are fully
-  // removed: no schema columns, no lib/route files, no UI, no scheduler.
+  // The abandoned editable-note and PROMPT-CHAIN workflow experiments are fully
+  // removed: no schema columns, no note UI, no scheduler, no queued-step model.
+  // (This is distinct from the Claude Code workflow runtime added later, which
+  // runs whole .js scripts — see the workflow-runtime test below.)
   const [schema, bootstrap] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
@@ -351,11 +353,32 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   for (const gone of [
     "../app/lib/feed-workflows.ts",
     "../app/lib/feed-scheduler.ts",
-    "../app/api/feed/workflows/route.ts",
     "../instrumentation.ts",
   ]) {
     await assert.rejects(readFile(new URL(gone, import.meta.url), "utf8"));
   }
+});
+
+test("runs Claude Code workflow scripts through the approval-gated feed", async () => {
+  const [runtime, route, agent] = await Promise.all([
+    readFile(new URL("../app/lib/workflow-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/workflows/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+  ]);
+  // The runtime injects the CC workflow primitives and runs the script in a vm.
+  assert.match(runtime, /export async function runWorkflow/);
+  assert.match(runtime, /export function readWorkflowMeta/);
+  assert.match(runtime, /base\.agent =|const agent =/);
+  assert.match(runtime, /base\.parallel =/);
+  assert.match(runtime, /base\.pipeline =/);
+  assert.match(runtime, /vm\.runInContext/);
+  // Each agent() turn goes through the feed runner, so writes stay approval-gated.
+  assert.match(runtime, /runFeedAgent/);
+  // runFeedAgent now resolves with the turn result so a workflow can await it.
+  assert.match(agent, /Promise<AgentTurnResult>/);
+  // The workflows are saved (CRUD) and validated via the script's meta.
+  assert.match(route, /readFeedWorkflows|writeFeedWorkflows/);
+  assert.match(route, /readWorkflowMeta/);
 });
 
 test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", async () => {

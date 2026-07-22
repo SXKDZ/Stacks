@@ -2515,6 +2515,8 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
   const detailPanelRef = useRef<HTMLElement>(null);
   const { runTask } = useBackgroundTasks();
   const [summarizing, setSummarizing] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(paper.notes);
+  useEffect(() => { setNotesDraft(paper.notes); }, [paper.id, paper.notes]);
 
   async function generateSummary() {
     setSummarizing(true);
@@ -2553,9 +2555,14 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
     }
     function closeWhenInteractionLeavesPanel(event: PointerEvent | FocusEvent) {
       const target = event.target;
-      if (target instanceof Node && !detailPanelRef.current?.contains(target)) {
-        onClose();
-      }
+      if (!(target instanceof Element)) return;
+      // Ignore interactions inside the drawer itself, and inside any dialog the
+      // drawer spawned (edit/export modals). Otherwise opening the Edit modal —
+      // whether by click or the E shortcut — would auto-close the drawer as the
+      // modal steals focus, before suspendAutoClose can take effect.
+      if (detailPanelRef.current?.contains(target)) return;
+      if (target.closest(".modal-layer, [role='dialog']")) return;
+      onClose();
     }
 
     document.addEventListener("pointerdown", closeWhenInteractionLeavesPanel, true);
@@ -2565,6 +2572,29 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
       document.removeEventListener("focusin", closeWhenInteractionLeavesPanel, true);
     };
   }, [onClose, suspendAutoClose]);
+
+  // Single-key shortcuts for the drawer actions, matching the badges on each
+  // button: R Read, S Source, F Feed, E Edit, X Export. Ignored while a modal is
+  // open (suspendAutoClose) or while typing in a field, and never with modifiers.
+  useEffect(() => {
+    if (suspendAutoClose) return;
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      // Enter opens the reader (the primary action); letters map to the rest.
+      if (event.key === "Enter") { if (hasViewer) { event.preventDefault(); onRead(); } return; }
+      switch (event.key.toLowerCase()) {
+        case "s": if (paper.url) { event.preventDefault(); window.open(paper.url, "_blank", "noreferrer"); } break;
+        case "f": event.preventDefault(); onChat(); break;
+        case "e": event.preventDefault(); onEdit(); break;
+        case "x": event.preventDefault(); onExport(); break;
+        default: break;
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [suspendAutoClose, hasViewer, paper.url, onRead, onChat, onEdit, onExport]);
 
   return (
     <div className="drawer-layer">
@@ -2623,14 +2653,14 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           </div>
           {hasViewer || paper.url ? (
             <div className="drawer-cta-primary">
-              {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />}>Read</ActionButton> : null}
-              {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>Source</ActionLink> : null}
+              {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />} kbd="↵">Read</ActionButton> : null}
+              {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />} kbd="S">Source</ActionLink> : null}
             </div>
           ) : null}
           <div className="drawer-cta-row">
-            <ActionButton variant="brand-ghost" onClick={onChat} icon={<Sparkles />}>Feed</ActionButton>
-            <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />}>Edit</ActionButton>
-            <ActionButton variant="secondary" onClick={onExport} icon={<Download />}>Export</ActionButton>
+            <ActionButton variant="brand-ghost" onClick={onChat} icon={<Sparkles />} kbd="F">Feed</ActionButton>
+            <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />} kbd="E">Edit</ActionButton>
+            <ActionButton variant="secondary" onClick={onExport} icon={<Download />} kbd="X">Export</ActionButton>
           </div>
           <div className="detail-section summary-section">
             <p className="eyebrow eyebrow-action">
@@ -2648,14 +2678,13 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           </div>
           <div className="detail-section">
             <p className="eyebrow">Research notes</p>
-            <textarea
-              defaultValue={paper.notes}
+            <MarkdownCodeEditor
+              value={notesDraft}
+              onChange={setNotesDraft}
+              onBlur={() => { if (notesDraft !== paper.notes) void onUpdate(paper, { notes: notesDraft }, "Notes saved."); }}
+              rows={4}
+              ariaLabel="Research notes"
               placeholder="Add an observation, question, or connection…"
-              onBlur={(event) => {
-                if (event.target.value !== paper.notes) {
-                  void onUpdate(paper, { notes: event.target.value }, "Notes saved.");
-                }
-              }}
             />
           </div>
           {paper.volume || paper.issue || paper.pages || paper.category || paper.doi || paper.preprintId || paper.arxivId || paper.localPath || paper.htmlSnapshotPath ? (

@@ -687,8 +687,19 @@ textarea::placeholder {
   overflow: hidden;
 }
 
-.summary-copy.markdown-content {
+.summary-copy.markdown-content,
+.abstract-copy.markdown-content,
+.notes-copy.markdown-content {
   margin-top: 11px;
+}
+
+/* Keep the drawer's rendered summary/abstract at the same size as the reader's
+   summary (both 12.5px) so the two surfaces read identically. */
+.summary-copy.markdown-content,
+.summary-copy.markdown-content p,
+.abstract-copy.markdown-content,
+.abstract-copy.markdown-content p {
+  font-size: 12.5px;
 }
 
 .reader-summary > .markdown-content {
@@ -1237,6 +1248,16 @@ textarea::placeholder {
 [data-theme="light"] .detail-section textarea {
   background: rgba(255, 255, 255, 0.9);
   color: var(--ink);
+}
+
+/* The code editor's textarea is a transparent input layered over the colored
+   highlight <pre>; it must stay transparent (and its text invisible) so the
+   syntax layer shows through, even inside a themed form that skins textareas. */
+[data-theme="light"] .prompt-code-editor textarea,
+.prompt-code-editor textarea {
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 [data-theme="light"] input::placeholder,

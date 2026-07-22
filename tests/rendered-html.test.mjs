@@ -62,8 +62,10 @@ test("ships the Stacks application shell and product metadata", async () => {
   assert.match(application, /abstract-copy/);
   assert.match(application, /summary-copy/);
   assert.match(reader, /reader-summary-scroll/);
-  assert.match(reader, /reader-notes-editor/);
-  assert.match(reader, /aria-label="My notes"/);
+  // Notes use the shared markdown editor (same component as the paper editor
+  // and prompt settings) rather than a bespoke textarea.
+  assert.match(reader, /MarkdownCodeEditor/);
+  assert.match(reader, /ariaLabel="My notes"/);
   assert.match(reader, /setNoteState\("saved"\)/);
   assert.match(application, /const \[filterBuilderOpen, setFilterBuilderOpen\] = useState\(false\)/);
   assert.match(application, /filterBuilderOpen \? "is-open"/);

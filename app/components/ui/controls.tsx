@@ -80,16 +80,24 @@ function actionClassName(variant: ActionVariant, size: ActionSize, className?: s
   return cx(actionVariants({ variant, size, className }));
 }
 
+/** The small keyboard-shortcut badge shown at the trailing edge of a button. */
+export function KeyHint({ children }: { children: ReactNode }) {
+  return <kbd className="action-kbd" aria-hidden="true">{children}</kbd>;
+}
+
 export interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ActionVariant;
   size?: ActionSize;
   icon?: ReactNode;
+  /** A keyboard-shortcut hint rendered as a trailing badge (e.g. "R"). */
+  kbd?: ReactNode;
 }
 
 export function ActionButton({
   variant = "secondary",
   size = "medium",
   icon,
+  kbd,
   className,
   children,
   type = "button",
@@ -103,6 +111,7 @@ export function ActionButton({
         </span>
       ) : null}
       {children ? <span className="overflow-hidden text-ellipsis whitespace-nowrap">{children}</span> : null}
+      {kbd != null ? <KeyHint>{kbd}</KeyHint> : null}
     </button>
   );
 }
@@ -111,12 +120,14 @@ export interface ActionLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement>
   variant?: ActionVariant;
   size?: ActionSize;
   icon?: ReactNode;
+  kbd?: ReactNode;
 }
 
 export function ActionLink({
   variant = "secondary",
   size = "medium",
   icon,
+  kbd,
   className,
   children,
   ...props
@@ -129,6 +140,7 @@ export function ActionLink({
         </span>
       ) : null}
       {children ? <span className="overflow-hidden text-ellipsis whitespace-nowrap">{children}</span> : null}
+      {kbd != null ? <KeyHint>{kbd}</KeyHint> : null}
     </a>
   );
 }

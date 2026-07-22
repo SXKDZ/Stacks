@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
+import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { ActionButton, ActionLink, StatusPill } from "@/app/components/ui/controls";
 import { readError } from "@/app/lib/http";
 import type { LibrarySnapshot, Paper } from "@/app/lib/types";
@@ -97,6 +98,7 @@ export default function ReaderWorkspace() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [noteState, setNoteState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [notesDraft, setNotesDraft] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -138,6 +140,9 @@ export default function ReaderWorkspace() {
   }, []);
 
   const documentSource = useMemo(() => paper ? documentIdentity(paper) : null, [paper]);
+
+  // Keep the notes editor in sync with the loaded/saved paper.
+  useEffect(() => { setNotesDraft(paper?.notes ?? ""); }, [paper?.id, paper?.updatedAt, paper?.notes]);
 
   async function saveNotes(notes: string) {
     if (!paper || notes === paper.notes) {
@@ -231,14 +236,13 @@ export default function ReaderWorkspace() {
               <p className="eyebrow">My notes</p>
               <span aria-live="polite">{noteState === "saving" ? "Saving…" : noteState === "saved" ? "Saved" : noteState === "error" ? "Save failed" : ""}</span>
             </div>
-            <textarea
-              key={`${paper.id}:${paper.updatedAt}`}
-              className="reader-notes-editor"
-              defaultValue={paper.notes}
+            <MarkdownCodeEditor
+              value={notesDraft}
+              onChange={(value) => { setNotesDraft(value); setNoteState("idle"); }}
+              onBlur={() => void saveNotes(notesDraft)}
+              rows={8}
+              ariaLabel="My notes"
               placeholder="Add a note…"
-              aria-label="My notes"
-              onFocus={() => setNoteState("idle")}
-              onBlur={(event) => void saveNotes(event.target.value)}
             />
           </section>
           <ActionButton variant="primary" className="mt-5 w-full" onClick={() => window.open(`/feed?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer")} icon={<Sparkles />}>Discuss this paper in the feed</ActionButton>
