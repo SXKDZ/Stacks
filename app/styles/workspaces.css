@@ -887,12 +887,38 @@
 
 /* --- AI feed workspace: a two-pane console (list left, thread right) --- */
 .feed-page {
+  --feed-sidebar-width: 320px;
   background: var(--canvas);
   display: grid;
-  grid-template-columns: minmax(280px, 320px) 1fr;
+  grid-template-columns: var(--feed-sidebar-width) 6px 1fr;
   height: 100dvh;
   overflow: hidden;
   position: relative;
+}
+
+/* Draggable divider between the feed list and the detail pane. */
+.feed-sidebar-resize {
+  align-self: stretch;
+  background: transparent;
+  cursor: col-resize;
+  margin: 0 -3px;
+  position: relative;
+  z-index: 20;
+}
+
+.feed-sidebar-resize::before {
+  background: var(--line);
+  content: "";
+  inset: 0 auto 0 3px;
+  position: absolute;
+  transition: background var(--motion-fast);
+  width: 1px;
+}
+
+.feed-sidebar-resize:hover::before,
+.is-resizing-column .feed-sidebar-resize::before {
+  background: var(--brand-blue);
+  width: 2px;
 }
 
 /* Sync controls anchored at the bottom of the feed sidebar: the last-result
@@ -2379,6 +2405,9 @@
 @media (max-width: 720px) {
   .feed-page {
     grid-template-columns: 1fr;
+  }
+  .feed-sidebar-resize {
+    display: none;
   }
   .feed-detail-pane {
     display: none;

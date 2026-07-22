@@ -709,12 +709,41 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   );
 }
 
+const FEED_SIDEBAR_KEY = "stacks-feed-sidebar-width";
+const FEED_SIDEBAR_MIN = 240;
+const FEED_SIDEBAR_MAX = 520;
+
 export default function FeedWorkspace() {
   const [ready, setReady] = useState(false);
   const [snippets, setSnippets] = useState<FeedSnippet[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+
+  // Restore the persisted (draggable) sidebar width.
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem(FEED_SIDEBAR_KEY));
+    if (saved >= FEED_SIDEBAR_MIN && saved <= FEED_SIDEBAR_MAX) setSidebarWidth(saved);
+  }, []);
+
+  const startSidebarResize = useCallback((event: React.PointerEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    const onMove = (moveEvent: PointerEvent) => {
+      const next = Math.min(FEED_SIDEBAR_MAX, Math.max(FEED_SIDEBAR_MIN, startWidth + moveEvent.clientX - startX));
+      setSidebarWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      document.body.classList.remove("is-resizing-column");
+      setSidebarWidth((width) => { window.localStorage.setItem(FEED_SIDEBAR_KEY, String(width)); return width; });
+    };
+    document.body.classList.add("is-resizing-column");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  }, [sidebarWidth]);
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
@@ -935,7 +964,7 @@ export default function FeedWorkspace() {
 
   const showDetail = Boolean(selected) && !composing;
   return (
-    <main className={`feed-page ${showDetail || composing ? "has-selection" : ""}`}>
+    <main className={`feed-page ${showDetail || composing ? "has-selection" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
       <div className="feed-theme-toggle">
         <ThemeToggle />
       </div>
@@ -969,6 +998,15 @@ export default function FeedWorkspace() {
           </div>
         ) : null}
       </aside>
+
+      <div
+        className="feed-sidebar-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the feed list"
+        onPointerDown={startSidebarResize}
+        onDoubleClick={() => { setSidebarWidth(320); window.localStorage.setItem(FEED_SIDEBAR_KEY, "320"); }}
+      />
 
       <div className="feed-detail-pane">
         {showDetail && selected ? (
