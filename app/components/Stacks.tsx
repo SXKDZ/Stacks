@@ -15,6 +15,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CircleDot,
+  Clock3,
   Command,
   Compass,
   Database,
@@ -24,6 +25,7 @@ import {
   FileSearch,
   FolderOpen,
   Home,
+  Inbox,
   Library,
   Link2,
   ListFilter,
@@ -406,6 +408,13 @@ function statusLabel(value: string): string {
     complete: "Read",
   };
   return labels[value] ?? value;
+}
+
+/** The icon paired with each reading status (matches StatusPill's mapping). */
+function StatusIcon({ status, size = 14 }: { status: string; size?: number }): ReactNode {
+  if (status === "complete") return <CheckCircle2 size={size} />;
+  if (status === "reading") return <Clock3 size={size} />;
+  return <Inbox size={size} />;
 }
 
 function matchesSearch(values: Array<string | number | null | undefined>, query: string): boolean {
@@ -2585,20 +2594,22 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
     <div className="drawer-layer">
       <button className="drawer-scrim" onClick={onClose} aria-label="Close paper details" />
       <aside ref={detailPanelRef} className="detail-drawer" aria-label="Paper details">
-        <div className="drawer-header is-minimal">
-          <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<PanelRightClose />} />
-        </div>
-        <div className="drawer-content">
+        <div className="drawer-fixed-head">
           <div className="detail-actions-top">
             <StatusPill className="detail-status" status={paper.readingStatus} />
-            <button className={`star-button ${paper.favorite ? "is-starred" : ""}`} onClick={() => void onUpdate(paper, { favorite: !paper.favorite }, paper.favorite ? "Removed from starred papers." : "Paper starred.")}>
-              <Star size={16} fill={paper.favorite ? "currentColor" : "none"} />
-            </button>
+            <div className="detail-actions-top-right">
+              <button className={`star-button ${paper.favorite ? "is-starred" : ""}`} onClick={() => void onUpdate(paper, { favorite: !paper.favorite }, paper.favorite ? "Removed from starred papers." : "Paper starred.")} aria-label={paper.favorite ? "Remove from starred papers" : "Star this paper"}>
+                <Star size={16} fill={paper.favorite ? "currentColor" : "none"} />
+              </button>
+              <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<PanelRightClose />} />
+            </div>
           </div>
           <h2>{paper.title}</h2>
           <div className="detail-authors" aria-label="Paper authors">
             <ExpandableAuthorButtons paper={paper} onOpenAuthor={onOpenAuthor} />
           </div>
+        </div>
+        <div className="drawer-content">
           <div className="detail-control-stack">
             <div className="detail-meta-grid" aria-label="Publication facts">
               <span><small>Venue</small><TextButton link className="detail-meta-value max-w-full truncate capitalize text-[var(--ink)]" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></span>
@@ -2609,7 +2620,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
               <p className="detail-control-label">Reading status</p>
               <div className="status-selector">
                 {["inbox", "reading", "complete"].map((status) => (
-                  <TabButton key={status} variant="segmented" active={paper.readingStatus === status} onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}>{statusLabel(status)}</TabButton>
+                  <TabButton key={status} variant="segmented" className={`status-tab status-tab-${status}`} active={paper.readingStatus === status} onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)} icon={<StatusIcon status={status} />}>{statusLabel(status)}</TabButton>
                 ))}
               </div>
             </div>
@@ -2618,9 +2629,13 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
               <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <Chip key={collection.id} tone="neutral" className={`collection-chip swatch-${collection.color}`} icon={<span className="collection-chip-dot" />} onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</Chip>) : <span className="row-muted detail-empty-value">No collections yet</span>}</div>
             </div>
           </div>
+          {hasViewer || paper.url ? (
+            <div className="drawer-cta-primary">
+              {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />}>Read</ActionButton> : null}
+              {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>Source</ActionLink> : null}
+            </div>
+          ) : null}
           <div className="drawer-cta-row">
-            {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />}>Read</ActionButton> : null}
-            {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>Source</ActionLink> : null}
             <ActionButton variant="brand-ghost" onClick={onChat} icon={<Sparkles />}>Feed</ActionButton>
             <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />}>Edit</ActionButton>
             <ActionButton variant="secondary" onClick={onExport} icon={<Download />}>Export</ActionButton>

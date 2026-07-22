@@ -556,6 +556,8 @@
   color: var(--ink);
 }
 
+/* Portaled to the body with fixed top/right (set inline from the kebab's rect)
+   so it escapes the scrolling .feed-list clip. z-index sits above the sidebar. */
 .feed-row-menu-list {
   background: var(--panel-strong);
   border: 1px solid var(--line-strong);
@@ -566,10 +568,7 @@
   gap: 1px;
   min-width: 150px;
   padding: 5px;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 40;
+  z-index: 80;
 }
 
 .feed-row-menu-list button {

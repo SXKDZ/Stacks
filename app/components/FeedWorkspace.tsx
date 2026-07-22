@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -312,16 +313,40 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDele
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const kebabRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
     const close = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+      const target = event.target as Node;
+      if (menuRef.current?.contains(target) || listRef.current?.contains(target)) return;
+      setMenuOpen(false);
     };
+    // The menu is portaled out of the scrolling list, so close it if the list
+    // scrolls or the window resizes rather than letting it float detached.
+    const dismiss = () => setMenuOpen(false);
     window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", dismiss, true);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+    };
   }, [menuOpen]);
+
+  function toggleMenu() {
+    if (menuOpen) {
+      setMenuOpen(false);
+      return;
+    }
+    const rect = kebabRef.current?.getBoundingClientRect();
+    if (rect) setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    setMenuOpen(true);
+  }
 
   const run = (action: () => void) => () => { setMenuOpen(false); action(); };
 
@@ -346,15 +371,18 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onDele
         </span>
       </button>
       <div className="feed-row-menu" ref={menuRef}>
-        <button type="button" className="feed-row-kebab" onClick={() => setMenuOpen((open) => !open)} aria-label="More actions" aria-haspopup="menu" aria-expanded={menuOpen}><MoreVertical size={15} /></button>
-        {menuOpen ? (
-          <div className="feed-row-menu-list" role="menu">
-            <button type="button" role="menuitem" onClick={run(onRename)}><Pencil size={14} /> Rename</button>
-            <button type="button" role="menuitem" onClick={run(onFork)}><GitBranch size={14} /> Fork</button>
-            <button type="button" role="menuitem" onClick={run(onExport)}><Download size={14} /> Export</button>
-            <button type="button" role="menuitem" className="is-danger" onClick={run(onDelete)}><Trash2 size={14} /> Delete</button>
-          </div>
-        ) : null}
+        <button ref={kebabRef} type="button" className="feed-row-kebab" onClick={toggleMenu} aria-label="More actions" aria-haspopup="menu" aria-expanded={menuOpen}><MoreVertical size={15} /></button>
+        {menuOpen && menuPos
+          ? createPortal(
+              <div ref={listRef} className="feed-row-menu-list" role="menu" style={{ position: "fixed", top: menuPos.top, right: menuPos.right }}>
+                <button type="button" role="menuitem" onClick={run(onRename)}><Pencil size={14} /> Rename</button>
+                <button type="button" role="menuitem" onClick={run(onFork)}><GitBranch size={14} /> Fork</button>
+                <button type="button" role="menuitem" onClick={run(onExport)}><Download size={14} /> Export</button>
+                <button type="button" role="menuitem" className="is-danger" onClick={run(onDelete)}><Trash2 size={14} /> Delete</button>
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   );
@@ -485,6 +513,9 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
           ? { ...proposal, status: nextStatus, summary: payload.error ? `${proposal.summary}: ${payload.error}` : proposal.summary }
           : proposal,
       ));
+      // Refresh the snippet list so the sidebar's pending-proposal badge (computed
+      // server-side) reflects the resolved proposal instead of a stale count.
+      if (response.ok) onChanged();
     } finally {
       setResolving(null);
     }

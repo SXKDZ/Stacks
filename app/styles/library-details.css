@@ -989,10 +989,19 @@ td.number-cell {
   padding: 0 20px;
 }
 
+/* The paper header (status, star, close, title, authors) is pinned; only the
+   body below it scrolls. */
+.drawer-fixed-head {
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+  padding: 20px 25px 16px;
+}
+
 .drawer-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 27px 25px;
+  padding: 20px 25px 27px;
 }
 
 .detail-actions-top {
@@ -1001,7 +1010,13 @@ td.number-cell {
   justify-content: space-between;
 }
 
-.drawer-content > h2 {
+.detail-actions-top-right {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.drawer-fixed-head > h2 {
   font-family: var(--font-display);
   font-size: 25px;
   font-weight: 500;
@@ -1073,6 +1088,23 @@ td.number-cell {
   text-overflow: ellipsis;
   text-transform: capitalize;
   white-space: nowrap;
+}
+
+/* Read + Source are the primary open actions, paired side by side above the
+   secondary Feed/Edit/Export row. */
+.drawer-cta-primary {
+  display: grid;
+  gap: 8px;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  margin-bottom: 8px;
+}
+
+.drawer-cta-primary > * {
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+  width: 100%;
 }
 
 .drawer-cta-row {
@@ -1152,6 +1184,32 @@ td.number-cell {
   grid-template-columns: repeat(3, 1fr);
   margin-top: 10px;
   padding: 3px;
+}
+
+/* Each reading-status tab carries its status icon; the active tab tints to that
+   status's accent so the current state reads at a glance. */
+.status-selector .status-tab {
+  gap: 5px;
+}
+
+/* The segmented TabButton marks the active tab with aria-pressed="true" (its
+   Tailwind active utilities are out-cascaded by this unlayered rule). */
+.status-tab-inbox[aria-pressed="true"] {
+  background: var(--status-inbox-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-inbox) 34%, transparent);
+  color: var(--status-inbox);
+}
+
+.status-tab-reading[aria-pressed="true"] {
+  background: var(--status-reading-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-reading) 34%, transparent);
+  color: var(--status-reading);
+}
+
+.status-tab-complete[aria-pressed="true"] {
+  background: var(--status-complete-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-complete) 34%, transparent);
+  color: var(--status-complete);
 }
 
 .identifier-list {
