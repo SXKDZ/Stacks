@@ -36,12 +36,13 @@ Or send several at once: {"proposals":[{...},{...}]}. Each operation:
     "id": "<required for update/delete>",
     "data": { ...fields... },
     "summary": "<one short human-readable line describing the change>" }
-For a paper, data may include: title, abstract, year, authors (array of names),
-venueName, venueAcronym, paperType, doi, arxivId, url, pdfUrl,
-collectionNames (array), notes.
-- paperType MUST be one of: "conference", "journal", "workshop", "preprint",
-  or "other". Choose the most specific fit (an arXiv-only paper is "preprint";
-  a blog post or tech report with no venue is "other").
+For a paper, data MUST include title and paperType, and should include: abstract,
+year, authors (array of names), venueName, venueAcronym, doi, arxivId, url,
+pdfUrl, collectionNames (array), notes.
+- paperType is REQUIRED on every create and MUST be one of: "conference",
+  "journal", "workshop", "preprint", or "other". Never omit it. Choose the most
+  specific fit (an arXiv-only paper is "preprint"; a blog post or tech report
+  with no venue is "other").
 - Always set venueName when the work has one (conference/journal name; drop
   "Proceedings of" and ordinals, e.g. "NeurIPS", "Nature Machine Intelligence"),
   and venueAcronym when there's a common one. Leave venueName empty only for

@@ -260,15 +260,11 @@
   justify-content: center;
 }
 
-/* Override the shared dock's sidebar variant for this inline row: size it to
-   its content beside the Sync button. The popover is anchored to the banner
-   container (not the narrow dock) so it spans the pane width and opens upward. */
-.feed-sync-bar .background-task-dock {
-  align-items: stretch;
-  flex-shrink: 0;
-  margin: 0;
+/* The dock is non-positioning in the footer so its popover anchors to the
+   padded .feed-sidebar-foot — left-aligned with the full-width Activity toggle
+   and spanning the whole rail, opening upward. */
+.feed-sidebar-foot .background-task-dock {
   position: static;
-  width: auto;
 }
 
 .feed-sidebar-foot .background-task-panel {
@@ -1516,6 +1512,26 @@
 
 .feed-proposal-applied .feed-proposal-status { color: var(--status-complete); }
 .feed-proposal-failed .feed-proposal-status { color: var(--rose); }
+
+/* At-a-glance chips for what the change is (e.g. "create paper", the paper type,
+   and venue) so the type is visible without opening the raw JSON block. */
+.feed-proposal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.feed-proposal-tag {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  text-transform: capitalize;
+}
 
 .feed-proposal-actions {
   display: flex;

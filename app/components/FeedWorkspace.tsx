@@ -36,6 +36,26 @@ interface FeedProposal {
   createdAt: string;
 }
 
+/** Parse a proposal's raw operation JSON into the label chips shown on its card
+ *  (entity + action, plus a paper's type/venue) so the change is legible without
+ *  expanding the raw block. */
+function proposalTags(operation: string): string[] {
+  try {
+    const op = JSON.parse(operation) as { entity?: string; action?: string; data?: Record<string, unknown> };
+    const tags: string[] = [];
+    if (op.action && op.entity) tags.push(`${op.action} ${op.entity}`);
+    const type = typeof op.data?.paperType === "string" ? op.data.paperType : "";
+    if (type) tags.push(type);
+    const venue = typeof op.data?.venueAcronym === "string" && op.data.venueAcronym
+      ? op.data.venueAcronym
+      : typeof op.data?.venueName === "string" ? op.data.venueName : "";
+    if (venue) tags.push(venue);
+    return tags;
+  } catch {
+    return [];
+  }
+}
+
 interface FeedSnippet {
   id: string;
   title: string;
@@ -550,6 +570,11 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
               <span className="feed-proposal-summary">{proposal.summary}</span>
               <span className="feed-proposal-status">{proposal.status}</span>
             </div>
+            {proposalTags(proposal.operation).length ? (
+              <div className="feed-proposal-tags">
+                {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
+              </div>
+            ) : null}
             {proposal.status === "pending" ? (
               <div className="feed-proposal-actions">
                 <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
