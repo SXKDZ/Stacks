@@ -1682,7 +1682,7 @@
   background: var(--panel-strong);
   border: 1px solid var(--line-strong);
   border-radius: 50%;
-  bottom: 104px;
+  bottom: calc(100% + 12px);
   box-shadow: var(--shadow-md);
   color: var(--ink);
   cursor: pointer;
@@ -1822,6 +1822,7 @@
   border-top: 1px solid var(--line);
   flex-shrink: 0;
   padding: 14px var(--feed-gutter);
+  position: relative;
 }
 
 /* The reply reuses the composer dock, compact and pinned in the footer. It
@@ -1909,7 +1910,9 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   color: var(--ink);
+  cursor: pointer;
   display: inline-flex;
+  font: inherit;
   font-size: var(--type-caption);
   gap: 6px;
   max-width: 260px;

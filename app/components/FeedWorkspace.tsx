@@ -63,20 +63,60 @@ function parseAttachments(raw: string | null | undefined): FeedAttachment[] {
 
 /** Render clickable chips for a turn's attachments (download via the feed route). */
 function AttachmentChips({ snippetId, attachments }: { snippetId: string; attachments: FeedAttachment[] }) {
+  const [viewing, setViewing] = useState<{ label: string; content: string } | null>(null);
+  const [loading, setLoading] = useState(false);
   if (!attachments.length) return null;
+
+  async function openText(name: string, label: string) {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippetId}/attachments/${encodeURIComponent(name)}`);
+      const content = response.ok ? await response.text() : "This attachment could not be loaded.";
+      setViewing({ label, content });
+    } catch {
+      setViewing({ label, content: "This attachment could not be loaded." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="feed-turn-attachments">
-      {attachments.map((attachment) => {
-        const name = attachment.relativePath.split("/").pop() ?? attachment.label;
-        const href = `/api/feed/snippets/${snippetId}/attachments/${encodeURIComponent(name)}`;
-        return (
-          <a key={attachment.relativePath} href={href} target="_blank" rel="noreferrer" className="feed-turn-attachment" title={`Open ${attachment.label}`}>
-            <Paperclip size={12} />
-            <span>{attachment.label}</span>
-          </a>
-        );
-      })}
-    </div>
+    <>
+      <div className="feed-turn-attachments">
+        {attachments.map((attachment) => {
+          const name = attachment.relativePath.split("/").pop() ?? attachment.label;
+          const href = `/api/feed/snippets/${snippetId}/attachments/${encodeURIComponent(name)}`;
+          // Pasted/short text opens an in-app viewer (like the composer's text
+          // editor); binary files (PDF/HTML/image) open in a new tab.
+          const isText = /\.(txt|md|markdown)$/i.test(name);
+          if (isText) {
+            return (
+              <button type="button" key={attachment.relativePath} className="feed-turn-attachment" onClick={() => void openText(name, attachment.label)} disabled={loading} title={`View ${attachment.label}`}>
+                <Paperclip size={12} />
+                <span>{attachment.label}</span>
+              </button>
+            );
+          }
+          return (
+            <a key={attachment.relativePath} href={href} target="_blank" rel="noreferrer" className="feed-turn-attachment" title={`Open ${attachment.label}`}>
+              <Paperclip size={12} />
+              <span>{attachment.label}</span>
+            </a>
+          );
+        })}
+      </div>
+      {viewing ? (
+        <div className="feed-picker-scrim" onClick={() => setViewing(null)}>
+          <div className="feed-picker feed-text-editor" onClick={(event) => event.stopPropagation()}>
+            <header className="feed-picker-head">
+              <strong>{viewing.label}</strong>
+              <button type="button" className="feed-tool-btn" onClick={() => setViewing(null)} aria-label="Close"><X size={16} /></button>
+            </header>
+            <textarea className="feed-text-editor-area" value={viewing.content} readOnly />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -522,8 +562,10 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                 );
                 continue;
               }
-              const { prose, raw } = message.role === "user" ? { prose: message.content, raw: null } : splitProposalBlock(message.content);
+              const { prose: rawProse, raw } = message.role === "user" ? { prose: message.content, raw: null } : splitProposalBlock(message.content);
               const messageAttachments = message.role === "user" ? parseAttachments(message.attachments) : [];
+              // Drop the "(attached N files)" placeholder when the chips convey it.
+              const prose = messageAttachments.length && /^\(attached \d+ files?\)$/.test(rawProse.trim()) ? "" : rawProse;
               if (prose || messageAttachments.length) {
                 nodes.push(
                   <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
@@ -556,13 +598,12 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         </div>
       </div>
 
-      {!atBottom ? (
-        <button type="button" className="feed-scroll-bottom" onClick={scrollToBottom} aria-label="Scroll to latest">
-          <ArrowDown size={16} />
-        </button>
-      ) : null}
-
       <footer className="feed-detail-foot">
+        {!atBottom ? (
+          <button type="button" className="feed-scroll-bottom" onClick={scrollToBottom} aria-label="Scroll to latest">
+            <ArrowDown size={16} />
+          </button>
+        ) : null}
         {running ? (
           <ActionButton variant="secondary" size="small" onClick={() => void stop()} icon={<Square size={14} />}>Stop</ActionButton>
         ) : (
