@@ -920,7 +920,7 @@ function StacksWorkspace() {
 
         <BackgroundTaskDock />
 
-        <button className="assistant-card" onClick={() => openFeedWorkspace(currentPaper)}>
+        <button className="assistant-card" onClick={() => openFeedWorkspace()}>
           <span className="assistant-orb">
             <Sparkles size={17} />
           </span>
