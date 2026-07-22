@@ -3,6 +3,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import type { LibraryQuerier } from "@/db/client";
 import { removeStoredFile } from "@/app/lib/local-files";
 import { normalizeAbstract, normalizeAuthorNames, normalizePages, normalizeTitle } from "@/app/lib/metadata-normalize";
+import { normalizeCollectionColor } from "@/app/lib/types";
 import {
   authors,
   collections,
@@ -99,7 +100,7 @@ async function readSnapshot() {
     .orderBy(paperAuthors.paperId, paperAuthors.authorOrder)
     .all();
   const collectionLinks = database
-    .select({ paperId: paperCollections.paperId, id: collections.id, name: collections.name })
+    .select({ paperId: paperCollections.paperId, id: collections.id, name: collections.name, color: collections.color })
     .from(paperCollections)
     .innerJoin(collections, eq(collections.id, paperCollections.collectionId))
     .orderBy(collections.name)
@@ -150,7 +151,7 @@ async function readSnapshot() {
       }));
     const paperCollectionList = collectionLinks
       .filter((link) => link.paperId === paper.id)
-      .map((link) => ({ id: link.id, name: link.name }));
+      .map((link) => ({ id: link.id, name: link.name, color: normalizeCollectionColor(link.color) }));
     return {
       id: paper.id,
       title: paper.title,
@@ -216,6 +217,7 @@ async function readSnapshot() {
   const collectionList = collectionRows.map(({ collection, paperCount }) => ({
     id: collection.id,
     name: collection.name,
+    color: normalizeCollectionColor(collection.color),
     paperCount: Number(paperCount ?? 0),
   }));
 
@@ -471,6 +473,7 @@ const entityFields = {
   },
   collection: {
     name: collections.name,
+    color: collections.color,
   },
 } as const;
 
@@ -516,7 +519,7 @@ async function createEntity(
     throw new Error("A collection name is required.");
   }
   database.transaction((tx) => {
-    tx.insert(collections).values({ id, name }).run();
+    tx.insert(collections).values({ id, name, color: normalizeCollectionColor(data.color) }).run();
     syncCollectionPapers(tx, id, data.paperIds);
   });
   return id;
@@ -608,9 +611,10 @@ async function updateEntities(
   const assignments: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (key in fields) {
-      // Every editable column on these entities is TEXT; coerce so a stray
-      // boolean/object from an API caller cannot crash the bind.
-      assignments[key] = textValue(value);
+      // A collection's color is constrained to the fixed palette (or null);
+      // every other editable column on these entities is free TEXT, coerced so
+      // a stray boolean/object from an API caller cannot crash the bind.
+      assignments[key] = key === "color" ? normalizeCollectionColor(value) : textValue(value);
     }
   }
   const database = await ensureDatabase();

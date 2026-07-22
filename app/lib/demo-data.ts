@@ -48,7 +48,7 @@ export const demoSnapshot: LibrarySnapshot = {
           corresponding: false,
         },
       ],
-      collections: [{ id: "collection-active", name: "Active review" }],
+      collections: [{ id: "collection-active", name: "Active review", color: "amber" }],
     },
     {
       id: "paper-sensemaking",
@@ -97,8 +97,8 @@ export const demoSnapshot: LibrarySnapshot = {
         },
       ],
       collections: [
-        { id: "collection-active", name: "Active review" },
-        { id: "collection-interface", name: "Interface patterns" },
+        { id: "collection-active", name: "Active review", color: "amber" },
+        { id: "collection-interface", name: "Interface patterns", color: null },
       ],
     },
     {
@@ -147,7 +147,7 @@ export const demoSnapshot: LibrarySnapshot = {
           corresponding: false,
         },
       ],
-      collections: [{ id: "collection-agents", name: "Research agents" }],
+      collections: [{ id: "collection-agents", name: "Research agents", color: "green" }],
     },
     {
       id: "paper-memory",
@@ -243,7 +243,7 @@ export const demoSnapshot: LibrarySnapshot = {
           corresponding: false,
         },
       ],
-      collections: [{ id: "collection-interface", name: "Interface patterns" }],
+      collections: [{ id: "collection-interface", name: "Interface patterns", color: null }],
     },
   ],
   authors: [
@@ -260,9 +260,9 @@ export const demoSnapshot: LibrarySnapshot = {
     { id: "venue-arxiv", name: "arXiv", acronym: "arXiv", type: "preprint", publisher: "Cornell Tech", url: "https://arxiv.org", notes: null, paperCount: 2, latestYear: 2026 },
   ],
   collections: [
-    { id: "collection-active", name: "Active review", paperCount: 2 },
-    { id: "collection-agents", name: "Research agents", paperCount: 1 },
-    { id: "collection-interface", name: "Interface patterns", paperCount: 2 },
+    { id: "collection-active", name: "Active review", color: "amber", paperCount: 2 },
+    { id: "collection-agents", name: "Research agents", color: "green", paperCount: 1 },
+    { id: "collection-interface", name: "Interface patterns", color: null, paperCount: 2 },
   ],
   stats: { papers: 5, authors: 5, venues: 4, unread: 1, active: 2, recent: 2 },
 };

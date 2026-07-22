@@ -849,6 +849,80 @@
   }
 }
 
+/* Collection color picker: a row of accent swatches plus a "no color" option. */
+.collection-color-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.collection-color-field > span {
+  color: var(--muted);
+  font-size: var(--type-label);
+  font-weight: 600;
+}
+
+.collection-color-swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.collection-color-swatch {
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  height: 24px;
+  padding: 0;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  width: 24px;
+}
+
+.collection-color-swatch:hover {
+  transform: scale(1.1);
+}
+
+.collection-color-swatch.is-selected {
+  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px currentColor;
+}
+
+.collection-color-swatch.swatch-blue { background: var(--brand-blue); color: var(--brand-blue); }
+.collection-color-swatch.swatch-cyan { background: var(--cyan); color: var(--cyan); }
+.collection-color-swatch.swatch-amber { background: var(--amber); color: var(--amber); }
+.collection-color-swatch.swatch-green { background: var(--green); color: var(--green); }
+.collection-color-swatch.swatch-rose { background: var(--rose); color: var(--rose); }
+
+.collection-color-swatch.is-none {
+  background: var(--panel);
+  border-color: var(--line-strong);
+  color: var(--muted);
+  position: relative;
+}
+
+/* A diagonal strike marks the "no color" swatch. */
+.collection-color-swatch.is-none::after {
+  background: currentColor;
+  content: "";
+  height: 2px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  width: 16px;
+}
+
+/* Paper-list collection chips carry the collection's accent as a leading dot. */
+.collection-chip .collection-chip-dot {
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.collection-chip.swatch-blue .collection-chip-dot { background: var(--brand-blue); }
+.collection-chip.swatch-cyan .collection-chip-dot { background: var(--cyan); }
+.collection-chip.swatch-amber .collection-chip-dot { background: var(--amber); }
+.collection-chip.swatch-green .collection-chip-dot { background: var(--green); }
+.collection-chip.swatch-rose .collection-chip-dot { background: var(--rose); }
+
 /* Unified library surfaces — papers, authors, venues, and collections */
 
 /* --- entity-grids.css --- */
@@ -1064,6 +1138,21 @@
   justify-content: center;
   position: relative;
   width: 30px;
+}
+
+/* A collection's chosen accent tints its card icon. --swatch is the resolved
+   hue for the selected palette name; the base (blue) keeps the default tokens. */
+.collection-icon.swatch-cyan { --swatch: var(--cyan); }
+.collection-icon.swatch-amber { --swatch: var(--amber); }
+.collection-icon.swatch-green { --swatch: var(--green); }
+.collection-icon.swatch-rose { --swatch: var(--rose); }
+.collection-icon.swatch-cyan,
+.collection-icon.swatch-amber,
+.collection-icon.swatch-green,
+.collection-icon.swatch-rose {
+  background: color-mix(in srgb, var(--swatch) 16%, transparent) !important;
+  border-color: color-mix(in srgb, var(--swatch) 30%, transparent) !important;
+  color: var(--swatch) !important;
 }
 
 .collection-actions {

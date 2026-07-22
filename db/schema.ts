@@ -111,6 +111,9 @@ export const collections = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
+    // A named accent from the fixed palette (blue/cyan/amber/green/rose), or
+    // null for the default neutral. Shown on collection cards and paper chips.
+    color: text("color"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

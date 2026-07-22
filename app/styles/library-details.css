@@ -633,10 +633,6 @@ td.number-cell {
   width: 36px;
 }
 
-.collection-cyan .collection-icon { background: var(--cyan-soft); color: var(--cyan); }
-.collection-amber .collection-icon { background: var(--amber-soft); color: var(--amber); }
-.collection-green .collection-icon { background: var(--green-soft); color: var(--green); }
-.collection-rose .collection-icon { background: var(--rose-soft); color: var(--rose); }
 
 .collection-papers {
   border-top: 1px solid var(--line);

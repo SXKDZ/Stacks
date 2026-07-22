@@ -215,12 +215,13 @@ test("imports BibTeX and RIS files into normalized paper records", async () => {
 });
 
 test("persists collection membership through the paper-collection composite key", async () => {
-  const [schema, library, application, collectionMigration, colorMigration] = await Promise.all([
+  const [schema, library, application, collectionMigration, bootstrap, types] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0003_blushing_preak.sql", import.meta.url), "utf8"),
-    readFile(new URL("../drizzle/0005_lyrical_victor_mancha.sql", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(schema, /primaryKey\(\{ columns: \[table\.paperId, table\.collectionId\] \}\)/);
   // Membership is reconciled through Drizzle: idempotent inserts + composite-key deletes.
@@ -230,10 +231,20 @@ test("persists collection membership through the paper-collection composite key"
   assert.match(application, /Papers in collection/);
   assert.match(application, /All remaining papers/);
   assert.match(application, /aria-label="Remove selected paper from collection"/);
-  const collectionSchema = schema.slice(schema.indexOf("export const collections"), schema.indexOf("export const paperCollections"));
-  assert.doesNotMatch(collectionSchema, /description: text\("description"\)|color: text\("color"\)/);
+  // The unused legacy description column is dropped; color is a real feature.
   assert.match(collectionMigration, /DROP COLUMN `description`/);
-  assert.match(colorMigration, /DROP COLUMN `color`/);
+  const collectionSchema = schema.slice(schema.indexOf("export const collections"), schema.indexOf("export const paperCollections"));
+  assert.doesNotMatch(collectionSchema, /description: text\("description"\)/);
+  assert.match(collectionSchema, /color: text\("color"\)/);
+  // Bootstrap adds the color column (idempotent) rather than dropping it.
+  assert.match(bootstrap, /ALTER TABLE collections ADD COLUMN color TEXT/);
+  // Colors are constrained to a fixed palette, validated on both read and write.
+  assert.match(types, /COLLECTION_COLORS = \["blue", "cyan", "amber", "green", "rose"\]/);
+  assert.match(types, /export function normalizeCollectionColor/);
+  assert.match(library, /normalizeCollectionColor\(data\.color\)/);
+  // The picker and the paper-list color dot are wired in the UI.
+  assert.match(application, /collection-color-swatch/);
+  assert.match(application, /collection-chip-dot/);
 });
 
 test("uses integrated sortable table headers without a detached sort control", async () => {

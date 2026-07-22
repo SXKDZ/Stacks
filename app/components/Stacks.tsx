@@ -71,6 +71,7 @@ import type {
   Venue,
   ViewId,
 } from "@/app/lib/types";
+import { COLLECTION_COLORS } from "@/app/lib/types";
 
 const discoveryProviders: Array<{
   id: DiscoveryProvider;
@@ -1638,7 +1639,15 @@ function LibraryView({
                         </span>
                         {paper.collections.length ? (
                           <span className="paper-collection-line" aria-label="Collections">
-                            {paper.collections.slice(0, 3).map((collection) => <Chip key={collection.id} size="small">{collection.name}</Chip>)}
+                            {paper.collections.slice(0, 3).map((collection) => (
+                              <Chip
+                                key={collection.id}
+                                size="small"
+                                tone={collection.color ? "neutral" : "brand"}
+                                className={collection.color ? `collection-chip swatch-${collection.color}` : undefined}
+                                icon={collection.color ? <span className="collection-chip-dot" /> : undefined}
+                              >{collection.name}</Chip>
+                            ))}
                           </span>
                         ) : null}
                       </span>
@@ -2054,7 +2063,7 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
     <article className="collection-card">
       <header className="collection-card-top">
         <button type="button" className="collection-heading" onClick={onOpen}>
-          <span className="collection-icon"><FolderOpen size={18} /></span>
+          <span className={`collection-icon ${collection.color ? `swatch-${collection.color}` : ""}`}><FolderOpen size={18} /></span>
           <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
         </button>
         <div className="collection-actions">
@@ -3738,11 +3747,15 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
       .filter((paper) => paper.collections.some((collection) => collection.id === record.id))
       .map((paper) => paper.id);
   });
+  const [collectionColor, setCollectionColor] = useState<string | null>(
+    entity === "collection" ? ((record as Collection | undefined)?.color ?? null) : null,
+  );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data: Record<string, unknown> = Object.fromEntries(new FormData(event.currentTarget).entries());
     if (entity === "collection") {
       data.paperIds = collectionPaperIds;
+      data.color = collectionColor;
     }
     const succeeded = await mutateLibrary(
       { entity, action: editing ? "update" : "create", id: record?.id, data },
@@ -3802,6 +3815,32 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={3} defaultValue={venue?.notes ?? ""} /></label>
         </> : <>
           <label className="field-span-2"><span>Collection name *</span><input name="name" defaultValue={collection?.name} required autoFocus /></label>
+          <div className="field-span-2 collection-color-field">
+            <span>Color</span>
+            <div className="collection-color-swatches" role="radiogroup" aria-label="Collection color">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={collectionColor === null}
+                aria-label="No color"
+                title="No color"
+                className={`collection-color-swatch is-none ${collectionColor === null ? "is-selected" : ""}`}
+                onClick={() => setCollectionColor(null)}
+              />
+              {COLLECTION_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  role="radio"
+                  aria-checked={collectionColor === color}
+                  aria-label={color}
+                  title={color}
+                  className={`collection-color-swatch swatch-${color} ${collectionColor === color ? "is-selected" : ""}`}
+                  onClick={() => setCollectionColor(color)}
+                />
+              ))}
+            </div>
+          </div>
           <section className="collection-transfer field-span-2">
             <div className="collection-transfer-grid">
               <div className="transfer-column">

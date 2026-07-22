@@ -279,8 +279,9 @@ async function initializeDatabase(): Promise<void> {
   if (collectionColumns.has("description")) {
     raw.prepare("ALTER TABLE collections DROP COLUMN description").run();
   }
-  if (collectionColumns.has("color")) {
-    raw.prepare("ALTER TABLE collections DROP COLUMN color").run();
+  // A named accent from the fixed palette; nullable, no default (null = neutral).
+  if (!collectionColumns.has("color")) {
+    raw.prepare("ALTER TABLE collections ADD COLUMN color TEXT").run();
   }
 
   const existingAuthorColumns = tableColumns(raw, "authors");

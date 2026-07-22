@@ -18,6 +18,7 @@ export interface PaperAuthor {
 export interface PaperCollection {
   id: string;
   name: string;
+  color: string | null;
 }
 
 export interface Paper {
@@ -80,7 +81,19 @@ export interface Venue {
 export interface Collection {
   id: string;
   name: string;
+  color: string | null;
   paperCount: number;
+}
+
+/** The fixed accent palette a collection can carry (each maps to a design token). */
+export const COLLECTION_COLORS = ["blue", "cyan", "amber", "green", "rose"] as const;
+export type CollectionColor = (typeof COLLECTION_COLORS)[number];
+
+/** Coerce an arbitrary stored/POSTed value to a valid palette name or null. */
+export function normalizeCollectionColor(value: unknown): CollectionColor | null {
+  return typeof value === "string" && (COLLECTION_COLORS as readonly string[]).includes(value)
+    ? (value as CollectionColor)
+    : null;
 }
 
 export interface LibrarySnapshot {
