@@ -1150,11 +1150,8 @@ td.number-cell {
 }
 
 .identifier-list b {
-  background: #eef2f5;
-  border-radius: 4px;
-  color: #756c7b;
+  color: var(--soft);
   font-size: var(--type-micro);
-  padding: 3px 5px;
   width: 38px;
 }
 
