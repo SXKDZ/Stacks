@@ -131,6 +131,17 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.doesNotMatch(runtimeConfig, /settings-store/);
   assert.match(settingsView, /"\/api\/local-settings"/);
   assert.doesNotMatch(settingsView, /"\/api\/settings"/);
+  // A partial save must NOT reset untouched numeric/boolean fields to their
+  // hardcoded defaults: each falls back to the saved value (via envValue) when
+  // the payload omits it. Regression guard for the "maxTokens reverts to default"
+  // bug — the old `Number(data.maxTokens) || 1200` clobbered on any partial POST.
+  assert.doesNotMatch(localSettings, /Number\(data\.maxTokens\) \|\| \d/);
+  assert.doesNotMatch(localSettings, /Number\(data\.autoSyncInterval\) \|\| \d/);
+  assert.match(localSettings, /clampInt\(data\.maxTokens, envValue\("STACKS_MAX_TOKENS"/);
+  assert.match(localSettings, /data\.autoSync === undefined \? envValue\("STACKS_AUTO_SYNC"/);
+  // The default output-token ceiling is generous (>= 10000) so summaries aren't
+  // truncated out of the box.
+  assert.match(localSettings, /STACKS_MAX_TOKENS", "10000"/);
   assert.match(doctor, /PRAGMA quick_check/);
   assert.match(doctor, /PRAGMA foreign_key_check/);
   assert.match(doctor, /orphanedAssociations/);

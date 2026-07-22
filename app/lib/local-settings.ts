@@ -244,7 +244,7 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
     ai: {
       modelId: envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
       region: envValue("AWS_REGION", "us-east-1"),
-      maxTokens: envValue("STACKS_MAX_TOKENS", "1200"),
+      maxTokens: envValue("STACKS_MAX_TOKENS", "10000"),
       temperature: envValue("STACKS_TEMPERATURE", "0.25"),
     },
     prompts: {
@@ -371,7 +371,7 @@ export function currentSettings() {
       provider: "bedrock",
       modelId: envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
       region: envValue("AWS_REGION", "us-east-1"),
-      maxTokens: Number(envValue("STACKS_MAX_TOKENS", "1200")) || 1200,
+      maxTokens: Number(envValue("STACKS_MAX_TOKENS", "10000")) || 10000,
       temperature: Number(envValue("STACKS_TEMPERATURE", "0.25")) || 0,
     },
     integrations: Object.fromEntries(
@@ -399,17 +399,35 @@ export function currentSettings() {
 }
 
 function sanitizeSettings(data: SettingsPayload): Record<string, string> {
+  // Every field falls back to its CURRENTLY SAVED value (envValue reads
+  // settings.json first) when the payload omits it, so a partial save never
+  // resets an untouched field to a hardcoded default. Numeric/boolean fields
+  // are clamped only when the payload actually supplies them.
+  const clampInt = (value: unknown, saved: string, min: number, max: number, fallback: number): string => {
+    if (value === undefined || value === null || value === "") return saved || String(fallback);
+    const n = Number(value);
+    if (!Number.isFinite(n)) return saved || String(fallback);
+    return String(Math.min(max, Math.max(min, Math.round(n))));
+  };
+  const clampFloat = (value: unknown, saved: string, min: number, max: number, fallback: number): string => {
+    if (value === undefined || value === null || value === "") return saved || String(fallback);
+    const n = Number(value);
+    if (!Number.isFinite(n)) return saved || String(fallback);
+    return String(Math.min(max, Math.max(min, n)));
+  };
   const updates: Record<string, string> = {
     STACKS_LIBRARY_NAME: String(data.libraryName ?? envValue("STACKS_LIBRARY_NAME", "My Paper Library")).trim().slice(0, 60) || "My Paper Library",
     BEDROCK_MODEL_ID: String(data.modelId ?? envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")).trim(),
     AWS_REGION: String(data.region ?? envValue("AWS_REGION", "us-east-1")).trim(),
-    STACKS_MAX_TOKENS: String(Math.max(128, Number(data.maxTokens) || 1200)),
+    STACKS_MAX_TOKENS: clampInt(data.maxTokens, envValue("STACKS_MAX_TOKENS", "10000"), 128, 200000, 10000),
     STACKS_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
     STACKS_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
-    STACKS_TEMPERATURE: String(Math.min(1, Math.max(0, Number(data.temperature) || 0))),
+    STACKS_TEMPERATURE: clampFloat(data.temperature, envValue("STACKS_TEMPERATURE", "0.25"), 0, 1, 0.25),
     STACKS_ONEDRIVE_PATH: String(data.remotePath ?? envValue("STACKS_ONEDRIVE_PATH")).trim(),
-    STACKS_AUTO_SYNC: data.autoSync ? "true" : "false",
-    STACKS_AUTO_SYNC_INTERVAL: String(Math.min(3600, Math.max(5, Number(data.autoSyncInterval) || 5))),
+    // autoSync is a real boolean in the payload; only fall back to the saved
+    // value when it's omitted entirely (undefined), not when it's an explicit false.
+    STACKS_AUTO_SYNC: data.autoSync === undefined ? envValue("STACKS_AUTO_SYNC", "false") : data.autoSync ? "true" : "false",
+    STACKS_AUTO_SYNC_INTERVAL: clampInt(data.autoSyncInterval, envValue("STACKS_AUTO_SYNC_INTERVAL", "5"), 5, 3600, 5),
     STACKS_GITHUB_REPO: String(data.githubRepo ?? envValue("STACKS_GITHUB_REPO")).trim(),
   };
   for (const key of secretKeys) {

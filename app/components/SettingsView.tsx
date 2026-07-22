@@ -205,7 +205,7 @@ const defaultSettings: SettingsSnapshot = {
     provider: "bedrock",
     modelId: "us.anthropic.claude-sonnet-4-6",
     region: "us-east-1",
-    maxTokens: 1200,
+    maxTokens: 10000,
     temperature: 0.25,
   },
   integrations: {},
