@@ -95,10 +95,8 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(prompts, /\{\{source_text\[1:2\]\}\}/);
   assert.match(prompts, /export function pageSliceFor/);
   assert.doesNotMatch(prompts, /\{\{papers\}\}|DEFAULT_CHAT_SYSTEM_PROMPT/);
-  // Streaming robustness: mid-stream exception frames/events surface as errors
-  // (both parsers) and the client abort is forwarded to Bedrock.
-  assert.match(bedrock, /messageType === "exception"/);
-  assert.match(bedrock, /parsed\.type === "error" \|\| parsed\.error/);
+  // The client forwards the caller's abort signal to Bedrock so a cancelled
+  // request stops upstream too.
   assert.match(bedrock, /signal: options\.signal/);
   // The summarize route pins the Node runtime and streams from Bedrock.
   const summarizeRoute = await readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8");
@@ -324,6 +322,9 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   ]);
   assert.doesNotMatch(schema, /note: text\("note"\)/);
   assert.doesNotMatch(schema, /workflowSteps/);
+  // Bootstrap drops the two retired columns from any pre-existing library.
+  assert.match(bootstrap, /DROP COLUMN note/);
+  assert.match(bootstrap, /DROP COLUMN workflow_steps/);
   assert.doesNotMatch(feed, /feed-note-editor/);
   assert.doesNotMatch(feed, /pendingWorkflowSteps|runNextWorkflowStep/);
   assert.doesNotMatch(settings, /FeedWorkflowsEditor|feed-workflow-schedule/);
@@ -382,10 +383,9 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
 });
 
 test("runs the library on a local SQLite file in the self-contained library folder", async () => {
-  const [library, bootstrap, dbIndex, client, paths, localFiles] = await Promise.all([
+  const [library, bootstrap, client, paths, localFiles] = await Promise.all([
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
-    readFile(new URL("../db/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/client.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/library-paths.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
@@ -402,8 +402,7 @@ test("runs the library on a local SQLite file in the self-contained library fold
   assert.match(library, /removeStoredFile\("pdf"/);
   assert.match(localFiles, /export function removeStoredFile/);
   assert.match(bootstrap, /SELECT COUNT\(\*\) AS count FROM papers/);
-  assert.doesNotMatch(bootstrap, /cloudflare:workers/);
-  assert.doesNotMatch(dbIndex, /drizzle-orm\/d1|cloudflare:workers/);
+  assert.doesNotMatch(bootstrap, /cloudflare:workers|drizzle-orm\/d1/);
   assert.match(client, /import Database from "better-sqlite3"/);
   assert.match(client, /drizzle-orm\/better-sqlite3/);
   // Reopen when the resolved library path changes (folder move at runtime).

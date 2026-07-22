@@ -3,11 +3,10 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 
 /**
- * The single owner of the local SQLite connection. Paper Assistant talks to its
+ * The single owner of the local SQLite connection. Stacks talks to its
  * `library.db` file through Drizzle (typed queries, automatic value coercion);
  * this module opens the underlying better-sqlite3 connection and hands out the
- * Drizzle handle. There is no Cloudflare D1 anywhere in the runtime — the
- * database is a plain on-disk SQLite file.
+ * Drizzle handle. The database is a plain on-disk SQLite file.
  */
 
 // The drizzle() return type includes `$client` (the raw better-sqlite3 handle)

@@ -106,7 +106,7 @@
   border-color: rgba(22, 141, 236, 0.16);
 }
 
-/* Paper details and Ask Stacks behave as persistent third panels, never modal scrims. */
+/* Paper details behaves as a persistent third panel, never a modal scrim. */
 .drawer-layer {
   pointer-events: none;
 }

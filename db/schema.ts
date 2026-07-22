@@ -220,10 +220,3 @@ export const feedProposals = sqliteTable(
   (table) => [index("feed_proposals_snippet_idx").on(table.snippetId)],
 );
 
-export type PaperRecord = typeof papers.$inferSelect;
-export type AuthorRecord = typeof authors.$inferSelect;
-export type VenueRecord = typeof venues.$inferSelect;
-export type CollectionRecord = typeof collections.$inferSelect;
-export type FeedSnippetRecord = typeof feedSnippets.$inferSelect;
-export type FeedMessageRecord = typeof feedMessages.$inferSelect;
-export type FeedProposalRecord = typeof feedProposals.$inferSelect;
