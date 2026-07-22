@@ -325,6 +325,15 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   // next pass rather than dropping them.
   assert.match(sync, /githubCommentId/);
   assert.match(sync, /isFeedRunning/);
+  // Full pagination (follow Link rel=next) and incremental pulls (since=).
+  assert.match(client, /rel="next"/);
+  assert.match(client, /since=/);
+  assert.match(sync, /readGithubLastSyncedAt/);
+  assert.match(sync, /writeGithubLastSyncedAt/);
+  // Bidirectional title rename (3-way base) and comment-edit adoption.
+  assert.match(client, /patchIssueTitle/);
+  assert.match(sync, /issueTitleSynced/);
+  assert.match(sync, /commentsUpdated/);
   // Settings persist a repo (non-secret) and token (secret) in settings.json.
   assert.match(settingsLib, /STACKS_GITHUB_REPO/);
   assert.match(settingsLib, /GITHUB_TOKEN/);

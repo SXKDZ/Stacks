@@ -244,6 +244,9 @@ async function initializeDatabase(): Promise<void> {
   if (!feedSnippetColumns.has("issue_number")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_number INTEGER").run();
   }
+  if (!feedSnippetColumns.has("issue_title_synced")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_title_synced TEXT").run();
+  }
   for (const column of ["input_tokens", "output_tokens", "duration_ms", "turns"]) {
     if (!feedSnippetColumns.has(column)) {
       raw.prepare(`ALTER TABLE feed_snippets ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();

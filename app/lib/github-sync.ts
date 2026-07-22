@@ -27,6 +27,7 @@ export interface GitHubIssue {
   title: string;
   body: string;
   state: string;
+  updatedAt: string;
   /** GitHub marks issues that are actually PRs; we skip those. */
   isPullRequest: boolean;
 }
@@ -34,6 +35,7 @@ export interface GitHubIssue {
 export interface GitHubComment {
   id: number;
   body: string;
+  updatedAt: string;
   /** True when the body carries the Stacks agent marker (i.e. we posted it). */
   fromStacks: boolean;
 }
@@ -48,12 +50,21 @@ function parseRepo(repo: string): { owner: string; name: string } {
   return { owner: match[1], name: match[2] };
 }
 
-async function githubFetch(
+// A defensive ceiling on pages walked per list, so a runaway Link chain can't
+// loop forever. 20 pages × 100/page = 2000 items, far above a personal inbox.
+const MAX_PAGES = 20;
+
+async function githubRequest(
   config: GitHubConfig,
   path: string,
   init: RequestInit = {},
-): Promise<unknown> {
-  const response = await fetch(`${API_ROOT}${path}`, {
+): Promise<Response> {
+  const url = path.startsWith("http") ? path : `${API_ROOT}${path}`;
+  // Only ever talk to api.github.com, even when following a paginated Link URL.
+  if (!url.startsWith(API_ROOT)) {
+    throw new GitHubError("Refusing to follow a link outside api.github.com.");
+  }
+  const response = await fetch(url, {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
@@ -62,7 +73,6 @@ async function githubFetch(
       "Content-Type": "application/json",
       ...init.headers,
     },
-    // Never follow a redirect off api.github.com.
     redirect: "error",
   });
   if (!response.ok) {
@@ -74,10 +84,42 @@ async function githubFetch(
         : "";
     throw new GitHubError(`GitHub API ${response.status}.${hint}${detail ? ` ${detail.slice(0, 200)}` : ""}`);
   }
+  return response;
+}
+
+async function githubFetch(
+  config: GitHubConfig,
+  path: string,
+  init: RequestInit = {},
+): Promise<unknown> {
+  const response = await githubRequest(config, path, init);
   if (response.status === 204) {
     return null;
   }
   return response.json();
+}
+
+/** The next-page URL from a GitHub `Link` header, or null at the last page. */
+function nextPageUrl(response: Response): string | null {
+  const link = response.headers.get("link");
+  if (!link) return null;
+  const match = link.match(/<([^>]+)>;\s*rel="next"/);
+  return match ? match[1] : null;
+}
+
+/** Fetch every page of a list endpoint, following `Link: rel="next"` (capped). */
+async function githubFetchAll<T>(config: GitHubConfig, firstPath: string): Promise<{ items: T[]; truncated: boolean }> {
+  const items: T[] = [];
+  let url: string | null = firstPath;
+  let pages = 0;
+  while (url && pages < MAX_PAGES) {
+    const response: Response = await githubRequest(config, url);
+    const page = (await response.json()) as T[];
+    items.push(...page);
+    url = nextPageUrl(response);
+    pages += 1;
+  }
+  return { items, truncated: Boolean(url) };
 }
 
 /** Confirm the token can see the repo (used by the "Test connection" button). */
@@ -94,34 +136,56 @@ function markerless(body: string): string {
   return body.replace(STACKS_MARKER, "").trimEnd();
 }
 
-/** List open issues (excluding pull requests), newest first. */
-export async function listOpenIssues(config: GitHubConfig): Promise<GitHubIssue[]> {
+/**
+ * List open issues (excluding pull requests), following all pages. When `since`
+ * is given, sorts by `updated` and returns only issues touched since then —
+ * any edit (rename, new/edited comment) bumps updated_at, so this is the
+ * incremental change-gate. `truncated` is true if the page cap was hit.
+ */
+export async function listOpenIssues(config: GitHubConfig, since?: string): Promise<{ issues: GitHubIssue[]; truncated: boolean }> {
   const { owner, name } = parseRepo(config.repo);
-  const data = (await githubFetch(
+  const query = since
+    ? `state=open&per_page=100&sort=updated&direction=asc&since=${encodeURIComponent(since)}`
+    : "state=open&per_page=100&sort=created&direction=asc";
+  const { items, truncated } = await githubFetchAll<{ number: number; title: string; body: string | null; state: string; updated_at: string; pull_request?: unknown }>(
     config,
-    `/repos/${owner}/${name}/issues?state=open&per_page=100&sort=created&direction=desc`,
-  )) as Array<{ number: number; title: string; body: string | null; state: string; pull_request?: unknown }>;
-  return data.map((issue) => ({
-    number: issue.number,
-    title: issue.title,
-    body: markerless(issue.body ?? ""),
-    state: issue.state,
-    isPullRequest: Boolean(issue.pull_request),
+    `/repos/${owner}/${name}/issues?${query}`,
+  );
+  return {
+    issues: items.map((issue) => ({
+      number: issue.number,
+      title: issue.title,
+      body: markerless(issue.body ?? ""),
+      state: issue.state,
+      updatedAt: issue.updated_at,
+      isPullRequest: Boolean(issue.pull_request),
+    })),
+    truncated,
+  };
+}
+
+/** List every comment on an issue (all pages), oldest first. */
+export async function listComments(config: GitHubConfig, issueNumber: number): Promise<GitHubComment[]> {
+  const { owner, name } = parseRepo(config.repo);
+  const { items } = await githubFetchAll<{ id: number; body: string | null; updated_at: string }>(
+    config,
+    `/repos/${owner}/${name}/issues/${issueNumber}/comments?per_page=100`,
+  );
+  return items.map((comment) => ({
+    id: comment.id,
+    body: markerless(comment.body ?? ""),
+    updatedAt: comment.updated_at,
+    fromStacks: (comment.body ?? "").includes(STACKS_MARKER),
   }));
 }
 
-/** List every comment on an issue, oldest first. */
-export async function listComments(config: GitHubConfig, issueNumber: number): Promise<GitHubComment[]> {
+/** Rename an issue to match a locally-renamed feed (title push, local wins). */
+export async function patchIssueTitle(config: GitHubConfig, issueNumber: number, title: string): Promise<void> {
   const { owner, name } = parseRepo(config.repo);
-  const data = (await githubFetch(
-    config,
-    `/repos/${owner}/${name}/issues/${issueNumber}/comments?per_page=100`,
-  )) as Array<{ id: number; body: string | null }>;
-  return data.map((comment) => ({
-    id: comment.id,
-    body: markerless(comment.body ?? ""),
-    fromStacks: (comment.body ?? "").includes(STACKS_MARKER),
-  }));
+  await githubFetch(config, `/repos/${owner}/${name}/issues/${issueNumber}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title: title.slice(0, 250) || "Untitled feed" }),
+  });
 }
 
 /** Open a new issue for a feed. Returns the created issue number. */

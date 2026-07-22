@@ -537,7 +537,7 @@ export default function FeedWorkspace() {
     setNotice(null);
     try {
       const response = await fetch("/api/feed/github/sync", { method: "POST" });
-      const data = (await response.json()) as { counts?: Record<string, number>; error?: string };
+      const data = (await response.json()) as { counts?: Record<string, number>; truncated?: boolean; error?: string };
       if (!response.ok) throw new Error(data.error ?? "GitHub sync failed.");
       const c = data.counts ?? {};
       const parts = [
@@ -545,8 +545,11 @@ export default function FeedWorkspace() {
         c.commentsPosted ? `${c.commentsPosted} posted` : "",
         c.feedsCreated ? `${c.feedsCreated} new feed${c.feedsCreated === 1 ? "" : "s"}` : "",
         c.commentsIngested ? `${c.commentsIngested} pulled` : "",
+        c.commentsUpdated ? `${c.commentsUpdated} edited` : "",
+        c.titlesRenamed ? `${c.titlesRenamed} renamed` : "",
       ].filter(Boolean);
-      setNotice({ tone: "success", message: parts.length ? `Synced — ${parts.join(", ")}.` : "Synced — already up to date." });
+      const base = parts.length ? `Synced — ${parts.join(", ")}.` : "Synced — already up to date.";
+      setNotice({ tone: "success", message: data.truncated ? `${base} More remain — sync again to continue.` : base });
       await loadSnippets();
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "GitHub sync failed." });

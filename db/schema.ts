@@ -150,6 +150,9 @@ export const feedSnippets = sqliteTable(
     // The GitHub issue this feed is mirrored to (for remote/mobile access), if
     // GitHub inbox sync is configured. Null until the feed is first synced.
     issueNumber: integer("issue_number"),
+    // The title last reconciled with GitHub — the 3-way base for rename sync, so
+    // we can tell whether a divergence came from a local or a remote rename.
+    issueTitleSynced: text("issue_title_synced"),
     // Cumulative agent usage across all turns, captured from the result event.
     inputTokens: integer("input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),

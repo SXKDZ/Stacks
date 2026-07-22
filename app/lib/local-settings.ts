@@ -49,6 +49,8 @@ interface StructuredSettingsFile {
   };
   github?: {
     repo: string;
+    /** ISO timestamp of the last successful inbox sync, for incremental pulls. */
+    lastSyncedAt?: string;
   };
   feedSkills?: Array<{ id: string; label: string; icon: string; prompt: string }>;
   secrets: Record<string, string>;
@@ -249,6 +251,8 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
     },
     github: {
       repo: envValue("STACKS_GITHUB_REPO"),
+      // Preserve the sync high-water mark across unrelated settings writes.
+      lastSyncedAt: existing?.github?.lastSyncedAt,
     },
     // Seed the secret baseline from the persisted settings file ONLY (no env
     // fallback). Otherwise a secret supplied purely through the environment
@@ -272,6 +276,18 @@ export function readFeedSkills(): Array<{ id: string; label: string; icon: strin
 export function writeFeedSkills(skills: Array<{ id: string; label: string; icon: string; prompt: string }>): void {
   const next = settingsFromCurrentValues(readStructuredSettings());
   next.feedSkills = skills;
+  writeStructuredSettings(next);
+}
+
+/** The high-water mark of the last successful GitHub inbox sync (or undefined). */
+export function readGithubLastSyncedAt(): string | undefined {
+  return readStructuredSettings()?.github?.lastSyncedAt;
+}
+
+/** Record when the GitHub inbox sync last completed, preserving the rest. */
+export function writeGithubLastSyncedAt(iso: string): void {
+  const next = settingsFromCurrentValues(readStructuredSettings());
+  next.github = { repo: next.github?.repo ?? "", lastSyncedAt: iso };
   writeStructuredSettings(next);
 }
 

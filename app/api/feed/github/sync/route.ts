@@ -2,10 +2,12 @@ import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { readGithubLastSyncedAt, writeGithubLastSyncedAt } from "@/app/lib/local-settings";
 import {
   createIssue,
   listComments,
   listOpenIssues,
+  patchIssueTitle,
   postComment,
   GitHubError,
   type GitHubConfig,
@@ -25,12 +27,16 @@ function mirrorLabel(role: string): string {
 }
 
 /**
- * Reconcile the local feeds with their GitHub issues, one manual pass:
- *   outbound — create an issue per feed, mirror new local messages as comments;
- *   inbound  — new issues become new feeds; new human comments become reply
- *              turns. Agents run asynchronously, so their replies are mirrored
- *              on the next sync. Loop-safe: Stacks-authored comments carry a
- *              marker and every mirrored/ingested message stores its comment id.
+ * Reconcile the local feeds with their GitHub issues in one manual pass:
+ *   outbound — create an issue per feed, push local renames, mirror new local
+ *              messages as comments;
+ *   inbound  — adopt remote renames, ingest new/edited human comments, turn new
+ *              issues into feeds. New comments trigger a reply turn; edits just
+ *              update the local copy (no re-run).
+ * Incremental: the inbound issue list is filtered by `since` the last successful
+ * sync (sorted by updated_at), so each pass pulls only what changed; the first
+ * sync does a full paginated sweep. Loop-safe: Stacks-authored comments carry a
+ * marker and every mirrored/ingested message stores its comment id.
  */
 export async function POST(): Promise<Response> {
   const runtime = await resolveRuntimeValues();
@@ -42,18 +48,34 @@ export async function POST(): Promise<Response> {
   const config: GitHubConfig = { repo, token };
 
   const database = await ensureDatabase();
-  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0 };
+  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0 };
+  const since = readGithubLastSyncedAt();
+  // Stamp the high-water mark from BEFORE the network calls, so anything that
+  // changes mid-sync is re-examined next time rather than skipped.
+  const startedAt = new Date().toISOString();
 
   try {
-    // 1. OUTBOUND — ensure every feed has an issue, then mirror any local
-    //    messages that haven't been pushed yet.
+    // 1. OUTBOUND — ensure an issue per feed, push local renames, mirror
+    //    unposted local messages. Runs over all feeds (not the incremental
+    //    set), so a purely-local change is never missed.
     const feeds = database.select().from(feedSnippets).all();
     for (const feed of feeds) {
       let issueNumber = feed.issueNumber;
       if (!issueNumber) {
         issueNumber = await createIssue(config, { title: feed.title, body: feed.instruction || feed.title });
-        database.update(feedSnippets).set({ issueNumber }).where(eq(feedSnippets.id, feed.id)).run();
+        database.update(feedSnippets).set({ issueNumber, issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
         counts.issuesCreated += 1;
+      } else if (feed.issueTitleSynced === null) {
+        // A feed synced before rename tracking existed: adopt the current title
+        // as the base (no push) so future renames on either side are detected.
+        database.update(feedSnippets).set({ issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
+        feed.issueTitleSynced = feed.title;
+      } else if (feed.title !== feed.issueTitleSynced) {
+        // The feed was renamed locally since the last sync — push it (local wins).
+        await patchIssueTitle(config, issueNumber, feed.title);
+        database.update(feedSnippets).set({ issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
+        feed.issueTitleSynced = feed.title;
+        counts.titlesRenamed += 1;
       }
       const messages = database
         .select()
@@ -71,12 +93,12 @@ export async function POST(): Promise<Response> {
       }
     }
 
-    // 2. INBOUND — reconcile open issues into feeds and new comments into turns.
+    // 2. INBOUND — reconcile changed issues into feeds, renames, and comments.
     const linked = new Map<number, typeof feeds[number]>();
     for (const feed of database.select().from(feedSnippets).all()) {
       if (feed.issueNumber) linked.set(feed.issueNumber, feed);
     }
-    const issues = await listOpenIssues(config);
+    const { issues, truncated } = await listOpenIssues(config, since);
     for (const issue of issues) {
       if (issue.isPullRequest) continue;
       const feed = linked.get(issue.number);
@@ -94,6 +116,7 @@ export async function POST(): Promise<Response> {
           status: "queued",
           sessionId: "",
           issueNumber: issue.number,
+          issueTitleSynced: issue.title,
           createdAt: now,
           updatedAt: now,
         }).run();
@@ -103,20 +126,38 @@ export async function POST(): Promise<Response> {
         continue;
       }
 
-      // An existing feed: ingest human comments Stacks hasn't seen yet.
-      const seen = new Set(
-        database
-          .select({ id: feedMessages.githubCommentId })
-          .from(feedMessages)
-          .where(eq(feedMessages.snippetId, feed.id))
-          .all()
-          .map((row) => row.id)
-          .filter((value): value is number => typeof value === "number"),
-      );
+      // Adopt a remote rename only when the feed wasn't also renamed locally
+      // (local rename already pushed above, so the base now equals the local
+      // title). If the title differs from the just-synced base, GitHub changed it.
+      if (issue.title && issue.title !== feed.title && feed.issueTitleSynced === feed.title) {
+        database.update(feedSnippets).set({ title: issue.title.slice(0, 120), issueTitleSynced: issue.title }).where(eq(feedSnippets.id, feed.id)).run();
+        counts.titlesRenamed += 1;
+      }
+
+      // Reconcile comments: ingest new human comments and adopt edits to ones
+      // already synced (by comparing the remote body to the stored content).
+      const localByComment = new Map<number, { id: string; content: string; role: string }>();
+      for (const message of database.select().from(feedMessages).where(eq(feedMessages.snippetId, feed.id)).all()) {
+        if (typeof message.githubCommentId === "number") {
+          localByComment.set(message.githubCommentId, { id: message.id, content: message.content, role: message.role });
+        }
+      }
       const comments = await listComments(config, issue.number);
-      const fresh = comments.filter((comment) => !comment.fromStacks && !seen.has(comment.id) && comment.body.trim());
+
+      // Edits to already-synced HUMAN comments: keep the local copy in step.
+      for (const comment of comments) {
+        if (comment.fromStacks) continue;
+        const local = localByComment.get(comment.id);
+        const body = comment.body.trim();
+        if (local && local.role === "user" && body && body !== local.content.trim()) {
+          database.update(feedMessages).set({ content: body }).where(eq(feedMessages.id, local.id)).run();
+          counts.commentsUpdated += 1;
+        }
+      }
+
+      const fresh = comments.filter((comment) => !comment.fromStacks && !localByComment.has(comment.id) && comment.body.trim());
       if (!fresh.length) continue;
-      // Leave the comments unrecorded if the agent is mid-run, so the next sync
+      // Leave new comments unrecorded if the agent is mid-run, so the next sync
       // (when it's free) ingests and acts on them rather than dropping them.
       if (isFeedRunning(feed.id)) continue;
 
@@ -157,7 +198,12 @@ export async function POST(): Promise<Response> {
       counts.repliesQueued += 1;
     }
 
-    return Response.json({ ok: true, counts });
+    // Advance the high-water mark only when the full changed set was seen; if
+    // the page cap truncated results, keep the old mark so the tail isn't lost.
+    if (!truncated) {
+      writeGithubLastSyncedAt(startedAt);
+    }
+    return Response.json({ ok: true, counts, truncated });
   } catch (error) {
     const message = error instanceof GitHubError || error instanceof Error ? error.message : "GitHub sync failed.";
     return Response.json({ error: message }, { status: 400 });
