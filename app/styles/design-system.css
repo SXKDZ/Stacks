@@ -143,37 +143,6 @@
 
 /* Prompt chips wrap naturally instead of forcing a horizontal scrollbar. */
 
-/* Compact chat Markdown rhythm. */
-.chat-bubble.markdown-content {
-  line-height: 1.42;
-}
-
-.chat-bubble.markdown-content p {
-  margin: 0 0 0.34em;
-}
-
-.chat-bubble.markdown-content h1,
-.chat-bubble.markdown-content h2,
-.chat-bubble.markdown-content h3,
-.chat-bubble.markdown-content h4 {
-  line-height: 1.16;
-  margin: 0.48em 0 0.2em;
-}
-
-.chat-bubble.markdown-content ul,
-.chat-bubble.markdown-content ol {
-  margin: 0.22em 0 0.38em;
-  padding-left: 1.18em;
-}
-
-.chat-bubble.markdown-content li {
-  margin: 0.08em 0;
-}
-
-.chat-bubble.markdown-content li > p {
-  margin-bottom: 0.16em;
-}
-
 /* Author expansion controls stay immediately after the final visible author. */
 .paper-table.research-grid .expandable-author-list,
 .paper-table.research-grid .expandable-author-list.is-expanded,

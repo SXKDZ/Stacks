@@ -636,24 +636,6 @@
   color: var(--ink);
 }
 
-/* React Markdown emits formatting whitespace between block nodes. Do not render it. */
-.chat-bubble.markdown-content {
-  white-space: normal;
-}
-
-.chat-bubble.markdown-content > :first-child {
-  margin-top: 0;
-}
-
-.chat-bubble.markdown-content > :last-child,
-.chat-bubble.markdown-content li > :last-child {
-  margin-bottom: 0;
-}
-
-.chat-bubble.markdown-content li > p {
-  margin: 0;
-}
-
 .detail-section-title-row {
   align-items: center;
   display: flex;
@@ -2107,17 +2089,6 @@
   flex-wrap: wrap;
   max-width: 100%;
   min-width: 0;
-}
-
-.detail-section.summary-section,
-[data-theme="light"] .detail-section.summary-section {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  border-top: 1px solid var(--line);
-  box-shadow: none;
-  margin-top: 23px;
-  padding: 20px 0 0;
 }
 
 .publication-detail-list > span {

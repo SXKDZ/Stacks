@@ -275,13 +275,6 @@
   margin-left: 0;
 }
 
-.paper-grid-shell,
-.data-grid-shell {
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden !important;
-}
-
 .research-grid th,
 .research-grid td {
   min-width: 0;
@@ -347,7 +340,6 @@
 .summary-copy,
 .abstract-copy {
   color: var(--ink);
-  font-size: 11.5px;
   line-height: 1.58;
   margin-top: 10px;
 }
@@ -460,15 +452,6 @@
 }
 
 /* Final interaction polish: compact icon actions, aligned details, and calm selected states. */
-
-.drawer-header.is-minimal {
-  justify-content: flex-end;
-}
-
-.detail-actions-top .detail-status {
-  background: transparent;
-  padding-left: 0;
-}
 
 .collection-manager-modal .page-search.inline-search {
   flex-direction: row;
@@ -799,37 +782,6 @@
   max-height: min(340px, calc(100dvh - 120px));
   position: absolute;
   width: min(330px, calc(100vw - 28px));
-}
-
-.chat-bubble.markdown-content {
-  line-height: 1.48;
-}
-
-.chat-bubble.markdown-content p {
-  margin: 0 0 0.5em;
-}
-
-.chat-bubble.markdown-content h1,
-.chat-bubble.markdown-content h2,
-.chat-bubble.markdown-content h3,
-.chat-bubble.markdown-content h4 {
-  line-height: 1.22;
-  margin: 0.72em 0 0.28em;
-}
-
-.chat-bubble.markdown-content ul,
-.chat-bubble.markdown-content ol {
-  margin: 0.38em 0 0.58em;
-  padding-left: 1.25em;
-}
-
-.chat-bubble.markdown-content li {
-  margin: 0.16em 0;
-  padding-left: 0.04em;
-}
-
-.chat-bubble.markdown-content li > p {
-  margin-bottom: 0.3em;
 }
 
 .expandable-author-list.is-expanded {

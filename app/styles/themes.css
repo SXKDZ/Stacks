@@ -355,8 +355,9 @@ textarea::placeholder {
 .detail-section > p:last-child:not(.eyebrow),
 .summary-copy,
 .summary-empty,
+.abstract-copy,
 .reader-summary {
-  font-size: 12.5px;
+  font-size: var(--type-control);
 }
 
 .reader-notes > h2 {
@@ -693,23 +694,10 @@ textarea::placeholder {
   margin-top: 11px;
 }
 
-/* Keep the drawer's rendered summary/abstract at the same size as the reader's
-   summary (both 12.5px) so the two surfaces read identically. */
-.summary-copy.markdown-content,
-.summary-copy.markdown-content p,
-.abstract-copy.markdown-content,
-.abstract-copy.markdown-content p {
-  font-size: 12.5px;
-}
-
 .reader-summary > .markdown-content {
   color: #c3cad8;
 }
 
-.chat-bubble .katex-display {
-  background: rgba(0, 0, 0, 0.18);
-  padding: 0.6em;
-}
 
 .loading-card {
   background: linear-gradient(90deg, rgba(255,255,255,0.035) 20%, color-mix(in srgb, var(--brand-blue) 10%, transparent) 50%, rgba(255,255,255,0.035) 80%);
@@ -748,104 +736,6 @@ textarea::placeholder {
 .settings-form-grid textarea:focus {
   border-color: color-mix(in srgb, var(--brand-blue) 64%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-blue) 9%, transparent);
-}
-
-.chat-paper-options {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.chat-paper-options > button {
-  align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--ink);
-  display: grid;
-  gap: 8px;
-  grid-template-columns: auto minmax(0, 1fr);
-  padding: 8px;
-  text-align: left;
-}
-
-.chat-paper-options > button:hover,
-.chat-paper-options > button.is-selected {
-  background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
-  border-color: color-mix(in srgb, var(--brand-blue) 18%, transparent);
-}
-
-.chat-paper-options > button > span:last-child {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.chat-paper-options strong,
-.chat-paper-options small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-paper-options strong {
-  font-size: 11px;
-}
-
-.chat-paper-options small {
-  color: var(--muted);
-  font-size: var(--type-label);
-  margin-top: 2px;
-}
-
-.chat-paper-options .selection-box {
-  align-items: center;
-  border-color: color-mix(in srgb, var(--brand-blue) 40%, transparent);
-  color: white;
-  display: flex;
-  justify-content: center;
-}
-
-.chat-paper-options > button.is-selected .selection-box {
-  background: var(--brand-blue);
-}
-
-.chat-grounding-pages {
-  align-items: center;
-  color: var(--muted);
-  display: flex;
-  font-size: var(--type-micro);
-  gap: 6px;
-}
-
-.chat-grounding-pages i {
-  font-style: normal;
-}
-
-.chat-grounding-pages input {
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  color: var(--ink);
-  font: inherit;
-  height: 28px;
-  outline: none;
-  padding: 0 6px;
-  width: 64px;
-}
-
-.chat-grounding-pages input:hover,
-.chat-grounding-pages input:focus {
-  border-color: var(--brand-blue);
-}
-
-.drawer-grounding-pages {
-  border-bottom: 1px solid var(--line);
-  justify-content: flex-end;
-  padding: 8px 14px;
 }
 
 .path-picker-control {
@@ -1320,9 +1210,6 @@ textarea::placeholder {
   color: #4e5667;
 }
 
-[data-theme="light"] .reader-notes-editor {
-  background: rgba(255, 255, 255, 0.9);
-}
 
 [data-theme="light"] .markdown-content code {
   color: #086dc4;

@@ -142,7 +142,6 @@
   border-top: 1px solid var(--line);
   color: #5d5562;
   font-family: var(--font-display);
-  font-size: 10px;
   line-height: 1.55;
   margin-top: 19px;
   padding-top: 17px;
@@ -174,26 +173,6 @@
 /* The notes section and the Discuss CTA keep their natural height below. */
 .reader-notes-section {
   flex: 0 0 auto;
-}
-
-.reader-notes-editor {
-  background: rgba(0, 0, 0, 0.26);
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  color: var(--ink);
-  display: block;
-  font-family: var(--font-display);
-  font-size: 12.5px;
-  line-height: 1.55;
-  min-height: 116px;
-  outline: 0;
-  padding: 10px;
-  resize: vertical;
-  width: 100%;
-}
-
-.reader-notes-editor:focus {
-  border-color: var(--brand-blue);
 }
 
 /* The reader is a standalone workspace, not a modal layered over the library. */

@@ -617,11 +617,6 @@ td.number-cell {
   top: 0;
 }
 
-.collection-cyan::before { background: var(--cyan); }
-.collection-amber::before { background: var(--amber); }
-.collection-green::before { background: var(--green); }
-.collection-rose::before { background: var(--rose); }
-
 .collection-icon {
   align-items: center;
   background: var(--brand-blue-soft);
@@ -981,14 +976,6 @@ td.number-cell {
   width: min(470px, 94vw);
 }
 
-.drawer-header {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  min-height: 59px;
-  padding: 0 20px;
-}
-
 /* The paper header (status, star, close, title, authors) is pinned; only the
    body below it scrolls. */
 .drawer-fixed-head {
@@ -1153,7 +1140,6 @@ td.number-cell {
 .summary-empty {
   color: #526171;
   font-family: var(--font-display);
-  font-size: 10px;
   line-height: 1.58;
   margin: 11px 0 0;
   white-space: pre-wrap;
@@ -1189,10 +1175,6 @@ td.number-cell {
   color: var(--soft);
   font-size: var(--type-micro);
   width: 38px;
-}
-
-.large-chips {
-  margin-top: 10px;
 }
 
 .drawer-footer {
