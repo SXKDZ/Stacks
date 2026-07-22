@@ -532,7 +532,6 @@ td.number-cell {
   background: linear-gradient(145deg, #edf7fe, #cfeafd);
   border: 1px solid #b8dcf8;
   border-radius: 8px;
-  color: #086dc4;
   display: flex;
   flex: 0 0 auto;
   font-family: var(--font-display);
@@ -953,7 +952,7 @@ td.number-cell {
 
 .drawer-scrim {
   backdrop-filter: blur(2px);
-  background: rgba(15, 31, 42, 0.3);
+  background: var(--scrim);
   inset: 0;
   position: absolute;
   width: 100%;

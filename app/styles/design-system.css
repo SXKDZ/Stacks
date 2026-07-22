@@ -54,14 +54,14 @@
 
 .bibliography-dropzone:hover,
 .bibliography-dropzone.has-file {
-  background: rgba(22, 141, 236, 0.09);
+  background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 2px rgba(22, 141, 236, 0.08);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-blue) 8%, transparent);
 }
 
 .bibliography-dropzone,
 .bibliography-upload-icon {
-  border-color: rgba(22, 141, 236, 0.32);
+  border-color: color-mix(in srgb, var(--brand-blue) 32%, transparent);
 }
 
 .bibliography-upload-icon {
@@ -81,7 +81,7 @@
 }
 
 .continue-visual::before {
-  background: radial-gradient(circle, rgba(22, 141, 236, 0.36), transparent 68%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--brand-blue) 36%, transparent), transparent 68%);
 }
 
 .document-back {
@@ -102,13 +102,13 @@
 }
 
 .discovery-orbit {
-  background: rgba(22, 141, 236, 0.06);
-  border-color: rgba(22, 141, 236, 0.3);
+  background: color-mix(in srgb, var(--brand-blue) 6%, transparent);
+  border-color: color-mix(in srgb, var(--brand-blue) 30%, transparent);
   color: var(--brand-blue);
 }
 
 .discovery-orbit::before {
-  border-color: rgba(22, 141, 236, 0.3);
+  border-color: color-mix(in srgb, var(--brand-blue) 30%, transparent);
 }
 
 .discovery-orbit span {
@@ -123,8 +123,8 @@
 
 .summary-section,
 .sync-caution {
-  background: rgba(22, 141, 236, 0.07);
-  border-color: rgba(22, 141, 236, 0.16);
+  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
+  border-color: color-mix(in srgb, var(--brand-blue) 16%, transparent);
 }
 
 /* Paper details behaves as a persistent third panel, never a modal scrim. */

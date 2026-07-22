@@ -336,9 +336,6 @@ textarea::placeholder {
   color: var(--ink);
 }
 
-.drawer-scrim {
-  background: rgba(2, 3, 8, 0.66);
-}
 
 .modal-results article {
   background: rgba(255, 255, 255, 0.04);
@@ -1191,9 +1188,6 @@ textarea::placeholder {
   color: var(--ink);
 }
 
-[data-theme="light"] .drawer-scrim {
-  background: rgba(28, 32, 44, 0.42);
-}
 
 [data-theme="light"] .modal-results article {
   background: #ffffff;
@@ -1212,7 +1206,7 @@ textarea::placeholder {
 
 
 [data-theme="light"] .markdown-content code {
-  color: #086dc4;
+  color: var(--brand-blue-strong);
 }
 
 [data-theme="light"] .markdown-content pre {
