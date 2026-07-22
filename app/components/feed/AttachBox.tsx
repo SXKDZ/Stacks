@@ -46,6 +46,7 @@ export function AttachBox({
   initialText = "",
   initialPapers = [],
   hint,
+  leadingAction,
   onSubmit,
 }: {
   library: LibraryPaper[];
@@ -57,6 +58,8 @@ export function AttachBox({
   initialText?: string;
   initialPapers?: LibraryPaper[];
   hint?: ReactNode;
+  /** Optional control shown in the tools row (e.g. a Stop button while running). */
+  leadingAction?: ReactNode;
   onSubmit: (payload: AttachSubmit) => Promise<boolean>;
 }) {
   const [text, setText] = useState(initialText);
@@ -234,6 +237,7 @@ export function AttachBox({
             <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
             <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file"><Paperclip size={16} /></button>
             <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library"><BookOpen size={16} /></button>
+            {leadingAction}
           </div>
           <div className="feed-dock-send">
             {hint ? <span className="feed-dock-hint">{hint}</span> : null}

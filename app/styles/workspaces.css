@@ -992,7 +992,7 @@
 }
 
 .feed-row:hover {
-  background: var(--panel);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .feed-row.is-active {

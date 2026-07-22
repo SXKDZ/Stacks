@@ -83,6 +83,24 @@ export async function stopFeed(snippetId: string): Promise<void> {
   }
 }
 
+/**
+ * Stop a running agent and wait until its process has fully exited (the close
+ * handler removes it from `runs`). Callers that immediately start a new turn on
+ * the same session must await this, so two `claude -p --resume` processes never
+ * write the same transcript at once. Resolves immediately if not running, and
+ * gives up after `timeoutMs` so a stuck process can't hang the caller forever.
+ */
+export async function stopFeedAndWait(snippetId: string, timeoutMs = 8000): Promise<void> {
+  if (!runs.has(snippetId)) {
+    return;
+  }
+  await stopFeed(snippetId);
+  const start = Date.now();
+  while (runs.has(snippetId) && Date.now() - start < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+}
+
 async function persistMessage(
   snippetId: string,
   role: string,

@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
-import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
+import { feedWorkingDir, isFeedRunning, runFeedAgent, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { buildFollowUpPrompt, buildForkPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 
@@ -42,8 +42,11 @@ export async function POST(
   if (!snippet) {
     return Response.json({ error: "Snippet not found." }, { status: 404 });
   }
+  // Interrupt-then-send: if the agent is mid-run, stop it and wait for the
+  // process to fully exit before starting the new turn, so two `claude -p
+  // --resume` processes never write the same session transcript at once.
   if (isFeedRunning(id)) {
-    return Response.json({ error: "The agent is still working on this snippet." }, { status: 409 });
+    await stopFeedAndWait(id);
   }
 
   let attachments: SnippetAttachment[] = [];

@@ -321,6 +321,9 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
 
   // Auto-scroll to the newest content as it streams in, but only when the user
   // is already near the bottom — so scrolling up to re-read isn't yanked back.
+  // Content growth doesn't fire a scroll event, so we also re-measure the
+  // near-bottom state here (not just on the scroll listener), which is why
+  // opening a long thread correctly shows the jump-to-latest button.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
@@ -328,6 +331,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
     if (nearBottom) {
       body.scrollTop = body.scrollHeight;
     }
+    setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
   }, [messages, proposals, running]);
 
   // Track whether the user is near the bottom, to toggle the jump-to-latest button.
@@ -604,18 +608,17 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
             <ArrowDown size={16} />
           </button>
         ) : null}
-        {running ? (
-          <ActionButton variant="secondary" size="small" onClick={() => void stop()} icon={<Square size={14} />}>Stop</ActionButton>
-        ) : (
-          <AttachBox
-            library={library}
-            placeholder="Reply to continue this thread. The agent keeps its context."
-            submitLabel="Reply"
-            submitting={replying}
-            compact
-            onSubmit={sendReply}
-          />
-        )}
+        <AttachBox
+          library={library}
+          placeholder={running ? "The agent is working. Send to interrupt and steer it." : "Reply to continue this thread. The agent keeps its context."}
+          submitLabel={running ? "Interrupt & send" : "Reply"}
+          submitting={replying}
+          compact
+          onSubmit={sendReply}
+          leadingAction={running ? (
+            <button type="button" className="feed-tool-btn" onClick={() => void stop()} title="Stop the agent" aria-label="Stop the agent"><Square size={15} /></button>
+          ) : undefined}
+        />
       </footer>
     </section>
   );
