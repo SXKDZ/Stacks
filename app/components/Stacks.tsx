@@ -2615,7 +2615,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             </div>
             <div className="detail-control-row detail-collections-row">
               <p className="detail-control-label">Collections</p>
-              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <Chip key={collection.id} onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</Chip>) : <span className="row-muted detail-empty-value">No collections yet</span>}</div>
+              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <Chip key={collection.id} tone="neutral" className={`collection-chip swatch-${collection.color}`} icon={<span className="collection-chip-dot" />} onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</Chip>) : <span className="row-muted detail-empty-value">No collections yet</span>}</div>
             </div>
           </div>
           <div className="drawer-cta-row">
