@@ -362,11 +362,17 @@ textarea::placeholder {
 }
 
 .detail-meta-grid,
-.status-selector,
 .summary-section,
 .sync-caution {
   background: color-mix(in srgb, var(--brand-blue) 8%, transparent);
   border-color: color-mix(in srgb, var(--brand-blue) 16%, transparent);
+}
+
+/* The reading-status segmented control uses a neutral track (the active tab
+   carries its own status accent), not the blue meta-panel fill. */
+.status-selector {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-color: transparent;
 }
 
 .modal-results article {

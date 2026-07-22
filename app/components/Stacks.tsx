@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -2596,13 +2597,10 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
       <aside ref={detailPanelRef} className="detail-drawer" aria-label="Paper details">
         <div className="drawer-fixed-head">
           <div className="detail-actions-top">
-            <StatusPill className="detail-status" status={paper.readingStatus} />
-            <div className="detail-actions-top-right">
-              <button className={`star-button ${paper.favorite ? "is-starred" : ""}`} onClick={() => void onUpdate(paper, { favorite: !paper.favorite }, paper.favorite ? "Removed from starred papers." : "Paper starred.")} aria-label={paper.favorite ? "Remove from starred papers" : "Star this paper"}>
-                <Star size={16} fill={paper.favorite ? "currentColor" : "none"} />
-              </button>
-              <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<PanelRightClose />} />
-            </div>
+            <button className={`star-button ${paper.favorite ? "is-starred" : ""}`} onClick={() => void onUpdate(paper, { favorite: !paper.favorite }, paper.favorite ? "Removed from starred papers." : "Paper starred.")} aria-label={paper.favorite ? "Remove from starred papers" : "Star this paper"}>
+              <Star size={16} fill={paper.favorite ? "currentColor" : "none"} />
+            </button>
+            <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<PanelRightClose />} />
           </div>
           <h2>{paper.title}</h2>
           <div className="detail-authors" aria-label="Paper authors">
@@ -2878,8 +2876,48 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
   );
 }
 
+/**
+ * Renders autocomplete options in a body portal, fixed-positioned under the
+ * given anchor, so the list escapes the scrollable modal-body's overflow clip
+ * (which would otherwise truncate it for fields near the bottom). Re-measures on
+ * scroll/resize and while open.
+ */
+function AnchoredOptions({ anchorRef, open, className, id, children }: {
+  anchorRef: React.RefObject<HTMLElement | null>;
+  open: boolean;
+  className: string;
+  id: string;
+  children: ReactNode;
+}) {
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const node = anchorRef.current;
+      if (!node) return;
+      const r = node.getBoundingClientRect();
+      setRect({ top: r.bottom - 14, left: r.left, width: r.width });
+    };
+    measure();
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [open, anchorRef]);
+  if (!open || !rect) return null;
+  return createPortal(
+    <div className={className} id={id} role="listbox" style={{ position: "fixed", top: rect.top, left: rect.left, width: rect.width }}>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; defaultValue?: string }) {
   const listboxId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(defaultValue);
   const [open, setOpen] = useState(false);
   const fragment = value.split(",").at(-1)?.trim().toLowerCase() ?? "";
@@ -2896,8 +2934,8 @@ function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; d
   return (
     <label className="field-span-2 autocomplete-field">
       <span>Authors</span>
-      <input name="authors" value={value} onChange={(event) => { setValue(event.target.value); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
-      {open && matches.length ? <div className="metadata-autocomplete-options" id={listboxId} role="listbox">{matches.map((author) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</div> : null}
+      <input ref={inputRef} name="authors" value={value} onChange={(event) => { setValue(event.target.value); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
+      <AnchoredOptions anchorRef={inputRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options" id={listboxId}>{matches.map((author) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</AnchoredOptions>
       <small>Separate names with commas. Choose a match to reuse its canonical author record.</small>
     </label>
   );
@@ -2905,6 +2943,7 @@ function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; d
 
 function VenueFields({ venues, label, defaultName = "", defaultAcronym = "", placeholder, showAcronym, span = true }: { venues: Venue[]; label: string; defaultName?: string; defaultAcronym?: string; placeholder: string; showAcronym: boolean; span?: boolean }) {
   const listboxId = useId();
+  const nameFieldRef = useRef<HTMLLabelElement>(null);
   const [name, setName] = useState(defaultName);
   const [acronym, setAcronym] = useState(defaultAcronym);
   const [open, setOpen] = useState(false);
@@ -2918,7 +2957,7 @@ function VenueFields({ venues, label, defaultName = "", defaultAcronym = "", pla
   }
   return (
     <div className={`venue-field-pair ${span ? "field-span-2" : ""} ${showAcronym ? "has-acronym" : ""}`}>
-      <label className="autocomplete-field">
+      <label ref={nameFieldRef} className="autocomplete-field">
         <span>{label}</span>
         <input name="venueName" value={name} onChange={(event) => { setName(event.target.value); setActiveField("name"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("name"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "name" && Boolean(matches.length)} aria-controls={listboxId} placeholder={placeholder} />
       </label>
@@ -2928,13 +2967,14 @@ function VenueFields({ venues, label, defaultName = "", defaultAcronym = "", pla
           <input name="venueAcronym" value={acronym} onChange={(event) => { setAcronym(event.target.value); setActiveField("acronym"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("acronym"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "acronym" && Boolean(matches.length)} aria-controls={listboxId} placeholder="NeurIPS" />
         </label>
       ) : null}
-      {open && matches.length ? <div className="metadata-autocomplete-options venue-autocomplete-options" id={listboxId} role="listbox">{matches.map((venue) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(venue)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</div> : null}
+      <AnchoredOptions anchorRef={nameFieldRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options venue-autocomplete-options" id={listboxId}>{matches.map((venue) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(venue)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</AnchoredOptions>
     </div>
   );
 }
 
 function CollectionNamesField({ collections, value, onChange }: { collections: Collection[]; value: string[]; onChange: (value: string[]) => void }) {
   const listboxId = useId();
+  const editorRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const selectedNames = new Set(value.map((name) => name.toLowerCase()));
@@ -2956,7 +2996,7 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
   return (
     <div className="paper-collection-field field-span-2">
       <span className="paper-collection-label">Collections</span>
-      <div className="collection-tag-editor">
+      <div className="collection-tag-editor" ref={editorRef}>
         {value.map((name) => (
           <Chip key={name} onRemove={() => onChange(value.filter((candidate) => candidate !== name))} removeIcon={<X />} removeLabel={`Remove ${name}`}>
             {name}
@@ -2983,11 +3023,9 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
           placeholder={value.length ? "Add another…" : "Add or create a collection…"}
         />
       </div>
-      {open && matches.length ? (
-        <div className="metadata-autocomplete-options collection-autocomplete-options" id={listboxId} role="listbox">
-          {matches.map((collection) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => addName(collection.name)} key={collection.id}><FolderOpen size={14} /><span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}
-        </div>
-      ) : null}
+      <AnchoredOptions anchorRef={editorRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options collection-autocomplete-options" id={listboxId}>
+        {matches.map((collection) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => addName(collection.name)} key={collection.id}><FolderOpen size={14} /><span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}
+      </AnchoredOptions>
       <small>Choose an existing collection or type a new name and press Enter.</small>
     </div>
   );

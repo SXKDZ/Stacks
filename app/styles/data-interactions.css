@@ -1064,18 +1064,16 @@
   position: relative;
 }
 
+/* Portaled to the body with fixed top/left/width (set inline from the field's
+   rect) so it escapes the scrollable modal-body's overflow clip. */
 .metadata-autocomplete-options {
   background: var(--panel-strong);
   border: 1px solid var(--line-strong);
   border-radius: 9px;
   box-shadow: var(--shadow-md);
-  left: 0;
   max-height: 220px;
   overflow-y: auto;
-  position: absolute;
-  right: 0;
-  top: calc(100% - 14px);
-  z-index: 20;
+  z-index: 80;
 }
 
 .metadata-autocomplete-options > button {

@@ -50,9 +50,9 @@
 /* --- detail-final.css --- */
 /* Compact paper facts, status, and collection controls share one visual rhythm. */
 .detail-control-stack {
-  border-block: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   display: grid;
-  margin: 16px 0 14px;
+  margin: 0 0 14px;
 }
 
 .detail-control-stack .detail-meta-grid,

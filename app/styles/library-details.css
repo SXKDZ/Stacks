@@ -1010,12 +1010,6 @@ td.number-cell {
   justify-content: space-between;
 }
 
-.detail-actions-top-right {
-  align-items: center;
-  display: flex;
-  gap: 4px;
-}
-
 .drawer-fixed-head > h2 {
   font-family: var(--font-display);
   font-size: 25px;
