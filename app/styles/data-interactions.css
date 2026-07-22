@@ -1002,23 +1002,12 @@
    column (mirrors the chip dot), instead of a generic folder glyph. */
 .collection-option-dot {
   align-self: center;
+  background: var(--swatch);
   border-radius: 50%;
   height: 10px;
   justify-self: center;
   width: 10px;
 }
-.collection-option-dot.swatch-blue { background: var(--collection-blue); }
-.collection-option-dot.swatch-indigo { background: var(--collection-indigo); }
-.collection-option-dot.swatch-violet { background: var(--collection-violet); }
-.collection-option-dot.swatch-pink { background: var(--collection-pink); }
-.collection-option-dot.swatch-rose { background: var(--collection-rose); }
-.collection-option-dot.swatch-orange { background: var(--collection-orange); }
-.collection-option-dot.swatch-amber { background: var(--collection-amber); }
-.collection-option-dot.swatch-lime { background: var(--collection-lime); }
-.collection-option-dot.swatch-green { background: var(--collection-green); }
-.collection-option-dot.swatch-teal { background: var(--collection-teal); }
-.collection-option-dot.swatch-cyan { background: var(--collection-cyan); }
-.collection-option-dot.swatch-slate { background: var(--collection-slate); }
 
 .metadata-autocomplete-options small {
   color: var(--muted);

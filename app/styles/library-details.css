@@ -560,10 +560,6 @@ td.number-cell {
   gap: 6px;
 }
 
-.avatar-1 { background: linear-gradient(145deg, #e0f7f5, #c1ece9); border-color: #afe0dd; color: #167f86; }
-.avatar-2 { background: linear-gradient(145deg, #fff1db, #f5d8aa); border-color: #efd09d; color: #a36912; }
-.avatar-3 { background: linear-gradient(145deg, #e2f5ea, #bfe9d3); border-color: #aee0c5; color: #247c5b; }
-.avatar-4 { background: linear-gradient(145deg, #f9e7ec, #efc6d0); border-color: #e8b8c3; color: #a34255; }
 .venue-monogram {
   align-items: center;
   background: #eef4f8;
@@ -1045,7 +1041,8 @@ td.number-cell {
   margin-bottom: 8px;
 }
 
-.drawer-cta-primary > * {
+.drawer-cta-primary > *,
+.drawer-cta-row > * {
   justify-content: center;
   min-width: 0;
   white-space: nowrap;
@@ -1056,13 +1053,6 @@ td.number-cell {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.drawer-cta-row > * {
-  justify-content: center;
-  min-width: 0;
-  white-space: nowrap;
-  width: 100%;
 }
 
 .detail-section {

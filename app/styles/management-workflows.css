@@ -837,38 +837,20 @@
   box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px currentColor;
 }
 
-.collection-color-swatch.swatch-blue { background: var(--collection-blue); color: var(--collection-blue); }
-.collection-color-swatch.swatch-indigo { background: var(--collection-indigo); color: var(--collection-indigo); }
-.collection-color-swatch.swatch-violet { background: var(--collection-violet); color: var(--collection-violet); }
-.collection-color-swatch.swatch-pink { background: var(--collection-pink); color: var(--collection-pink); }
-.collection-color-swatch.swatch-rose { background: var(--collection-rose); color: var(--collection-rose); }
-.collection-color-swatch.swatch-orange { background: var(--collection-orange); color: var(--collection-orange); }
-.collection-color-swatch.swatch-amber { background: var(--collection-amber); color: var(--collection-amber); }
-.collection-color-swatch.swatch-lime { background: var(--collection-lime); color: var(--collection-lime); }
-.collection-color-swatch.swatch-green { background: var(--collection-green); color: var(--collection-green); }
-.collection-color-swatch.swatch-teal { background: var(--collection-teal); color: var(--collection-teal); }
-.collection-color-swatch.swatch-cyan { background: var(--collection-cyan); color: var(--collection-cyan); }
-.collection-color-swatch.swatch-slate { background: var(--collection-slate); color: var(--collection-slate); }
+.collection-color-swatch {
+  /* color kept alongside background so .is-selected's currentColor ring
+     matches the swatch hue. */
+  background: var(--swatch);
+  color: var(--swatch);
+}
 
 /* Paper-list collection chips carry the collection's accent as a leading dot. */
 .collection-chip .collection-chip-dot {
+  background: var(--swatch);
   border-radius: 50%;
   height: 8px;
   width: 8px;
 }
-
-.collection-chip.swatch-blue .collection-chip-dot { background: var(--collection-blue); }
-.collection-chip.swatch-indigo .collection-chip-dot { background: var(--collection-indigo); }
-.collection-chip.swatch-violet .collection-chip-dot { background: var(--collection-violet); }
-.collection-chip.swatch-pink .collection-chip-dot { background: var(--collection-pink); }
-.collection-chip.swatch-rose .collection-chip-dot { background: var(--collection-rose); }
-.collection-chip.swatch-orange .collection-chip-dot { background: var(--collection-orange); }
-.collection-chip.swatch-amber .collection-chip-dot { background: var(--collection-amber); }
-.collection-chip.swatch-lime .collection-chip-dot { background: var(--collection-lime); }
-.collection-chip.swatch-green .collection-chip-dot { background: var(--collection-green); }
-.collection-chip.swatch-teal .collection-chip-dot { background: var(--collection-teal); }
-.collection-chip.swatch-cyan .collection-chip-dot { background: var(--collection-cyan); }
-.collection-chip.swatch-slate .collection-chip-dot { background: var(--collection-slate); }
 
 /* Unified library surfaces — papers, authors, venues, and collections */
 
@@ -1087,21 +1069,21 @@
   width: 30px;
 }
 
-/* A collection's chosen accent tints its card icon. Each swatch class sets
-   --swatch to a collection palette token; the tint is derived with color-mix.
-   Blue is the default, so its tokens match the base .collection-icon rule. */
-.collection-icon.swatch-blue { --swatch: var(--collection-blue); }
-.collection-icon.swatch-indigo { --swatch: var(--collection-indigo); }
-.collection-icon.swatch-violet { --swatch: var(--collection-violet); }
-.collection-icon.swatch-pink { --swatch: var(--collection-pink); }
-.collection-icon.swatch-rose { --swatch: var(--collection-rose); }
-.collection-icon.swatch-orange { --swatch: var(--collection-orange); }
-.collection-icon.swatch-amber { --swatch: var(--collection-amber); }
-.collection-icon.swatch-lime { --swatch: var(--collection-lime); }
-.collection-icon.swatch-green { --swatch: var(--collection-green); }
-.collection-icon.swatch-teal { --swatch: var(--collection-teal); }
-.collection-icon.swatch-cyan { --swatch: var(--collection-cyan); }
-.collection-icon.swatch-slate { --swatch: var(--collection-slate); }
+/* The single collection-hue enumeration: each swatch class exposes its palette
+   token as --swatch, which every collection surface (card icon, chip dot, color
+   swatch, autocomplete dot) reads. Blue is the default. */
+.swatch-blue { --swatch: var(--collection-blue); }
+.swatch-indigo { --swatch: var(--collection-indigo); }
+.swatch-violet { --swatch: var(--collection-violet); }
+.swatch-pink { --swatch: var(--collection-pink); }
+.swatch-rose { --swatch: var(--collection-rose); }
+.swatch-orange { --swatch: var(--collection-orange); }
+.swatch-amber { --swatch: var(--collection-amber); }
+.swatch-lime { --swatch: var(--collection-lime); }
+.swatch-green { --swatch: var(--collection-green); }
+.swatch-teal { --swatch: var(--collection-teal); }
+.swatch-cyan { --swatch: var(--collection-cyan); }
+.swatch-slate { --swatch: var(--collection-slate); }
 .collection-icon[class*="swatch-"] {
   background: color-mix(in srgb, var(--swatch) 16%, transparent) !important;
   border-color: color-mix(in srgb, var(--swatch) 30%, transparent) !important;
