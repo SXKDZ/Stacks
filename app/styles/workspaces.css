@@ -921,8 +921,11 @@
   width: 2px;
 }
 
-/* Sync controls anchored at the bottom of the feed sidebar: the last-result
-   notice above a single row with a highlighted Sync button + activity toggle. */
+/* A static bottom banner: the last-result notice above a row with the Sync
+   button and the shared Activity dock. The dock reuses the exact
+   .background-task-* chrome (see data-interactions.css) so it matches the
+   main-page Activity; only the row layout and dock placement live here. The
+   container is the positioning context so the popover spans the pane width. */
 .feed-sidebar-sync {
   border-top: 1px solid var(--line);
   display: flex;
@@ -930,6 +933,7 @@
   flex-shrink: 0;
   gap: 8px;
   padding: 10px;
+  position: relative;
 }
 
 .feed-sidebar-sync .feed-sync-notice {
@@ -937,6 +941,7 @@
 }
 
 .feed-sync-bar {
+  align-items: center;
   display: flex;
   gap: 6px;
 }
@@ -946,150 +951,23 @@
   justify-content: center;
 }
 
-/* The activity toggle: an outlined pill (icon + "Activity" + chevron), matching
-   the main-page Activity control. */
-.feed-sync-toggle {
-  align-items: center;
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  cursor: pointer;
-  display: flex;
+/* Override the shared dock's sidebar variant for this inline row: size it to
+   its content beside the Sync button. The popover is anchored to the banner
+   container (not the narrow dock) so it spans the pane width and opens upward. */
+.feed-sync-bar .background-task-dock {
+  align-items: stretch;
   flex-shrink: 0;
-  font-size: var(--type-control);
-  font-weight: 560;
-  gap: 6px;
-  padding: 0 11px;
-}
-
-.feed-sync-toggle:hover {
-  background: var(--panel-strong);
-  color: var(--ink);
-}
-
-.feed-sync-toggle > svg:first-child {
-  color: var(--brand-blue-strong);
-}
-
-.feed-sync-toggle svg {
-  transition: transform var(--motion-control);
-}
-
-.feed-sync-toggle.is-open svg {
-  transform: rotate(180deg);
-}
-
-/* The activity log floats above everything (portaled to body), bottom-left. */
-.feed-sync-scrim {
-  inset: 0;
-  position: fixed;
-  z-index: 130;
-}
-
-.feed-sync-panel {
-  background: var(--panel-strong);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg);
-  bottom: 62px;
-  box-shadow: var(--shadow-md), var(--edge-highlight);
-  display: flex;
-  flex-direction: column;
-  left: 16px;
-  max-height: min(420px, 70dvh);
-  position: fixed;
-  width: min(360px, calc(100vw - 32px));
-  z-index: 131;
-}
-
-.feed-sync-panel > header {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  justify-content: space-between;
-  padding: 11px 13px;
-}
-
-.feed-sync-panel > header > span {
-  align-items: center;
-  color: var(--ink);
-  display: flex;
-  font-weight: 640;
-  gap: 7px;
-}
-
-.feed-sync-panel > header > div {
-  align-items: center;
-  display: flex;
-  gap: 4px;
-}
-
-.feed-sync-panel .activity-clear {
-  background: transparent;
-  border: 0;
-  color: var(--soft);
-  cursor: pointer;
-  font-size: var(--type-caption);
-  padding: 4px 6px;
-}
-
-.feed-sync-panel .activity-clear:hover:not(:disabled) {
-  color: var(--ink);
-}
-
-.feed-sync-panel > header > div > button:last-child {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--soft);
-  cursor: pointer;
-  display: flex;
-  padding: 4px;
-}
-
-.feed-sync-panel-list {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: 6px;
-}
-
-.feed-sync-log-row {
-  align-items: flex-start;
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  display: flex;
-  gap: 9px;
-  padding: 8px 9px;
-}
-
-.feed-sync-log-row.is-success svg { color: var(--green); flex-shrink: 0; margin-top: 1px; }
-.feed-sync-log-row.is-error svg { color: var(--rose); flex-shrink: 0; margin-top: 1px; }
-
-.feed-sync-log-row span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.feed-sync-log-row strong {
-  font-size: var(--type-label);
-  font-weight: 560;
-}
-
-.feed-sync-log-row small {
-  color: var(--soft);
-  font-size: var(--type-micro);
-  margin-top: 2px;
-}
-
-.feed-sync-panel .activity-log-empty {
-  color: var(--soft);
-  font-size: var(--type-label);
   margin: 0;
-  padding: 14px 10px;
-  text-align: center;
+  position: static;
+  width: auto;
+}
+
+.feed-sidebar-sync .background-task-panel {
+  bottom: calc(100% + 7px);
+  left: 10px;
+  position: absolute;
+  right: 10px;
+  width: auto;
 }
 
 /* Left pane: brand + New-feed button above a scrolling list of interactions.
@@ -1100,7 +978,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  /* No overflow clip: the .feed-list scrolls internally, so the Activity dock's
+     upward popover can escape the pane like the main-page sidebar does. */
 }
 
 .feed-list-head {

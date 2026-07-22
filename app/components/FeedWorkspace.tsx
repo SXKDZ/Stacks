@@ -3,7 +3,6 @@
 import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -151,9 +150,9 @@ function writeSyncLog(entries: SyncLogEntry[]): void {
 }
 
 /**
- * The feed sidebar's bottom bar: a highlighted Sync button plus a collapsible
- * activity log of past syncs. One row; the log panel is portaled to <body> so
- * the sidebar's overflow:hidden can't clip it.
+ * The feed sidebar's static bottom banner: a Sync button beside the shared
+ * activity dock (reusing the exact .background-task-* chrome from the main-page
+ * Activity, so the two match). The dock's popover opens upward, in-flow.
  */
 function SyncActivityDock({ log, onClear, syncing, onSync }: {
   log: SyncLogEntry[];
@@ -162,42 +161,35 @@ function SyncActivityDock({ log, onClear, syncing, onSync }: {
   onSync: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
-  const panel = open && mounted ? createPortal(
-    <>
-      <div className="feed-sync-scrim" onClick={() => setOpen(false)} />
-      <div className="feed-sync-panel" role="dialog" aria-label="Sync activity">
-        <header>
-          <span><RefreshCw size={15} /><strong>Sync activity</strong></span>
-          <div>
-            <button type="button" className="activity-clear" onClick={onClear} disabled={!log.length}>Clear</button>
-            <button type="button" onClick={() => setOpen(false)} aria-label="Collapse sync activity"><X size={15} /></button>
-          </div>
-        </header>
-        <div className="feed-sync-panel-list">
-          {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
-            <div className={`feed-sync-log-row is-${entry.status}`} key={entry.id}>
-              {entry.status === "success" ? <CircleCheck size={15} /> : <CircleAlert size={15} />}
-              <span><strong>{entry.summary}</strong><small>{new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>,
-    document.body,
-  ) : null;
-
   return (
     <div className="feed-sync-bar">
       <ActionButton variant="primary" size="small" className="feed-sync-run" onClick={onSync} disabled={syncing} icon={syncing ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}>{syncing ? "Syncing…" : "Sync inbox"}</ActionButton>
-      <button type="button" className={`feed-sync-toggle ${open ? "is-open" : ""}`} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        <ListChecks size={15} />
-        <span>Activity</span>
-        <ChevronUp size={14} />
-      </button>
-      {panel}
+      <aside className={`background-task-dock ${open ? "is-open" : ""}`} aria-label="Sync activity">
+        {open ? (
+          <div className="background-task-panel">
+            <header>
+              <span><ListChecks size={16} /><strong>Sync activity</strong></span>
+              <div>
+                <button type="button" className="activity-clear" onClick={onClear} disabled={!log.length}>Clear</button>
+                <button type="button" onClick={() => setOpen(false)} aria-label="Collapse sync activity"><X size={15} /></button>
+              </div>
+            </header>
+            <div className="background-task-list">
+              {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
+                <div className={`background-task-row is-${entry.status === "success" ? "complete" : "error"}`} key={entry.id}>
+                  {entry.status === "success" ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
+                  <span><strong>{entry.summary}</strong><small>{new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <button type="button" className="background-task-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <ListChecks size={17} />
+          <span>Activity</span>
+          <ChevronUp size={14} />
+        </button>
+      </aside>
     </div>
   );
 }
