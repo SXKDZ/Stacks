@@ -454,3 +454,21 @@ test("backs up the local library one-way to OneDrive without replacing the live 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("auto-back up runs a debounced backup after live library changes", async () => {
+  const [settings, library] = await Promise.all([
+    readFile(new URL("../app/lib/local-settings.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
+  ]);
+  // A debounced scheduler exists, gated on the autoSync toggle + a real target.
+  assert.match(settings, /export function scheduleAutoSync/);
+  assert.match(settings, /if \(!sync\.autoSync \|\| !sync\.sourceExists \|\| !sync\.remotePath\.trim\(\)\)/);
+  // It coalesces via a single timer and clamps the delay to the 5–3600s bounds.
+  assert.match(settings, /clearTimeout\(autoSyncTimer\)/);
+  assert.match(settings, /Math\.min\(3600, Math\.max\(5, Number\(sync\.autoSyncInterval\)/);
+  // A backup already in flight defers a re-run rather than overlapping.
+  assert.match(settings, /if \(syncRunning\) \{\s*autoSyncPending = true/);
+  // The library mutation route triggers it after a successful change.
+  assert.match(library, /import \{ scheduleAutoSync \} from "@\/app\/lib\/local-settings"/);
+  assert.match(library, /scheduleAutoSync\(\);\s*\n\s*return Response\.json\(await readSnapshot\(\)\)/);
+});

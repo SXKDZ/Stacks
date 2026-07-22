@@ -537,3 +537,50 @@ export async function runSync(auto = false): Promise<SyncResult> {
     syncRunning = false;
   }
 }
+
+// Debounced auto-backup. When "Auto-back up after live Stacks changes" is on,
+// each mutation calls scheduleAutoSync(); a burst of edits coalesces into one
+// backup that runs once the library has been quiet for `autoSyncInterval`
+// seconds. Runs server-side on the always-on Node process, so it works with no
+// browser tab open. Failures are swallowed (best-effort background backup).
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let autoSyncPending = false;
+
+export function scheduleAutoSync(): void {
+  const sync = currentSettings().sync;
+  if (!sync.autoSync || !sync.sourceExists || !sync.remotePath.trim()) {
+    return;
+  }
+  // Clamp to the same 5–3600s bounds the settings writer enforces.
+  const seconds = Math.min(3600, Math.max(5, Number(sync.autoSyncInterval) || 5));
+  if (autoSyncTimer) {
+    clearTimeout(autoSyncTimer);
+  }
+  autoSyncTimer = setTimeout(() => {
+    autoSyncTimer = null;
+    void fireAutoSync();
+  }, seconds * 1000);
+  // Don't keep the process alive solely for a pending backup.
+  if (typeof autoSyncTimer === "object" && autoSyncTimer && "unref" in autoSyncTimer) {
+    (autoSyncTimer as { unref: () => void }).unref();
+  }
+}
+
+async function fireAutoSync(): Promise<void> {
+  // If a backup is already mid-flight, remember to re-run once it settles so the
+  // edits that arrived during it aren't lost; otherwise run now.
+  if (syncRunning) {
+    autoSyncPending = true;
+    return;
+  }
+  try {
+    await runSync(true);
+  } catch {
+    // Best-effort: a failed background backup must not crash the mutation path.
+  } finally {
+    if (autoSyncPending) {
+      autoSyncPending = false;
+      scheduleAutoSync();
+    }
+  }
+}

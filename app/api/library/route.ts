@@ -3,6 +3,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import type { LibraryQuerier } from "@/db/client";
 import { removeStoredFile } from "@/app/lib/local-files";
 import { normalizeAbstract, normalizeAuthorNames, normalizePages, normalizeTitle } from "@/app/lib/metadata-normalize";
+import { scheduleAutoSync } from "@/app/lib/local-settings";
 import { normalizeCollectionColor } from "@/app/lib/types";
 import {
   authors,
@@ -796,6 +797,7 @@ export async function POST(request: Request): Promise<Response> {
           });
         }
       }
+      if (added) scheduleAutoSync();
       return Response.json({ ...(await readSnapshot()), importSummary: { added, skipped, failed } });
     } else if (body.action === "update" || body.action === "bulk-update") {
       if (body.entity === "paper") {
@@ -810,6 +812,9 @@ export async function POST(request: Request): Promise<Response> {
       await deleteEntities(body.entity, ids);
     }
 
+    // A live library change just committed; queue a debounced OneDrive backup
+    // (a no-op unless the user enabled auto-back-up).
+    scheduleAutoSync();
     return Response.json(await readSnapshot());
   } catch (error) {
     const raw = error instanceof Error ? error.message : "";
