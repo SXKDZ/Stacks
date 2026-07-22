@@ -1058,6 +1058,12 @@ td.number-cell {
   padding-top: 20px;
 }
 
+/* The notes editor sits directly under its eyebrow label; give it the same
+   breathing room the summary/abstract copy gets after the eyebrow. */
+.detail-section .eyebrow + .prompt-code-editor {
+  margin-top: 10px;
+}
+
 .detail-section > p:last-child:not(.eyebrow) {
   color: #5e5664;
   font-family: var(--font-display);
