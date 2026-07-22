@@ -219,7 +219,8 @@ export function AttachBox({
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            // Enter sends; Alt/Shift/Cmd/Ctrl+Enter inserts a newline instead.
+            if (event.key === "Enter" && !event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
               void submit(event);
             }
           }}

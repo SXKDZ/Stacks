@@ -233,6 +233,18 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const [error, setError] = useState<string | null>(null);
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to the newest content as it streams in, but only when the user
+  // is already near the bottom — so scrolling up to re-read isn't yanked back.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
+    if (nearBottom) {
+      body.scrollTop = body.scrollHeight;
+    }
+  }, [messages, proposals, running]);
 
   // Stream this snippet's events. The endpoint replays persisted history first,
   // then live events if it's still running, then closes. Re-runs on reply.
@@ -374,7 +386,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         </div>
       </header>
 
-      <div className="feed-detail-body">
+      <div className="feed-detail-body" ref={bodyRef}>
         <div className="feed-detail-body-inner">
         {snippet.instruction && snippet.instruction !== snippet.title ? (
           <div className="feed-message feed-turn feed-turn-user">
@@ -775,7 +787,7 @@ export default function FeedWorkspace() {
               autoFocus
               initialText={initialText}
               initialPapers={initialPapers}
-              hint="⌘↵ to send"
+              hint="↵ to send · ⌥↵ for a new line"
               onSubmit={createSnippet}
             />
           </div>
