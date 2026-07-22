@@ -394,8 +394,10 @@ test("backs up the local library one-way to OneDrive without replacing the live 
   try {
     await mkdir(join(local, "pdfs"), { recursive: true });
     await mkdir(join(local, "html_snapshots"), { recursive: true });
+    await mkdir(join(local, "feed", "feed-1", "attachments"), { recursive: true });
     await writeFile(join(local, "pdfs", "paper.pdf"), "pdf fixture");
     await writeFile(join(local, "html_snapshots", "paper.html"), "<p>fixture</p>");
+    await writeFile(join(local, "feed", "feed-1", "attachments", "notes.txt"), "attachment fixture");
     const database = new DatabaseSync(databasePath);
     database.exec("CREATE TABLE papers (id TEXT PRIMARY KEY, title TEXT NOT NULL)");
     database.exec("INSERT INTO papers VALUES ('paper-1', 'Fixture')");
@@ -419,6 +421,8 @@ test("backs up the local library one-way to OneDrive without replacing the live 
     backup.close();
     assert.equal(await readFile(join(remote, "pdfs", "paper.pdf"), "utf8"), "pdf fixture");
     assert.equal(await readFile(join(remote, "html_snapshots", "paper.html"), "utf8"), "<p>fixture</p>");
+    // Feed attachments are backed up too, preserving their nested path.
+    assert.equal(await readFile(join(remote, "feed", "feed-1", "attachments", "notes.txt"), "utf8"), "attachment fixture");
 
     // A second run is idempotent: nothing changes when the backup is current.
     const { stdout: second } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
