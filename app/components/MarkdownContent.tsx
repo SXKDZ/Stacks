@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
@@ -48,7 +49,11 @@ function normalizeLatexDelimiters(source: string): string {
     .join("");
 }
 
-export function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
+// Parsing runs remark/rehype (math + syntax highlighting) plus a regex
+// normalization pass, so it is comparatively expensive. Memoize on the
+// primitive props so an unrelated parent re-render (e.g. typing in the feed
+// search box) never re-parses an unchanged thread.
+export const MarkdownContent = memo(function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
   return (
     <div className={`markdown-content ${className}`.trim()}>
       <ReactMarkdown
@@ -65,4 +70,4 @@ export function MarkdownContent({ content, className = "" }: { content: string; 
       </ReactMarkdown>
     </div>
   );
-}
+});
