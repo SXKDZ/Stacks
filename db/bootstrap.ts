@@ -279,9 +279,27 @@ async function initializeDatabase(): Promise<void> {
   if (collectionColumns.has("description")) {
     raw.prepare("ALTER TABLE collections DROP COLUMN description").run();
   }
-  // A named accent from the fixed palette; nullable, no default (null = neutral).
+  // A named accent from the fixed palette; every collection has one (blue is the
+  // client default). On first add, existing collections get a color spread across
+  // the palette so the library looks varied rather than uniformly blue. The
+  // assignment is deterministic (derived from each id) so it never shifts.
   if (!collectionColumns.has("color")) {
     raw.prepare("ALTER TABLE collections ADD COLUMN color TEXT").run();
+    const palette = [
+      "blue", "indigo", "violet", "pink", "rose", "orange",
+      "amber", "lime", "green", "teal", "cyan", "slate",
+    ];
+    const existing = raw.prepare("SELECT id FROM collections").all() as Array<{ id: string }>;
+    const assign = raw.prepare("UPDATE collections SET color = ? WHERE id = ?");
+    for (const { id } of existing) {
+      // FNV-1a-ish hash of the id → a stable palette index (no Math.random).
+      let hash = 2166136261;
+      for (let i = 0; i < id.length; i += 1) {
+        hash ^= id.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      assign.run(palette[Math.abs(hash) % palette.length], id);
+    }
   }
 
   const existingAuthorColumns = tableColumns(raw, "authors");

@@ -98,7 +98,7 @@ export const demoSnapshot: LibrarySnapshot = {
       ],
       collections: [
         { id: "collection-active", name: "Active review", color: "amber" },
-        { id: "collection-interface", name: "Interface patterns", color: null },
+        { id: "collection-interface", name: "Interface patterns", color: "violet" },
       ],
     },
     {
@@ -243,7 +243,7 @@ export const demoSnapshot: LibrarySnapshot = {
           corresponding: false,
         },
       ],
-      collections: [{ id: "collection-interface", name: "Interface patterns", color: null }],
+      collections: [{ id: "collection-interface", name: "Interface patterns", color: "violet" }],
     },
   ],
   authors: [
@@ -262,7 +262,7 @@ export const demoSnapshot: LibrarySnapshot = {
   collections: [
     { id: "collection-active", name: "Active review", color: "amber", paperCount: 2 },
     { id: "collection-agents", name: "Research agents", color: "green", paperCount: 1 },
-    { id: "collection-interface", name: "Interface patterns", color: null, paperCount: 2 },
+    { id: "collection-interface", name: "Interface patterns", color: "violet", paperCount: 2 },
   ],
   stats: { papers: 5, authors: 5, venues: 4, unread: 1, active: 2, recent: 2 },
 };

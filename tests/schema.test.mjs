@@ -236,10 +236,13 @@ test("persists collection membership through the paper-collection composite key"
   const collectionSchema = schema.slice(schema.indexOf("export const collections"), schema.indexOf("export const paperCollections"));
   assert.doesNotMatch(collectionSchema, /description: text\("description"\)/);
   assert.match(collectionSchema, /color: text\("color"\)/);
-  // Bootstrap adds the color column (idempotent) rather than dropping it.
+  // Bootstrap adds the color column (idempotent) and spreads a color across
+  // existing collections on first add rather than dropping it.
   assert.match(bootstrap, /ALTER TABLE collections ADD COLUMN color TEXT/);
-  // Colors are constrained to a fixed palette, validated on both read and write.
-  assert.match(types, /COLLECTION_COLORS = \["blue", "cyan", "amber", "green", "rose"\]/);
+  assert.match(bootstrap, /UPDATE collections SET color = \? WHERE id = \?/);
+  // Colors are a fixed 12-hue palette (blue default), validated on read + write.
+  assert.match(types, /"blue", "indigo", "violet", "pink", "rose", "orange"/);
+  assert.match(types, /DEFAULT_COLLECTION_COLOR: CollectionColor = "blue"/);
   assert.match(types, /export function normalizeCollectionColor/);
   assert.match(library, /normalizeCollectionColor\(data\.color\)/);
   // The picker and the paper-list color dot are wired in the UI.

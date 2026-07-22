@@ -1200,6 +1200,20 @@ textarea::placeholder {
   --green-soft: rgba(33, 132, 95, 0.1);
   --rose: #c1495a;
   --rose-soft: rgba(193, 73, 90, 0.1);
+  /* Collection accent palette (light): darker, higher-contrast hues that read on
+     the paper canvas. Same names as the dark tokens in foundation.css. */
+  --collection-blue: #1668c4;
+  --collection-indigo: #4d5bd6;
+  --collection-violet: #7b4fd0;
+  --collection-pink: #c53b93;
+  --collection-rose: #c1495a;
+  --collection-orange: #c76a20;
+  --collection-amber: #9a6816;
+  --collection-lime: #5f8420;
+  --collection-green: #21845f;
+  --collection-teal: #16897a;
+  --collection-cyan: #177d8d;
+  --collection-slate: #5a6480;
   /* Darker, higher-contrast status hues for the light canvas (dark mode uses the
      bright --cyan/--amber accents defined in foundation.css). */
   --status-reading: #0f7b88;

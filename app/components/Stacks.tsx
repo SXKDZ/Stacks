@@ -71,7 +71,7 @@ import type {
   Venue,
   ViewId,
 } from "@/app/lib/types";
-import { COLLECTION_COLORS } from "@/app/lib/types";
+import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
 
 const discoveryProviders: Array<{
   id: DiscoveryProvider;
@@ -1643,9 +1643,9 @@ function LibraryView({
                               <Chip
                                 key={collection.id}
                                 size="small"
-                                tone={collection.color ? "neutral" : "brand"}
-                                className={collection.color ? `collection-chip swatch-${collection.color}` : undefined}
-                                icon={collection.color ? <span className="collection-chip-dot" /> : undefined}
+                                tone="neutral"
+                                className={`collection-chip swatch-${collection.color}`}
+                                icon={<span className="collection-chip-dot" />}
                               >{collection.name}</Chip>
                             ))}
                           </span>
@@ -2063,7 +2063,7 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
     <article className="collection-card">
       <header className="collection-card-top">
         <button type="button" className="collection-heading" onClick={onOpen}>
-          <span className={`collection-icon ${collection.color ? `swatch-${collection.color}` : ""}`}><FolderOpen size={18} /></span>
+          <span className={`collection-icon swatch-${collection.color}`}><FolderOpen size={18} /></span>
           <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
         </button>
         <div className="collection-actions">
@@ -3747,8 +3747,8 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
       .filter((paper) => paper.collections.some((collection) => collection.id === record.id))
       .map((paper) => paper.id);
   });
-  const [collectionColor, setCollectionColor] = useState<string | null>(
-    entity === "collection" ? ((record as Collection | undefined)?.color ?? null) : null,
+  const [collectionColor, setCollectionColor] = useState<string>(
+    entity === "collection" ? ((record as Collection | undefined)?.color ?? DEFAULT_COLLECTION_COLOR) : DEFAULT_COLLECTION_COLOR,
   );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3818,15 +3818,6 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
           <div className="field-span-2 collection-color-field">
             <span>Color</span>
             <div className="collection-color-swatches" role="radiogroup" aria-label="Collection color">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={collectionColor === null}
-                aria-label="No color"
-                title="No color"
-                className={`collection-color-swatch is-none ${collectionColor === null ? "is-selected" : ""}`}
-                onClick={() => setCollectionColor(null)}
-              />
               {COLLECTION_COLORS.map((color) => (
                 <button
                   key={color}

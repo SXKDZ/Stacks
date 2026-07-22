@@ -57,6 +57,21 @@
   --green-soft: rgba(86, 224, 160, 0.12);
   --rose: #ff7a85;
   --rose-soft: rgba(255, 122, 133, 0.12);
+  /* Collection accent palette (dark). Each is a single saturated hue; soft
+     tints are derived at use-site with color-mix. Light overrides in themes.css
+     darken them for contrast on the paper canvas. */
+  --collection-blue: #2d9cff;
+  --collection-indigo: #8098ff;
+  --collection-violet: #b183ff;
+  --collection-pink: #ff86c8;
+  --collection-rose: #ff7a85;
+  --collection-orange: #ff9d54;
+  --collection-amber: #ffcf5c;
+  --collection-lime: #bfe062;
+  --collection-green: #56e0a0;
+  --collection-teal: #45d6c1;
+  --collection-cyan: #5fd9e8;
+  --collection-slate: #9aa6c0;
   /* Semantic status palette. In dark mode these use the bright accent tokens
      (--cyan/--amber) rather than the dark hex tuned for light backgrounds, so
      the reading/inbox badges read clearly on the dark canvas. The light theme
