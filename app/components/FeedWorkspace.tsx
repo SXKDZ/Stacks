@@ -568,13 +568,13 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
           <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
             <div className="feed-proposal-body">
               <span className="feed-proposal-summary">{proposal.summary}</span>
+              {proposalTags(proposal.operation).length ? (
+                <div className="feed-proposal-tags">
+                  {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
+                </div>
+              ) : null}
               <span className="feed-proposal-status">{proposal.status}</span>
             </div>
-            {proposalTags(proposal.operation).length ? (
-              <div className="feed-proposal-tags">
-                {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
-              </div>
-            ) : null}
             {proposal.status === "pending" ? (
               <div className="feed-proposal-actions">
                 <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
