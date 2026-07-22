@@ -153,6 +153,7 @@ function useResizableColumns<Key extends string>(
   storageKey: string,
   defaults: Record<Key, number>,
   minimums: Record<Key, number>,
+  maxRatios?: Partial<Record<Key, number>>,
 ) {
   const [widths, setWidths] = useState<Record<Key, number>>(defaults);
 
@@ -181,7 +182,7 @@ function useResizableColumns<Key extends string>(
     const startX = event.clientX;
     const startWidth = header.getBoundingClientRect().width;
     const tableWidth = table.getBoundingClientRect().width;
-    const maximum = Math.max(minimums[key], tableWidth * 0.7);
+    const maximum = Math.max(minimums[key], tableWidth * (maxRatios?.[key] ?? 0.7));
     const onPointerMove = (moveEvent: PointerEvent) => {
       const width = Math.min(maximum, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
       const percentage = Number(((width / tableWidth) * 100).toFixed(2));
@@ -1322,7 +1323,12 @@ function LibraryView({
   const [filterValue, setFilterValue] = useState("");
   const [filterBuilderOpen, setFilterBuilderOpen] = useState(false);
   const [sort, setSort] = useState<{ key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" }>({ key: "recent", direction: "desc" });
-  const [columnWidths, setColumnWidths] = useState<Record<PaperColumnKey, number>>(defaultPaperColumnWidths);
+  const { widths: columnWidths, resizeColumn, resetColumnWidth } = useResizableColumns<PaperColumnKey>(
+    "stacks-paper-grid-widths-v3",
+    defaultPaperColumnWidths,
+    { title: 280, venue: 140, year: 72, status: 72 },
+    { title: 0.68, venue: 0.32, year: 0.32, status: 0.32 },
+  );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -1335,19 +1341,6 @@ function LibraryView({
     return () => window.cancelAnimationFrame(frame);
   }, [filters.length]);
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      try {
-      const saved = JSON.parse(window.localStorage.getItem("stacks-paper-grid-widths-v3") ?? "null") as Partial<Record<PaperColumnKey, number>> | null;
-        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value))) {
-          setColumnWidths((current) => ({ ...current, ...saved }));
-        }
-      } catch {
-        // Invalid browser preferences fall back to the balanced default widths.
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
   const filtered = useMemo(() => {
     const result = papers.filter((paper) => {
       const statusMatch = status === "all" || paper.readingStatus === status || (status === "favorite" && paper.favorite);
@@ -1422,48 +1415,6 @@ function LibraryView({
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
       : { key, direction: key === "year" ? "desc" : "asc" });
-  }
-
-  function resizeColumn(event: ReactPointerEvent<HTMLButtonElement>, key: PaperColumnKey) {
-    event.preventDefault();
-    event.stopPropagation();
-    const header = event.currentTarget.closest("th");
-    const table = event.currentTarget.closest("table");
-    if (!header || !table) {
-      return;
-    }
-    const startX = event.clientX;
-    const startWidth = header.getBoundingClientRect().width;
-    const tableWidth = table.getBoundingClientRect().width;
-    const minimums: Record<PaperColumnKey, number> = { title: 280, venue: 140, year: 72, status: 72 };
-    const maximum = Math.max(minimums[key], tableWidth * (key === "title" ? 0.68 : 0.32));
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const width = Math.min(maximum, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
-      const percentage = Number(((width / tableWidth) * 100).toFixed(2));
-      setColumnWidths((current) => {
-        const next = { ...current, [key]: percentage };
-        window.localStorage.setItem("stacks-paper-grid-widths-v3", JSON.stringify(next));
-        return next;
-      });
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      document.body.classList.remove("is-resizing-column");
-    };
-    document.body.classList.add("is-resizing-column");
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-  }
-
-  function resetColumnWidth(event: ReactMouseEvent<HTMLButtonElement>, key: PaperColumnKey) {
-    event.preventDefault();
-    event.stopPropagation();
-    setColumnWidths((current) => {
-      const next = { ...current, [key]: defaultPaperColumnWidths[key] };
-      window.localStorage.setItem("stacks-paper-grid-widths-v3", JSON.stringify(next));
-      return next;
-    });
   }
 
   function toggleAll() {
