@@ -1422,6 +1422,13 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
                 </details>
                 <input className="feed-skill-label-input" value={selected.label} maxLength={60} placeholder="Workflow name" onChange={(event) => update(selected.id, { label: event.target.value })} />
               </div>
+              <label className="feed-workflow-schedule">
+                <input type="checkbox" checked={(selected.intervalMinutes ?? 0) > 0} onChange={(event) => update(selected.id, { intervalMinutes: event.target.checked ? 1440 : 0 })} />
+                <span>Run automatically every</span>
+                <input type="number" min="5" max="10080" disabled={(selected.intervalMinutes ?? 0) === 0} value={selected.intervalMinutes || 1440} onChange={(event) => update(selected.id, { intervalMinutes: Number(event.target.value) })} />
+                <span>minutes</span>
+                <small>Scheduled runs only queue proposals for your approval — nothing writes unattended.</small>
+              </label>
               <div className="feed-workflow-steps">
                 {selected.steps.map((step, index) => (
                   <div className="feed-workflow-step" key={index}>

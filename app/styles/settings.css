@@ -746,6 +746,40 @@
   gap: 9px;
 }
 
+/* The per-workflow auto-run schedule control. */
+.feed-workflow-schedule {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-label);
+  gap: 7px;
+  margin-top: 10px;
+  padding: 9px 11px;
+}
+
+.feed-workflow-schedule input[type="number"] {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font: inherit;
+  padding: 3px 6px;
+  width: 72px;
+}
+
+.feed-workflow-schedule input[type="number"]:disabled {
+  opacity: 0.5;
+}
+
+.feed-workflow-schedule > small {
+  color: var(--soft);
+  flex-basis: 100%;
+}
+
 /* A workflow's steps: a vertical stack of numbered prompt blocks. */
 .feed-workflow-steps {
   display: flex;

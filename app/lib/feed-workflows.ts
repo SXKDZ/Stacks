@@ -20,6 +20,13 @@ export interface FeedWorkflow {
   label: string;
   icon: string;
   steps: FeedWorkflowStep[];
+  /**
+   * Auto-run cadence in minutes. 0 or undefined = manual only. When > 0, the
+   * always-on server starts a feed from this workflow on that interval (a
+   * library-wide scheduled run — its step prompts should not assume an
+   * attachment). Writes still queue for approval, so a scheduled run is safe.
+   */
+  intervalMinutes?: number;
 }
 
 /** The seed workflows, used when the user has none saved yet. */
@@ -74,7 +81,12 @@ export function normalizeFeedWorkflows(value: unknown): FeedWorkflow[] {
     const id = typeof candidate.id === "string" && candidate.id.trim()
       ? candidate.id.trim()
       : `workflow-${workflows.length}-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    workflows.push({ id, label: label.slice(0, 60), icon, steps });
+    // Clamp the auto-run cadence: 0 (manual) or 5min–7days.
+    const rawInterval = Number(candidate.intervalMinutes);
+    const intervalMinutes = Number.isFinite(rawInterval) && rawInterval > 0
+      ? Math.min(10080, Math.max(5, Math.round(rawInterval)))
+      : 0;
+    workflows.push({ id, label: label.slice(0, 60), icon, steps, intervalMinutes });
   }
   return workflows;
 }

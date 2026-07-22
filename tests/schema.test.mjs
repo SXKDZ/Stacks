@@ -342,6 +342,17 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   assert.match(feed, /pendingWorkflowSteps/);
   assert.match(feed, /runNextWorkflowStep/);
   assert.match(settings, /FeedWorkflowsEditor/);
+  // Workflows can be scheduled: an always-on server scheduler auto-starts them,
+  // registered from instrumentation, and only ever queues approval-gated writes.
+  const [scheduler, instrumentation] = await Promise.all([
+    readFile(new URL("../app/lib/feed-scheduler.ts", import.meta.url), "utf8"),
+    readFile(new URL("../instrumentation.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(workflowsLib, /intervalMinutes/);
+  assert.match(scheduler, /export function startFeedScheduler/);
+  assert.match(scheduler, /export async function startWorkflowRun/);
+  assert.match(instrumentation, /startFeedScheduler/);
+  assert.match(settings, /feed-workflow-schedule/);
 });
 
 test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", async () => {
