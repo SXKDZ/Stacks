@@ -769,12 +769,11 @@ button.stat-card:hover {
 }
 
 .paper-byline {
-  align-items: center;
   color: #948b9c;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   font-size: var(--type-label);
-  gap: 7px;
+  gap: 3px;
   margin-top: 13px;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
@@ -682,6 +682,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
           compact
+          hint={<><kbd>⌥↵</kbd> newline</>}
           onSubmit={sendReply}
           leadingAction={running ? (
             <button type="button" className="feed-tool-btn" onClick={() => void stop()} title="Stop the agent" aria-label="Stop the agent"><Square size={15} /></button>
@@ -704,6 +705,7 @@ export default function FeedWorkspace() {
   const [submitting, setSubmitting] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [libraryName, setLibraryName] = useState("My Paper Library");
+  const [query, setQuery] = useState("");
 
   // Restore the persisted (draggable) sidebar width.
   useEffect(() => {
@@ -790,8 +792,8 @@ export default function FeedWorkspace() {
         c.proposalsPosted ? `${c.proposalsPosted} change${c.proposalsPosted === 1 ? "" : "s"} posted` : "",
         c.proposalsUpdated ? `${c.proposalsUpdated} change status${c.proposalsUpdated === 1 ? "" : "es"} updated` : "",
       ].filter(Boolean);
-      const base = parts.length ? `Synced: ${parts.join(", ")}.` : "Synced. Already up to date.";
-      const message = data.truncated ? `${base} More remain; sync again to continue.` : base;
+      const base = parts.length ? `Synced: ${parts.join(", ")}` : "Synced, already up to date";
+      const message = data.truncated ? `${base} (more remain, sync again)` : base;
       setNotice({ tone: "success", message });
       recordSync("success", message);
       await loadSnippets();
@@ -856,10 +858,32 @@ export default function FeedWorkspace() {
     return () => window.clearInterval(timer);
   }, [snippets, loadSnippets]);
 
+  // Type-anywhere: a printable keypress with no input focused jumps into the
+  // visible composer/reply textarea, so you can just start typing.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key.length !== 1) return; // ignore Enter, arrows, etc.
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+      // Prefer the reply/compose dock textarea; fall back to any dock textarea.
+      const textarea = document.querySelector<HTMLTextAreaElement>(".feed-detail-foot .feed-dock textarea, .feed-compose .feed-dock textarea");
+      if (textarea) textarea.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const selected = useMemo(
     () => snippets.find((snippet) => snippet.id === selectedId) ?? null,
     [snippets, selectedId],
   );
+
+  const filteredSnippets = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return snippets;
+    return snippets.filter((snippet) => `${snippet.title} ${snippet.instruction}`.toLowerCase().includes(term));
+  }, [snippets, query]);
 
   async function createSnippet(payload: AttachSubmit): Promise<boolean> {
     setSubmitting(true);
@@ -960,11 +984,20 @@ export default function FeedWorkspace() {
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
           <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />}>New</ActionButton>
         </header>
+        {snippets.length ? (
+          <div className="feed-search">
+            <Search size={15} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search feeds…" aria-label="Search feeds" />
+            {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button> : null}
+          </div>
+        ) : null}
         <div className="feed-list" role="list">
           {snippets.length === 0 ? (
             <p className="feed-list-empty">Nothing captured yet. Start a new feed and the agent goes to work.</p>
+          ) : filteredSnippets.length === 0 ? (
+            <p className="feed-list-empty">No feeds match “{query}”.</p>
           ) : (
-            snippets.map((snippet) => (
+            filteredSnippets.map((snippet) => (
               <FeedRow
                 key={snippet.id}
                 snippet={snippet}
@@ -1036,7 +1069,7 @@ export default function FeedWorkspace() {
               autoFocus
               initialText={initialText}
               initialPapers={initialPapers}
-              hint="↵ to send · ⌥↵ for a new line"
+              hint={<><kbd>⌥↵</kbd> newline</>}
               onSubmit={createSnippet}
             />
           </div>

@@ -1226,8 +1226,7 @@ function Dashboard({
             <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
             <div className="paper-byline">
               <span>{fullAuthorLine(currentPaper)}</span>
-              <i />
-              <span>{venueLine(currentPaper)} · {currentPaper.year}</span>
+              <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
             </div>
             <div className="continue-actions">
               <ActionButton variant="primary" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>

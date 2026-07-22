@@ -241,7 +241,7 @@ export function AttachBox({
           </div>
           <div className="feed-dock-send">
             {hint ? <span className="feed-dock-hint">{hint}</span> : null}
-            <ActionButton type="submit" variant="primary" size={compact ? "small" : undefined} disabled={!canSubmit} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}>{submitLabel}</ActionButton>
+            <ActionButton type="submit" variant="primary" size={compact ? "small" : undefined} disabled={!canSubmit} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}><span className="feed-send-label">{submitLabel}</span><kbd className="feed-send-kbd">↵</kbd></ActionButton>
           </div>
         </div>
       </div>
