@@ -2,6 +2,7 @@
 
 import { BookOpen, Check, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ActionButton } from "@/app/components/ui/controls";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
@@ -75,6 +76,16 @@ export function AttachBox({
   const [texts, setTexts] = useState<Array<{ id: string; name: string; content: string }>>([]);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<{ id: string; name: string; content: string } | null>(null);
+  // Hover image preview. The attachment tray is a height-capped scroll box
+  // (overflow-y:auto), so an absolutely-positioned preview inside it would be
+  // clipped. Anchor a fixed-position preview to the hovered chip and portal it
+  // to the body so it floats above the tray's clip.
+  const [hoverPreview, setHoverPreview] = useState<{ url: string; left: number; bottom: number } | null>(null);
+
+  function showPreview(url: string, target: HTMLElement) {
+    const rect = target.getBoundingClientRect();
+    setHoverPreview({ url, left: rect.left, bottom: window.innerHeight - rect.top + 8 });
+  }
 
   const hasAttachments = files.length > 0 || papers.length > 0 || texts.length > 0;
 
@@ -203,8 +214,15 @@ export function AttachBox({
             return (
               <span key={`${file.name}-${index}`} className="feed-chip">
                 {preview ? (
-                  <button type="button" className="feed-chip-open" onClick={() => setZoomedImage(preview)} title="View image">
-                    <span className="feed-chip-preview"><ImageIcon size={12} /><img src={preview} alt="" /></span>
+                  <button
+                    type="button"
+                    className="feed-chip-open"
+                    onClick={() => setZoomedImage(preview)}
+                    onMouseEnter={(event) => showPreview(preview, event.currentTarget)}
+                    onMouseLeave={() => setHoverPreview(null)}
+                    title="View image"
+                  >
+                    <span className="feed-chip-preview"><ImageIcon size={12} /></span>
                     <span className="feed-chip-label">{file.name || "image"}</span>
                   </button>
                 ) : (
@@ -308,6 +326,18 @@ export function AttachBox({
           </div>
         </div>
       ) : null}
+
+      {hoverPreview
+        ? createPortal(
+            <img
+              src={hoverPreview.url}
+              alt=""
+              className="feed-chip-hover-preview"
+              style={{ left: hoverPreview.left, bottom: hoverPreview.bottom }}
+            />,
+            document.body,
+          )
+        : null}
     </form>
   );
 }

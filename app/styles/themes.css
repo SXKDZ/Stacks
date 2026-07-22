@@ -13,10 +13,6 @@ body {
   line-height: 1.45;
 }
 
-.ambient {
-  display: none;
-}
-
 .sidebar {
   backdrop-filter: blur(22px);
   background: rgba(8, 10, 18, 0.78);

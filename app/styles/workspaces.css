@@ -931,21 +931,17 @@
   position: relative;
 }
 
-.feed-chip-preview img {
+/* The preview is portaled to the body and fixed-positioned (anchored to the
+   hovered chip from JS) so it escapes the attachment tray's overflow clip. */
+.feed-chip-hover-preview {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
-  bottom: calc(100% + 8px);
   box-shadow: var(--shadow-2);
-  display: none;
-  left: 0;
   max-height: 220px;
   max-width: 280px;
-  position: absolute;
-  z-index: 20;
-}
-
-.feed-chip-preview:hover img {
-  display: block;
+  pointer-events: none;
+  position: fixed;
+  z-index: 50;
 }
 
 /* The round remove (X) button on a chip. */

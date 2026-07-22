@@ -872,9 +872,6 @@ function StacksWorkspace() {
 
   return (
     <div className="stacks-shell">
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
-
       <aside className={`sidebar ${mobileNav ? "is-open" : ""}`}>
         <div className="brand-row">
           <button className="brand" onClick={() => changeView("home")} aria-label="Stacks home">

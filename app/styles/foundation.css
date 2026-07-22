@@ -186,31 +186,6 @@ body {
   isolation: isolate;
 }
 
-.ambient {
-  border-radius: 999px;
-  filter: blur(10px);
-  opacity: 0.45;
-  pointer-events: none;
-  position: fixed;
-  z-index: -1;
-}
-
-.ambient-one {
-  background: radial-gradient(circle, rgba(45, 156, 255, 0.12), transparent 68%);
-  height: 560px;
-  right: -180px;
-  top: -170px;
-  width: 560px;
-}
-
-.ambient-two {
-  background: radial-gradient(circle, rgba(24, 168, 185, 0.08), transparent 68%);
-  bottom: -200px;
-  height: 600px;
-  left: 120px;
-  width: 600px;
-}
-
 .sidebar {
   background: rgba(249, 250, 252, 0.94);
   border-right: 1px solid var(--line);

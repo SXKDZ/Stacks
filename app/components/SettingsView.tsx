@@ -1011,7 +1011,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
       {doctorModal ? (
         <>
-          <Scrim onClick={() => setDoctorModal(null)} label="Close dialog" fixed />
+          <Scrim onClick={() => setDoctorModal(null)} label="Close dialog" fixed className="z-[80]" />
           <div className="doctor-modal" role="dialog" aria-modal="true" aria-label={doctorModal.label}>
             <header className="doctor-modal-head">
               <h2>{doctorModal.label}</h2>
