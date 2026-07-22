@@ -33,6 +33,14 @@ interface RunHandle {
   subscribers: Set<(event: FeedEvent) => void>;
 }
 
+/** The outcome of a single agent turn, resolved when its process exits. */
+export interface AgentTurnResult {
+  status: "done" | "error" | "stopped";
+  /** The agent's final assistant/result text (empty on error/stop). */
+  text: string;
+  error?: string;
+}
+
 const runs = new Map<string, RunHandle>();
 
 function createId(prefix: string): string {
@@ -244,8 +252,12 @@ export async function runFeedAgent(options: {
   resume: boolean;
   /** Internal: true on the fresh-session retry after a failed resume. */
   resumeRetried?: boolean;
-}): Promise<void> {
+}): Promise<AgentTurnResult> {
   const { snippetId, sessionId, prompt, resume, resumeRetried = false } = options;
+  // Resolved when the process exits (or the resume-fallback turn it spawns does),
+  // so a caller can await the turn's outcome — the workflow runtime relies on this.
+  let settle: (result: AgentTurnResult) => void;
+  const completion = new Promise<AgentTurnResult>((resolve) => { settle = resolve; });
   const workingDir = feedWorkingDir(snippetId);
   mkdirSync(workingDir, { recursive: true });
   mkdirSync(claudeConfigDir(), { recursive: true });
@@ -291,6 +303,8 @@ export async function runFeedAgent(options: {
   let sessionCaptured = resume;
   let lastAssistantText = "";
   let lastAssistantId: string | null = null;
+  // The final result text of this turn, surfaced to awaiting callers.
+  let finalText = "";
   // Set when a --resume run fails because its session transcript is missing; the
   // close handler then restarts the turn as a fresh session with the transcript.
   let resumeFallback = false;
@@ -344,6 +358,7 @@ export async function runFeedAgent(options: {
     if (event.type === "result") {
       const isError = Boolean(event.is_error);
       const text = typeof event.result === "string" ? event.result : "";
+      if (!isError && text.trim()) finalText = text;
       // Accumulate this turn's usage onto the snippet (tokens, duration, turns).
       await recordUsage(snippetId, event);
       // The result event repeats the final assistant text. Only persist it when
@@ -395,6 +410,7 @@ export async function runFeedAgent(options: {
     emit(snippetId, { type: "done", status: "error" });
     revokeFeedToken(snippetId);
     runs.delete(snippetId);
+    settle({ status: "error", text: "", error: error.message });
   });
 
   child.on("close", async (code, signal) => {
@@ -406,11 +422,14 @@ export async function runFeedAgent(options: {
 
     // The resume failed with a missing-session error: restart this turn as a
     // fresh session seeded with the thread transcript, so the reply still lands.
+    // Chain the retry's outcome to this turn's completion so an awaiting caller
+    // sees the final result, not the transient failure.
     if (resumeFallback) {
       const transcript = await threadTranscript(snippetId);
       const freshPrompt = buildForkPrompt({ reply: prompt, transcript });
       await clearSessionId(snippetId);
-      void runFeedAgent({ snippetId, sessionId: crypto.randomUUID(), prompt: freshPrompt, resume: false, resumeRetried: true }).catch(() => {});
+      runFeedAgent({ snippetId, sessionId: crypto.randomUUID(), prompt: freshPrompt, resume: false, resumeRetried: true })
+        .then(settle, (error) => settle({ status: "error", text: "", error: error instanceof Error ? error.message : String(error) }));
       return;
     }
 
@@ -420,10 +439,15 @@ export async function runFeedAgent(options: {
       const detail = stderr.trim().slice(-500) || `The agent exited with code ${code}.`;
       await persistMessage(snippetId, "system", "error", detail);
       await setStatus(snippetId, "error", detail);
-    } else {
-      await setStatus(snippetId, status);
+      emit(snippetId, { type: "done", status });
+      settle({ status: "error", text: "", error: detail });
+      return;
     }
+    await setStatus(snippetId, status);
     // Emit the terminal event so live subscribers (the SSE stream) can close.
     emit(snippetId, { type: "done", status });
+    settle({ status, text: finalText, error: undefined });
   });
+
+  return completion;
 }

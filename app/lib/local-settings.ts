@@ -56,6 +56,10 @@ interface StructuredSettingsFile {
     lastSyncedAt?: string;
   };
   feedSkills?: Array<{ id: string; label: string; icon: string; prompt: string }>;
+  // Saved Claude Code workflow scripts (the `export const meta` + body form),
+  // run against the library through the approval-gated feed. name/description
+  // are parsed from the script's meta for the list; script is the source.
+  feedWorkflows?: Array<{ id: string; name: string; description: string; script: string }>;
   secrets: Record<string, string>;
 }
 
@@ -266,8 +270,9 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
     // would be silently materialized into plaintext settings.json the first
     // time any unrelated setting is saved. Secrets are persisted only when the
     // user enters them in the UI (they then arrive via the request payload).
-    // Preserve any saved feed skills across unrelated settings writes.
+    // Preserve any saved feed skills + workflows across unrelated settings writes.
     feedSkills: existing?.feedSkills,
+    feedWorkflows: existing?.feedWorkflows,
     secrets: Object.fromEntries(
       secretKeys.map((key) => [key, existing?.secrets?.[key]?.trim() ?? ""]),
     ),
@@ -283,6 +288,18 @@ export function readFeedSkills(): Array<{ id: string; label: string; icon: strin
 export function writeFeedSkills(skills: Array<{ id: string; label: string; icon: string; prompt: string }>): void {
   const next = settingsFromCurrentValues(readStructuredSettings());
   next.feedSkills = skills;
+  writeStructuredSettings(next);
+}
+
+/** Read the user's saved Claude Code workflows (undefined if none saved yet). */
+export function readFeedWorkflows(): Array<{ id: string; name: string; description: string; script: string }> | undefined {
+  return readStructuredSettings()?.feedWorkflows;
+}
+
+/** Persist the saved workflows, preserving the rest of settings.json. */
+export function writeFeedWorkflows(workflows: Array<{ id: string; name: string; description: string; script: string }>): void {
+  const next = settingsFromCurrentValues(readStructuredSettings());
+  next.feedWorkflows = workflows;
   writeStructuredSettings(next);
 }
 

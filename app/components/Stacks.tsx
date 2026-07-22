@@ -53,6 +53,7 @@ import { readError } from "@/app/lib/http";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
+import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
@@ -3526,6 +3527,8 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
 }) {
   const [paperType, setPaperType] = useState<EditablePaperType>(() => editablePaperType(paper.paperType));
   const [summary, setSummary] = useState(paper.summary);
+  const [abstract, setAbstract] = useState(paper.abstract);
+  const [notes, setNotes] = useState(paper.notes);
   const [summarizing, setSummarizing] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3730,9 +3733,9 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         <AuthorNamesField authors={authors} defaultValue={paper.authors.map((author) => author.displayName).join(", ")} />
         <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} onPaperTypeChange={setPaperType} />
         <CollectionNamesField collections={collections} value={collectionNames} onChange={setCollectionNames} />
-        <label className="field-span-2 summary-field"><span className="field-label-action"><span>Summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><textarea name="summary" rows={5} value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
-        <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} defaultValue={paper.abstract} /></label>
-        <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={4} defaultValue={paper.notes} /></label>
+        <label className="field-span-2 summary-field"><span className="field-label-action"><span>Summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><MarkdownCodeEditor name="summary" ariaLabel="Summary" rows={5} value={summary} onChange={setSummary} placeholder="A short summary for your library…" /></label>
+        <label className="field-span-2"><span>Abstract</span><MarkdownCodeEditor name="abstract" ariaLabel="Abstract" rows={5} value={abstract} onChange={setAbstract} placeholder="What this paper contributes…" /></label>
+        <label className="field-span-2"><span>Research notes</span><MarkdownCodeEditor name="notes" ariaLabel="Research notes" rows={4} value={notes} onChange={setNotes} placeholder="Observations, questions, and connections…" /></label>
         </div>
         <div className="form-actions edit-paper-form-actions">
           <ActionButton

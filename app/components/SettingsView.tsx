@@ -40,6 +40,7 @@ import {
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 import { DEFAULT_FEED_SKILLS, FEED_SKILL_ICONS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
+import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { readError } from "@/app/lib/http";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
@@ -1235,7 +1236,7 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
                 </details>
                 <input className="feed-skill-label-input" value={selected.label} maxLength={60} placeholder="Skill name" onChange={(event) => update(selected.id, { label: event.target.value })} />
               </div>
-              <HighlightedPromptArea value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction this skill drops into the composer. Use {{paper}} to inline attached papers." />
+              <MarkdownCodeEditor value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} variables ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction this skill drops into the composer. Use {{paper}} to inline attached papers." />
               <p className="feed-skill-detail-hint">This text seeds the composer when the skill is picked. Placeholders like <code>{"{{paper}}"}</code> and <code>{"{{paper[1:20]}}"}</code> inline attachments.</p>
             </>
           ) : (
@@ -1270,54 +1271,6 @@ function DoctorMetric({ icon, label, value, detail, tone, onClick }: {
   return <div className={`storage-doctor-metric is-${tone}`}>{body}</div>;
 }
 
-// A prompt is highlighted for its own "syntax": {{placeholder}} (with optional
-// [a:b] page slice), Markdown headings, `inline code`, and $math$.
-const PROMPT_TOKEN_RE = /(\{\{[a-zA-Z0-9_]+(?:\[[^\]]*\])?\}\}|^#{1,6}\s.+$|`[^`\n]+`|\${1,2}[^$\n]+\${1,2})/gm;
-
-function promptTokenClass(part: string): string | undefined {
-  if (/^\{\{.+\}\}$/.test(part)) return "is-variable";
-  if (/^#{1,6}\s/.test(part)) return "is-heading";
-  if (/^`.+`$/.test(part)) return "is-code";
-  if (/^\${1,2}.+\${1,2}$/.test(part)) return "is-math";
-  return undefined;
-}
-
-/** A bordered textarea with a synchronized, read-only syntax layer behind it. */
-function HighlightedPromptArea({ value, onChange, ariaLabel, placeholder, textareaRef }: {
-  value: string;
-  onChange: (value: string) => void;
-  ariaLabel: string;
-  placeholder?: string;
-  textareaRef?: (node: HTMLTextAreaElement | null) => void;
-}) {
-  const highlightLayer = useRef<HTMLPreElement | null>(null);
-  const parts = value.split(PROMPT_TOKEN_RE);
-
-  return (
-    <div className="prompt-code-editor">
-      <pre ref={highlightLayer} aria-hidden="true">
-        {parts.map((part, index) => (
-          <span className={promptTokenClass(part)} key={`${index}-${part.slice(0, 12)}`}>{part}</span>
-        ))}
-        {value.endsWith("\n") ? "\n" : null}
-      </pre>
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onScroll={(event) => {
-          if (!highlightLayer.current) return;
-          highlightLayer.current.scrollTop = event.currentTarget.scrollTop;
-          highlightLayer.current.scrollLeft = event.currentTarget.scrollLeft;
-        }}
-        spellCheck={false}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-      />
-    </div>
-  );
-}
-
 function PromptEditor({ inputRef, promptKey, value, onChange }: {
   inputRef: RefObject<Record<PromptKey, HTMLTextAreaElement | null>>;
   promptKey: PromptKey;
@@ -1325,9 +1278,10 @@ function PromptEditor({ inputRef, promptKey, value, onChange }: {
   onChange: (value: string) => void;
 }) {
   return (
-    <HighlightedPromptArea
+    <MarkdownCodeEditor
       value={value}
       onChange={onChange}
+      variables
       textareaRef={(node) => { inputRef.current[promptKey] = node; }}
       ariaLabel={`${promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
     />
