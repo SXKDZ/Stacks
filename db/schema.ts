@@ -206,6 +206,11 @@ export const feedProposals = sqliteTable(
     // pending | approved | rejected | applied | failed
     status: text("status").notNull().default("pending"),
     resultSummary: text("result_summary"),
+    // The GitHub comment mirroring this proposal + its status, so mobile sees
+    // the proposed change and whether it was applied/rejected. Null until synced.
+    githubCommentId: integer("github_comment_id"),
+    // The status last reflected in that comment, so sync only edits on change.
+    githubStatusSynced: text("github_status_synced"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     resolvedAt: text("resolved_at"),
   },

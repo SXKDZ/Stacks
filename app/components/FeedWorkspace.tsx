@@ -771,6 +771,8 @@ export default function FeedWorkspace() {
         c.commentsUpdated ? `${c.commentsUpdated} edited` : "",
         c.titlesRenamed ? `${c.titlesRenamed} renamed` : "",
         c.attachmentsUploaded ? `${c.attachmentsUploaded} file${c.attachmentsUploaded === 1 ? "" : "s"} uploaded` : "",
+        c.proposalsPosted ? `${c.proposalsPosted} change${c.proposalsPosted === 1 ? "" : "s"} posted` : "",
+        c.proposalsUpdated ? `${c.proposalsUpdated} change status${c.proposalsUpdated === 1 ? "" : "es"} updated` : "",
       ].filter(Boolean);
       const base = parts.length ? `Synced: ${parts.join(", ")}.` : "Synced. Already up to date.";
       const message = data.truncated ? `${base} More remain; sync again to continue.` : base;

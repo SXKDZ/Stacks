@@ -253,6 +253,13 @@ async function initializeDatabase(): Promise<void> {
   if (!feedSnippetColumns.has("attachments")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN attachments TEXT").run();
   }
+  const feedProposalColumns = tableColumns(raw, "feed_proposals");
+  if (!feedProposalColumns.has("github_comment_id")) {
+    raw.prepare("ALTER TABLE feed_proposals ADD COLUMN github_comment_id INTEGER").run();
+  }
+  if (!feedProposalColumns.has("github_status_synced")) {
+    raw.prepare("ALTER TABLE feed_proposals ADD COLUMN github_status_synced TEXT").run();
+  }
   for (const column of ["input_tokens", "output_tokens", "duration_ms", "turns"]) {
     if (!feedSnippetColumns.has(column)) {
       raw.prepare(`ALTER TABLE feed_snippets ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedMessages, feedSnippets } from "@/db/schema";
+import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { readGithubLastSyncedAt, writeGithubLastSyncedAt } from "@/app/lib/local-settings";
 import {
@@ -32,6 +32,26 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 function mirrorLabel(role: string): string {
   return role === "user" ? "**You:**" : "**Agent:**";
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "⏳ Awaiting approval",
+  approved: "✅ Approved",
+  applied: "✅ Applied",
+  rejected: "🚫 Rejected",
+  failed: "⚠️ Failed",
+};
+
+/** A GitHub comment body summarizing a proposed library change + its status. */
+function proposalCommentBody(operation: string, status: string): string {
+  let summary = "Proposed change";
+  try {
+    const parsed = JSON.parse(operation) as { summary?: string; action?: string; entity?: string };
+    summary = parsed.summary ?? ([parsed.action, parsed.entity].filter(Boolean).join(" ") || summary);
+  } catch {
+    // Keep the default summary if the stored operation isn't parseable.
+  }
+  return `**Proposed library change** · ${STATUS_LABEL[status] ?? status}\n\n${summary}\n\n_Approve or reject in Stacks; this reflects the current status._`;
 }
 
 interface StoredAttachment { relativePath: string; label: string }
@@ -93,7 +113,7 @@ export async function POST(): Promise<Response> {
   const config: GitHubConfig = { repo, token };
 
   const database = await ensureDatabase();
-  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0 };
+  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0 };
   const since = readGithubLastSyncedAt();
   // Stamp the high-water mark from BEFORE the network calls, so anything that
   // changes mid-sync is re-examined next time rather than skipped.
@@ -149,6 +169,23 @@ export async function POST(): Promise<Response> {
         const commentId = await postComment(config, issueNumber, body);
         database.update(feedMessages).set({ githubCommentId: commentId }).where(eq(feedMessages.id, message.id)).run();
         counts.commentsPosted += 1;
+      }
+
+      // Mirror proposed library changes + their status, so mobile sees what the
+      // agent proposed and whether it was applied/rejected. One comment per
+      // proposal, edited when the status changes.
+      const proposals = database.select().from(feedProposals).where(eq(feedProposals.snippetId, feed.id)).all();
+      for (const proposal of proposals) {
+        const body = proposalCommentBody(proposal.operation, proposal.status);
+        if (!proposal.githubCommentId) {
+          const commentId = await postComment(config, issueNumber, body);
+          database.update(feedProposals).set({ githubCommentId: commentId, githubStatusSynced: proposal.status }).where(eq(feedProposals.id, proposal.id)).run();
+          counts.proposalsPosted += 1;
+        } else if (proposal.githubStatusSynced !== proposal.status) {
+          await editComment(config, proposal.githubCommentId, body);
+          database.update(feedProposals).set({ githubStatusSynced: proposal.status }).where(eq(feedProposals.id, proposal.id)).run();
+          counts.proposalsUpdated += 1;
+        }
       }
     }
 
