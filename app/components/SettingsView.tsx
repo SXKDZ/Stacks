@@ -40,6 +40,7 @@ import {
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
 import { DEFAULT_FEED_SKILLS, FEED_SKILL_ICONS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
+import { readError } from "@/app/lib/http";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
 import type { Paper } from "@/app/lib/types";
@@ -301,14 +302,6 @@ function byteLabel(bytes: number): string {
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
 
-async function errorMessage(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { error?: string };
-    return payload.error ?? `Request failed with ${response.status}.`;
-  } catch {
-    return `Request failed with ${response.status}.`;
-  }
-}
 
 export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibraryNameChange, papers }: {
   notify: (message: string, tone?: "success" | "error" | "info") => void;
@@ -355,7 +348,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     try {
       const response = await fetch("/api/local-settings", { cache: "no-store" });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const payload = (await response.json()) as SettingsSnapshot;
       setSettings({ ...payload, ai: { ...payload.ai, modelId: normalizedModelId(payload.ai.modelId) } });
@@ -372,7 +365,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     try {
       const response = await fetch("/api/models", { cache: "no-store" });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const payload = await response.json() as { models: BedrockModelOption[] };
       setModels(payload.models);
@@ -437,7 +430,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         body: JSON.stringify({ modelId: settings.ai.modelId }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const result = await response.json() as ModelAccessResult;
       setModelAccess(result);
@@ -465,7 +458,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         body: JSON.stringify({ target: "remote" }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const payload = await response.json() as { path: string | null };
       if (payload.path) {
@@ -491,7 +484,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         body: JSON.stringify({ target: "storage" }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const payload = await response.json() as { path: string | null };
       if (payload.path) {
@@ -539,7 +532,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         body: JSON.stringify({ data: settingsData() }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const saved = (await response.json()) as SettingsSnapshot;
       setSettings(saved);
@@ -570,7 +563,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           body: JSON.stringify({ data: settingsData() }),
         });
         if (!response.ok) {
-          throw new Error(await errorMessage(response));
+          throw new Error(await readError(response));
         }
         return response.json() as Promise<{ result: SyncResult; sync: SettingsSnapshot["sync"] }>;
       });
@@ -589,7 +582,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     try {
       const response = await fetch("/api/version?check=1", { cache: "no-store" });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       setVersionInfo(await response.json() as VersionInfo);
     } catch (error) {
@@ -615,7 +608,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const report = await response.json() as StorageReport;
       setStorageReport(report);
@@ -657,7 +650,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const report = await response.json() as StorageReport;
       notify(`Removed ${report.removedFiles} unlinked file${report.removedFiles === 1 ? "" : "s"} and reclaimed ${byteLabel(report.removedBytes)}.`, "success");
@@ -694,7 +687,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           }),
         });
         if (!response.ok) {
-          throw new Error(await errorMessage(response));
+          throw new Error(await readError(response));
         }
         return response.json() as Promise<StorageReport>;
       });
@@ -724,7 +717,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         body: JSON.stringify({ operation: "clean-orphans", confirmed: true }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       setStorageReport(await response.json() as StorageReport);
       setDoctorModal(null);
@@ -766,7 +759,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const report = await response.json() as StorageReport;
       setStorageReport(report);
@@ -1183,7 +1176,7 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
         body: JSON.stringify({ skills }),
       });
       if (!response.ok) {
-        throw new Error(await errorMessage(response));
+        throw new Error(await readError(response));
       }
       const data = await response.json() as { skills: FeedSkill[] };
       setSkills(data.skills);

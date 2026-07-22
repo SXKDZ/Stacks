@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { ActionButton, ActionLink, StatusPill } from "@/app/components/ui/controls";
+import { readError } from "@/app/lib/http";
 import type { LibrarySnapshot, Paper } from "@/app/lib/types";
 
 function venueLabel(paper: Paper): string {
@@ -72,14 +73,6 @@ function documentIdentity(paper: Paper): { kind: string; value: string; url: str
   };
 }
 
-async function responseMessage(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { error?: string };
-    return payload.error || `Request failed with status ${response.status}.`;
-  } catch {
-    return `Request failed with status ${response.status}.`;
-  }
-}
 
 function ReaderAuthors({ paper }: { paper: Paper }) {
   const [expanded, setExpanded] = useState(false);
@@ -117,7 +110,7 @@ export default function ReaderWorkspace() {
       try {
         const response = await fetch("/api/library", { cache: "no-store" });
         if (!response.ok) {
-          throw new Error(await responseMessage(response));
+          throw new Error(await readError(response));
         }
         const snapshot = (await response.json()) as LibrarySnapshot;
         const selected = snapshot.papers.find((candidate) => candidate.id === paperId);
@@ -158,7 +151,7 @@ export default function ReaderWorkspace() {
         body: JSON.stringify({ entity: "paper", action: "update", id: paper.id, data: { notes } }),
       });
       if (!response.ok) {
-        throw new Error(await responseMessage(response));
+        throw new Error(await readError(response));
       }
       const snapshot = (await response.json()) as LibrarySnapshot;
       setPaper(snapshot.papers.find((candidate) => candidate.id === paper.id) ?? { ...paper, notes });

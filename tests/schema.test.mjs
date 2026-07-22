@@ -106,12 +106,11 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {
-  const [bootstrap, localSettings, runtimeConfig, doctor, grounding, settingsView, version] = await Promise.all([
+  const [bootstrap, localSettings, runtimeConfig, doctor, settingsView, version] = await Promise.all([
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/local-settings.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/runtime-config.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/storage-management/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/lib/document-grounding.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/version/route.ts", import.meta.url), "utf8"),
   ]);
@@ -137,16 +136,14 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(doctor, /setLibraryRoot\(target\)/);
   assert.match(doctor, /folderMove: true/);
   assert.doesNotMatch(doctor, /Move the library folder from the filesystem/);
-  assert.match(grounding, /getDocumentProxy/);
   // SSRF guards live in the shared url-safety module and are used on every
-  // server-side fetch of a user-supplied URL (grounding + source acquisition).
+  // server-side fetch of a user-supplied URL (source acquisition + snapshots).
   const [urlSafety, localFiles] = await Promise.all([
     readFile(new URL("../app/lib/url-safety.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
   ]);
   assert.match(urlSafety, /redirect: "manual"/);
   assert.match(urlSafety, /publicHttpsUrl/);
-  assert.match(grounding, /from "@\/app\/lib\/url-safety"/);
   assert.match(localFiles, /safeFetch/);
   assert.doesNotMatch(localFiles, /redirect: "follow"/);
   // The dead PDF-grounding-pages control and Discussion prompt are gone.

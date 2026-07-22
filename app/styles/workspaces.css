@@ -5,7 +5,7 @@
   align-self: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   box-shadow: var(--shadow-sm);
   display: inline-flex;
   gap: 5px;

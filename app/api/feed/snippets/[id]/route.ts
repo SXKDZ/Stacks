@@ -29,28 +29,33 @@ export async function GET(
   return Response.json({ snippet, messages, proposals });
 }
 
-/** Rename a feed (update its title). */
+/** Update a feed's editable fields: its title (rename) and/or its note body. */
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as { title?: string };
-  const title = body.title?.trim();
-  if (!title) {
-    return Response.json({ error: "Enter a title." }, { status: 400 });
-  }
+  const body = (await request.json().catch(() => ({}))) as { title?: string; note?: string };
   const database = await ensureDatabase();
   const snippet = database.select().from(feedSnippets).where(eq(feedSnippets.id, id)).get();
   if (!snippet) {
     return Response.json({ error: "Snippet not found." }, { status: 404 });
   }
-  database
-    .update(feedSnippets)
-    .set({ title: title.slice(0, 200), updatedAt: new Date().toISOString() })
-    .where(eq(feedSnippets.id, id))
-    .run();
-  return Response.json({ ok: true, title: title.slice(0, 200) });
+  const changes: { title?: string; note?: string; updatedAt: string } = { updatedAt: new Date().toISOString() };
+  if (typeof body.title === "string") {
+    const title = body.title.trim();
+    if (!title) {
+      return Response.json({ error: "Enter a title." }, { status: 400 });
+    }
+    changes.title = title.slice(0, 200);
+  }
+  // The note is free-form and may be intentionally cleared, so an empty string
+  // is a valid value (unlike the title).
+  if (typeof body.note === "string") {
+    changes.note = body.note.slice(0, 20000);
+  }
+  database.update(feedSnippets).set(changes).where(eq(feedSnippets.id, id)).run();
+  return Response.json({ ok: true, title: changes.title ?? snippet.title, note: changes.note ?? snippet.note });
 }
 
 /** Delete a feed and its messages/proposals (cascade). */

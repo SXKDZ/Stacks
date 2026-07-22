@@ -49,6 +49,7 @@ import {
 import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { readError } from "@/app/lib/http";
 import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
@@ -490,17 +491,6 @@ function matchesLibraryFilters(paper: Paper, clauses: LibraryFilterClause[]): bo
   return parseOr();
 }
 
-async function readError(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { error?: string; detail?: string };
-    if (payload.error && payload.detail) {
-      return `${payload.error} ${payload.detail}`;
-    }
-    return payload.error ?? `Request failed with ${response.status}.`;
-  } catch {
-    return `Request failed with ${response.status}.`;
-  }
-}
 
 interface SourceAcquisitionResult {
   kind: "pdf" | "html";

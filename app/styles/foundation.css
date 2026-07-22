@@ -359,17 +359,6 @@ body {
   width: 100%;
 }
 
-.nav-item:hover {
-  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
-  color: var(--ink);
-}
-
-.nav-item.is-active {
-  background: #edf5fc;
-  box-shadow: inset 2px 0 var(--brand-blue);
-  color: var(--ink);
-}
-
 .nav-item.is-active svg {
   color: var(--brand-blue);
 }

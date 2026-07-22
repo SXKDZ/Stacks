@@ -170,13 +170,6 @@ textarea::placeholder {
   font-size: 10.5px;
 }
 
-.continue-card {
-  background:
-    radial-gradient(520px 260px at 84% 10%, rgba(45, 156, 255, 0.2), transparent 62%),
-    linear-gradient(135deg, rgba(17, 22, 38, 0.96), rgba(18, 31, 52, 0.95));
-  border-color: color-mix(in srgb, var(--brand-blue) 20%, transparent);
-}
-
 .continue-copy h2 {
   font-size: clamp(24px, 2.25vw, 32px);
   font-weight: 700;
@@ -281,19 +274,6 @@ textarea::placeholder {
   min-height: 480px;
 }
 
-.discovery-orbit {
-  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
-  border-color: color-mix(in srgb, var(--brand-blue) 28%, transparent);
-}
-
-.discovery-orbit::before {
-  border-color: rgba(45, 156, 255, 0.3);
-}
-
-.discovery-orbit span {
-  border-color: #0b0f1c;
-}
-
 .discovery-intro h2 {
   background: linear-gradient(90deg, #60b7f4, #8fd0f8);
   background-clip: text;
@@ -359,12 +339,6 @@ textarea::placeholder {
 
 .drawer-scrim {
   background: rgba(2, 3, 8, 0.66);
-}
-
-.summary-section,
-.sync-caution {
-  background: color-mix(in srgb, var(--brand-blue) 8%, transparent);
-  border-color: color-mix(in srgb, var(--brand-blue) 16%, transparent);
 }
 
 .modal-results article {
@@ -1299,11 +1273,6 @@ textarea::placeholder {
   background: rgba(36, 42, 59, 0.035);
 }
 
-[data-theme="light"] .paper-table tbody tr:hover,
-[data-theme="light"] .paper-table tbody tr.is-selected {
-  background: rgba(22, 141, 236, 0.065);
-}
-
 [data-theme="light"] .detail-drawer,
 [data-theme="light"] .modal-card,
 [data-theme="light"] .command-card,
@@ -1432,7 +1401,6 @@ textarea::placeholder {
   .continue-copy { padding: 28px; }
   .continue-visual { display: none; }
   .recent-row { grid-template-columns: auto minmax(0,1fr) auto; }
-  .recent-row .recent-row-status { display: none; }
   .paper-table th:nth-child(4),
   .paper-table td:nth-child(4) { display: none; }
   .paper-table th:nth-child(2) { width: 64%; }

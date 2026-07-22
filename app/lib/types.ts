@@ -143,24 +143,3 @@ export type DiscoveryProvider =
   | "crossref";
 
 export type IdentifierSource = "arxiv" | "doi" | "dblp" | "openreview";
-
-export interface ChatGroundingSource {
-  title: string;
-  grounded: boolean;
-  source: string;
-}
-
-export interface ChatGrounding {
-  paperCount: number;
-  groundedPapers: number;
-  pdfStartPage: number;
-  pdfEndPage: number;
-  sources: ChatGroundingSource[];
-}
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  grounding?: ChatGrounding;
-}

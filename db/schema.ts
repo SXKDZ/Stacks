@@ -144,6 +144,9 @@ export const feedSnippets = sqliteTable(
     id: text("id").primaryKey(),
     title: text("title").notNull().default(""),
     instruction: text("instruction").notNull().default(""),
+    // A free-text note the user can edit anytime (notes-app style), separate
+    // from the fixed opening instruction. Shown pinned above the agent thread.
+    note: text("note").notNull().default(""),
     // queued | running | awaiting_input | done | error | stopped
     status: text("status").notNull().default("queued"),
     workingDir: text("working_dir"),

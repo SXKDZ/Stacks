@@ -58,7 +58,7 @@
 .version-status-pill {
   background: var(--green-soft);
   border: 1px solid color-mix(in srgb, var(--green) 32%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--green);
   font-size: var(--type-micro);
   font-weight: 700;
@@ -1771,7 +1771,7 @@
 
 .transfer-column > header small {
   background: var(--brand-blue-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--brand-blue-strong);
   font-size: 10px;
   font-weight: 700;

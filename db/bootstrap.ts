@@ -244,6 +244,9 @@ async function initializeDatabase(): Promise<void> {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments TEXT").run();
   }
   const feedSnippetColumns = tableColumns(raw, "feed_snippets");
+  if (!feedSnippetColumns.has("note")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN note TEXT NOT NULL DEFAULT ''").run();
+  }
   if (!feedSnippetColumns.has("issue_number")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_number INTEGER").run();
   }
