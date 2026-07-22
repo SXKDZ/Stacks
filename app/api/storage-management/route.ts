@@ -298,6 +298,7 @@ export async function POST(request: Request): Promise<Response> {
       totalBytes: storage.totalBytes,
       orphanedFiles: storage.orphanedFiles,
       orphanedBytes: storage.orphanedBytes,
+      orphanedNames: storage.orphanedNames,
       removedFiles: storage.removedFiles,
       removedBytes: storage.removedBytes,
     });

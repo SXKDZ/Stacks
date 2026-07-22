@@ -147,6 +147,10 @@ export function inspectStorage(
     html,
     orphanedFiles: pdf.orphanedNames.length + html.orphanedNames.length,
     orphanedBytes: pdf.orphanedBytes + html.orphanedBytes,
+    orphanedNames: [
+      ...pdf.orphanedNames.map((name) => ({ kind: "pdf" as const, name })),
+      ...html.orphanedNames.map((name) => ({ kind: "html" as const, name })),
+    ],
     totalFiles: pdf.storedFiles + html.storedFiles,
     totalBytes: pdf.storedBytes + html.storedBytes,
     removedFiles,
