@@ -305,11 +305,7 @@
 }
 
 .table-pagination {
-  flex-wrap: wrap;
   gap: 6px 12px;
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
 }
 
 .table-pagination-controls {

@@ -912,10 +912,10 @@
    key badge (white-on-translucent on the brand button). */
 .feed-send-kbd {
   align-items: center;
-  background: color-mix(in srgb, #fff 14%, transparent);
-  border: 1px solid color-mix(in srgb, #fff 24%, transparent);
+  background: var(--kbd-badge-bg);
+  border: 1px solid var(--kbd-badge-border);
   border-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--white);
   /* Fixed square-ish box with a 1 line-height so the ↵ glyph's tall line box
      can't overflow the button's bottom edge (was clipped). */
   display: inline-flex;

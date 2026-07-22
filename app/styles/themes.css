@@ -171,7 +171,6 @@ textarea::placeholder {
 }
 
 .continue-copy h2 {
-  font-size: clamp(24px, 2.25vw, 32px);
   font-weight: 700;
 }
 
@@ -182,7 +181,6 @@ textarea::placeholder {
 
 .section-title-row h3,
 .settings-heading h2 {
-  font-size: 17px;
   font-weight: 650;
 }
 
@@ -219,17 +217,12 @@ textarea::placeholder {
   color: var(--muted);
 }
 
-.paper-table th {
-  font-size: 10px;
-}
-
 .paper-table tbody tr:hover,
 .paper-table tbody tr.is-selected {
   background: color-mix(in srgb, var(--brand-blue) 8%, transparent);
 }
 
 .paper-title-cell strong {
-  font-size: 13px;
   font-weight: 600;
 }
 
@@ -281,11 +274,6 @@ textarea::placeholder {
   font-weight: 720;
 }
 
-.discovery-intro > p,
-.result-abstract {
-  font-size: 13px;
-}
-
 .discovery-capabilities {
   display: grid;
   gap: 9px;
@@ -313,7 +301,6 @@ textarea::placeholder {
 }
 
 .result-copy h3 {
-  font-size: 15px;
   font-weight: 630;
 }
 
@@ -862,9 +849,6 @@ textarea::placeholder {
   font-size: var(--type-caption);
 }
 
-.collection-papers > span {
-  font-size: var(--type-label);
-}
 
 .collection-papers > span svg {
   flex: 0 0 16px;

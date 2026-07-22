@@ -24,6 +24,9 @@
   /* A hairline top highlight that fakes a light source on raised dark surfaces. */
   --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --white: #ffffff;
+  /* White-on-brand keyboard badge, shared by the New-paper and feed-send caps. */
+  --kbd-badge-bg: color-mix(in srgb, var(--white) 14%, transparent);
+  --kbd-badge-border: color-mix(in srgb, var(--white) 24%, transparent);
   --brand-blue: #2d9cff;
   --brand-blue-strong: #71c2ff;
   --brand-blue-soft: rgba(45, 156, 255, 0.15);
@@ -314,10 +317,10 @@ body {
 }
 
 .new-paper-button kbd {
-  background: color-mix(in srgb, #fff 14%, transparent);
-  border: 1px solid color-mix(in srgb, #fff 24%, transparent);
+  background: var(--kbd-badge-bg);
+  border: 1px solid var(--kbd-badge-border);
   border-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--white);
   font-size: var(--type-label);
   margin-left: auto;
   padding: 2px 5px;
@@ -630,7 +633,6 @@ button.stat-card:hover {
 
 .continue-copy h2 {
   font-family: var(--font-display);
-  font-size: clamp(23px, 2.2vw, 33px);
   font-weight: 500;
   letter-spacing: -0.035em;
   line-height: 1.12;
