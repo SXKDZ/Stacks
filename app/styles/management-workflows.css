@@ -282,53 +282,6 @@
   justify-content: flex-end;
 }
 
-.storage-doctor-paths {
-  border-top: 1px solid var(--line);
-  padding: 0 16px;
-}
-
-.storage-doctor-paths summary {
-  align-items: center;
-  cursor: pointer;
-  display: flex;
-  font-size: var(--type-label);
-  font-weight: 700;
-  gap: 6px;
-  list-style: none;
-  padding: 10px 0;
-}
-
-.storage-doctor-paths summary span {
-  background: var(--rose-soft);
-  border-radius: 999px;
-  color: var(--rose);
-  font-size: var(--type-micro);
-  padding: 2px 6px;
-}
-
-.storage-doctor-paths ul {
-  display: grid;
-  gap: 4px;
-  margin: 0 0 12px;
-  max-height: 126px;
-  overflow: auto;
-  padding: 0;
-}
-
-.storage-doctor-paths li {
-  background: color-mix(in srgb, var(--panel) 76%, var(--canvas));
-  border-radius: 6px;
-  color: var(--soft);
-  list-style: none;
-  padding: 6px 8px;
-}
-
-.storage-doctor-paths code {
-  font-family: var(--font-mono);
-  font-size: var(--type-micro);
-  overflow-wrap: anywhere;
-}
-
 .storage-doctor-actions {
   align-items: center;
   border-top: 1px solid var(--line);
@@ -709,8 +662,7 @@
   border-color: var(--line-strong);
 }
 
-[data-theme="dark"] .library-toolbar .page-search,
-[data-theme="dark"] .library-toolbar .filter-control {
+[data-theme="dark"] .library-toolbar .page-search {
   color: var(--ink);
 }
 
@@ -811,13 +763,6 @@
   }
 }
 
-.page-primary-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 10px;
-  min-height: 38px;
-}
-
 .markdown-content ul {
   list-style: disc outside;
 }
@@ -846,60 +791,6 @@
   flex: 0 0 66px;
   text-align: center;
   width: 66px;
-}
-
-.structured-filter {
-  align-items: center;
-  background: color-mix(in srgb, var(--panel) 94%, transparent);
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  display: flex;
-  gap: 6px;
-  height: 42px;
-  padding: 0 6px 0 10px;
-}
-
-.structured-filter > svg {
-  color: var(--muted);
-  flex: 0 0 auto;
-}
-
-.structured-filter > select {
-  background: transparent;
-  border: 0;
-  color: var(--ink);
-  font-size: 10.5px;
-  height: 32px;
-  max-width: 150px;
-  outline: 0;
-  padding: 0 22px 0 4px;
-}
-
-.structured-filter > select:last-of-type {
-  min-width: 130px;
-}
-
-.structured-filter > span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.structured-filter > button {
-  align-items: center;
-  background: transparent;
-  border-radius: 6px;
-  color: var(--muted);
-  display: flex;
-  height: 28px;
-  justify-content: center;
-  padding: 0;
-  width: 28px;
-}
-
-.structured-filter > button:hover {
-  background: var(--brand-blue-soft);
-  color: var(--brand-blue-strong);
 }
 
 .collection-manager-modal {
@@ -948,14 +839,6 @@
 }
 
 @media (max-width: 760px) {
-  .structured-filter {
-    width: 100%;
-  }
-
-  .structured-filter > select:last-of-type {
-    flex: 1;
-    min-width: 0;
-  }
 
   .collection-manager-modal .collection-transfer-grid {
     height: auto;
@@ -1183,59 +1066,8 @@
   width: 30px;
 }
 
-.collection-swatch {
-  background: var(--brand-blue);
-  border: 2px solid var(--panel);
-  border-radius: 50%;
-  bottom: -2px;
-  height: 8px;
-  position: absolute;
-  right: -2px;
-  width: 8px;
-}
-
-.collection-swatch.swatch-cyan { background: var(--cyan); }
-.collection-swatch.swatch-amber { background: var(--amber); }
-.collection-swatch.swatch-green { background: var(--green); }
-.collection-swatch.swatch-rose { background: var(--rose); }
-
 .collection-actions {
   gap: 3px;
-}
-
-.collection-main {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 0;
-  padding: 5px 0 7px;
-}
-
-.collection-main h3 {
-  font-size: 13.5px;
-  font-weight: 650;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.collection-main p {
-  color: var(--muted);
-  font-size: 10.5px;
-  line-height: 1.3;
-  margin: 3px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.collection-main > span {
-  color: var(--brand-blue-strong);
-  font-size: 10.5px;
-  font-weight: 680;
-  margin-top: 4px;
 }
 
 .collection-papers {
@@ -1527,14 +1359,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.paper-grid-shell .table-footer {
-  background: color-mix(in srgb, var(--panel) 84%, var(--canvas));
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 10.5px;
-  padding: 8px 12px;
-}
-
 .summary-field textarea {
   max-height: 220px;
   min-height: 116px;
@@ -1744,8 +1568,7 @@
   padding: 12px;
 }
 
-.collection-card::before,
-.collection-swatch {
+.collection-card::before {
   content: none;
   display: none;
 }
@@ -1798,18 +1621,6 @@
   display: flex;
   flex: 0 0 auto;
   gap: 3px;
-}
-
-.collection-description {
-  color: var(--muted);
-  display: -webkit-box;
-  flex: 0 0 auto;
-  font-size: 10.5px;
-  line-height: 1.35;
-  margin: 8px 0 5px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .collection-papers {
@@ -2042,20 +1853,6 @@
   z-index: 1;
 }
 
-.provider-detail {
-  display: none;
-}
-
-.selected-option-check {
-  background: var(--brand-blue);
-  border-radius: 50%;
-  color: white;
-  flex: 0 0 22px;
-  height: 22px;
-  padding: 4px;
-  width: 22px;
-}
-
 .bibliography-import-form {
   display: flex;
   flex-direction: column;
@@ -2148,36 +1945,7 @@
   margin-top: 3px;
 }
 
-/* Paper detail Markdown is collapsible, scrollable, and starts at its first block. */
-.detail-section-heading > .collapse-section-button {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: var(--ink);
-  display: flex;
-  gap: 6px;
-  padding: 3px 0;
-}
-
-.detail-section-heading > .collapse-section-button:hover {
-  color: var(--brand-blue-strong);
-}
-
-.collapse-section-button > svg {
-  color: var(--muted);
-  transform: rotate(-90deg);
-  transition: transform 140ms ease;
-}
-
-.collapse-section-button > svg.is-expanded {
-  transform: rotate(0deg);
-}
-
-.collapse-section-button .eyebrow {
-  color: inherit;
-  margin: 0;
-}
-
+/* Paper detail Markdown is scrollable and starts at its first block. */
 .summary-copy.markdown-content,
 .abstract-copy.markdown-content {
   margin-top: 12px;
@@ -2418,9 +2186,6 @@
 }
 
 /* Final accent and density pass: blue branding, stable rows, and connected collection paging. */
-.brand-mark::after {
-  display: none;
-}
 
 .discover-search-box {
   min-width: 0;

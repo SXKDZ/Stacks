@@ -241,22 +241,6 @@ body {
   text-align: left;
 }
 
-.brand-mark {
-  align-items: center;
-  background: var(--ink);
-  border-radius: 9px;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 5px 12px rgba(15, 31, 42, 0.15);
-  color: white;
-  display: flex;
-  font-size: 12px;
-  font-weight: 800;
-  height: 33px;
-  justify-content: center;
-  letter-spacing: -0.04em;
-  position: relative;
-  width: 33px;
-}
-
 /* The Stacks logo (public/favicon.svg) is a self-contained tiled mark, so it
    needs no background box — just size and round it. Used in place of a glyph. */
 .brand-logo {
@@ -274,18 +258,6 @@ body {
 
 .brand-logo-link {
   display: inline-flex;
-}
-
-.brand-mark::after {
-  background: var(--brand-blue);
-  border: 2px solid var(--ink);
-  border-radius: 50%;
-  content: "";
-  height: 8px;
-  position: absolute;
-  right: -3px;
-  top: -3px;
-  width: 8px;
 }
 
 .brand-copy {
@@ -436,9 +408,7 @@ body {
   text-align: left;
 }
 
-.assistant-card:hover .assistant-orb,
-.chat-empty-state:hover .message-avatar,
-.chat-workspace-message.message-assistant:hover .message-avatar {
+.assistant-card:hover .assistant-orb {
   transform: rotate(8deg) scale(1.05);
 }
 
@@ -490,39 +460,6 @@ body {
   color: var(--soft);
   font-size: var(--type-label);
   margin-top: 1px;
-}
-
-.sync-dot {
-  background: #45b98b;
-  border: 3px solid #dcf5e9;
-  border-radius: 50%;
-  height: 10px;
-  width: 10px;
-}
-
-.sync-dot.is-demo {
-  background: var(--amber);
-  border-color: var(--amber-soft);
-}
-
-.icon-button {
-  align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  color: var(--muted);
-  display: inline-flex;
-  height: 30px;
-  justify-content: center;
-  padding: 0;
-  transition: 140ms ease;
-  width: 30px;
-}
-
-.icon-button:hover {
-  background: var(--brand-blue-soft);
-  border-color: color-mix(in srgb, var(--brand-blue) 24%, var(--line-strong));
-  color: var(--brand-blue-strong);
 }
 
 .mobile-close,
@@ -599,28 +536,6 @@ body {
   padding: 35px 42px 60px;
 }
 
-.page-heading {
-  align-items: flex-end;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 27px;
-}
-
-.page-heading h1 {
-  font-family: var(--font-display);
-  font-size: clamp(30px, 3.2vw, 46px);
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  line-height: 1.06;
-  margin: 6px 0 8px;
-}
-
-.page-heading > div > p:last-child {
-  color: var(--muted);
-  font-size: 12px;
-  margin: 0;
-}
-
 .dashboard-grid {
   display: grid;
   gap: 18px;
@@ -687,15 +602,6 @@ button.stat-card:hover {
 
 .stat-card > svg {
   color: #b3acb9;
-}
-
-.micro-trend {
-  background: var(--green-soft);
-  border-radius: 5px;
-  color: var(--green);
-  font-size: var(--type-caption);
-  font-weight: 800;
-  padding: 3px 5px;
 }
 
 .continue-card {

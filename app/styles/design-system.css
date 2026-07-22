@@ -1,27 +1,19 @@
 /* Shared controls consume the palette from foundation.css/themes.css. */
 
-.brand-mark,
 .discover-search-box > button,
 .modal-results article > button,
-.message-user > p,
-.message-user > .chat-bubble,
 .toast,
-.assistant-orb,
-.message-avatar {
+.assistant-orb {
   background: var(--brand-cta);
   border-color: var(--brand-cta-border);
   box-shadow: 0 7px 18px var(--brand-cta-shadow);
 }
 
-.assistant-orb svg,
-.message-avatar svg {
+.assistant-orb svg {
   color: #ffffff;
 }
 
-[data-theme="dark"] .assistant-orb,
-[data-theme="dark"] .message-avatar,
-[data-theme="dark"] .message-user > p,
-[data-theme="dark"] .message-user > .chat-bubble {
+[data-theme="dark"] .assistant-orb {
   background: var(--brand-cta);
 }
 
@@ -51,14 +43,8 @@
   border-color: rgba(22, 141, 236, 0.32);
 }
 
-.bibliography-upload-icon,
-.selected-option-check {
+.bibliography-upload-icon {
   color: var(--brand-blue);
-}
-
-.selected-option-check {
-  background: var(--brand-blue);
-  color: white;
 }
 
 .continue-card {
@@ -114,22 +100,12 @@
   color: var(--brand-blue);
 }
 
-.chat-context,
 .summary-section,
 .detail-meta-grid,
-.publication-grid span,
 .status-selector,
 .sync-caution {
   background: rgba(22, 141, 236, 0.07);
   border-color: rgba(22, 141, 236, 0.16);
-}
-
-.chat-context strong {
-  color: var(--ink);
-}
-
-.chat-context small {
-  color: var(--muted);
 }
 
 /* Paper details and Ask Stacks behave as persistent third panels, never modal scrims. */
@@ -141,18 +117,12 @@
   display: none;
 }
 
-.detail-drawer,
-.chat-drawer {
+.detail-drawer {
   box-shadow: -12px 0 34px rgba(0, 0, 0, 0.15);
   pointer-events: auto;
 }
 
 /* Prompt chips wrap naturally instead of forcing a horizontal scrollbar. */
-.chat-prompts {
-  flex-wrap: wrap;
-  overflow-x: visible;
-  padding-bottom: 9px;
-}
 
 /* Compact chat Markdown rhythm. */
 .chat-bubble.markdown-content {
@@ -408,11 +378,7 @@
 }
 
 [data-theme="light"] .paper-table tbody tr:hover,
-[data-theme="light"] .author-row:hover,
-[data-theme="light"] .venue-row:hover,
-[data-theme="light"] .paper-table tbody tr.is-selected,
-[data-theme="light"] .author-row.is-selected,
-[data-theme="light"] .venue-row.is-selected {
+[data-theme="light"] .paper-table tbody tr.is-selected {
   background: rgba(22, 141, 236, 0.065);
 }
 
