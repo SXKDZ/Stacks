@@ -315,6 +315,18 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   // The feed is always on: no enable gate remains.
   assert.doesNotMatch(feed, /feedEnabled/);
   assert.doesNotMatch(settings, /feedEnabled/);
+  // Each feed carries an editable note (notes-app style), saved on blur through
+  // the snippet PATCH route and migrated in bootstrap.
+  const [schema, bootstrap, snippetIdRoute] = await Promise.all([
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(schema, /note: text\("note"\)/);
+  assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN note TEXT/);
+  assert.match(snippetIdRoute, /typeof body\.note === "string"/);
+  assert.match(feed, /feed-note-editor/);
+  assert.match(feed, /onBlur=\{\(event\) => void saveNote\(event\.target\.value\)\}/);
 });
 
 test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", async () => {
