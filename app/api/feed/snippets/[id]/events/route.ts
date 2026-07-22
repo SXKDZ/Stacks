@@ -36,6 +36,7 @@ export async function GET(
           kind: message.kind,
           content: message.content,
           toolUseId: message.toolUseId,
+          attachments: message.attachments,
           createdAt: message.createdAt,
         }));
       }

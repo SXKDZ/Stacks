@@ -68,6 +68,7 @@ export async function POST(request: Request): Promise<Response> {
         instruction: instruction || freeText,
         status: "queued",
         sessionId: "",
+        attachments: attachments.length ? JSON.stringify(attachments) : null,
         createdAt: now,
         updatedAt: now,
       })

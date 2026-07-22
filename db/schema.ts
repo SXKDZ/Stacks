@@ -153,6 +153,9 @@ export const feedSnippets = sqliteTable(
     // The title last reconciled with GitHub — the 3-way base for rename sync, so
     // we can tell whether a divergence came from a local or a remote rename.
     issueTitleSynced: text("issue_title_synced"),
+    // JSON array of the files attached to the opening turn ({label, relativePath,
+    // kind}), staged under the feed working dir, so the UI can list and link them.
+    attachments: text("attachments"),
     // Cumulative agent usage across all turns, captured from the result event.
     inputTokens: integer("input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),
@@ -182,6 +185,9 @@ export const feedMessages = sqliteTable(
     // The GitHub issue-comment id this message was mirrored to or ingested from,
     // so sync neither double-posts nor re-ingests a comment. Null when local-only.
     githubCommentId: integer("github_comment_id"),
+    // JSON array of files attached to this turn ({label, relativePath, kind}),
+    // for reply turns that carried uploads/papers. Null when none.
+    attachments: text("attachments"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("feed_messages_snippet_idx").on(table.snippetId, table.createdAt)],

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
@@ -10,12 +10,19 @@ import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 
+interface FeedAttachment {
+  relativePath: string;
+  label: string;
+  kind: "paper-pdf" | "paper-html" | "upload";
+}
+
 interface FeedMessage {
   id: string;
   role: string;
   kind: string;
   content: string;
   toolUseId?: string | null;
+  attachments?: string | null;
   createdAt: string;
 }
 
@@ -38,8 +45,39 @@ interface FeedSnippet {
   outputTokens?: number;
   durationMs?: number;
   turns?: number;
+  attachments?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Parse the stored attachments JSON (tolerant of nulls / malformed rows). */
+function parseAttachments(raw: string | null | undefined): FeedAttachment[] {
+  if (!raw) return [];
+  try {
+    const value = JSON.parse(raw);
+    return Array.isArray(value) ? (value as FeedAttachment[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Render clickable chips for a turn's attachments (download via the feed route). */
+function AttachmentChips({ snippetId, attachments }: { snippetId: string; attachments: FeedAttachment[] }) {
+  if (!attachments.length) return null;
+  return (
+    <div className="feed-turn-attachments">
+      {attachments.map((attachment) => {
+        const name = attachment.relativePath.split("/").pop() ?? attachment.label;
+        const href = `/api/feed/snippets/${snippetId}/attachments/${encodeURIComponent(name)}`;
+        return (
+          <a key={attachment.relativePath} href={href} target="_blank" rel="noreferrer" className="feed-turn-attachment" title={`Open ${attachment.label}`}>
+            <Paperclip size={12} />
+            <span>{attachment.label}</span>
+          </a>
+        );
+      })}
+    </div>
+  );
 }
 
 // The agent emits its proposed changes as a fenced ```stacks-proposals JSON
@@ -234,6 +272,12 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
   const bodyRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+
+  const scrollToBottom = useCallback(() => {
+    const body = bodyRef.current;
+    if (body) body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
+  }, []);
 
   // Auto-scroll to the newest content as it streams in, but only when the user
   // is already near the bottom — so scrolling up to re-read isn't yanked back.
@@ -245,6 +289,16 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
       body.scrollTop = body.scrollHeight;
     }
   }, [messages, proposals, running]);
+
+  // Track whether the user is near the bottom, to toggle the jump-to-latest button.
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const onScroll = () => setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
+    onScroll();
+    body.addEventListener("scroll", onScroll, { passive: true });
+    return () => body.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Stream this snippet's events. The endpoint replays persisted history first,
   // then live events if it's still running, then closes. Re-runs on reply.
@@ -388,12 +442,20 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
 
       <div className="feed-detail-body" ref={bodyRef}>
         <div className="feed-detail-body-inner">
-        {snippet.instruction && snippet.instruction !== snippet.title ? (
-          <div className="feed-message feed-turn feed-turn-user">
-            <span className="feed-turn-label">You</span>
-            <MarkdownContent content={snippet.instruction} className="feed-bubble" />
-          </div>
-        ) : null}
+        {(() => {
+          const openingAttachments = parseAttachments(snippet.attachments);
+          const showOpening = (snippet.instruction && snippet.instruction !== snippet.title) || openingAttachments.length > 0;
+          if (!showOpening) return null;
+          return (
+            <div className="feed-message feed-turn feed-turn-user">
+              <span className="feed-turn-label">You</span>
+              {snippet.instruction && snippet.instruction !== snippet.title
+                ? <MarkdownContent content={snippet.instruction} className="feed-bubble" />
+                : null}
+              <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
+            </div>
+          );
+        })()}
         <div className="feed-thread">
           {messages.length === 0 && running ? <div className="typing chat-workspace-typing" role="status"><i /><i /><i /></div> : null}
           {(() => {
@@ -461,11 +523,13 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                 continue;
               }
               const { prose, raw } = message.role === "user" ? { prose: message.content, raw: null } : splitProposalBlock(message.content);
-              if (prose) {
+              const messageAttachments = message.role === "user" ? parseAttachments(message.attachments) : [];
+              if (prose || messageAttachments.length) {
                 nodes.push(
                   <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
                     <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
-                    <MarkdownContent content={prose} className="feed-bubble" />
+                    {prose ? <MarkdownContent content={prose} className="feed-bubble" /> : null}
+                    <AttachmentChips snippetId={snippet.id} attachments={messageAttachments} />
                   </div>,
                 );
               }
@@ -491,6 +555,12 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         {error ? <div className="feed-error feed-error-banner"><CircleAlert size={14} /> <span>{error}</span></div> : null}
         </div>
       </div>
+
+      {!atBottom ? (
+        <button type="button" className="feed-scroll-bottom" onClick={scrollToBottom} aria-label="Scroll to latest">
+          <ArrowDown size={16} />
+        </button>
+      ) : null}
 
       <footer className="feed-detail-foot">
         {running ? (

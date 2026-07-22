@@ -63,7 +63,7 @@ export async function POST(
   const displayReply = reply || `(attached ${attachments.length} file${attachments.length === 1 ? "" : "s"})`;
   database
     .insert(feedMessages)
-    .values({ id: `msg-${crypto.randomUUID()}`, snippetId: id, role: "user", kind: "text", content: displayReply, createdAt: new Date().toISOString() })
+    .values({ id: `msg-${crypto.randomUUID()}`, snippetId: id, role: "user", kind: "text", content: displayReply, attachments: attachments.length ? JSON.stringify(attachments) : null, createdAt: new Date().toISOString() })
     .run();
 
   if (snippet.sessionId) {

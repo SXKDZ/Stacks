@@ -240,12 +240,18 @@ async function initializeDatabase(): Promise<void> {
   if (!feedMessageColumns.has("github_comment_id")) {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN github_comment_id INTEGER").run();
   }
+  if (!feedMessageColumns.has("attachments")) {
+    raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments TEXT").run();
+  }
   const feedSnippetColumns = tableColumns(raw, "feed_snippets");
   if (!feedSnippetColumns.has("issue_number")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_number INTEGER").run();
   }
   if (!feedSnippetColumns.has("issue_title_synced")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_title_synced TEXT").run();
+  }
+  if (!feedSnippetColumns.has("attachments")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN attachments TEXT").run();
   }
   for (const column of ["input_tokens", "output_tokens", "duration_ms", "turns"]) {
     if (!feedSnippetColumns.has(column)) {

@@ -1672,6 +1672,33 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
+  position: relative;
+}
+
+/* Jump-to-latest: floats just above the reply footer while the user has
+   scrolled up, so the newest content is one click away. */
+.feed-scroll-bottom {
+  align-items: center;
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  bottom: 104px;
+  box-shadow: var(--shadow-md);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+  width: 38px;
+  z-index: 5;
+}
+
+.feed-scroll-bottom:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
+  color: var(--brand-blue-strong);
 }
 
 /* The detail header is the feed's topbar: same 62px height as the main app's
@@ -1862,6 +1889,48 @@
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
   color: #fff;
   padding: 9px 13px;
+}
+
+/* Clickable chips for files attached to a turn, shown under its bubble. */
+.feed-turn-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: inherit;
+}
+
+.feed-turn-user .feed-turn-attachments {
+  justify-content: flex-end;
+}
+
+.feed-turn-attachment {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  display: inline-flex;
+  font-size: var(--type-caption);
+  gap: 6px;
+  max-width: 260px;
+  padding: 4px 11px;
+  text-decoration: none;
+}
+
+.feed-turn-attachment:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
+  color: var(--brand-blue-strong);
+}
+
+.feed-turn-attachment svg {
+  color: var(--brand-blue-strong);
+  flex-shrink: 0;
+}
+
+.feed-turn-attachment span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* On the blue user bubble the global brand-tint selection is invisible; use a
