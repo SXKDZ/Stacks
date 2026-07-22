@@ -755,7 +755,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         ) : null}
         <AttachBox
           library={library}
-          placeholder={running ? "The agent is working. Send a message to interrupt it." : "Reply to continue this thread. The agent remembers it."}
+          placeholder={running ? "Message the agent…" : "Reply to continue this thread."}
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
           compact
@@ -1148,7 +1148,7 @@ export default function FeedWorkspace() {
         ) : null}
         <div className="feed-list" role="list">
           {snippets.length === 0 ? (
-            <p className="feed-list-empty">Nothing captured yet. Start a new feed and the agent goes to work.</p>
+            <p className="feed-list-empty">Nothing captured yet. Start a new feed.</p>
           ) : filteredSnippets.length === 0 ? (
             <p className="feed-list-empty">No feeds match “{query}”.</p>
           ) : (
@@ -1236,7 +1236,7 @@ export default function FeedWorkspace() {
             <div className="feed-compose">
             <div className="feed-compose-hero">
               <h2>What should the agent work on?</h2>
-              <p>Paste a link or a note, attach a paper or file, and say what to do. It proposes changes; you approve them.</p>
+              <p>It proposes changes; you approve them.</p>
               <div className="feed-skills">
                 {skills.map((skill) => {
                   const Icon = feedSkillIcon(skill.icon);

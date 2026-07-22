@@ -926,7 +926,7 @@ function StacksWorkspace() {
           </span>
           <span>
             <strong>AI feed</strong>
-            <small>Get AI help with your library</small>
+            
           </span>
           <ArrowUpRight size={16} />
         </button>
@@ -1221,7 +1221,7 @@ function Dashboard({
       {currentPaper ? (
         <article className="continue-card">
           <div className="continue-copy">
-            <p className="card-kicker" title="The paper you're reading, or your latest one."><span /> {currentPaper.readingStatus === "reading" ? "Continue reading" : "Latest paper"}</p>
+            <p className="card-kicker"><span /> {currentPaper.readingStatus === "reading" ? "Continue reading" : "Latest paper"}</p>
             <h2>{currentPaper.title}</h2>
             <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
             <div className="paper-byline">
@@ -1472,7 +1472,7 @@ function LibraryView({
 
       {filterBuilderOpen ? (
         <section className="filter-builder-panel" aria-label="Library filter expression">
-          <header><span><ListFilter size={15} /><strong>Filter expression</strong><small>Combine filters with AND, OR, NOT, and parentheses.</small></span>{filters.length ? <button type="button" onClick={() => { setFilters([]); setPage(1); }}><X size={14} /> Clear all</button> : null}</header>
+          <header><span><ListFilter size={15} /><strong>Filter expression</strong></span>{filters.length ? <button type="button" onClick={() => { setFilters([]); setPage(1); }}><X size={14} /> Clear all</button> : null}</header>
           <div className="filter-clause-list">
             {filters.map((clause, index) => (
               <div className="filter-clause-row" key={clause.key}>
@@ -2435,7 +2435,7 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
         <div className="discovery-intro">
           <div className="discovery-orbit"><span /><span /><span /><Sparkles size={28} /></div>
           <h2>Search beyond your library.</h2>
-          <p>Search across academic sources and add papers to your library. Authors, links, and IDs are kept intact.</p>
+          <p>Authors, links, and IDs are kept intact.</p>
           <div className="prompt-suggestions">
             {["long-context retrieval agents", "human AI literature review", "scholarly knowledge graphs"].map((suggestion) => (
               <Chip key={suggestion} tone="neutral" onClick={() => setQuery(suggestion)} icon={<WandSparkles />}>{suggestion}</Chip>
@@ -2670,7 +2670,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                 {paper.summary ? "Regenerate" : "Generate"}
               </button>
             </p>
-            {paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet. Stacks can create one from the paper.</p>}
+            {paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet.</p>}
           </div>
           <div className="detail-section">
             <p className="eyebrow">Abstract</p>
@@ -2711,7 +2711,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
 
 function ModalFrame({ title, subtitle, onClose, children, className = "" }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
@@ -2720,7 +2720,7 @@ function ModalFrame({ title, subtitle, onClose, children, className = "" }: {
     <div className="modal-layer">
       <Scrim onClick={onClose} label="Close dialog" />
       <section className={`modal-card ${className}`} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="modal-header"><div><h2>{title}</h2><p>{subtitle}</p></div><ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<X />} /></div>
+        <div className="modal-header"><div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div><ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<X />} /></div>
         {children}
       </section>
     </div>
@@ -2756,7 +2756,7 @@ function ExportReferencesModal({ papers, onClose }: {
   return (
     <ModalFrame
       title="Export references"
-      subtitle={`${papers.length} selected ${papers.length === 1 ? "paper" : "papers"}. Preview the exact selection before copying or downloading.`}
+      subtitle={`${papers.length} selected ${papers.length === 1 ? "paper" : "papers"}. `}
       onClose={onClose}
       className="export-modal"
     >
@@ -2900,7 +2900,7 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
           tabIndex={-1}
         />
       </div>
-      <small>Choose a file to copy into your library.</small>
+      
     </label>
   );
 }
@@ -2967,7 +2967,7 @@ function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; d
       <span>Authors</span>
       <input ref={inputRef} name="authors" value={value} onChange={(event) => { setValue(event.target.value); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
       <AnchoredOptions anchorRef={inputRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options" id={listboxId}>{matches.map((author) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</AnchoredOptions>
-      <small>Separate names with commas. Pick a suggestion to reuse an existing author.</small>
+      <small>Separate names with commas.</small>
     </label>
   );
 }
@@ -3135,7 +3135,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify, onPaperTypeChan
       {visible.preprint ? <label><span>Category</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
       {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? paper?.arxivId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
-      {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div><small>Stacks saves a PDF if there is one, or a copy of the web page.</small></label> : null}
+      {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div></label> : null}
       {visible.pdf ? <LocalFileField name="localPath" label="Local PDF path" kind="pdf" defaultValue={paper?.localPath ?? ""} notify={notify} /> : null}
       {visible.html ? <LocalFileField name="htmlSnapshotPath" label="Local HTML snapshot path" kind="html" defaultValue={paper?.htmlSnapshotPath ?? ""} notify={notify} /> : null}
     </>
@@ -3425,7 +3425,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   }
 
   return (
-    <ModalFrame title="Add to Stacks" subtitle="Search academic sources, import bibliography files, or add details by hand." onClose={onClose} className="add-modal">
+    <ModalFrame title="Add to Stacks" onClose={onClose} className="add-modal">
       <div className="modal-tabs">
         <TabButton variant="underline" active={tab === "search"} onClick={() => setTab("search")} icon={<Search />}>Academic search</TabButton>
         <TabButton variant="underline" active={tab === "identifier"} onClick={() => setTab("identifier")} icon={<Database />}>Identifier</TabButton>
@@ -3444,7 +3444,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             <span>Search in</span>
             {discoveryProviders.map((item) => <TabButton variant="pill" active={provider === item.id} onClick={() => setProvider(item.id)} key={item.id}>{item.label}</TabButton>)}
           </div>
-          {!results.length && !loading ? <div className="modal-placeholder"><span><Compass size={22} /></span><h3>Find a paper anywhere.</h3><p>Stacks keeps authors, links, and publication details.</p></div> : null}
+          {!results.length && !loading ? <div className="modal-placeholder"><span><Compass size={22} /></span><h3>Find a paper anywhere.</h3></div> : null}
           <div className="modal-results">
             {results.map((result) => {
               const key = result.sourceId || result.title;
@@ -3490,7 +3490,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             onDrop={(event) => { event.preventDefault(); setBibDragActive(false); acceptDroppedBibliography(event.dataTransfer.files?.[0]); }}
           >
             <span className="bibliography-upload-icon">{bibliographyFile ? <Check size={23} /> : <Upload size={23} />}</span>
-            <span><strong>{bibliographyFile?.name ?? "Choose or drop a BibTeX or RIS file"}</strong><small>{bibliographyFile ? `${Math.max(1, Math.round(bibliographyFile.size / 1024))} KB · ready to import` : "Drag a file here or click to browse. .bib, .bibtex, .ris, or RIS-formatted .txt · up to 5 MB"}</small></span>
+            <span><strong>{bibliographyFile?.name ?? "Choose or drop a BibTeX or RIS file"}</strong><small>{bibliographyFile ? `${Math.max(1, Math.round(bibliographyFile.size / 1024))} KB · ready to import` : ".bib, .bibtex, .ris, or RIS-formatted .txt · up to 5 MB"}</small></span>
             <input
               type="file"
               accept=".bib,.bibtex,.ris,.txt,application/x-bibtex,application/x-research-info-systems"
@@ -3502,7 +3502,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             <div><strong>RIS</strong><small>Imports journal or conference metadata, ordered authors, DOI, URL, and page range.</small></div>
           </div>
           <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />} disabled={loading || !bibliographyFile}>Import bibliography</ActionButton>
-          <p className="identifier-footnote">Each entry is added to your library with its authors and venue.</p>
+          
         </form>
       ) : tab === "pdf" ? (
         <form className="modal-body bibliography-import-form" onSubmit={importLocalPdf}>
@@ -3513,17 +3513,17 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
             onDrop={(event) => { event.preventDefault(); setPdfDragActive(false); acceptDroppedPdf(event.dataTransfer.files?.[0]); }}
           >
             <span className="bibliography-upload-icon">{pdfFile ? <Check size={23} /> : <FileSearch size={23} />}</span>
-            <span><strong>{pdfFile?.name ?? "Choose or drop a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : "Drag a PDF here or click to browse. Stacks reads the details from its first pages."}</small></span>
+            <span><strong>{pdfFile?.name ?? "Choose or drop a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : ""}</small></span>
             <input type="file" accept=".pdf,application/pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setPdfFile(event.target.files?.[0] ?? null)} />
           </label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <FileSearch size={16} />} disabled={loading || !pdfFile}>Import and extract PDF</ActionButton>
-          <p className="identifier-footnote">You can edit the details after import. The PDF is saved in your library.</p>
+          <p className="identifier-footnote">You can edit the details after import.</p>
         </form>
       ) : tab === "url" ? (
         <form className="modal-body import-form" onSubmit={importUrl}>
           <div className="import-illustration"><Upload size={28} /><span /></div>
           <h3>Import from the web</h3>
-          <p>Paste a link to an article, arXiv or publisher page, or PDF. Stacks pulls in the content and details.</p>
+          <p>Paste a link to an article, arXiv or publisher page, or PDF.</p>
           <label className="large-field"><Link2 size={17} /><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://arxiv.org/abs/…" required autoFocus /></label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <WandSparkles size={16} />} disabled={loading || !url.trim()}>Read and import</ActionButton>
           <small className="privacy-note">Only the URL is sent to Jina Reader. Your local notes stay in Stacks.</small>
@@ -3753,7 +3753,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
   }
 
   return (
-    <ModalFrame title="Edit paper" subtitle="Edit this paper's details, authors, venue, files, summary, and notes." onClose={onClose} className="add-modal edit-paper-modal">
+    <ModalFrame title="Edit paper" onClose={onClose} className="add-modal edit-paper-modal">
       <form ref={formRef} className="edit-paper-modal-form" onSubmit={submit}>
         <div className="modal-body entity-form edit-paper-fields">
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>

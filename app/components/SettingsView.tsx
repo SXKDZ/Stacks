@@ -815,7 +815,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <SettingsHeading icon={<Palette size={19} />} title="Appearance" detail="Name and theme for this browser." />
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /><small>Shown in the lower-left corner.</small></label>
+                <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /></label>
                 <div className="theme-choice-field span-2"><span>Color theme</span><div className="theme-choice-grid"><SelectCard selected={theme === "dark"} onClick={() => onThemeChange("dark")} icon={<Moon />} title="Dark" description="Low-glare research workspace" trailing={theme === "dark" ? <Check /> : null} /><SelectCard selected={theme === "light"} onClick={() => onThemeChange("light")} icon={<Sun />} title="Light" description="Bright, paper-like workspace" trailing={theme === "light" ? <Check /> : null} /></div><small>Appearance is saved automatically in this browser.</small></div>
               </div>
             </div>
@@ -824,15 +824,15 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "model" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose the model Stacks uses." />
+            <SettingsHeading icon={<Bot size={19} />} title="AI model" />
             <div className="settings-card">
               <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>Connected with an API key</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
               <div className="settings-form-grid">
                 <label className="span-2"><span>Model</span><select value={knownModel ? settings.ai.modelId : "custom"} onChange={(event) => updateAi("modelId", event.target.value === "custom" ? "" : event.target.value)}>{modelOptions.map((model) => <option value={model.id} key={model.id}>{model.label}</option>)}<option value="custom">Custom Bedrock model ID…</option></select><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
-                {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Stacks picks the right endpoint automatically from the ID you enter.</small></label> : null}
+                {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /></label> : null}
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Seeing a model in the list doesn't mean your key can use it. Use Test access to check."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
-                <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The longest reply the model may write. The model’s own limit still applies.</small></label>
+                <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
             </div>
@@ -846,11 +846,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card prompt-settings-card">
               <details className="prompt-template-section">
                 <summary><span><strong>Summary system prompt</strong><small>Create the reusable Stacks summary stored with a paper.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Placeholders are filled from the paper before the summary runs.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</ActionButton></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</ActionButton></div>
               </details>
               <details className="prompt-template-section">
                 <summary><span><strong>PDF extraction system prompt</strong><small>Extract structured metadata from local PDF text.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Reads the PDF metadata and pages, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
               </details>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
@@ -859,7 +859,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "skills" ? (
           <section>
-            <SettingsHeading icon={<Sparkles size={19} />} title="Feed skills" detail="Starting prompts for a new AI feed. Add your own, edit the wording, and pick an icon." />
+            <SettingsHeading icon={<Sparkles size={19} />} title="Feed skills" detail="Starting prompts for a new AI feed." />
             <FeedSkillsEditor notify={notify} />
           </section>
         ) : null}
@@ -965,7 +965,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>{settings.local ? "Stacks backs up your database, PDFs, and saved web pages here, creating the folder if needed. It only adds files, never deletes them. Pick a folder outside your library." : "Backups need Stacks running on this computer."}</small></label>
                 <label><span>Auto-back up delay</span><div className="unit-input"><input disabled={!settings.local || !settings.sync.autoSync} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
-              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong><small>After you make a change, Stacks waits the delay above, then backs up to OneDrive in the background.</small></div></label>
+              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong></div></label>
               <div className="sync-caution"><ShieldCheck size={16} /><p><strong>Your library on this computer is the real one.</strong> Backups copy it to OneDrive, but nothing is ever copied back. To restore, you copy the files back yourself.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
@@ -1107,7 +1107,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
         <label className="span-2">
           <span>Repository</span>
           <input value={repo} onChange={(event) => onRepoChange(event.target.value)} placeholder="owner/name, e.g. octocat/stacks-inbox" autoComplete="off" spellCheck={false} />
-          <small>A private repository dedicated to Stacks. Its issues become your feed inbox.</small>
+          <small>A private repository dedicated to Stacks.</small>
         </label>
         <label className="span-2">
           <span>Access token</span>
@@ -1117,7 +1117,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
       </div>
       <div className="github-inbox-actions">
         <ActionButton variant="secondary" size="small" onClick={() => void testConnection()} disabled={testing || !repo.trim()} icon={testing ? <LoaderCircle className="spin" size={14} /> : <Github size={14} />}>Test connection</ActionButton>
-        <small>Save settings below to persist the repo and token.</small>
+        
       </div>
     </div>
   );
@@ -1246,7 +1246,7 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
                 </details>
                 <input className="feed-skill-label-input" value={selected.label} maxLength={60} placeholder="Skill name" onChange={(event) => update(selected.id, { label: event.target.value })} />
               </div>
-              <MarkdownCodeEditor value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction this skill drops into the composer." />
+              <MarkdownCodeEditor value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction for this skill." />
             </>
           ) : (
             <div className="feed-skill-empty"><Sparkles size={22} /><p>No skills yet. Add one to get started.</p></div>
@@ -1412,8 +1412,8 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
   );
 }
 
-function SettingsHeading({ icon, title, detail }: { icon: ReactNode; title: string; detail: string }) {
-  return <div className="settings-heading"><span>{icon}</span><div><h2>{title}</h2><p>{detail}</p></div></div>;
+function SettingsHeading({ icon, title, detail }: { icon: ReactNode; title: string; detail?: string }) {
+  return <div className="settings-heading"><span>{icon}</span><div><h2>{title}</h2>{detail ? <p>{detail}</p> : null}</div></div>;
 }
 
 function DoctorMetric({ icon, label, value, detail, tone, onClick }: {
