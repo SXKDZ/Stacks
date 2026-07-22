@@ -708,7 +708,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                 nodes.push(
                   <details key={`${message.id}-raw`} className="feed-tool-call feed-proposal-raw">
                     <summary><Code2 size={12} /> <span>Proposed changes (raw)</span></summary>
-                    <div className="feed-tool-io"><span className="feed-tool-tag">stacks-proposals</span>{renderToolContent(raw)}</div>
+                    <div className="feed-tool-io"><span className="feed-tool-tag">JSON</span>{renderToolContent(raw)}</div>
                   </details>,
                 );
               }
@@ -735,7 +735,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         ) : null}
         <AttachBox
           library={library}
-          placeholder={running ? "The agent is working. Send to interrupt and steer it." : "Reply to continue this thread. The agent keeps its context."}
+          placeholder={running ? "The agent is working. Send a message to interrupt it." : "Reply to continue this thread. The agent remembers it."}
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
           compact

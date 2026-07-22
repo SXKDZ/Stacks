@@ -7,7 +7,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Stacks",
   description:
-    "A modern research library for papers, authors, venues, collections, discovery, and grounded AI reading assistance.",
+    "A research library to read, organize, and discuss your papers, with AI help.",
   applicationName: "Stacks",
   keywords: [
     "research papers",

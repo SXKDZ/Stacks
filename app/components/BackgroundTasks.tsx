@@ -33,7 +33,7 @@ function readTaskHistory(): BackgroundTask[] {
   try {
     const parsed = JSON.parse(window.sessionStorage.getItem(TASK_HISTORY_KEY) || "[]") as BackgroundTask[];
     return Array.isArray(parsed) ? parsed.slice(0, 40).map((task) => task.status === "running"
-      ? { ...task, status: "error", completedAt: Date.now(), detail: "Interrupted when the app session ended." }
+      ? { ...task, status: "error", completedAt: Date.now(), detail: "Stopped when the app closed." }
       : task) : [];
   } catch {
     return [];
@@ -65,7 +65,7 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
       setTasks((current) => current.map((task) => task.id === id ? { ...task, status: "complete", completedAt: Date.now() } : task));
       return result;
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "The background operation failed.";
+      const detail = error instanceof Error ? error.message : "The task failed.";
       setTasks((current) => current.map((task) => task.id === id ? { ...task, status: "error", detail, completedAt: Date.now() } : task));
       setOpen(true);
       throw error;

@@ -473,7 +473,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
   async function chooseStorageDirectory() {
     if (storageReport?.capabilities?.folderMove === false) {
-      notify("Moving a local library folder requires Stacks's local filesystem companion.", "info");
+      notify("You can only move the library folder when Stacks runs on this computer.", "info");
       return;
     }
     setSelectingStorageDirectory(true);
@@ -537,7 +537,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       const saved = (await response.json()) as SettingsSnapshot;
       setSettings(saved);
       setSecrets({});
-      notify(saved.local ? "Settings saved to Stacks’s protected local settings file." : "Settings saved to Stacks’s application database.");
+      notify("Settings saved.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Settings could not be saved.", "error");
     } finally {
@@ -795,7 +795,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
         <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
         <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Pickable AI feed prompts</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Ready-made feed prompts</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
@@ -804,7 +804,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       </aside>
 
       <div className="settings-content">
-        {loading ? <div className="settings-loading"><LoaderCircle className="spin" size={22} /><span>Reading environment…</span></div> : null}
+        {loading ? <div className="settings-loading"><LoaderCircle className="spin" size={22} /><span>Loading settings…</span></div> : null}
 
         {!loading && tab === "appearance" ? (
           <section>
@@ -820,15 +820,15 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "model" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose an available Amazon Bedrock inference profile." />
+            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose the model Stacks uses." />
             <div className="settings-card">
-              <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>API key authentication · Runtime Converse</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
+              <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>Connected with an API key</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
               <div className="settings-form-grid">
                 <label className="span-2"><span>Model</span><select value={knownModel ? settings.ai.modelId : "custom"} onChange={(event) => updateAi("modelId", event.target.value === "custom" ? "" : event.target.value)}>{modelOptions.map((model) => <option value={model.id} key={model.id}>{model.label}</option>)}<option value="custom">Custom Bedrock model ID…</option></select><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
-                {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Base Anthropic IDs use Bedrock Mantle; geo, global, and inference-profile IDs use Bedrock Runtime.</small></label> : null}
-                <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Catalog presence does not guarantee that this API key can invoke the selected model. Use Test access to verify it."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
+                {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /><small>Stacks picks the right endpoint automatically from the ID you enter.</small></label> : null}
+                <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Seeing a model in the list doesn't mean your key can use it. Use Test access to check."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
-                <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>Stacks sends this value to the selected model without imposing an artificial upper limit; the model’s own output limit still applies.</small></label>
+                <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The longest reply the model may write. The model’s own limit still applies.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
             </div>
@@ -855,7 +855,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "skills" ? (
           <section>
-            <SettingsHeading icon={<Sparkles size={19} />} title="Feed skills" detail="Pickable starting prompts shown when you open a new AI feed. Add your own, edit the wording, and choose an icon." />
+            <SettingsHeading icon={<Sparkles size={19} />} title="Feed skills" detail="Starting prompts for a new AI feed. Add your own, edit the wording, and pick an icon." />
             <FeedSkillsEditor notify={notify} />
           </section>
         ) : null}
@@ -866,7 +866,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card storage-location-card">
               <div className="storage-location-heading">
                 <span className="storage-doctor-icon"><HardDrive size={18} /></span>
-                <div><strong>Stacks library location</strong><small>The library.db database, settings, and managed PDFs and HTML snapshots all live in this folder.</small></div>
+                <div><strong>Stacks library location</strong><small>Your database, settings, PDFs, and saved web pages all live in this folder.</small></div>
               </div>
               <div className="storage-root-summary">
                 <span>Active library</span>
@@ -880,7 +880,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                   <ActionButton variant="secondary" onClick={() => void chooseStorageDirectory()} disabled={storageReport?.capabilities?.folderMove === false || selectingStorageDirectory || movingStorage} icon={selectingStorageDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Browse</ActionButton>
                   <ActionButton variant="secondary" onClick={() => void moveLibrary()} disabled={storageReport?.capabilities?.folderMove === false || movingStorage || !storageTarget.trim()} icon={movingStorage ? <LoaderCircle className="spin" size={15} /> : <ArrowRightLeft size={15} />}>Move</ActionButton>
                 </div>
-                <small>Moves Stacks-managed files, switches local file storage to the new location, and removes the old managed-file folder only after two confirmations.</small>
+                <small>Copies your files to the new folder, then removes the old one — only after two confirmations.</small>
               </label>
             </div>
             <div className="settings-card storage-doctor-card">
@@ -915,13 +915,13 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                           <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={fileChecks ? `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked` : `${storageReport.referencedPdfFiles} referenced`} detail={fileChecks ? `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingPdfFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "PDFs", detail: `${storageReport.presentPdfFiles} of ${storageReport.referencedPdfFiles} referenced PDFs are present on disk (${storageReport.missingPdfFiles} missing). ${storageReport.storedPdfFiles} physical files total, ${byteLabel(storageReport.storedPdfBytes)}.`, paths: storageReport.missingPdfPaths })} />
                           <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={fileChecks ? `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked` : `${storageReport.referencedHtmlFiles} referenced`} detail={fileChecks ? `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingHtmlFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "HTML snapshots", detail: `${storageReport.presentHtmlFiles} of ${storageReport.referencedHtmlFiles} referenced snapshots are present on disk (${storageReport.missingHtmlFiles} missing). ${storageReport.storedHtmlFiles} physical files total, ${byteLabel(storageReport.storedHtmlBytes)}.`, paths: storageReport.missingHtmlPaths })} />
                           <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} papers`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} onClick={() => setDoctorModal({ label: "No local source", detail: `${storageReport.papersWithoutLocalAsset} paper${storageReport.papersWithoutLocalAsset === 1 ? " has" : "s have"} neither a readable PDF nor an HTML snapshot in the library. Open a paper and use its source-acquisition dialog to attach one.` })} />
-                          <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="Stored paths that do not satisfy Stacks’s portable-path rules" tone={storageReport.invalidReferences ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Invalid references", detail: "Stored file paths that are absolute or otherwise break Stacks’s portable-path rules. Repair library rewrites these to portable names.", paths: [...storageReport.invalidPdfPaths, ...storageReport.invalidHtmlPaths] })} />
+                          <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="File paths saved in a form Stacks can’t use" tone={storageReport.invalidReferences ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Invalid references", detail: "Stored file paths that are absolute or otherwise break Stacks’s portable-path rules. Repair library rewrites these to portable names.", paths: [...storageReport.invalidPdfPaths, ...storageReport.invalidHtmlPaths] })} />
                           <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} ${storageReport.orphanedFiles === 1 ? "file" : "files"}`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Unlinked assets", detail: `${storageReport.orphanedFiles} file${storageReport.orphanedFiles === 1 ? "" : "s"} in the managed pdfs/ and html_snapshots/ folders are not referenced by any paper (${byteLabel(storageReport.orphanedBytes)} reclaimable of ${byteLabel(storageReport.totalBytes)} managed). Use "Clean unlinked assets" below to remove them.`, records: (storageReport.orphanedNames ?? []).map((file) => ({ id: file.name, kind: file.kind.toUpperCase(), label: file.name })) })} />
                           {storageReport.systemHealth ? (
                             <>
                               <DoctorMetric icon={<Cpu size={17} />} label="Runtime" value={storageReport.systemHealth.runtime} detail={storageReport.systemHealth.platform ?? "Local server"} tone="good" onClick={() => setDoctorModal({ label: "Runtime", detail: `${storageReport.systemHealth!.runtime} on ${storageReport.systemHealth!.platform ?? "this machine"}.${storageReport.systemHealth!.freeBytes ? ` ${byteLabel(storageReport.systemHealth!.freeBytes)} free on the library volume.` : ""}` })} />
-                              <DoctorMetric icon={<DatabaseBackup size={17} />} label="Database engine" value={storageReport.systemHealth.database} detail="Local SQLite file; no external database" tone="good" onClick={() => setDoctorModal({ label: "Database engine", detail: `${storageReport.systemHealth!.database}. Stacks stores everything in a single local SQLite file (library.db) inside the library folder; there is no external database server.` })} />
-                              <DoctorMetric icon={<Bot size={17} />} label="Claude CLI (AI feed)" value={storageReport.systemHealth.claudeCli ?? "Not found"} detail={storageReport.systemHealth.claudeCli ? "Available for headless feed agents" : "Install the claude CLI to use the AI feed"} tone={storageReport.systemHealth.claudeCli ? "good" : "warn"} onClick={() => setDoctorModal({ label: "Claude CLI (AI feed)", detail: storageReport.systemHealth!.claudeCli ? `The claude CLI (${storageReport.systemHealth!.claudeCli}) is on PATH, so the AI feed can drive headless agents.` : "The claude CLI was not found on PATH. Install it (npm i -g @anthropic-ai/claude-code) so the AI feed can run headless agents." })} />
+                              <DoctorMetric icon={<DatabaseBackup size={17} />} label="Database engine" value={storageReport.systemHealth.database} detail="All data stays on this computer" tone="good" onClick={() => setDoctorModal({ label: "Database engine", detail: `${storageReport.systemHealth!.database}. Stacks stores everything in a single local SQLite file (library.db) inside the library folder; there is no external database server.` })} />
+                              <DoctorMetric icon={<Bot size={17} />} label="Claude CLI (AI feed)" value={storageReport.systemHealth.claudeCli ?? "Not found"} detail={storageReport.systemHealth.claudeCli ? "Ready for the AI feed" : "Install the claude CLI to use the AI feed"} tone={storageReport.systemHealth.claudeCli ? "good" : "warn"} onClick={() => setDoctorModal({ label: "Claude CLI (AI feed)", detail: storageReport.systemHealth!.claudeCli ? `The claude CLI (${storageReport.systemHealth!.claudeCli}) is on PATH, so the AI feed can drive headless agents.` : "The claude CLI was not found on PATH. Install it (npm i -g @anthropic-ai/claude-code) so the AI feed can run headless agents." })} />
                             </>
                           ) : null}
                         </>
@@ -929,7 +929,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                     })()}
                   </div>
                   <div className="storage-doctor-actions">
-                    <p>Cleanup deletes only unlinked files from Stacks’s managed pdfs/ and html_snapshots/ folders. It requires two confirmations and never deletes linked assets.</p>
+                    <p>Cleanup deletes only files no paper uses. It asks twice and never removes files still in use.</p>
                     <div className="storage-doctor-action-buttons">
                       <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage || !storageReport.capabilities?.repairs.length} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>{storageReport.mode === "hosted" ? "Repair database" : "Repair library"}</ActionButton>
                       <ActionButton variant="danger" onClick={() => void cleanStorage()} disabled={cleaningStorage || !storageReport.orphanedFiles} icon={cleaningStorage ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}>Clean unlinked assets</ActionButton>
@@ -951,11 +951,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>{settings.local ? "Stacks writes a consistent library.db backup plus pdfs/ and html_snapshots/ here, creating the folder if needed. Existing contents are kept; backup only adds, never deletes. Must be outside the live library folder." : "A hosted Worker cannot access a folder on this computer. Run Stacks locally to enable backups."}</small></label>
+                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>{settings.local ? "Stacks backs up your database, PDFs, and saved web pages here, creating the folder if needed. It only adds files, never deletes them. Pick a folder outside your library." : "Backups need Stacks running on this computer."}</small></label>
                 <label><span>Auto-back up delay</span><div className="unit-input"><input disabled={!settings.local || !settings.sync.autoSync} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
-              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong><small>After a library change, Stacks waits for the delay above (coalescing a burst of edits) then writes a fresh one-way backup to OneDrive in the background.</small></div></label>
-              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>The local library is authoritative.</strong> Backup writes a consistent one-way copy to OneDrive; it never reads the OneDrive copy back onto the live library. Restoring a backup is a manual step.</p></div>
+              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong><small>After you make a change, Stacks waits the delay above, then backs up to OneDrive in the background.</small></div></label>
+              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>Your library on this computer is the real one.</strong> Backups copy it to OneDrive, but nothing is ever copied back. To restore, you copy the files back yourself.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
@@ -997,7 +997,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 {versionInfo?.releaseUrl ? <ActionLink variant="primary" href={versionInfo.releaseUrl} target="_blank" rel="noreferrer">View release</ActionLink> : null}
               </div>
             </div>
-            <p className="version-update-note">Local installs update from the Git repository, followed by <code>npm install</code>. Hosted installs update when the latest commit is redeployed; Stacks never modifies its own source tree automatically.</p>
+            <p className="version-update-note">Local installs update from the Git repository, followed by <code>npm install</code>. Hosted installs update when you redeploy. Stacks never updates itself.</p>
           </section>
         ) : null}
       </div>

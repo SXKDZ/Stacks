@@ -198,35 +198,41 @@
   --feed-sidebar-width: 320px;
   background: var(--canvas);
   display: grid;
-  grid-template-columns: var(--feed-sidebar-width) 6px 1fr;
+  /* Two columns only — the single 1px seam is the sidebar's own border-right, so
+     there is no gap band between the panes. The drag handle is an overlay. */
+  grid-template-columns: var(--feed-sidebar-width) 1fr;
   height: 100dvh;
   overflow: hidden;
   position: relative;
 }
 
-/* Draggable divider between the feed list and the detail pane. */
+/* Draggable divider: a thin invisible hit-area centered on the seam between the
+   two panes, overlaid so it consumes no layout width. The visible line is the
+   sidebar's border-right; this only widens/tints it on hover/drag. */
 .feed-sidebar-resize {
-  align-self: stretch;
-  background: transparent;
   cursor: col-resize;
-  margin: 0 -3px;
-  position: relative;
+  height: 100%;
+  left: var(--feed-sidebar-width);
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 9px;
   z-index: 20;
 }
 
 .feed-sidebar-resize::before {
-  background: var(--line);
+  background: transparent;
   content: "";
-  inset: 0 auto 0 3px;
+  inset: 0;
+  margin: 0 auto;
   position: absolute;
   transition: background var(--motion-fast);
-  width: 1px;
+  width: 2px;
 }
 
 .feed-sidebar-resize:hover::before,
 .is-resizing-column .feed-sidebar-resize::before {
   background: var(--brand-blue);
-  width: 2px;
 }
 
 /* A static bottom banner: the last-result notice above a row with the Sync
@@ -619,8 +625,12 @@
   color: var(--rose);
 }
 
-/* Right pane: the selected thread, or an empty prompt. */
+/* Right pane: the selected thread, or an empty prompt. The reading-column vars
+   live here so both the detail header and the compose header (siblings in this
+   pane) resolve --feed-gutter identically. */
 .feed-detail-pane {
+  --feed-col: 780px;
+  --feed-gutter: 32px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1184,10 +1194,9 @@
   align-items: center;
   display: flex;
   gap: 13px;
-  margin: 0 auto;
-  max-width: var(--feed-col);
-  padding: 0 var(--feed-gutter);
-  padding-right: 76px;
+  /* Full-width, left-aligned: the title starts just past the divider and the bar
+     fills the pane. Right padding clears the floating theme toggle (34px + btn). */
+  padding: 0 76px 0 var(--feed-gutter);
   width: 100%;
 }
 

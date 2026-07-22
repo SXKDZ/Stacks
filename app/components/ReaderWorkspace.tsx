@@ -103,7 +103,7 @@ export default function ReaderWorkspace() {
     async function loadPaper() {
       const paperId = new URLSearchParams(window.location.search).get("paper");
       if (!paperId) {
-        setError("No paper was selected for the reader.");
+        setError("No paper was selected.");
         setLoading(false);
         return;
       }
@@ -210,7 +210,7 @@ export default function ReaderWorkspace() {
             <div className="reader-empty-document">
               <FileText size={30} />
               <h2>No document attached</h2>
-              <p>Add a local PDF or HTML snapshot from the paper editor.</p>
+              <p>Add a PDF or saved web page from the paper editor.</p>
             </div>
           )}
         </section>
@@ -224,7 +224,7 @@ export default function ReaderWorkspace() {
           <p className="reader-authors"><ReaderAuthors paper={paper} /></p>
           <section className="reader-summary reader-summary-scroll">
             <p className="eyebrow">Summary</p>
-            <MarkdownContent content={paper.summary || paper.abstract || "No summary is available for this paper yet."} />
+            <MarkdownContent content={paper.summary || paper.abstract || "No summary yet."} />
           </section>
           <section className="reader-summary reader-notes-section">
             <div className="reader-section-heading">
@@ -235,7 +235,7 @@ export default function ReaderWorkspace() {
               key={`${paper.id}:${paper.updatedAt}`}
               className="reader-notes-editor"
               defaultValue={paper.notes}
-              placeholder="Add an observation, question, or connection…"
+              placeholder="Add a note…"
               aria-label="My notes"
               onFocus={() => setNoteState("idle")}
               onBlur={(event) => void saveNotes(event.target.value)}
