@@ -762,7 +762,6 @@ textarea::placeholder {
 }
 
 .markdown-content .katex-display > .katex {
-  font-size: 1.28em;
   text-align: center;
   white-space: normal;
 }
