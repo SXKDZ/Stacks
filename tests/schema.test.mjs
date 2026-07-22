@@ -91,16 +91,25 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   // The summary and extraction prompts survive chat removal; the discussion
   // prompt and its {{papers}}/{{paper1}} placeholders are gone.
   assert.match(prompts, /\{\{paper\}\}/);
-  // source_text now carries a page-range slice, e.g. {{source_text[1:2]}}.
+  // The summary prompt separates paper text ({{paper}}) from record fields
+  // ({{metadata}}); extraction's source_text still carries a page-range slice.
+  assert.match(prompts, /\{\{metadata\}\}/);
   assert.match(prompts, /\{\{source_text\[1:2\]\}\}/);
   assert.match(prompts, /export function pageSliceFor/);
   assert.doesNotMatch(prompts, /\{\{papers\}\}|DEFAULT_CHAT_SYSTEM_PROMPT/);
   // The client forwards the caller's abort signal to Bedrock so a cancelled
   // request stops upstream too.
   assert.match(bedrock, /signal: options\.signal/);
-  // The summarize route pins the Node runtime and streams from Bedrock.
-  const summarizeRoute = await readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8");
+  // The summarize route pins the Node runtime and grounds {{paper}} in the
+  // stored PDF, page-sliced the same way extraction is (shared readPdfPages).
+  const [summarizeRoute, pdfText] = await Promise.all([
+    readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/pdf-text.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(summarizeRoute, /export const runtime = "nodejs"/);
+  assert.match(summarizeRoute, /pageSliceFor\(configuredPrompt, "paper"\)/);
+  assert.match(summarizeRoute, /readPdfPages|readPaperText/);
+  assert.match(pdfText, /export async function readPdfPages/);
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {

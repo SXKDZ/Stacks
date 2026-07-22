@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import {
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
+  pageSliceFor,
   renderPromptTemplate,
 } from "@/app/lib/ai-prompts";
 import {
@@ -7,6 +9,8 @@ import {
   invokeBedrockMessages,
 } from "@/app/lib/bedrock";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { resolveStoredFile } from "@/app/lib/local-files";
+import { readPdfPages } from "@/app/lib/pdf-text";
 import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
 
 export const dynamic = "force-dynamic";
@@ -21,23 +25,40 @@ interface SummaryRequest {
     year?: number | null;
     url?: string | null;
     doi?: string | null;
+    localPath?: string | null;
   };
 }
 
-async function readSource(url: string): Promise<string> {
-  // Best-effort readable text from a locally-rendered snapshot. Grounding is
-  // optional here, so a challenge/error page just yields no extra context
-  // (the summary falls back to metadata) rather than surfacing an error.
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") {
+/**
+ * The paper's own text for {{paper}}: the stored PDF read page-by-page (honoring
+ * a {{paper[a:b]}} range, defaulting to the whole document), or a web snapshot of
+ * the paper's URL when no local PDF exists. Grounding is best-effort — a missing
+ * file or a challenge page just yields no text, and the summary leans on metadata.
+ */
+async function readPaperText(
+  localPath: string | null | undefined,
+  url: string | null | undefined,
+  slice: ReturnType<typeof pageSliceFor>,
+): Promise<string> {
+  const stored = localPath ? resolveStoredFile("pdfs", localPath) : null;
+  if (stored) {
+    try {
+      const bytes = new Uint8Array(readFileSync(stored.path));
+      const { text } = await readPdfPages(bytes, slice ?? { start: 1, end: null });
+      if (text) return text;
+    } catch {
+      // Unreadable PDF — fall through to the URL snapshot below.
+    }
+  }
+  if (url?.startsWith("https")) {
+    try {
+      const snapshot = await captureWebpageSnapshot(new URL(url));
+      return snapshot.text.slice(0, 32000);
+    } catch {
       return "";
     }
-    const snapshot = await captureWebpageSnapshot(parsed);
-    return snapshot.text.slice(0, 28000);
-  } catch {
-    return "";
   }
+  return "";
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -55,29 +76,29 @@ export async function POST(request: Request): Promise<Response> {
         { status: 500 },
       );
     }
-    const sourceText = paper.url?.startsWith("https")
-      ? await readSource(paper.url)
-      : "";
-    const context = [
+    const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
+    const model = runtimeValue(runtime, "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6");
+    const configuredPrompt = runtimeValue(runtime, "STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT);
+    // {{paper}} carries the paper's own text (the stored PDF, page-sliceable via
+    // {{paper[a:b]}}, or a web snapshot); {{metadata}} carries the record fields.
+    const slice = pageSliceFor(configuredPrompt, "paper");
+    const paperText = await readPaperText(paper.localPath, paper.url, slice);
+    const metadata = [
       `Title: ${paper.title}`,
       `Authors: ${(paper.authors ?? []).join(", ") || "Unknown"}`,
       `Venue: ${paper.venue ?? "Unknown"} (${paper.year ?? "n.d."})`,
       `DOI: ${paper.doi ?? "Not available"}`,
       `Abstract: ${paper.abstract ?? "Not available"}`,
-      sourceText ? `Extracted paper content:\n${sourceText}` : "",
-    ].filter(Boolean).join("\n\n");
-    const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
-    const model = runtimeValue(runtime, "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6");
-    const configuredPrompt = runtimeValue(runtime, "STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT);
+    ].join("\n");
     const templatedPrompt = renderPromptTemplate(configuredPrompt, {
-      paper: context,
+      paper: paperText || "Not available",
+      metadata,
       title: paper.title,
       authors: (paper.authors ?? []).join(", ") || "Unknown",
       venue: paper.venue ?? "Unknown",
       year: String(paper.year ?? "n.d."),
       doi: paper.doi ?? "Not available",
       abstract: paper.abstract ?? "Not available",
-      source_text: sourceText || "Not available",
     });
     const result = await invokeBedrockMessages({
       token,
@@ -95,7 +116,7 @@ export async function POST(request: Request): Promise<Response> {
     if (!summary) {
       return Response.json({ error: "No summary was generated." }, { status: 502 });
     }
-    return Response.json({ summary, model, endpoint: result.endpoint, groundedWithReader: Boolean(sourceText) });
+    return Response.json({ summary, model, endpoint: result.endpoint, groundedWithReader: Boolean(paperText) });
   } catch (error) {
     if (error instanceof BedrockInvocationError) {
       return Response.json({ error: `Bedrock returned ${error.status}: ${error.message}` }, { status: 502 });

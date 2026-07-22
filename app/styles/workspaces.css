@@ -289,11 +289,15 @@
 
 .feed-list-head {
   align-items: center;
+  /* Match the detail header's 62px band + bottom border so the two top bars read
+     as one continuous strip across the divider (no floating gap at the seam). */
+  border-bottom: 1px solid var(--line);
   display: flex;
   flex-shrink: 0;
   gap: 12px;
+  height: 62px;
   justify-content: space-between;
-  padding: 16px 14px 14px;
+  padding: 0 14px;
 }
 
 /* Theme toggle pinned to the top-right of the feed page, matching the main
@@ -326,7 +330,7 @@
   display: flex;
   flex-shrink: 0;
   gap: 7px;
-  margin: 0 12px 8px;
+  margin: 12px 12px 8px;
   padding: 0 9px;
 }
 
@@ -625,11 +629,6 @@
   position: relative;
 }
 
-.feed-compose-back {
-  left: 16px;
-  position: absolute;
-  top: 16px;
-}
 
 /* Empty state: a centered hero prompt with a bottom-docked composer, so
    starting a new feed reads like a chat entry point (Paper Scout style). The
@@ -641,10 +640,11 @@
   --feed-col: 780px;
   --feed-gutter: 32px;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  height: 100%;
   margin: 0 auto;
   max-width: var(--feed-col);
+  min-height: 0;
   padding: 24px var(--feed-gutter) 40px;
   position: relative;
   width: 100%;

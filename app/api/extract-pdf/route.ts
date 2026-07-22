@@ -8,6 +8,7 @@ import {
   invokeBedrockMessages,
 } from "@/app/lib/bedrock";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { readPdfPagesFromDocument } from "@/app/lib/pdf-text";
 import { getDocumentProxy, getMeta } from "unpdf";
 
 export const dynamic = "force-dynamic";
@@ -128,22 +129,8 @@ export async function POST(request: Request): Promise<Response> {
     // The {{source_text}} placeholder controls how many pages to read, e.g.
     // {{source_text[1:2]}}. Default (no slice) reads the first two pages.
     const slice = pageSliceFor(template, "source_text") ?? { start: 1, end: 2 };
-    const firstPage = Math.min(document.numPages, Math.max(1, slice.start));
-    const lastPage = Math.min(document.numPages, slice.end === null ? document.numPages : Math.max(firstPage, slice.end));
-    const pages: string[] = [];
-    for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber += 1) {
-      const page = await document.getPage(pageNumber);
-      const content = await page.getTextContent();
-      const pageText = content.items
-        .map((item) => "str" in item ? item.str : "")
-        .join(" ")
-        .replace(/\s+/g, " ")
-        .trim();
-      pages.push(pageText);
-      page.cleanup();
-    }
-    const pageCount = pages.length;
-    const sourceText = pages.join("\n\n").slice(0, 32000);
+    const { text: sourceText, firstPage, lastPage } = await readPdfPagesFromDocument(document, slice);
+    const pageCount = Math.max(0, lastPage - firstPage + 1);
     if (!sourceText) {
       return Response.json({ error: `No selectable text was found in PDF pages ${firstPage}-${lastPage}.` }, { status: 422 });
     }

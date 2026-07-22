@@ -249,14 +249,14 @@ function normalizedModelId(modelId: string): string {
 }
 
 const summaryVariables: PromptVariableDefinition[] = [
-  { token: "{{paper}}", description: "The complete selected-paper context: metadata, abstract, and extracted source text." },
-  { token: "{{title}}", description: "The selected paper’s title." },
-  { token: "{{authors}}", description: "The selected paper’s author names, joined with commas." },
-  { token: "{{venue}}", description: "The selected paper’s venue or publication source." },
-  { token: "{{year}}", description: "The selected paper’s publication year." },
-  { token: "{{doi}}", description: "The selected paper’s DOI, or “Not available”." },
-  { token: "{{abstract}}", description: "The abstract saved in the library record." },
-  { token: "{{source_text}}", description: "Full text extracted through the configured reader, or “Not available”." },
+  { token: "{{paper}}", description: "The paper’s text from the stored PDF. Add a page range like {{paper[1:2]}}, {{paper[3]}} for one page, or {{paper[2:]}} from page 2 on. No range reads the whole paper." },
+  { token: "{{metadata}}", description: "Title, authors, venue, year, DOI, and abstract from the library record." },
+  { token: "{{title}}", description: "The paper’s title." },
+  { token: "{{authors}}", description: "The paper’s authors, joined with commas." },
+  { token: "{{venue}}", description: "The paper’s venue." },
+  { token: "{{year}}", description: "The paper’s year." },
+  { token: "{{doi}}", description: "The paper’s DOI, or “Not available”." },
+  { token: "{{abstract}}", description: "The abstract from the library record." },
 ];
 
 const extractionVariables: PromptVariableDefinition[] = [
@@ -808,10 +808,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "appearance" ? (
           <section>
-            <SettingsHeading icon={<Palette size={19} />} title="Appearance" detail="Personalize this browser without changing Stacks’s source database." />
+            <SettingsHeading icon={<Palette size={19} />} title="Appearance" detail="Name and theme for this browser." />
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /><small>Shown in the lower-left library status. The product name remains Stacks.</small></label>
+                <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /><small>Shown in the lower-left corner.</small></label>
                 <div className="theme-choice-field span-2"><span>Color theme</span><div className="theme-choice-grid"><SelectCard selected={theme === "dark"} onClick={() => onThemeChange("dark")} icon={<Moon />} title="Dark" description="Low-glare research workspace" trailing={theme === "dark" ? <Check /> : null} /><SelectCard selected={theme === "light"} onClick={() => onThemeChange("light")} icon={<Sun />} title="Light" description="Bright, paper-like workspace" trailing={theme === "light" ? <Check /> : null} /></div><small>Appearance is saved automatically in this browser.</small></div>
               </div>
             </div>
@@ -842,11 +842,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card prompt-settings-card">
               <details className="prompt-template-section">
                 <summary><span><strong>Summary system prompt</strong><small>Create the reusable Stacks summary stored with a paper.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Summary placeholders are replaced with the selected paper’s current metadata and extracted content.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</ActionButton></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="summarySystem" value={settings.prompts.summarySystem} onChange={(value) => updatePrompt("summarySystem", value)} /><small>Placeholders are filled from the paper before the summary runs.</small><PromptVariables variables={summaryVariables} onInsert={(variable) => insertPromptVariable("summarySystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("summarySystem", DEFAULT_SUMMARY_SYSTEM_PROMPT)}>Restore summary default</ActionButton></div>
               </details>
               <details className="prompt-template-section">
                 <summary><span><strong>PDF extraction system prompt</strong><small>Extract structured metadata from local PDF text.</small></span><ChevronDown size={16} /></summary>
-                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Extraction analyzes embedded PDF metadata and the pages named by the {"{{source_text}}"} range, then returns normalized paper fields. Add a page range in Python-slice style: <code>{"{{source_text[1:2]}}"}</code> reads pages 1–2, <code>{"{{source_text[3]}}"}</code> a single page, <code>{"{{source_text[2:]}}"}</code> page 2 to the end, and <code>{"{{source_text}}"}</code> the default first two pages.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
+                <div className="prompt-template-content"><PromptEditor inputRef={promptEditors} promptKey="extractionSystem" value={settings.prompts.extractionSystem} onChange={(value) => updatePrompt("extractionSystem", value)} /><small>Reads the PDF metadata and pages, then returns normalized paper fields.</small><PromptVariables variables={extractionVariables} onInsert={(variable) => insertPromptVariable("extractionSystem", variable)} /><ActionButton variant="secondary" size="small" className="mt-0.5 justify-self-start" onClick={() => updatePrompt("extractionSystem", DEFAULT_EXTRACTION_SYSTEM_PROMPT)}>Restore extraction default</ActionButton></div>
               </details>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
@@ -1350,5 +1350,5 @@ function PromptVariables({ variables, onInsert }: { variables: PromptVariableDef
 }
 
 function SettingsFooter({ saving, onRefresh }: { saving: boolean; onRefresh: () => void }) {
-  return <div className="settings-footer"><ActionButton variant="secondary" onClick={onRefresh} icon={<RefreshCw size={14} />}>Reset</ActionButton><ActionButton type="submit" variant="primary" disabled={saving} icon={saving ? <LoaderCircle size={14} className="spin" /> : <Save size={14} />}>{saving ? "Saving…" : "Save settings"}</ActionButton></div>;
+  return <div className="settings-footer"><ActionButton variant="secondary" onClick={onRefresh} icon={<RefreshCw size={14} />} title="Discard unsaved changes and reload the last saved settings">Reload</ActionButton><ActionButton type="submit" variant="primary" disabled={saving} icon={saving ? <LoaderCircle size={14} className="spin" /> : <Save size={14} />}>{saving ? "Saving…" : "Save settings"}</ActionButton></div>;
 }

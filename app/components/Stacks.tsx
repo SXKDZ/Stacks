@@ -3505,6 +3505,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
               year: paper.year,
               url: paper.url,
               doi: paper.doi,
+              localPath: paper.localPath,
             },
           }),
         });

@@ -11,7 +11,7 @@ export const DEFAULT_SUMMARY_SYSTEM_PROMPT = [
   "## Advantages and limitations — separate reported strengths from limitations and open questions; do not invent either.",
   "## Conclusion — synthesize the approach, novelty, evidence, comparative position, and limitations.",
   "Use compact lists where they improve readability. Preserve mathematical expressions with $...$ inline and $$...$$ for display equations.",
-  "\n\nPaper to summarize:\n{{paper}}",
+  "\n\nPaper metadata:\n{{metadata}}\n\nPaper text:\n{{paper}}",
 ].join(" ");
 
 export const DEFAULT_EXTRACTION_SYSTEM_PROMPT = [

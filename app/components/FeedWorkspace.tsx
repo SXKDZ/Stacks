@@ -1106,8 +1106,14 @@ export default function FeedWorkspace() {
             onChanged={loadSnippets}
           />
         ) : (
-          <div className="feed-compose">
-            <button type="button" className="feed-detail-back feed-compose-back" onClick={() => setComposing(false)} aria-label="Back to list"><ArrowLeft size={16} /></button>
+          <>
+            <header className="feed-detail-head">
+              <div className="feed-detail-head-inner">
+                <button type="button" className="feed-detail-back feed-compose-back" onClick={() => setComposing(false)} aria-label="Back to list"><ArrowLeft size={16} /></button>
+                <div className="feed-detail-heading"><h1>New feed</h1></div>
+              </div>
+            </header>
+            <div className="feed-compose">
             <div className="feed-compose-hero">
               <h2>What should the agent work on?</h2>
               <p>Paste a link or a note, attach a paper or file, and say what to do. It proposes changes; you approve them.</p>
@@ -1134,7 +1140,8 @@ export default function FeedWorkspace() {
               hint={<><kbd>⌥↵</kbd> newline</>}
               onSubmit={createSnippet}
             />
-          </div>
+            </div>
+          </>
         )}
       </div>
     </main>
