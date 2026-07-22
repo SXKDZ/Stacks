@@ -206,20 +206,34 @@ def backup_assets(local_directory, remote_directory, suffix, kind, result):
         result["details"][copied_key].append("{} backed up".format(name))
 
 
+def feed_path_included(parts):
+    """Which files under feed/ belong in a portable backup:
+      - <id>/attachments/*      the files a turn carried (uploads, pasted text)
+      - .claude/projects/*.jsonl the agent session transcripts, so a restored
+                                 library can --resume old feed threads
+    Everything else under .claude/ (machine/user IDs in .claude.json, shell
+    snapshots, session-env, backups) is machine-specific or ephemeral and stays
+    local."""
+    if "attachments" in parts:
+        return True
+    if parts[:2] == (".claude", "projects") and parts[-1].endswith(".jsonl"):
+        return True
+    return False
+
+
 def backup_feed_attachments(local_root, remote_root, result):
-    """Back up the AI feed's attachment tree (feed/<id>/attachments/*), which is
-    nested unlike the flat pdfs/ and html_snapshots/ dirs, so it's walked
-    recursively and mirrored one-way preserving the relative path."""
+    """Back up the AI feed's files (attachments + agent transcripts), walked
+    recursively and mirrored one-way preserving the relative path. Ephemeral and
+    machine-specific state under .claude/ is skipped (see feed_path_included)."""
     if not local_root.exists():
         return
-    result["progress"].append({"message": "Backing up feed attachments"})
+    result["progress"].append({"message": "Backing up feed files"})
     for local_path in sorted(local_root.rglob("*")):
         if not local_path.is_file():
             continue
-        # Only mirror the attachment files, not agent transcripts or scratch.
-        if "attachments" not in local_path.relative_to(local_root).parts:
-            continue
         relative = local_path.relative_to(local_root)
+        if not feed_path_included(relative.parts):
+            continue
         remote_path = remote_root / relative
         if remote_path.exists() and file_hash(local_path) == file_hash(remote_path):
             continue

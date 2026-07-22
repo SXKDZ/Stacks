@@ -478,9 +478,13 @@ test("backs up the local library one-way to OneDrive without replacing the live 
     await mkdir(join(local, "pdfs"), { recursive: true });
     await mkdir(join(local, "html_snapshots"), { recursive: true });
     await mkdir(join(local, "feed", "feed-1", "attachments"), { recursive: true });
+    await mkdir(join(local, "feed", ".claude", "projects", "p1"), { recursive: true });
     await writeFile(join(local, "pdfs", "paper.pdf"), "pdf fixture");
     await writeFile(join(local, "html_snapshots", "paper.html"), "<p>fixture</p>");
     await writeFile(join(local, "feed", "feed-1", "attachments", "notes.txt"), "attachment fixture");
+    // A session transcript (backed up) and machine-specific state (excluded).
+    await writeFile(join(local, "feed", ".claude", "projects", "p1", "session.jsonl"), "{\"t\":\"turn\"}\n");
+    await writeFile(join(local, "feed", ".claude", ".claude.json"), "{\"machineID\":\"local-only\"}");
     const database = new DatabaseSync(databasePath);
     database.exec("CREATE TABLE papers (id TEXT PRIMARY KEY, title TEXT NOT NULL)");
     database.exec("INSERT INTO papers VALUES ('paper-1', 'Fixture')");
@@ -506,6 +510,12 @@ test("backs up the local library one-way to OneDrive without replacing the live 
     assert.equal(await readFile(join(remote, "html_snapshots", "paper.html"), "utf8"), "<p>fixture</p>");
     // Feed attachments are backed up too, preserving their nested path.
     assert.equal(await readFile(join(remote, "feed", "feed-1", "attachments", "notes.txt"), "utf8"), "attachment fixture");
+    // Agent transcripts are backed up so restored feeds can resume; machine-
+    // specific .claude.json stays local.
+    assert.equal(await readFile(join(remote, "feed", ".claude", "projects", "p1", "session.jsonl"), "utf8"), "{\"t\":\"turn\"}\n");
+    await assert.rejects(readFile(join(remote, "feed", ".claude", ".claude.json"), "utf8"));
+    // The whole-file database copy counts as ONE change, not one-per-paper.
+    assert.equal(result.changes.database, 1);
 
     // A second run is idempotent: nothing changes when the backup is current.
     const { stdout: second } = await execFile("python3", [bridgePath, "--local", local, "--database", databasePath, "--remote", remote]);
