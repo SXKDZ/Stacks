@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -563,20 +563,22 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const pendingCount = proposals.filter((p) => p.status === "pending").length;
 
   // Anchor each proposal to the assistant message that produced it, so it renders
-  // inline in the thread instead of always pinned to the bottom. Proposals with
-  // no (or an unknown) message id — e.g. legacy rows or API-created ones — fall
-  // back to a trailing block.
+  // inline in the thread instead of always pinned to the bottom. Only assistant
+  // text/result messages render proposals inline; tool_use, tool_result, and
+  // error messages return early in the loop below and never reach the anchor
+  // check. A proposal anchored to one of those (or to no/an unknown message)
+  // falls back to the trailing block, or it would vanish entirely.
+  const inlineAnchorIds = new Set(
+    messages.filter((message) => message.role === "assistant" && (message.kind === "text" || message.kind === "result")).map((message) => message.id),
+  );
   const proposalsByMessage = new Map<string, FeedProposal[]>();
   for (const proposal of proposals) {
-    if (!proposal.messageId) continue;
+    if (!proposal.messageId || !inlineAnchorIds.has(proposal.messageId)) continue;
     const group = proposalsByMessage.get(proposal.messageId) ?? [];
     group.push(proposal);
     proposalsByMessage.set(proposal.messageId, group);
   }
-  const messageIds = new Set(messages.map((message) => message.id));
-  // Proposals with no anchor message (legacy rows, or ones created via the
-  // library API) can't be interleaved, so they render in a trailing block.
-  const unanchoredProposals = proposals.filter((proposal) => !proposal.messageId || !messageIds.has(proposal.messageId));
+  const unanchoredProposals = proposals.filter((proposal) => !proposal.messageId || !inlineAnchorIds.has(proposal.messageId));
 
   function renderProposals(list: FeedProposal[], key: string): ReactNode {
     if (!list.length) return null;
@@ -1169,7 +1171,7 @@ export default function FeedWorkspace() {
               {collapsedSnippets.length ? (
                 <div className="feed-collapsed-group">
                   <button type="button" className="feed-collapsed-toggle" onClick={() => setShowCollapsed((open) => !open)} aria-expanded={showCollapsed}>
-                    {showCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    {showCollapsed ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     Collapsed feeds
                     <span className="feed-collapsed-count">{collapsedSnippets.length}</span>
                   </button>
