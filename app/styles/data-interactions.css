@@ -774,8 +774,6 @@
   .provider-switch { flex-wrap: wrap; }
   .discovery-result { grid-template-columns: auto 1fr; }
   .discovery-result > button { grid-column: 2; width: max-content; }
-  .detail-meta-grid { grid-template-columns: repeat(2, 1fr); gap: 10px 0; }
-  .detail-meta-grid span:nth-child(3) { border-left: 0; padding-left: 0; }
   .drawer-cta-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .modal-card { max-height: 94vh; }
   .modal-body { max-height: calc(94vh - 130px); padding: 16px; }

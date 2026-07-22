@@ -2608,23 +2608,42 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           </div>
         </div>
         <div className="drawer-content">
-          <div className="detail-control-stack">
-            <div className="detail-meta-grid" aria-label="Publication facts">
-              <span><small>Venue</small><TextButton link className="detail-meta-value max-w-full truncate capitalize text-[var(--ink)]" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></span>
-              <span><small>Year</small><strong>{paper.year ?? "—"}</strong></span>
-              <span><small>Type</small><strong>{paper.paperType}</strong></span>
-            </div>
-            <div className="detail-control-row">
-              <p className="detail-control-label">Reading status</p>
-              <div className="status-selector">
+          <div className="paper-meta">
+            <dl className="paper-facts">
+              <div className="paper-fact">
+                <dt>Venue</dt>
+                <dd><TextButton link className="max-w-full truncate capitalize text-[var(--ink)]" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></dd>
+              </div>
+              <div className="paper-fact">
+                <dt>Year</dt>
+                <dd>{paper.year ?? "—"}</dd>
+              </div>
+              <div className="paper-fact">
+                <dt>Type</dt>
+                <dd className="capitalize">{paper.paperType}</dd>
+              </div>
+            </dl>
+            <div className="paper-field">
+              <span className="paper-field-label">Reading status</span>
+              <div className="reading-status-toggle" role="radiogroup" aria-label="Reading status">
                 {["inbox", "reading", "complete"].map((status) => (
-                  <TabButton key={status} variant="segmented" className={`status-tab status-tab-${status}`} active={paper.readingStatus === status} onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)} icon={<StatusIcon status={status} />}>{statusLabel(status)}</TabButton>
+                  <button
+                    key={status}
+                    type="button"
+                    role="radio"
+                    aria-checked={paper.readingStatus === status}
+                    className={`reading-status-option status-${status} ${paper.readingStatus === status ? "is-active" : ""}`}
+                    onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}
+                  >
+                    <StatusIcon status={status} />
+                    <span>{statusLabel(status)}</span>
+                  </button>
                 ))}
               </div>
             </div>
-            <div className="detail-control-row detail-collections-row">
-              <p className="detail-control-label">Collections</p>
-              <div className="collection-chips large-chips">{paper.collections.length ? paper.collections.map((collection) => <Chip key={collection.id} tone="neutral" className={`collection-chip swatch-${collection.color}`} icon={<span className="collection-chip-dot" />} onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</Chip>) : <span className="row-muted detail-empty-value">No collections yet</span>}</div>
+            <div className="paper-field">
+              <span className="paper-field-label">Collections</span>
+              <div className="collection-chips">{paper.collections.length ? paper.collections.map((collection) => <Chip key={collection.id} tone="neutral" className={`collection-chip swatch-${collection.color}`} icon={<span className="collection-chip-dot" />} onClick={() => onOpenCollection(collection.id, collection.name)}>{collection.name}</Chip>) : <span className="row-muted paper-field-empty">No collections yet</span>}</div>
             </div>
           </div>
           {hasViewer || paper.url ? (

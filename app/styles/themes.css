@@ -361,18 +361,10 @@ textarea::placeholder {
   background: rgba(2, 3, 8, 0.66);
 }
 
-.detail-meta-grid,
 .summary-section,
 .sync-caution {
   background: color-mix(in srgb, var(--brand-blue) 8%, transparent);
   border-color: color-mix(in srgb, var(--brand-blue) 16%, transparent);
-}
-
-/* The reading-status segmented control uses a neutral track (the active tab
-   carries its own status accent), not the blue meta-panel fill. */
-.status-selector {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  border-color: transparent;
 }
 
 .modal-results article {
@@ -1329,8 +1321,6 @@ textarea::placeholder {
 }
 
 [data-theme="light"] .summary-section,
-[data-theme="light"] .detail-meta-grid,
-[data-theme="light"] .status-selector,
 [data-theme="light"] .sync-caution {
   background: rgba(22, 141, 236, 0.065);
 }

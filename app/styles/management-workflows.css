@@ -473,36 +473,6 @@
   }
 }
 
-/* Compact, neutral publication facts in the persistent detail panel. */
-.detail-meta-grid,
-[data-theme="light"] .detail-meta-grid {
-  background: color-mix(in srgb, var(--panel) 94%, #168dec 6%);
-  border-color: color-mix(in srgb, var(--line) 78%, #168dec 22%);
-  border-radius: 11px;
-  margin: 16px 0;
-  padding: 8px 10px;
-}
-
-.detail-meta-grid span {
-  justify-content: center;
-  min-height: 38px;
-}
-
-.detail-meta-grid span + span {
-  border-left-color: var(--line);
-  padding-left: 12px;
-}
-
-.detail-meta-grid small {
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-}
-
-.detail-meta-grid strong {
-  font-size: 12px;
-  line-height: 1.2;
-  margin-top: 2px;
-}
 
 /* Paper collection membership mirrors PaperCLI's paper_collections relation. */
 .paper-collection-field {

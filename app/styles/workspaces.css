@@ -49,103 +49,127 @@
 
 /* --- detail-final.css --- */
 /* Compact paper facts, status, and collection controls share one visual rhythm. */
-.detail-control-stack {
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  margin: 0 0 14px;
+/* Paper detail meta: publication facts + reading status + collections. A calm
+   stack of label/value fields — no boxed table, no colored control tracks. */
+.paper-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
-.detail-control-stack .detail-meta-grid,
-[data-theme="light"] .detail-control-stack .detail-meta-grid {
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
+.paper-facts {
+  display: grid;
+  gap: 14px 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0;
-  min-height: 40px;
-  padding: 0;
 }
 
-.detail-control-stack .detail-meta-grid > span {
-  align-items: center;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 7px;
-  min-height: 40px;
-  padding: 0 10px;
+.paper-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
-.detail-control-stack .detail-meta-grid > span:first-child {
-  padding-left: 0;
-}
-
-.detail-control-stack .detail-meta-grid > span + span {
-  border-left-color: var(--line);
-  padding-left: 10px;
-}
-
-.detail-control-stack .detail-meta-grid small,
-.detail-control-label {
-  color: var(--muted);
+.paper-fact dt,
+.paper-field-label {
+  color: var(--soft);
   font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.04em;
   line-height: 1;
+  text-transform: uppercase;
+}
+
+.paper-fact dd {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
   margin: 0;
-  text-transform: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.detail-control-stack .detail-meta-grid strong {
-  font-size: 12.5px;
-  line-height: 1.2;
-  margin: 0;
+.paper-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
-.detail-control-stack .detail-meta-grid .detail-meta-value {
-  font-size: 12.5px;
-  font-weight: 700;
-  line-height: 1.2;
-  margin: 0;
-}
-
-.detail-control-row {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
+/* Reading status: a full-width segmented control on a neutral track; the active
+   segment fills with its own status accent (amber/blue/green), never a blanket
+   blue. */
+.reading-status-toggle {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-radius: var(--radius-md);
   display: grid;
-  gap: 10px;
-  grid-template-columns: 92px minmax(0, 1fr);
-  min-height: 44px;
-  padding: 5px 0;
+  gap: 3px;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
 }
 
-.detail-control-row:last-child {
-  border-bottom: 0;
-}
-
-.detail-control-stack .status-selector {
-  background: color-mix(in srgb, var(--panel) 82%, var(--blue) 18%);
-  border: 1px solid color-mix(in srgb, var(--line) 78%, var(--blue) 22%);
-  border-radius: 8px;
-  gap: 2px;
-  margin: 0;
+.reading-status-option {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 4px);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  justify-content: center;
   min-height: 32px;
-  padding: 2px;
+  padding: 0 6px;
+  transition: background var(--motion-control), color var(--motion-control);
 }
 
-.detail-control-stack .collection-chips.large-chips {
+.reading-status-option [class*="lucide"] {
+  height: 15px;
+  width: 15px;
+}
+
+.reading-status-option:hover:not(.is-active) {
+  color: var(--ink);
+}
+
+/* The active segment reads as a raised chip on the neutral track: an elevated
+   surface + soft shadow, tinted only by the status accent's text/icon — kept
+   light so it sits at the same visual weight as the collection chips beside it. */
+.reading-status-option.is-active {
+  background: var(--surface-floating);
+  box-shadow: var(--shadow-sm);
+}
+
+.reading-status-option.status-inbox.is-active {
+  color: var(--status-inbox);
+}
+
+.reading-status-option.status-reading.is-active {
+  color: var(--status-reading);
+}
+
+.reading-status-option.status-complete.is-active {
+  color: var(--status-complete);
+}
+
+.paper-meta .collection-chips {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin: 0;
+  gap: 6px;
   min-height: 28px;
 }
 
-.detail-control-stack .detail-empty-value {
+.paper-field-empty {
+  color: var(--soft);
   font-size: 12.5px;
   line-height: 1.35;
-  margin: 0;
 }
 
 .publication-detail-list .publication-file-row {
@@ -168,19 +192,6 @@
   white-space: nowrap;
 }
 
-@media (max-width: 460px) {
-  .detail-control-stack .detail-meta-grid > span {
-    align-content: center;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    justify-content: center;
-  }
-
-  .detail-control-row {
-    grid-template-columns: 82px minmax(0, 1fr);
-  }
-}
 
 /* --- AI feed workspace: a two-pane console (list left, thread right) --- */
 .feed-page {

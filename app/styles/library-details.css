@@ -1048,42 +1048,6 @@ td.number-cell {
   text-decoration-color: currentColor;
 }
 
-.detail-meta-grid {
-  background: #f1f4f7;
-  border: 1px solid #e5ebf0;
-  border-radius: 10px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin: 20px 0;
-  padding: 11px;
-}
-
-.detail-meta-grid span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.detail-meta-grid span + span {
-  border-left: 1px solid var(--line);
-  padding-left: 10px;
-}
-
-.detail-meta-grid small {
-  color: var(--soft);
-  font-size: var(--type-micro);
-  text-transform: uppercase;
-}
-
-.detail-meta-grid strong {
-  font-size: var(--type-label);
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-transform: capitalize;
-  white-space: nowrap;
-}
-
 /* Read + Source are the primary open actions, paired side by side above the
    secondary Feed/Edit/Export row. */
 .drawer-cta-primary {
@@ -1168,42 +1132,6 @@ td.number-cell {
 
 .summary-empty {
   color: var(--muted);
-}
-
-.status-selector {
-  background: #eef2f5;
-  border-radius: 8px;
-  display: grid;
-  gap: 3px;
-  grid-template-columns: repeat(3, 1fr);
-  margin-top: 10px;
-  padding: 3px;
-}
-
-/* Each reading-status tab carries its status icon; the active tab tints to that
-   status's accent so the current state reads at a glance. */
-.status-selector .status-tab {
-  gap: 5px;
-}
-
-/* The segmented TabButton marks the active tab with aria-pressed="true" (its
-   Tailwind active utilities are out-cascaded by this unlayered rule). */
-.status-tab-inbox[aria-pressed="true"] {
-  background: var(--status-inbox-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-inbox) 34%, transparent);
-  color: var(--status-inbox);
-}
-
-.status-tab-reading[aria-pressed="true"] {
-  background: var(--status-reading-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-reading) 34%, transparent);
-  color: var(--status-reading);
-}
-
-.status-tab-complete[aria-pressed="true"] {
-  background: var(--status-complete-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-complete) 34%, transparent);
-  color: var(--status-complete);
 }
 
 .identifier-list {
