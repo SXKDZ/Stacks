@@ -17,6 +17,10 @@
   --surface-2: #151a2b;
   /* Legacy name kept: the opaque floating surface (== surface-2). */
   --panel-strong: var(--surface-2);
+  /* Opaque composite for popovers floating over the raw canvas: the translucent
+     --panel tint composited onto an opaque --canvas base. Lazy var() resolution
+     keeps it theme-correct under [data-theme="light"], no override needed. */
+  --surface-floating: linear-gradient(var(--panel), var(--panel)), var(--canvas);
   /* A hairline top highlight that fakes a light source on raised dark surfaces. */
   --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --white: #ffffff;
@@ -438,15 +442,13 @@ body {
   transform: rotate(8deg) scale(1.05);
 }
 
-.assistant-card > span:nth-child(2),
-.sync-card > span:nth-child(2) {
+.assistant-card > span:nth-child(2) {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 
-.assistant-card strong,
-.sync-card strong {
+.assistant-card strong {
   font-size: 11px;
 }
 
@@ -482,10 +484,6 @@ body {
   grid-template-columns: auto 1fr auto;
   margin-top: 3px;
   padding: 12px 3px 0;
-}
-
-.sync-card strong {
-  color: #5b5461;
 }
 
 .sync-card small {

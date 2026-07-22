@@ -985,8 +985,6 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: 0 7px 22px rgba(12, 15, 28, 0.07);
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 
 .paper-table.research-grid th:nth-child(n),
@@ -2420,17 +2418,6 @@
 }
 
 /* Final accent and density pass: blue branding, stable rows, and connected collection paging. */
-.brand-mark,
-.discover-search-box > button,
-.modal-results article > button,
-.message-user > p,
-.message-user > .chat-bubble,
-.toast {
-  background: var(--brand-gradient);
-  border-color: color-mix(in srgb, var(--brand-blue) 36%, transparent);
-  box-shadow: 0 8px 20px rgba(22, 141, 236, 0.16);
-}
-
 .brand-mark::after {
   display: none;
 }

@@ -619,23 +619,11 @@
 
 /* --- background-tasks.css --- */
 /* Persistent task monitor for LLM, file, import, and sync operations. */
-.background-task-dock {
-  align-items: flex-end;
-  bottom: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  position: fixed;
-  right: 18px;
-  z-index: 140;
-}
-
 .background-task-trigger {
   align-items: center;
   /* Opaque elevated surface (not inverted --ink, which renders as a jarring
      near-white pill in dark mode). Matches the panel it opens. */
-  background-color: var(--canvas);
-  background-image: linear-gradient(var(--panel), var(--panel));
+  background: var(--surface-floating);
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   box-shadow: var(--shadow-sm);
@@ -657,13 +645,9 @@
 }
 
 .background-task-panel {
-  /* This is a floating popover over the raw canvas, so it needs an OPAQUE
-     surface — var(--panel) alone is a translucent tint meant to layer on a
-     solid background and would show the canvas straight through. Composite an
-     opaque canvas base with the panel tint on top so it stays elevated and
-     theme-correct in both light and dark. */
-  background-color: var(--canvas);
-  background-image: linear-gradient(var(--panel), var(--panel));
+  /* Floating popover over the raw canvas: needs the opaque composite surface,
+     not the translucent --panel tint (which would show the canvas through). */
+  background: var(--surface-floating);
   backdrop-filter: blur(18px);
   border: 1px solid var(--line-strong);
   border-radius: 11px;
@@ -775,10 +759,6 @@
     display: none;
   }
 
-  .background-task-dock {
-    bottom: 10px;
-    right: 10px;
-  }
 }
 
 @media (max-width: 560px) {
@@ -852,6 +832,8 @@
   align-items: stretch;
   bottom: auto;
   display: flex;
+  flex-direction: column;
+  gap: 7px;
   margin: 0 1px 6px;
   position: relative;
   right: auto;
@@ -983,10 +965,6 @@ body.is-resizing-chat {
   display: inline-flex;
   font-size: inherit;
   line-height: inherit;
-}
-
-.recent-row {
-  grid-template-columns: auto minmax(0, 1fr) 88px 28px;
 }
 
 .recent-copy,
@@ -1583,8 +1561,7 @@ body.is-resizing-chat {
 }
 
 .asset-acquisition-dialog {
-  background-color: var(--canvas);
-  background-image: linear-gradient(var(--panel), var(--panel));
+  background: var(--surface-floating);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);

@@ -28,18 +28,6 @@ body {
   padding-bottom: 17px;
 }
 
-.brand-mark,
-.discover-search-box button,
-.modal-results article > button,
-.message-user > p,
-.message-user > .chat-bubble,
-.toast {
-  background: var(--brand-gradient);
-  border-color: rgba(45, 156, 255, 0.36);
-  box-shadow: 0 10px 24px rgba(22, 141, 236, 0.18);
-  color: #fff;
-}
-
 .brand-mark {
   border-radius: 9px;
   height: 31px;

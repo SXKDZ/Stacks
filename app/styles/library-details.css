@@ -95,7 +95,7 @@
   border-top: 1px solid var(--line);
   display: grid;
   gap: 12px;
-  grid-template-columns: auto minmax(0,1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) 88px;
   padding: 13px 2px;
   text-align: left;
   width: 100%;

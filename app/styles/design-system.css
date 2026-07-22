@@ -263,10 +263,6 @@
   margin-left: 5px;
 }
 
-.recent-row {
-  grid-template-columns: auto minmax(0, 1fr) 88px;
-}
-
 /* Year and status are fixed utility columns; only Paper and Venue expose handles. */
 .paper-table col.paper-column-year {
   width: 88px !important;
