@@ -1987,7 +1987,7 @@
 }
 
 .sync-card {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sync-card > span:first-child {

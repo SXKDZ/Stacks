@@ -35,7 +35,6 @@ import {
   PanelRightClose,
   Pencil,
   Plus,
-  RefreshCw,
   Save,
   Search,
   Settings2,
@@ -678,7 +677,6 @@ function StacksWorkspace() {
   const [view, setView] = useState<ViewId>("home");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
@@ -704,10 +702,10 @@ function StacksWorkspace() {
     }, 3200);
   }, []);
 
-  async function loadLibrary(showSync = false) {
-    if (showSync) {
-      setSyncing(true);
-    }
+  // Fetches the latest library snapshot. Runs on mount and whenever the tab
+  // regains focus/visibility, so the sidebar and views stay fresh without a
+  // manual refresh control.
+  async function loadLibrary() {
     try {
       const response = await fetch("/api/library", { cache: "no-store" });
       if (!response.ok) {
@@ -727,7 +725,6 @@ function StacksWorkspace() {
       setDemoMode(true);
     } finally {
       setLoading(false);
-      setSyncing(false);
     }
   }
 
@@ -957,7 +954,6 @@ function StacksWorkspace() {
             <strong>{demoMode ? "Preview library" : libraryName.trim() || "My Paper Library"}</strong>
             <small>{demoMode ? "Loading library" : `${snapshot.stats.papers} papers · Local library`}</small>
           </span>
-          <ActionButton variant="ghost" size="icon" onClick={() => void loadLibrary(true)} aria-label="Refresh library" icon={<RefreshCw className={syncing ? "spin" : ""} />} />
         </div>
       </aside>
 
