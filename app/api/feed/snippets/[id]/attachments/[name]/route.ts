@@ -7,8 +7,6 @@ export const runtime = "nodejs";
 
 const CONTENT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
-  html: "text/html; charset=utf-8",
-  htm: "text/html; charset=utf-8",
   txt: "text/plain; charset=utf-8",
   md: "text/plain; charset=utf-8",
   png: "image/png",
@@ -19,6 +17,13 @@ const CONTENT_TYPES: Record<string, string> = {
   json: "application/json",
   csv: "text/csv; charset=utf-8",
 };
+
+// Renderable markup (a paper's HTML snapshot, an uploaded .html/.svg) is
+// untrusted: it can carry <script> that would run in the app's own origin and
+// drive its APIs. Attachments are raw files, not the curated reader view, so we
+// never serve them inline as HTML. These extensions are forced to download as
+// an opaque octet-stream instead of being rendered.
+const NEVER_RENDER = new Set(["html", "htm", "svg", "xhtml", "xml", "mhtml"]);
 
 /**
  * Serve a file the user attached to a feed turn, staged under the feed's
@@ -45,12 +50,18 @@ export async function GET(
   }
   const ext = requested.slice(requested.lastIndexOf(".") + 1).toLowerCase();
   const bytes = readFileSync(filePath);
+  const renderable = !NEVER_RENDER.has(ext);
+  const safeName = requested.replace(/"/g, "");
   return new Response(new Uint8Array(bytes), {
     headers: {
-      "Content-Type": CONTENT_TYPES[ext] ?? "application/octet-stream",
-      "Content-Disposition": `inline; filename="${requested.replace(/"/g, "")}"`,
+      "Content-Type": renderable ? (CONTENT_TYPES[ext] ?? "application/octet-stream") : "application/octet-stream",
+      "Content-Disposition": `${renderable ? "inline" : "attachment"}; filename="${safeName}"`,
       "Content-Length": String(bytes.length),
       "Cache-Control": "private, no-store",
+      // Defense in depth: even if a client renders the response, nothing loads
+      // or executes. Harmless for the download path.
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
