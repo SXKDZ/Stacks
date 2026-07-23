@@ -610,7 +610,7 @@ textarea::placeholder {
 }
 
 .markdown-content .katex {
-  color: #eef1f7;
+  color: var(--ink);
   font-size: 1.04em;
 }
 

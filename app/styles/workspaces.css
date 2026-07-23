@@ -1015,7 +1015,7 @@
    resets the border to 0, since this modal renders inside the dock form). */
 .feed-text-editor .feed-text-editor-area {
   background: var(--canvas);
-  border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
   border-radius: var(--radius-md);
   color: var(--ink);
   flex: 1;
