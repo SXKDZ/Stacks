@@ -6,6 +6,48 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Per-feed agent model picker in the composer and reply box: choose the Bedrock
+  model for a feed, persisted on the feed and passed to the agent, recorded as a
+  system notice in the thread, with the last-used model restored for new feeds.
+- One reusable dropdown control used everywhere a select is needed (feed model
+  picker, AI settings, filter builder, entity forms), replacing native selects
+  so the option list matches the app's own styling.
+- Clickable author names and collection chips in the paper list that filter the
+  library by that author or collection.
+- A one-time OneDrive backup on startup when auto-backup is configured, so
+  changes made while Stacks was closed are protected on the next launch.
+- Continuous integration (lint, typecheck, build, and tests) on every pull
+  request and push, with the main branch protected behind it.
+
+### Changed
+
+- Refreshed the interface: a modern type scale (Geist), a single theme-aware
+  brand gradient, rounder buttons, and consolidated spacing, radii, borders, and
+  colors so surfaces stay consistent across light and dark themes.
+- Proposal cards now show the change action (e.g. "Create paper") alongside the
+  paper type and venue, and expand in place to the structured change details
+  with the raw JSON tucked inside.
+- The OneDrive sync card reports the configured backup state and last backup
+  time instead of always reading as not-yet-connected after a restart.
+- The library view and an open feed now refresh each other's changes on tab
+  focus, retiring the manual refresh button.
+
+### Fixed
+
+- Feed HTML/SVG attachments are served as downloads with a strict content
+  policy, so a captured web page's scripts can never run inside the app.
+- The workflow runtime no longer exposes host internals to a workflow script.
+- Enforced unique arXiv and Semantic Scholar identifiers on papers, made
+  proposal approval and GitHub sync safe against overlapping runs, and stopped
+  the demo library from reappearing after every paper is deleted.
+- Feed attachments and agent sessions are cleaned up on delete and carried along
+  when the library folder moves; re-downloading a source now refreshes the file.
+- A failed agent launch now surfaces as an error instead of leaving a feed stuck
+  loading; an empty filter clause no longer hides every paper; and bulk delete or
+  export only ever acts on the papers currently in view.
+
 ## [0.1.1] - 2026-07-23
 
 ### Removed
