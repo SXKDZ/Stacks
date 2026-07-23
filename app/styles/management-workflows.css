@@ -224,13 +224,8 @@
 }
 
 .doctor-modal-kind {
-  color: var(--soft);
   flex-shrink: 0;
-  font-size: var(--type-micro);
-  font-weight: 800;
-  letter-spacing: 0.08em;
   min-width: 74px;
-  text-transform: uppercase;
 }
 
 .doctor-modal-foot {
@@ -1361,11 +1356,6 @@
   width: min(390px, 100%);
 }
 
-.page-search.inline-search:focus-within {
-  border-color: color-mix(in srgb, var(--brand-blue) 70%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-blue-soft) 86%, transparent);
-}
-
 .page-search.inline-search > svg {
   color: var(--muted);
   flex: 0 0 18px;
@@ -1861,18 +1851,6 @@
 .abstract-copy.markdown-content h3 {
   font-size: 1.02em;
   margin-top: 1em;
-}
-
-/* The sync status surface follows the selected light theme. */
-[data-theme="light"] .sync-status-card {
-  background: #ffffff;
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
-  color: var(--ink);
-}
-
-[data-theme="light"] .sync-status-card small {
-  color: var(--muted);
 }
 
 @media (max-width: 760px) {

@@ -16,12 +16,7 @@
 }
 
 .settings-nav > p {
-  color: var(--soft);
-  font-size: var(--type-micro);
-  font-weight: 800;
-  letter-spacing: 0.1em;
   margin: 8px 9px 7px;
-  text-transform: uppercase;
 }
 
 .settings-local-note > span {
@@ -237,23 +232,17 @@
   font-size: var(--type-caption);
 }
 
+/* Field geometry only; the theme-aware background and the shared focus ring
+   live in themes.css / design-system.css. */
 .settings-form-grid input,
 .settings-form-grid select,
 .integration-row input {
-  background-color: #fcfdfe;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  font-size: var(--type-label);
+  font-size: var(--type-control);
   outline: 0;
   padding: 9px;
   width: 100%;
-}
-
-.settings-form-grid input:focus,
-.settings-form-grid select:focus,
-.integration-row input:focus {
-  border-color: #8ac4ef;
-  box-shadow: 0 0 0 3px rgba(22,141,236,0.08);
 }
 
 .settings-form-grid small {
@@ -348,8 +337,8 @@
 
 .sync-caution {
   align-items: flex-start;
-  background: #eef7fe;
-  border-top: 1px solid #cce7fb;
+  background: var(--brand-blue-soft);
+  border-top: 1px solid color-mix(in srgb, var(--brand-blue) 24%, transparent);
   color: var(--brand-blue-strong);
   display: flex;
   gap: 9px;
@@ -357,16 +346,12 @@
 }
 
 .sync-caution svg { flex: 0 0 auto; }
-.sync-caution p { color: #6e627c; font-size: var(--type-micro); line-height: 1.45; margin: 0; }
+.sync-caution p { color: var(--muted); font-size: var(--type-micro); line-height: 1.45; margin: 0; }
 .sync-caution strong { color: var(--brand-blue-strong); }
 
+/* Composes .settings-card for the surface; only the row layout lives here. */
 .sync-status-card {
   align-items: center;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  color: var(--ink);
   display: grid;
   gap: 10px;
   grid-template-columns: auto 1fr auto;
@@ -376,7 +361,7 @@
 
 .sync-status-card > div { display: flex; flex-direction: column; }
 .sync-status-card strong { font-family: var(--font-display); font-size: var(--type-label); font-weight: 500; }
-.sync-status-card small { color: var(--soft); font-size: var(--type-micro); margin-top: 3px; }
+.sync-status-card small { color: var(--muted); font-size: var(--type-micro); margin-top: 3px; }
 .settings-footer {
   align-items: center;
   display: flex;
@@ -457,12 +442,7 @@
 }
 
 .command-results > p {
-  color: var(--soft);
-  font-size: var(--type-micro);
-  font-weight: 800;
-  letter-spacing: 0.12em;
   margin: 8px 8px 5px;
-  text-transform: uppercase;
 }
 
 .command-results > button {

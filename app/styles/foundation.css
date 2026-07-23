@@ -283,13 +283,6 @@ body {
   letter-spacing: -0.025em;
 }
 
-.brand-copy span {
-  color: var(--soft);
-  font-size: var(--type-label);
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
 
 .brand-copy .brand-slogan {
   color: var(--muted);
@@ -348,13 +341,22 @@ body {
   gap: 3px;
 }
 
+/* Section eyebrows / group labels share one spec app-wide. Per-instance rules
+   keep only layout (margins, padding, flex bits); .card-kicker's brighter color
+   is a deliberate hero-card exception set later. */
 .nav-label,
 .eyebrow,
-.card-kicker {
+.card-kicker,
+.brand-copy span,
+.settings-nav > p,
+.command-results > p,
+.feed-tool-tag,
+.doctor-modal-kind,
+.reader-brand small {
   color: var(--soft);
-  font-size: var(--type-label);
+  font-size: var(--type-micro);
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   margin: 0;
   text-transform: uppercase;
 }

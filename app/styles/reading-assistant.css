@@ -39,12 +39,6 @@
   min-width: 0;
 }
 
-.reader-brand small {
-  color: #a59cab;
-  font-size: var(--type-micro);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 
 .reader-brand strong {
   font-family: var(--font-display);
@@ -381,16 +375,17 @@
   gap: 8px;
 }
 
+/* Layout only: the theme normalization block (themes.css) supplies the surface. */
 .modal-search-row label,
 .large-field {
   align-items: center;
-  background: white;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
   color: var(--soft);
   display: flex;
   flex: 1;
   gap: 7px;
+  min-height: 36px;
   padding: 0 9px;
 }
 
@@ -542,27 +537,15 @@
   text-transform: uppercase;
 }
 
+/* Field geometry only; the theme-aware background and the shared focus ring
+   live in themes.css / design-system.css (textareas share their own spec there). */
 .entity-form input,
-.entity-form textarea,
 .entity-form select {
-  background-color: white;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  font-size: var(--type-micro);
+  font-size: var(--type-control);
   outline: 0;
   padding: 9px;
-}
-
-.entity-form textarea {
-  line-height: 1.5;
-  resize: vertical;
-}
-
-.entity-form input:focus,
-.entity-form textarea:focus,
-.entity-form select:focus {
-  border-color: #8ac4ef;
-  box-shadow: 0 0 0 3px rgba(22,141,236,0.08);
 }
 
 .entity-form label small {
@@ -588,9 +571,9 @@
 .bulk-warning {
   align-items: center;
   background: var(--brand-blue-soft);
-  border: 1px solid #cce7fb;
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 24%, transparent);
   border-radius: var(--radius-md);
-  color: #0b669f;
+  color: var(--brand-blue-strong);
   display: flex;
   font-size: var(--type-caption);
   gap: 9px;

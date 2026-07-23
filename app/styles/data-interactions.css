@@ -221,7 +221,7 @@
   color: var(--muted);
   display: inline-flex;
   font-size: var(--type-micro);
-  font-weight: 750;
+  font-weight: 700;
   gap: 4px;
   height: 29px;
   justify-content: center;
@@ -355,7 +355,7 @@
   color: var(--brand-blue-strong);
   display: inline-flex;
   font-size: var(--type-micro);
-  font-weight: 750;
+  font-weight: 700;
   gap: 5px;
   height: 29px;
   padding: 0 8px;
@@ -490,7 +490,7 @@
   color: var(--brand-blue-strong);
   flex: 0 0 auto;
   font-size: var(--type-micro);
-  font-weight: 750;
+  font-weight: 700;
   padding: 0;
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);

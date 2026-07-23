@@ -29,15 +29,7 @@ body {
   background-clip: text;
   color: transparent;
   font-size: var(--type-body-large);
-  font-weight: 750;
-}
-
-.brand-copy span,
-.nav-label,
-.eyebrow,
-.card-kicker {
-  font-size: var(--type-micro);
-  letter-spacing: 0.12em;
+  font-weight: 700;
 }
 
 .nav-item {
@@ -104,6 +96,7 @@ body {
 .entity-form select,
 .settings-form-grid input,
 .settings-form-grid select,
+.settings-form-grid textarea,
 .integration-row input,
 .detail-section textarea {
   background-color: rgba(0, 0, 0, 0.26);
@@ -453,7 +446,6 @@ textarea::placeholder {
 }
 
 .command-results small,
-.command-results > p,
 .command-footer {
   font-size: var(--type-micro);
 }
@@ -698,25 +690,6 @@ textarea::placeholder {
   display: none;
 }
 
-.settings-form-grid textarea {
-  background: #0a0f1b;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: var(--type-label);
-  line-height: 1.55;
-  outline: 0;
-  padding: 11px;
-  resize: vertical;
-  width: 100%;
-}
-
-.settings-form-grid textarea:focus {
-  border-color: color-mix(in srgb, var(--brand-blue) 64%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-blue) 9%, transparent);
-}
-
 .path-picker-control {
   display: grid;
   gap: 8px;
@@ -809,7 +782,8 @@ textarea::placeholder {
 .settings-form-grid input,
 .settings-form-grid select,
 .settings-form-grid textarea,
-.integration-row input {
+.integration-row input,
+.detail-section textarea {
   font-size: var(--type-control);
 }
 

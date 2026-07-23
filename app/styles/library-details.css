@@ -200,12 +200,13 @@
   white-space: nowrap;
 }
 
+/* Layout only: the theme normalization block (themes.css) supplies the surface
+   and .page-search.inline-search (management-workflows.css) the toolbar variant. */
 .inline-search {
   align-items: center;
-  background: white;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
-  color: #98909f;
+  color: var(--soft);
   display: flex;
   gap: 7px;
   min-height: 36px;
@@ -213,10 +214,6 @@
   width: min(310px, 30vw);
 }
 
-.inline-search:focus-within {
-  border-color: #9bcdf3;
-  box-shadow: 0 0 0 3px rgba(22,141,236,0.09);
-}
 
 .inline-search input {
   background: transparent;
@@ -690,7 +687,7 @@ td.number-cell {
 .discover-search-box {
   align-items: center;
   background: white;
-  border: 1px solid #dbe3ea;
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
   box-shadow: 0 12px 35px rgba(15, 31, 42, 0.07);
   display: flex;
@@ -1092,7 +1089,7 @@ td.number-cell {
   cursor: pointer;
   display: inline-flex;
   font-size: var(--type-micro);
-  font-weight: 750;
+  font-weight: 700;
   gap: 5px;
   height: 26px;
   letter-spacing: 0.04em;
@@ -1111,16 +1108,8 @@ td.number-cell {
 }
 
 .detail-section textarea {
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  line-height: 1.5;
   margin-top: var(--space-eyebrow-gap);
   min-height: 105px;
-  outline: 0;
-  padding: 10px;
-  resize: vertical;
-  width: 100%;
 }
 
 .summary-section {

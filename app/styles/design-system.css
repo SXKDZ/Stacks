@@ -581,3 +581,44 @@ select {
 .entity-form select {
   padding-right: 28px;
 }
+
+/* Editable multi-line textareas share one spec (entity forms, paper notes,
+   settings prompts). Backgrounds stay with the theme normalization blocks in
+   themes.css; per-context rules keep only min-height/margins. */
+.entity-form textarea,
+.detail-section textarea,
+.settings-form-grid textarea {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  line-height: 1.5;
+  outline: 0;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+/* One tokenized focus ring for every bare field and textarea (replaces the
+   hardcoded #8ac4ef / rgba(22,141,236,.08) literals and gives the notes
+   textarea a ring it lacked). 72% matches the ring recipe used elsewhere. */
+.settings-form-grid input:focus,
+.settings-form-grid select:focus,
+.settings-form-grid textarea:focus,
+.integration-row input:focus,
+.entity-form input:focus,
+.entity-form select:focus,
+.entity-form textarea:focus,
+.detail-section textarea:focus {
+  border-color: color-mix(in srgb, var(--brand-blue) 72%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--brand-blue-soft);
+}
+
+/* One focus ring for every search-input wrapper (library toolbar, feed sidebar,
+   modal search rows, and the discover hero box, which previously had none). */
+.inline-search:focus-within,
+.feed-search:focus-within,
+.modal-search-row label:focus-within,
+.large-field:focus-within,
+.discover-search-box:focus-within {
+  border-color: color-mix(in srgb, var(--brand-blue) 70%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--brand-blue-soft);
+}

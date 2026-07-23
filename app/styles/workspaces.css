@@ -319,11 +319,6 @@
   transition: border-color var(--motion-control), box-shadow var(--motion-control);
 }
 
-.feed-search:focus-within {
-  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--line-strong));
-  box-shadow: 0 0 0 3px var(--brand-blue-soft);
-}
-
 .feed-search input {
   background: transparent;
   border: 0;
@@ -1661,12 +1656,7 @@
 /* Sub-labels separating a request from its folded-in result. The result tag
    carries a divider so request and response read as distinct blocks. */
 .feed-tool-tag {
-  color: var(--soft);
-  font-size: var(--type-micro);
-  font-weight: 800;
-  letter-spacing: 0.1em;
   padding: 8px 11px 0;
-  text-transform: uppercase;
 }
 
 .feed-tool-io .feed-tool-md + .feed-tool-tag {
