@@ -2015,8 +2015,8 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
           <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
         </button>
         <div className="collection-actions">
-          <ActionButton variant="ghost" size="small" onClick={onEdit} icon={<Pencil />}>Edit</ActionButton>
-          <ActionButton variant="danger" size="small" onClick={onDelete} icon={<Trash2 />}>Delete</ActionButton>
+          <ActionButton variant="ghost" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} title="Edit" />
+          <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} title="Delete" />
         </div>
       </header>
       <div className="collection-papers" aria-label={`Papers in ${collection.name}`}>
