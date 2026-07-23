@@ -1421,7 +1421,7 @@
 }
 
 .table-pagination-controls select {
-  background: var(--panel);
+  background-color: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   color: var(--ink);

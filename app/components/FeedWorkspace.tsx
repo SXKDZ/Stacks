@@ -4,7 +4,7 @@ import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, ChevronUp, Circ
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
+import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { Brand } from "@/app/components/ui/Brand";
@@ -62,6 +62,7 @@ interface FeedSnippet {
   title: string;
   instruction: string;
   status: string;
+  model?: string | null;
   error: string | null;
   inputTokens?: number;
   outputTokens?: number;
@@ -433,9 +434,11 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, onBack, onChanged }: {
+function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onChanged }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
+  models: FeedModelOption[];
+  defaultModelLabel: string;
   onBack: () => void;
   onChanged: () => void;
 }) {
@@ -449,42 +452,42 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const running = snippet.status === "running" || snippet.status === "queued";
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
-  // Forces one scroll-to-bottom on the next content change, regardless of the
-  // near-bottom gate: set when the thread first opens and whenever the user
-  // sends a reply, so both land the view at the latest message.
-  const forceScrollRef = useRef(true);
+  // Stick-to-bottom: while pinned, every content change scrolls to the latest
+  // message (a thread opens pinned, and a reply re-pins). History streams in
+  // over several batches, so a one-shot scroll would strand the view partway;
+  // instead the pin persists until the user scrolls up, and re-arms when they
+  // return to the bottom.
+  const pinnedToBottomRef = useRef(true);
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
+    pinnedToBottomRef.current = true;
     if (body) body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
   }, []);
 
-  // Auto-scroll to the newest content as it streams in when the user is already
-  // near the bottom (so scrolling up to re-read isn't yanked back), or when a
-  // force is pending (thread just opened, or the user just replied). Content
-  // growth doesn't fire a scroll event, so we re-measure the near-bottom state
-  // here too, which is why opening a long thread shows the jump-to-latest button.
+  // Auto-scroll to the newest content as it streams in while pinned. Content
+  // growth doesn't fire a scroll event, so re-measure the bottom state here too.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
-    const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
-    // A pending force only resolves once there is scrollable content to land on,
-    // so a thread that opens empty still scrolls once its history streams in.
-    const force = forceScrollRef.current && body.scrollHeight > body.clientHeight;
-    if (nearBottom || force) {
+    if (pinnedToBottomRef.current) {
       body.scrollTop = body.scrollHeight;
-    }
-    if (force) {
-      forceScrollRef.current = false;
     }
     setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
   }, [messages, proposals, running]);
 
-  // Track whether the user is near the bottom, to toggle the jump-to-latest button.
+  // Scroll events either come from our own pin (which lands at the bottom) or
+  // from the user. A position away from the bottom therefore means the user
+  // scrolled up: unpin so streaming stops yanking them back. Returning to the
+  // bottom re-pins.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
-    const onScroll = () => setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
+    const onScroll = () => {
+      const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
+      pinnedToBottomRef.current = nearBottom;
+      setAtBottom(nearBottom);
+    };
     onScroll();
     body.addEventListener("scroll", onScroll, { passive: true });
     return () => body.removeEventListener("scroll", onScroll);
@@ -518,6 +521,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
       if (payload.files.length || payload.paperIds.length) {
         const form = new FormData();
         form.set("reply", payload.text);
+        form.set("model", payload.model);
         for (const file of payload.files) form.append("files", file);
         for (const paperId of payload.paperIds) form.append("paperIds", paperId);
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, { method: "POST", body: form });
@@ -525,12 +529,13 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reply: payload.text }),
+          body: JSON.stringify({ reply: payload.text, model: payload.model }),
         });
       }
       if (response.ok) {
-        // Pull the view down to the new turn even if the user had scrolled up.
-        forceScrollRef.current = true;
+        // Re-pin the view to the bottom so the new turn (and the incoming
+        // response) stays in view even if the user had scrolled up.
+        pinnedToBottomRef.current = true;
         setStreamNonce((nonce) => nonce + 1);
         onChanged();
         return true;
@@ -760,6 +765,13 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                 );
                 continue;
               }
+              // System notices (e.g. a model switch) render as a subtle centered line.
+              if (message.role === "system") {
+                nodes.push(
+                  <div key={message.id} className="feed-message feed-system-note">{message.content}</div>,
+                );
+                continue;
+              }
               const { prose: rawProse, raw } = message.role === "user" ? { prose: message.content, raw: null } : splitProposalBlock(message.content);
               const messageAttachments = message.role === "user" ? parseAttachments(message.attachments) : [];
               // Drop the "(attached N files)" placeholder when the chips convey it.
@@ -804,6 +816,9 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         ) : null}
         <AttachBox
           library={library}
+          models={models}
+          initialModel={snippet.model ?? ""}
+          defaultModelLabel={defaultModelLabel}
           placeholder={running ? "Message the agent…" : "Reply to continue this thread."}
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
@@ -857,6 +872,13 @@ export default function FeedWorkspace() {
     window.addEventListener("pointerup", onUp, { once: true });
   }, [sidebarWidth]);
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
+  const [models, setModels] = useState<FeedModelOption[]>([]);
+  const [defaultModelId, setDefaultModelId] = useState("");
+  // A new feed starts on the model the user last picked (persisted per browser).
+  const [lastUsedModel, setLastUsedModel] = useState("");
+  useEffect(() => {
+    setLastUsedModel(window.localStorage.getItem("stacks-feed-model") ?? "");
+  }, []);
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
@@ -875,6 +897,11 @@ export default function FeedWorkspace() {
     });
   }, []);
   const clearSyncLog = useCallback(() => { setSyncLog([]); writeSyncLog([]); }, []);
+
+  // The configured default model's friendly label (falls back to the raw id).
+  const defaultModelLabel = defaultModelId
+    ? models.find((option) => option.id === defaultModelId)?.label ?? defaultModelId
+    : "";
 
   // ⌘ on macOS, Ctrl elsewhere. Set after mount so SSR and client agree.
   const [modKey, setModKey] = useState("⌃");
@@ -904,15 +931,17 @@ export default function FeedWorkspace() {
     }
   }, []);
 
-  // Read the authoritative settings: the library name and whether GitHub inbox
-  // sync is configured (repo + token).
+  // Read the authoritative settings: the library name, whether GitHub inbox
+  // sync is configured (repo + token), and the configured default model id
+  // (Settings → AI model) so the composer's picker can name the default.
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/local-settings", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { libraryName?: string; github?: { repo?: string; connected?: boolean } } | null) => {
+      .then((data: { libraryName?: string; ai?: { modelId?: string }; github?: { repo?: string; connected?: boolean } } | null) => {
         if (cancelled || !data) return;
         if (data.libraryName?.trim()) setLibraryName(data.libraryName.trim());
+        if (data.ai?.modelId?.trim()) setDefaultModelId(data.ai.modelId.trim());
         setGithubReady(Boolean(data.github?.repo && data.github.connected));
       })
       .catch(() => {});
@@ -974,25 +1003,54 @@ export default function FeedWorkspace() {
     }
   }, [snippets]);
 
-  // Load the library once so papers can be attached (and the ?paper= param
-  // pre-attaches one, opening straight into the composer).
+  // Load the library so papers can be attached (and the ?paper= param
+  // pre-attaches one, opening straight into the composer). Reload on tab focus
+  // so papers added on the main page are attachable without a manual refresh.
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/library", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { papers?: LibraryPaper[] } | null) => {
-        if (cancelled || !data?.papers) return;
-        setLibrary(data.papers);
-        const params = new URLSearchParams(window.location.search);
-        const paperId = params.get("paper");
-        if (paperId) {
-          const paper = data.papers.find((item) => item.id === paperId);
-          if (paper) {
-            setInitialPapers([paper]);
-            setInitialText("Discuss this paper with me. Read the attached file first.");
-            setComposing(true);
+    let first = true;
+    const load = () => {
+      void fetch("/api/library", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { papers?: LibraryPaper[] } | null) => {
+          if (cancelled || !data?.papers) return;
+          setLibrary(data.papers);
+          if (!first) return;
+          first = false;
+          const params = new URLSearchParams(window.location.search);
+          const paperId = params.get("paper");
+          if (paperId) {
+            const paper = data.papers.find((item) => item.id === paperId);
+            if (paper) {
+              setInitialPapers([paper]);
+              setInitialText("Discuss this paper with me. Read the attached file first.");
+              setComposing(true);
+            }
           }
-        }
+        })
+        .catch(() => {});
+    };
+    load();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // Load the Bedrock model catalog (the same list Settings shows) so each feed
+  // can pick the agent model instead of always running the most powerful one.
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/models", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { models?: Array<{ id: string; label: string }> } | null) => {
+        if (!cancelled && data?.models) setModels(data.models.map(({ id, label }) => ({ id, label })));
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -1096,6 +1154,7 @@ export default function FeedWorkspace() {
       if (payload.files.length || payload.paperIds.length) {
         const form = new FormData();
         form.set("instruction", payload.text);
+        form.set("model", payload.model);
         for (const file of payload.files) form.append("files", file);
         for (const paperId of payload.paperIds) form.append("paperIds", paperId);
         response = await fetch("/api/feed/snippets", { method: "POST", body: form });
@@ -1103,11 +1162,13 @@ export default function FeedWorkspace() {
         response = await fetch("/api/feed/snippets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instruction: payload.text }),
+          body: JSON.stringify({ instruction: payload.text, model: payload.model }),
         });
       }
       if (response.ok) {
         const { id } = await response.json() as { id: string };
+        setLastUsedModel(payload.model);
+        window.localStorage.setItem("stacks-feed-model", payload.model);
         setInitialText("");
         setInitialPapers([]);
         setComposing(false);
@@ -1271,6 +1332,8 @@ export default function FeedWorkspace() {
             key={selected.id}
             snippet={selected}
             library={library}
+            models={models}
+            defaultModelLabel={defaultModelLabel}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
           />
@@ -1300,6 +1363,9 @@ export default function FeedWorkspace() {
             <AttachBox
               key={`${initialText}:${initialPapers.map((p) => p.id).join(",")}`}
               library={library}
+              models={models}
+              initialModel={lastUsedModel}
+              defaultModelLabel={defaultModelLabel}
               placeholder="Capture anything. A link or a note, and what to do with it."
               submitLabel="Add to feed"
               submitting={submitting}

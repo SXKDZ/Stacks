@@ -757,7 +757,20 @@ function StacksWorkspace() {
     const timer = window.setTimeout(() => {
       void loadLibrary();
     }, 0);
-    return () => window.clearTimeout(timer);
+    // Refresh whenever the tab regains focus so changes made elsewhere (the
+    // feed page approving a proposal, another window) show up without a manual
+    // reload.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadLibrary();
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The library name is a real setting (settings.json), loaded from the API so
@@ -2015,7 +2028,7 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
           <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
         </button>
         <div className="collection-actions">
-          <ActionButton variant="ghost" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} title="Edit" />
+          <ActionButton variant="secondary" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} title="Edit" />
           <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} title="Delete" />
         </div>
       </header>

@@ -468,8 +468,10 @@
   min-width: 0;
 }
 
+/* Row titles read at full ink like every other page's primary row text (the
+   library table, recent rows); only the meta line below stays soft. */
 .feed-row-title {
-  color: var(--muted);
+  color: var(--ink);
   font-size: var(--type-control);
   font-weight: 500;
   min-width: 0;
@@ -516,7 +518,7 @@
 /* Second line: status, relative time, and usage, dot-separated. */
 .feed-row-meta {
   align-items: center;
-  color: var(--soft);
+  color: var(--muted);
   display: flex;
   flex-wrap: wrap;
   font-size: var(--type-caption);
@@ -1832,4 +1834,51 @@
 .venue-table-wrap,
 .data-grid-shell {
   border-radius: var(--radius-lg);
+}
+
+/* Composer model picker: a bordered rounded control matching the app's inputs
+   (custom chevron; the native select is transparent inside). */
+.feed-model-select {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  display: inline-flex;
+  gap: 5px;
+  height: 30px;
+  padding: 0 8px;
+  position: relative;
+  transition: border-color var(--motion-control), color var(--motion-control);
+}
+
+.feed-model-select:hover,
+.feed-model-select:focus-within {
+  border-color: color-mix(in srgb, var(--brand-blue) 38%, var(--line-strong));
+  color: var(--ink);
+}
+
+.feed-model-select select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--type-micro);
+  font-weight: 600;
+  max-width: 210px;
+  outline: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* System notices in the thread (e.g. "Switched to model X."): a quiet centered line. */
+.feed-system-note {
+  align-self: center;
+  color: var(--soft);
+  font-size: var(--type-caption);
+  font-style: italic;
+  padding: 2px 0;
+  text-align: center;
 }

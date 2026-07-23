@@ -148,6 +148,8 @@ export const feedSnippets = sqliteTable(
     status: text("status").notNull().default("queued"),
     // The claude -p session id, used with --resume for follow-up turns.
     sessionId: text("session_id"),
+    // The Bedrock model id this feed's agent runs with (null = the CLI default).
+    model: text("model"),
     error: text("error"),
     // The GitHub issue this feed is mirrored to (for remote/mobile access), if
     // GitHub inbox sync is configured. Null until the feed is first synced.

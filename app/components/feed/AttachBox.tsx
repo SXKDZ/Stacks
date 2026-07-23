@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Cpu, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ActionButton } from "@/app/components/ui/controls";
@@ -17,6 +17,14 @@ export interface AttachSubmit {
   text: string;
   files: File[];
   paperIds: string[];
+  /** The Bedrock model to run this feed with ("" = the default). */
+  model: string;
+}
+
+/** A pickable agent model (from the Bedrock catalog, as in Settings). */
+export interface FeedModelOption {
+  id: string;
+  label: string;
 }
 
 /** Pull files out of a paste or a drag-drop (Finder), including clipboard images. */
@@ -48,6 +56,9 @@ export function AttachBox({
   initialPapers = [],
   hint,
   leadingAction,
+  models = [],
+  initialModel = "",
+  defaultModelLabel = "",
   onSubmit,
 }: {
   library: LibraryPaper[];
@@ -61,9 +72,16 @@ export function AttachBox({
   hint?: ReactNode;
   /** Optional control shown in the tools row (e.g. a Stop button while running). */
   leadingAction?: ReactNode;
+  /** Selectable agent models; empty hides the picker. */
+  models?: FeedModelOption[];
+  /** The feed's current model id ("" = the default). */
+  initialModel?: string;
+  /** The configured default model's label (Settings → AI model). */
+  defaultModelLabel?: string;
   onSubmit: (payload: AttachSubmit) => Promise<boolean>;
 }) {
   const [text, setText] = useState(initialText);
+  const [model, setModel] = useState(initialModel);
   const [files, setFiles] = useState<File[]>([]);
   const [papers, setPapers] = useState<LibraryPaper[]>(initialPapers);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -88,6 +106,28 @@ export function AttachBox({
   }
 
   const hasAttachments = files.length > 0 || papers.length > 0 || texts.length > 0;
+
+  // Esc closes whichever overlay is open (library picker, zoomed image, or the
+  // pasted-text editor), innermost first.
+  const overlayOpen = pickerOpen || zoomedImage !== null || editingText !== null;
+  useEffect(() => {
+    if (!overlayOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setZoomedImage((current) => {
+        if (current !== null) return null;
+        setEditingText((editing) => {
+          if (editing !== null) return null;
+          setPickerOpen(false);
+          return editing;
+        });
+        return current;
+      });
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [overlayOpen]);
 
   // Keep the newest chip in view when the (height-capped, scrollable) tray grows.
   useEffect(() => {
@@ -140,7 +180,7 @@ export function AttachBox({
     const textFiles = texts.map((entry, index) =>
       new File([entry.content], `pasted-${index + 1}.txt`, { type: "text/plain" }),
     );
-    const cleared = await onSubmit({ text: text.trim(), files: [...files, ...textFiles], paperIds: papers.map((p) => p.id) });
+    const cleared = await onSubmit({ text: text.trim(), files: [...files, ...textFiles], paperIds: papers.map((p) => p.id), model });
     if (cleared) {
       setText("");
       setFiles([]);
@@ -255,6 +295,16 @@ export function AttachBox({
             <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
             <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file"><Paperclip size={16} /></button>
             <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library"><BookOpen size={16} /></button>
+            {models.length ? (
+              <span className="feed-model-select">
+                <Cpu size={13} aria-hidden="true" />
+                <select value={model} onChange={(event) => setModel(event.target.value)} aria-label="Agent model">
+                  <option value="">{defaultModelLabel ? `${defaultModelLabel} (default)` : "Default model"}</option>
+                  {models.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
+                </select>
+                <ChevronDown size={12} aria-hidden="true" />
+              </span>
+            ) : null}
             {leadingAction}
           </div>
           <div className="feed-dock-send">

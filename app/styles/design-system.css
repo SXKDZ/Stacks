@@ -564,3 +564,20 @@
   position: relative;
   z-index: 46;
 }
+
+/* Native selects share one look app-wide: no OS arrow, our own chevron glyph
+   (inked per theme via --select-chevron), and room for it on the right. The
+   themed background rules use background-color so this image survives them. */
+select {
+  appearance: none;
+  background-image: var(--select-chevron);
+  background-position: right 8px center;
+  background-repeat: no-repeat;
+  background-size: 14px;
+  cursor: pointer;
+}
+
+.settings-form-grid select,
+.entity-form select {
+  padding-right: 28px;
+}

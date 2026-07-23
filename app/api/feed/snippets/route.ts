@@ -40,6 +40,7 @@ export async function POST(request: Request): Promise<Response> {
     let instruction = "";
     let freeText = "";
     let title = "";
+    let model = "";
     let paperIds: string[] = [];
     let attachments: SnippetAttachment[] = [];
 
@@ -49,16 +50,18 @@ export async function POST(request: Request): Promise<Response> {
       instruction = String(form.get("instruction") ?? "").trim();
       freeText = String(form.get("body") ?? "").trim();
       title = String(form.get("title") ?? "").trim();
+      model = String(form.get("model") ?? "").trim();
       paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
       const files = form.getAll("files").filter((value): value is File => value instanceof File);
       attachments = await collectSnippetAttachments(workingDir, files, paperIds);
     } else {
       const body = (await request.json()) as {
-        instruction?: string; body?: string; title?: string; paperIds?: string[];
+        instruction?: string; body?: string; title?: string; model?: string; paperIds?: string[];
       };
       instruction = body.instruction?.trim() ?? "";
       freeText = body.body?.trim() ?? "";
       title = body.title?.trim() ?? "";
+      model = body.model?.trim() ?? "";
       paperIds = Array.isArray(body.paperIds) ? body.paperIds.filter(Boolean) : [];
       attachments = await collectSnippetAttachments(workingDir, [], paperIds);
     }
@@ -78,6 +81,7 @@ export async function POST(request: Request): Promise<Response> {
         instruction: instruction || freeText,
         status: "queued",
         sessionId: "",
+        model: model.slice(0, 200) || null,
         attachments: attachments.length ? JSON.stringify(attachments) : null,
         createdAt: now,
         updatedAt: now,

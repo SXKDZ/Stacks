@@ -76,6 +76,7 @@ const schemaStatements = [
     instruction TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'queued',
     session_id TEXT,
+    model TEXT,
     error TEXT,
     issue_number INTEGER,
     issue_title_synced TEXT,
@@ -239,6 +240,9 @@ async function initializeDatabase(): Promise<void> {
     raw.prepare("ALTER TABLE feed_snippets DROP COLUMN working_dir").run();
   }
   // Add the collapse-feature columns to feeds created before it existed.
+  if (!feedSnippetColumns.has("model")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN model TEXT").run();
+  }
   if (!feedSnippetColumns.has("collapsed")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0").run();
   }

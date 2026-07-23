@@ -483,7 +483,7 @@ const paginationVariants = cva(
   {
     variants: {
       current: {
-        true: "border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white",
+        true: "border-white/10 bg-[image:var(--brand-gradient)] text-white",
         false: "border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[color-mix(in_srgb,var(--brand-blue)_34%,var(--line))] hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue-strong)]",
       },
       compact: {

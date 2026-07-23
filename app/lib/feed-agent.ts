@@ -266,6 +266,15 @@ export async function runFeedAgent(options: {
   // agent-facing library APIs. Reads run live; writes enqueue approvals.
   const feedToken = issueFeedToken(snippetId);
 
+  // The per-feed model choice lives on the snippet row, so every turn (create,
+  // reply, fork retry, GitHub sync) runs with the same model automatically.
+  const database = await ensureDatabase();
+  const snippetModel = database
+    .select({ model: feedSnippets.model })
+    .from(feedSnippets)
+    .where(eq(feedSnippets.id, snippetId))
+    .get()?.model?.trim();
+
   const args = [
     "-p",
     prompt,
@@ -276,6 +285,7 @@ export async function runFeedAgent(options: {
     MAX_TURNS,
     "--add-dir",
     workingDir,
+    ...(snippetModel ? ["--model", snippetModel] : []),
     // Headless: with no user to answer prompts, the default mode auto-denies
     // every Bash/network/temp-file call, so the agent can't even read the
     // library. "auto" keeps the background safety classifier as a guardrail

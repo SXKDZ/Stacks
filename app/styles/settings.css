@@ -240,7 +240,7 @@
 .settings-form-grid input,
 .settings-form-grid select,
 .integration-row input {
-  background: #fcfdfe;
+  background-color: #fcfdfe;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   font-size: var(--type-label);

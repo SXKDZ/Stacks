@@ -108,7 +108,7 @@
 }
 
 .filter-clause-row select {
-  background: var(--panel);
+  background-color: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   color: var(--ink);
@@ -1397,7 +1397,7 @@
   display: grid;
   gap: 12px;
   grid-template-columns: auto 1fr;
-  max-width: 460px;
+  max-width: 620px;
   padding: 20px;
   width: 100%;
 }
@@ -1429,9 +1429,9 @@
 
 .asset-acquisition-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
   grid-column: 1 / -1;
   justify-content: flex-end;
   margin-top: 4px;
+  white-space: nowrap;
 }

@@ -545,7 +545,7 @@
 .entity-form input,
 .entity-form textarea,
 .entity-form select {
-  background: white;
+  background-color: white;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   font-size: var(--type-micro);

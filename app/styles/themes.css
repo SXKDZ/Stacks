@@ -106,7 +106,7 @@ body {
 .settings-form-grid select,
 .integration-row input,
 .detail-section textarea {
-  background: rgba(0, 0, 0, 0.26);
+  background-color: rgba(0, 0, 0, 0.26);
   border-color: var(--line-strong);
   color: var(--ink);
 }
@@ -1043,6 +1043,8 @@ textarea::placeholder {
   /* A brighter, airier primary gradient for the light canvas, so buttons and the
      chat bubble stay vivid against white rather than looking heavy. */
   --brand-gradient: linear-gradient(135deg, #3aa6ff 0%, #4f86f0 52%, #6a6ff0 100%);
+  /* The select arrow in this theme's --soft ink (see foundation.css). */
+  --select-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a8395' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
   --cyan: #177d8d;
   --cyan-soft: rgba(23, 125, 141, 0.1);
   --amber: #9a6816;
@@ -1106,7 +1108,7 @@ textarea::placeholder {
 [data-theme="light"] .settings-form-grid textarea,
 [data-theme="light"] .integration-row input,
 [data-theme="light"] .detail-section textarea {
-  background: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.9);
   color: var(--ink);
 }
 
