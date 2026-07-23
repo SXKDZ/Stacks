@@ -2107,7 +2107,7 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
 }
 
 function ToolbarCreateButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <ActionButton variant="primary" size="icon" className="toolbar-add-action ml-auto" onClick={onClick} aria-label={label} title={label} icon={<Plus />} />;
+  return <ActionButton variant="primary" className="toolbar-add-action ml-auto" onClick={onClick} aria-label={label} title={label} icon={<Plus />}>{label}</ActionButton>;
 }
 
 function PageSearch({ value, onChange, placeholder }: {
