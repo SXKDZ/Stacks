@@ -25,17 +25,13 @@
 .modal-results article > button,
 .toast,
 .assistant-orb {
-  background: var(--brand-cta);
+  background-image: var(--brand-gradient);
   border-color: var(--brand-cta-border);
   box-shadow: 0 7px 18px var(--brand-cta-shadow);
 }
 
 .assistant-orb svg {
   color: #ffffff;
-}
-
-[data-theme="dark"] .assistant-orb {
-  background: var(--brand-cta);
 }
 
 .brand strong {

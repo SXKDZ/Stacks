@@ -15,7 +15,7 @@ export function cx(...values: Array<string | false | null | undefined>) {
 const actionVariants = cva(
   [
     "inline-flex shrink-0 select-none items-center justify-center gap-2",
-    "rounded-xl border font-semibold leading-[1.25] no-underline",
+    "rounded-[var(--radius-lg)] border font-semibold leading-[1.25] no-underline",
     "transition-[background-color,border-color,color,box-shadow,filter,transform] duration-200 ease-out",
     "hover:-translate-y-px active:translate-y-0 active:scale-[0.97]",
     "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[color-mix(in_srgb,var(--brand-blue)_22%,transparent)]",
@@ -487,8 +487,8 @@ const paginationVariants = cva(
         false: "border-[var(--line)] bg-[var(--panel)] text-[var(--muted)] hover:border-[color-mix(in_srgb,var(--brand-blue)_34%,var(--line))] hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue-strong)]",
       },
       compact: {
-        true: "min-h-[25px] min-w-[25px] rounded-[var(--radius-sm)] px-1 text-[length:var(--type-micro)]",
-        false: "min-h-[30px] min-w-[30px] rounded-[var(--radius-sm)] px-1.5 text-[length:var(--type-caption)]",
+        true: "min-h-[25px] min-w-[25px] rounded-[var(--radius-md)] px-1 text-[length:var(--type-micro)]",
+        false: "min-h-[30px] min-w-[30px] rounded-[var(--radius-md)] px-1.5 text-[length:var(--type-caption)]",
       },
     },
     defaultVariants: { current: false, compact: false },
