@@ -63,7 +63,6 @@ import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-import { WorkspaceHeader } from "@/app/components/ui/WorkspaceHeader";
 import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
 import { useTheme } from "@/app/lib/use-theme";
 import {
@@ -1550,12 +1549,6 @@ function LibraryView({
 
   return (
     <div className="data-view workspace-view">
-      <WorkspaceHeader
-        eyebrow="Research library"
-        title="Paper library"
-        detail="Read, filter, organize, and manage every paper from one workspace."
-        icon={<Library size={22} />}
-      />
       <div className="view-toolbar library-toolbar">
         <PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search titles, authors, venues…" />
         <button type="button" className={`filter-builder-toggle ${filterBuilderOpen ? "is-open" : ""} ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} aria-pressed={filterBuilderOpen} title={filterBuilderOpen ? "Close library filters" : "Build library filters"}><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
@@ -1822,12 +1815,6 @@ function AuthorsView({
   }
   return (
     <div className="data-view workspace-view">
-      <WorkspaceHeader
-        eyebrow="Research graph"
-        title="Authors"
-        detail="Browse the people represented across your library and open their papers."
-        icon={<UsersRound size={22} />}
-      />
       <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search author names…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add author" />
       <div className="data-grid-shell author-table-wrap">
         <TablePagination
@@ -1964,12 +1951,6 @@ function VenuesView({
   }
   return (
     <div className="data-view workspace-view">
-      <WorkspaceHeader
-        eyebrow="Publication index"
-        title="Venues"
-        detail="Track conferences, journals, workshops, and publishers represented in the library."
-        icon={<Building2 size={22} />}
-      />
       <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search venue names, types, and publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add venue" />
       <div className="data-grid-shell venue-table-wrap">
         <TablePagination
@@ -2078,12 +2059,6 @@ function CollectionsView({
   const largestCollection = collections.reduce((largest, collection) => Math.max(largest, collection.paperCount), 0);
   return (
     <div className="data-view collections-view workspace-view">
-      <WorkspaceHeader
-        eyebrow="Research organization"
-        title="Collections"
-        detail="Group papers into reusable research sets without moving or duplicating files."
-        icon={<FolderOpen size={22} />}
-      />
       <div className="view-toolbar compact-toolbar"><PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search collections…" /><ToolbarCreateButton label="Add collection" onClick={onCreate} /></div>
       <div className="collection-grid">
         {pagedCollections.map((collection) => (
@@ -2529,18 +2504,10 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
 
   return (
     <div className="discover-view workspace-view">
-      <WorkspaceHeader
-        eyebrow="External search"
-        title="Discover papers"
-        detail="Search academic sources, inspect the metadata, and add selected results to your library."
-        icon={<Telescope size={22} />}
-        actions={(
-          <>
-            <ActionButton variant="secondary" size="small" onClick={onSearchLibrary} icon={<Search />}>Search library</ActionButton>
-            <ActionButton variant="primary" size="small" onClick={onImport} icon={<Plus />}>Import paper</ActionButton>
-          </>
-        )}
-      />
+      <div className="discover-actions">
+        <ActionButton variant="secondary" size="small" onClick={onSearchLibrary} icon={<Search />}>Search library</ActionButton>
+        <ActionButton variant="primary" size="small" onClick={onImport} icon={<Plus />}>Import paper</ActionButton>
+      </div>
       <form className="discover-search" onSubmit={search}>
         <div className="provider-switch">
           <span>Search in</span>

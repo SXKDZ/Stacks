@@ -43,7 +43,6 @@ import {
 } from "@/app/lib/ai-prompts";
 import { DEFAULT_FEED_SKILLS, FEED_SKILL_ICONS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
-import { WorkspaceHeader } from "@/app/components/ui/WorkspaceHeader";
 import { readError } from "@/app/lib/http";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
@@ -794,19 +793,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
   return (
     <div className="settings-page workspace-view">
-      <WorkspaceHeader
-        eyebrow="Application controls"
-        title="Settings"
-        detail="Configure appearance, AI, prompts, storage, sync, and integrations."
-        icon={<Wrench size={22} />}
-        metrics={[
-          { label: "Library", value: settings.local ? "Local" : "Hosted", detail: "storage mode", tone: "green" },
-          { label: "Papers", value: papers.length, detail: "in this library", tone: "blue" },
-          { label: "Theme", value: theme === "dark" ? "Dark" : "Light", detail: "current appearance", tone: "violet" },
-          { label: "Sections", value: 9, detail: "configuration areas", tone: "aqua" },
-        ]}
-      />
-
       <div className="settings-layout">
         <aside className="settings-nav" aria-label="Settings sections">
         <p>Configuration</p>
