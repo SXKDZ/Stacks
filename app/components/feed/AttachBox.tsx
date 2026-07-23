@@ -92,6 +92,18 @@ export function AttachBox({
 }) {
   const [text, setText] = useState(initialText);
   const [model, setModel] = useState(initialModel);
+  // The composer's initialModel arrives after mount (the last-used model is read
+  // from localStorage), so adopt a changed initialModel — but only while the user
+  // hasn't picked one yet, so a late default can't clobber an active choice. The
+  // ref tracks the last prop value we synced from, distinguishing a prop change
+  // from a user selection.
+  const syncedModelRef = useRef(initialModel);
+  useEffect(() => {
+    if (initialModel !== syncedModelRef.current) {
+      syncedModelRef.current = initialModel;
+      setModel((current) => (current === "" ? initialModel : current));
+    }
+  }, [initialModel]);
   const [files, setFiles] = useState<File[]>([]);
   const [papers, setPapers] = useState<LibraryPaper[]>(initialPapers);
   const [pickerOpen, setPickerOpen] = useState(false);

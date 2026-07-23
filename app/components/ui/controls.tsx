@@ -581,6 +581,9 @@ export function Select({
       if (event.key === "Escape") {
         event.stopPropagation();
         setOpen(false);
+      } else if (event.key === "Tab") {
+        // Let focus move on, but don't leave a floating listbox behind.
+        setOpen(false);
       }
     };
     window.addEventListener("mousedown", close);
@@ -633,6 +636,7 @@ export function Select({
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
         aria-label={ariaLabel}
       >
         {leadingIcon}
