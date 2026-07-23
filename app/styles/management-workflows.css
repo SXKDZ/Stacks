@@ -1410,15 +1410,6 @@
   gap: 7px;
 }
 
-.table-pagination-controls select {
-  background-color: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: var(--type-caption);
-  height: 30px;
-  padding: 0 25px 0 8px;
-}
 
 .entity-column-actions {
   width: 64px !important;

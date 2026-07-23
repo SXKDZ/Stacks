@@ -127,9 +127,20 @@ test("button archetypes route through shared primitives, not hand-written CSS", 
 
   // The expanded primitive set must exist so components have a home for every
   // button archetype instead of re-declaring styles in CSS.
-  for (const primitive of ["ActionButton", "TabButton", "Chip", "TextButton", "SelectCard", "Scrim", "PaginationButton"]) {
+  for (const primitive of ["ActionButton", "TabButton", "Chip", "TextButton", "SelectCard", "Scrim", "PaginationButton", "Select"]) {
     assert.match(controls, new RegExp(`export function ${primitive}\\b`), `missing primitive ${primitive}`);
   }
+  // Dropdowns go through the one shared Select control (a native <select> can't
+  // style its option popup). No raw <select> should remain in any component.
+  const componentFiles = ["Stacks.tsx", "SettingsView.tsx", "feed/AttachBox.tsx", "FeedWorkspace.tsx"];
+  for (const file of componentFiles) {
+    const source = await readFile(new URL(`../app/components/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /<select\b/, `${file} still uses a native <select>`);
+  }
+  // The Select renders a portaled listbox and closes on Escape, but does NOT
+  // dismiss on scroll inside its own menu (that bug closed it while scrolling).
+  assert.match(controls, /role="listbox"/);
+  assert.match(controls, /listRef\.current\?\.contains\(event\.target as Node\)/);
 
   // Tailwind v4 treats an untyped arbitrary var() text value as a color. Font-size tokens
   // must use the explicit length hint or controls silently fall back to 14px.

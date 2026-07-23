@@ -235,7 +235,6 @@
 /* Field geometry only; the theme-aware background and the shared focus ring
    live in themes.css / design-system.css. */
 .settings-form-grid input,
-.settings-form-grid select,
 .integration-row input {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);

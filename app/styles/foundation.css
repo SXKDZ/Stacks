@@ -55,10 +55,6 @@
      Dark theme runs a deeper, richer blue that settles against the dark canvas;
      the light theme overrides it with a brighter one (see themes.css). */
   --brand-gradient: linear-gradient(135deg, #1c72d2 0%, #2a5cc2 52%, #3b41b0 100%);
-  /* Custom dropdown arrow for native selects (the OS arrow is hidden app-wide in
-     design-system.css). A url() can't read var() colors, so each theme defines
-     the whole image with its --soft ink baked in. */
-  --select-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23808ca3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
   --cyan: #5fd9e8;
   --cyan-soft: rgba(95, 217, 232, 0.12);
   --amber: #ffcf5c;

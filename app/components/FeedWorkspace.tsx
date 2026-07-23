@@ -37,21 +37,31 @@ interface FeedProposal {
   createdAt: string;
 }
 
-/** Parse a paper proposal's raw operation JSON into the meta chips shown on its
- *  card — the paper type and venue, which the summary line doesn't carry. The
- *  entity/action is already conveyed by the summary ("Add '…'"), so it's omitted
- *  to avoid a redundant "create paper" chip. */
-function proposalTags(operation: string): string[] {
+/** A meta chip on a proposal card. The `action` chip (e.g. "Create paper") is
+ *  the primary, brand-tinted label; the rest (paper type, venue) are neutral. */
+interface ProposalTag {
+  label: string;
+  kind: "action" | "meta";
+}
+
+/** Parse a proposal's operation JSON into the chips shown on its card: the
+ *  action + entity ("Create paper"), and for papers the type and venue. */
+function proposalTags(operation: string): ProposalTag[] {
   try {
-    const op = JSON.parse(operation) as { entity?: string; data?: Record<string, unknown> };
-    if (op.entity !== "paper") return [];
-    const tags: string[] = [];
-    const type = typeof op.data?.paperType === "string" ? op.data.paperType : "";
-    if (type) tags.push(type);
-    const venue = typeof op.data?.venueAcronym === "string" && op.data.venueAcronym
-      ? op.data.venueAcronym
-      : typeof op.data?.venueName === "string" ? op.data.venueName : "";
-    if (venue) tags.push(venue);
+    const op = JSON.parse(operation) as { entity?: string; action?: string; data?: Record<string, unknown> };
+    const tags: ProposalTag[] = [];
+    if (op.action && op.entity) {
+      const action = op.action.charAt(0).toUpperCase() + op.action.slice(1);
+      tags.push({ label: `${action} ${op.entity}`, kind: "action" });
+    }
+    if (op.entity === "paper") {
+      const type = typeof op.data?.paperType === "string" ? op.data.paperType : "";
+      if (type) tags.push({ label: type, kind: "meta" });
+      const venue = typeof op.data?.venueAcronym === "string" && op.data.venueAcronym
+        ? op.data.venueAcronym
+        : typeof op.data?.venueName === "string" ? op.data.venueName : "";
+      if (venue) tags.push({ label: venue, kind: "meta" });
+    }
     return tags;
   } catch {
     return [];
@@ -698,16 +708,16 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
                   onClick={() => setExpandedProposal(expanded ? null : proposal.id)}
                   aria-expanded={expanded}
                 >
-                  {proposalTags(proposal.operation).length ? (
-                    <div className="feed-proposal-tags">
-                      {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
-                    </div>
-                  ) : null}
                   <span className="feed-proposal-summary">
-                    {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                    {proposal.summary}
+                    {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <span className="feed-proposal-summary-text">{proposal.summary}</span>
                   </span>
-                  <span className="feed-proposal-status">{proposal.status}</span>
+                  <span className="feed-proposal-meta">
+                    <span className={`feed-proposal-status feed-proposal-status-${proposal.status}`}>{proposal.status}</span>
+                    {proposalTags(proposal.operation).map((tag) => (
+                      <span key={tag.label} className={`feed-proposal-tag feed-proposal-tag-${tag.kind}`}>{tag.label}</span>
+                    ))}
+                  </span>
                 </button>
                 {proposal.status === "pending" ? (
                   <div className="feed-proposal-actions">

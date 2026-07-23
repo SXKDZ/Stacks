@@ -1,8 +1,10 @@
 "use client";
 
-import { CheckCircle2, Clock3, Inbox, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Clock3, Inbox, X } from "lucide-react";
 import { cva } from "class-variance-authority";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { twMerge } from "tailwind-merge";
 
 export type ActionVariant = "primary" | "secondary" | "ghost" | "danger" | "success" | "light" | "brand-ghost" | "on-dark";
@@ -505,5 +507,168 @@ export function PaginationButton({ current = false, compact = false, className, 
     <button type={type} className={cx(paginationVariants({ current, compact, className }))} {...props}>
       {children}
     </button>
+  );
+}
+
+/** One option in a {@link Select}. */
+export interface SelectOption {
+  value: string;
+  label: ReactNode;
+  /** Optional plain-text label used for the trigger when `label` is a node. */
+  text?: string;
+}
+
+/**
+ * The app's one dropdown control. A native <select> can't style its option
+ * popup (it always falls back to the OS list), so this is a custom listbox: a
+ * bordered trigger plus a portaled menu using the app's own menu chrome, with a
+ * checkmark on the selected option. Used everywhere a select is needed — feed
+ * model picker, settings, filter builder, pagination, entity forms.
+ *
+ * The menu flips above the trigger when there isn't room below, and dismisses on
+ * outside click, Escape, or resize — and on scroll ONLY when the scroll happens
+ * outside the menu, so scrolling a long option list doesn't close it.
+ */
+export function Select({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  placeholder = "Select…",
+  size = "medium",
+  className,
+  disabled = false,
+  name,
+  leadingIcon,
+}: {
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  ariaLabel?: string;
+  placeholder?: string;
+  size?: "small" | "medium";
+  className?: string;
+  disabled?: boolean;
+  /** Emit a hidden input so the value posts with a native <form>. */
+  name?: string;
+  /** Optional icon shown at the start of the trigger (e.g. a model chip). */
+  leadingIcon?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
+
+  const selected = options.find((option) => option.value === value);
+  const triggerLabel = selected ? (selected.text ?? selected.label) : placeholder;
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || listRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const dismiss = () => setOpen(false);
+    // Scroll closes the menu only when the scroll target is OUTSIDE it —
+    // scrolling the option list itself must not dismiss it.
+    const onScroll = (event: Event) => {
+      if (listRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", onScroll, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", onScroll, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [open]);
+
+  function toggle() {
+    if (disabled) return;
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = Math.max(rect.width, 200);
+      // Open below the trigger, but flip above when the menu would run past the
+      // viewport bottom, so the options are never clipped.
+      const estimated = Math.min(options.length * 38 + 12, 460);
+      if (rect.bottom + 6 + estimated > window.innerHeight && rect.top - 6 > estimated) {
+        setPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left, width });
+      } else {
+        setPos({ top: rect.bottom + 6, left: rect.left, width });
+      }
+    }
+    setOpen(true);
+  }
+
+  function pick(next: string) {
+    onChange(next);
+    setOpen(false);
+    triggerRef.current?.focus();
+  }
+
+  return (
+    <span className={cx("app-select", className)}>
+      {name ? <input type="hidden" name={name} value={value} /> : null}
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cx("app-select-trigger", size === "small" && "app-select-trigger-sm")}
+        onClick={toggle}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+      >
+        {leadingIcon}
+        <span className="app-select-label">{triggerLabel}</span>
+        <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open && pos
+        ? createPortal(
+            <div
+              ref={listRef}
+              className="app-select-menu"
+              role="listbox"
+              id={listboxId}
+              aria-label={ariaLabel}
+              style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, minWidth: pos.width }}
+            >
+              {options.map((option) => {
+                const isSelected = option.value === value;
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    key={option.value}
+                    className={cx("app-select-option", isSelected && "is-selected")}
+                    onClick={() => pick(option.value)}
+                  >
+                    {isSelected ? <Check size={14} aria-hidden="true" /> : <span className="app-select-check-gap" />}
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
+    </span>
   );
 }

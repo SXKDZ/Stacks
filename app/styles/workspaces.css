@@ -1564,6 +1564,10 @@
   flex-shrink: 0;
 }
 
+.feed-proposal-row .feed-proposal-actions {
+  align-self: flex-start;
+}
+
 .feed-proposal.is-expanded {
   border-color: color-mix(in srgb, var(--brand-blue) 30%, var(--line-strong));
 }
@@ -1627,49 +1631,75 @@
   border: 0;
   cursor: pointer;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: 7px;
   min-width: 0;
   padding: 0;
   text-align: left;
 }
 
 .feed-proposal-summary {
-  align-items: center;
+  align-items: baseline;
   color: var(--ink);
   display: flex;
   font-size: var(--type-body);
+  gap: 7px;
+}
+
+.feed-proposal-summary svg {
+  align-self: center;
+}
+
+.feed-proposal-summary-text {
+  font-weight: 500;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+/* The meta line under the summary: a status pill followed by at-a-glance chips
+   (the action, e.g. "Create paper", plus paper type and venue). Indented to
+   align with the summary text past the chevron. */
+.feed-proposal-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  padding-left: 21px;
 }
 
 .feed-proposal-status {
+  border-radius: var(--radius-pill);
   color: var(--muted);
-  font-size: var(--type-label);
+  font-size: var(--type-micro);
   font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.feed-proposal-applied .feed-proposal-status { color: var(--status-complete); }
-.feed-proposal-failed .feed-proposal-status { color: var(--rose); }
-
-/* At-a-glance chips for what the change is (e.g. "create paper", the paper type,
-   and venue) so the type is visible without opening the raw JSON block. */
-.feed-proposal-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 2px;
-}
+.feed-proposal-status-applied { color: var(--status-complete); }
+.feed-proposal-status-rejected,
+.feed-proposal-status-failed { color: var(--rose); }
+.feed-proposal-status-pending { color: var(--amber); }
 
 .feed-proposal-tag {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
   border-radius: var(--radius-sm);
-  color: var(--muted);
   font-size: var(--type-micro);
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 3px 7px;
+  padding: 2px 7px;
   text-transform: capitalize;
+}
+
+/* The action chip (Create paper / Update venue …) is the primary label. */
+.feed-proposal-tag-action {
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue-strong);
+}
+
+.feed-proposal-tag-meta {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--muted);
 }
 
 .feed-proposal-actions {
@@ -1891,99 +1921,17 @@
   border-radius: var(--radius-lg);
 }
 
-/* Composer model picker: a bordered rounded control matching the app's inputs
-   (custom chevron; the native select is transparent inside). */
-.feed-model-select {
-  display: inline-flex;
-}
-
-/* The trigger: a bordered rounded control matching the app's other inputs. The
-   option list is a portaled custom menu (a native select can't style its popup). */
-.feed-model-trigger {
-  align-items: center;
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+/* The composer/reply model picker is the shared Select (.app-select); cap its
+   trigger width so a long model label doesn't stretch the tool row, and show the
+   Cpu leading icon in the muted tool-row ink. */
+.feed-model-select .app-select-trigger {
   color: var(--muted);
-  cursor: pointer;
-  display: inline-flex;
-  gap: 5px;
-  height: 30px;
   max-width: 240px;
-  padding: 0 8px;
-  transition: border-color var(--motion-control), color var(--motion-control);
 }
 
-.feed-model-trigger:hover,
-.feed-model-trigger[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--brand-blue) 38%, var(--line-strong));
+.feed-model-select .app-select-trigger:hover,
+.feed-model-select .app-select-trigger[aria-expanded="true"] {
   color: var(--ink);
-}
-
-.feed-model-trigger svg {
-  flex-shrink: 0;
-}
-
-.feed-model-label {
-  font-size: var(--type-micro);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Portaled option list, styled like the feed row's kebab menu. */
-.feed-model-menu {
-  background: var(--panel-strong);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-height: min(60vh, 460px);
-  overflow-y: auto;
-  padding: 5px;
-  z-index: 80;
-}
-
-.feed-model-option {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  cursor: pointer;
-  display: flex;
-  font-size: var(--type-control);
-  gap: 8px;
-  padding: 7px 9px;
-  text-align: left;
-  white-space: nowrap;
-  width: 100%;
-}
-
-.feed-model-option svg {
-  color: var(--brand-blue-strong);
-  flex-shrink: 0;
-}
-
-/* Keeps unselected labels aligned with the checked one (no icon = same indent). */
-.feed-model-check-gap {
-  flex-shrink: 0;
-  height: 14px;
-  width: 14px;
-}
-
-.feed-model-option:hover {
-  background: var(--brand-blue-soft);
-  color: var(--brand-blue-strong);
-}
-
-.feed-model-option.is-selected {
-  background: var(--brand-blue-soft);
-  color: var(--brand-blue-strong);
-  font-weight: 600;
 }
 
 /* System notices in the thread (e.g. "Switched to model X."): a quiet centered line. */

@@ -107,16 +107,11 @@
   padding: 4px 5px;
 }
 
-.filter-clause-row select {
-  background-color: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: var(--type-micro);
-  height: 29px;
+/* The join/field pickers in a filter clause use the shared Select; keep them
+   compact so several fit on one clause row. */
+.filter-clause-select .app-select-trigger {
   max-width: 220px;
   min-width: 104px;
-  padding: 0 24px 0 7px;
 }
 
 .filter-value-combobox {
@@ -510,6 +505,47 @@
   flex-basis: 100%;
   overflow: visible;
   white-space: normal;
+}
+
+/* Clickable authors in the paper-row secondary line: each name is a link to its
+   author filter, so the byline reads as muted text with the names as accents. */
+.paper-secondary-line .expandable-author-buttons {
+  align-items: baseline;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-label);
+  gap: 4px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.paper-secondary-line .expandable-author-buttons > span > span > button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.paper-secondary-line .expandable-author-buttons > span > span > button:hover {
+  color: var(--brand-blue-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.paper-secondary-line .expandable-author-buttons .author-toggle {
+  background: transparent;
+  color: var(--brand-blue-strong);
+  cursor: pointer;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);
+  text-underline-offset: 2px;
 }
 
 .recent-title-button {

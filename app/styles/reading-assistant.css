@@ -539,8 +539,7 @@
 
 /* Field geometry only; the theme-aware background and the shared focus ring
    live in themes.css / design-system.css (textareas share their own spec there). */
-.entity-form input,
-.entity-form select {
+.entity-form input {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   font-size: var(--type-control);

@@ -1,9 +1,9 @@
 "use client";
 
-import { BookOpen, Check, ChevronDown, Cpu, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { BookOpen, Check, Cpu, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ActionButton } from "@/app/components/ui/controls";
+import { ActionButton, Select, type SelectOption } from "@/app/components/ui/controls";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
 export interface LibraryPaper {
@@ -27,127 +27,14 @@ export interface FeedModelOption {
   label: string;
 }
 
-/**
- * The agent-model picker. A native <select> can't style its option popup (it
- * falls back to the OS list), so this is a custom dropdown: a trigger button
- * plus a portaled listbox styled with the app's own menu chrome. Opens upward
- * (the composer sits at the bottom of the pane) and dismisses on outside click,
- * Escape, scroll, or resize — the same pattern as the feed row's kebab menu.
- */
-function ModelSelect({
-  models,
-  value,
-  defaultModelLabel,
-  onChange,
-}: {
-  models: FeedModelOption[];
-  value: string;
-  defaultModelLabel: string;
-  onChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ bottom: number; left: number; width: number } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
+/** The agent-model options for the feed composer/reply picker, with the
+ *  configured default named explicitly at the top. */
+function modelSelectOptions(models: FeedModelOption[], defaultModelLabel: string): SelectOption[] {
   const defaultLabel = defaultModelLabel ? `${defaultModelLabel} (default)` : "Default model";
-  const selectedLabel = value ? (models.find((option) => option.id === value)?.label ?? value) : defaultLabel;
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (triggerRef.current?.contains(target) || listRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const dismiss = () => setOpen(false);
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        setOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("resize", dismiss);
-    window.addEventListener("scroll", dismiss, true);
-    // Capture phase so the picker closes before the composer's own Esc handlers.
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("resize", dismiss);
-      window.removeEventListener("scroll", dismiss, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [open]);
-
-  function toggle() {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
-      // Anchor the list above the trigger (it lives at the bottom of the pane).
-      setPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left, width: Math.max(rect.width, 240) });
-    }
-    setOpen(true);
-  }
-
-  function pick(id: string) {
-    onChange(id);
-    setOpen(false);
-  }
-
-  return (
-    <span className="feed-model-select">
-      <button
-        ref={triggerRef}
-        type="button"
-        className="feed-model-trigger"
-        onClick={toggle}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label="Agent model"
-      >
-        <Cpu size={13} aria-hidden="true" />
-        <span className="feed-model-label">{selectedLabel}</span>
-        <ChevronDown size={12} aria-hidden="true" />
-      </button>
-      {open && pos
-        ? createPortal(
-            <div
-              ref={listRef}
-              className="feed-model-menu"
-              role="listbox"
-              aria-label="Agent model"
-              style={{ position: "fixed", bottom: pos.bottom, left: pos.left, minWidth: pos.width }}
-            >
-              <button type="button" role="option" aria-selected={!value} className={`feed-model-option ${!value ? "is-selected" : ""}`} onClick={() => pick("")}>
-                {!value ? <Check size={14} aria-hidden="true" /> : <span className="feed-model-check-gap" />}
-                <span>{defaultLabel}</span>
-              </button>
-              {models.map((option) => {
-                const selected = option.id === value;
-                return (
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    key={option.id}
-                    className={`feed-model-option ${selected ? "is-selected" : ""}`}
-                    onClick={() => pick(option.id)}
-                  >
-                    {selected ? <Check size={14} aria-hidden="true" /> : <span className="feed-model-check-gap" />}
-                    <span>{option.label}</span>
-                  </button>
-                );
-              })}
-            </div>,
-            document.body,
-          )
-        : null}
-    </span>
-  );
+  return [
+    { value: "", label: defaultLabel, text: defaultLabel },
+    ...models.map((option) => ({ value: option.id, label: option.label, text: option.label })),
+  ];
 }
 
 /** Pull files out of a paste or a drag-drop (Finder), including clipboard images. */
@@ -420,7 +307,15 @@ export function AttachBox({
             <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file"><Paperclip size={16} /></button>
             <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library"><BookOpen size={16} /></button>
             {models.length ? (
-              <ModelSelect models={models} value={model} defaultModelLabel={defaultModelLabel} onChange={setModel} />
+              <Select
+                value={model}
+                options={modelSelectOptions(models, defaultModelLabel)}
+                onChange={setModel}
+                ariaLabel="Agent model"
+                size="small"
+                className="feed-model-select"
+                leadingIcon={<Cpu size={13} aria-hidden="true" />}
+              />
             ) : null}
             {leadingAction}
           </div>

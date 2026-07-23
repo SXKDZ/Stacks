@@ -348,7 +348,8 @@ test("combines exact linked-record filters with boolean relationships", async ()
   assert.match(application, /collection\.id === clause\.valueId/);
   assert.match(application, /paper\.venueId === clause\.valueId/);
   assert.match(application, /String\(paper\.year \?\? ""\) === clause\.valueId/);
-  assert.match(application, /<option value="AND">AND<\/option><option value="OR">OR<\/option>/);
+  // The join picker is the shared Select control (no native <select>/<option>).
+  assert.match(application, /options=\{\[\{ value: "AND", label: "AND" \}, \{ value: "OR", label: "OR" \}\]\}/);
   assert.match(application, />NOT<\/button>/);
   assert.match(application, /Add opening parenthesis/);
   assert.match(application, /createLibraryFilter\("collection", collection\.id/);
