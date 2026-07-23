@@ -89,7 +89,7 @@
 
 .settings-heading h2 {
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: var(--type-heading);
   font-weight: 600;
   letter-spacing: -0.025em;
   margin: 0;
@@ -380,7 +380,7 @@
 
 .sync-status-icon.is-success { color: #86e3bb; }
 .sync-status-card > div { display: flex; flex-direction: column; }
-.sync-status-card strong { font-family: var(--font-display); font-size: 11px; font-weight: 500; }
+.sync-status-card strong { font-family: var(--font-display); font-size: var(--type-label); font-weight: 500; }
 .sync-status-card small { color: #aaa0b0; font-size: var(--type-micro); margin-top: 3px; }
 .settings-footer {
   align-items: center;
@@ -440,7 +440,7 @@
   border: 0;
   flex: 1;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--type-body-large);
   outline: 0;
 }
 

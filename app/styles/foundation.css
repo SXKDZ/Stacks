@@ -103,6 +103,8 @@
   --type-body: 13px;
   --type-body-large: 14px;
   --type-heading-small: 17px;
+  --type-heading: 20px;
+  --type-heading-large: 24px;
   /* Radius scale, nudged up a step for a softer, more modern feel.
      --radius-control (11px) is the button/input default. */
   --radius-sm: 7px;
@@ -139,7 +141,7 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--type-body-large);
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.006em;
   min-width: 320px;
@@ -266,7 +268,7 @@ body {
 
 .brand-copy strong {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--type-body-large);
   letter-spacing: -0.025em;
 }
 
@@ -280,7 +282,7 @@ body {
 
 .brand-copy .brand-slogan {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 560;
   letter-spacing: 0.01em;
   line-height: 1.25;
@@ -358,7 +360,7 @@ body {
   border-radius: var(--radius-md);
   color: #68616f;
   display: flex;
-  font-size: 12px;
+  font-size: var(--type-control);
   font-weight: 600;
   gap: 10px;
   padding: 8px 9px;
@@ -373,7 +375,7 @@ body {
 
 .nav-count {
   color: #9b94a2;
-  font-size: 10px;
+  font-size: var(--type-micro);
   margin-left: auto;
 }
 
@@ -450,14 +452,14 @@ body {
 
 .assistant-card-copy strong {
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .assistant-card-copy small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -546,7 +548,7 @@ body {
   border-radius: var(--radius-md);
   color: #938c9b;
   display: flex;
-  font-size: 11px;
+  font-size: var(--type-label);
   gap: 8px;
   max-width: 405px;
   padding: 8px 9px;
@@ -642,7 +644,7 @@ button.stat-card:hover {
 
 .stat-card strong {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: var(--type-heading);
   font-weight: 500;
   line-height: 1;
 }
@@ -715,7 +717,7 @@ button.stat-card:hover {
   color: var(--muted);
   display: -webkit-box;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: var(--type-control);
   line-height: 1.55;
   margin: 0;
   max-width: 560px;
@@ -881,7 +883,7 @@ button.stat-card:hover {
 }
 
 .error-boundary h1 {
-  font-size: 21px;
+  font-size: var(--type-heading);
   font-weight: 680;
   letter-spacing: -0.02em;
   margin: 4px 0 0;

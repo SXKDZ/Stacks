@@ -21,7 +21,7 @@
 
 .section-title-row h3 {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: var(--type-heading);
   font-weight: 500;
   letter-spacing: -0.025em;
   margin: 5px 0 0;
@@ -48,7 +48,7 @@
 
 .metric-ring span {
   color: var(--brand-blue-strong);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   position: relative;
 }
@@ -127,7 +127,7 @@
 
 .recent-copy strong {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -221,7 +221,7 @@
 .inline-search input {
   background: transparent;
   border: 0;
-  font-size: 10px;
+  font-size: var(--type-micro);
   min-width: 0;
   outline: 0;
   width: 100%;
@@ -533,7 +533,7 @@ td.number-cell {
   display: flex;
   flex: 0 0 auto;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   height: 34px;
   justify-content: center;
   width: 34px;
@@ -665,7 +665,7 @@ td.number-cell {
 .modal-placeholder h3,
 .import-form h3 {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: var(--type-heading-small);
   font-weight: 500;
   margin: 13px 0 5px;
 }
@@ -674,7 +674,7 @@ td.number-cell {
 .modal-placeholder p,
 .import-form > p {
   color: var(--soft);
-  font-size: 10px;
+  font-size: var(--type-micro);
   margin: 0;
 }
 
@@ -707,7 +707,7 @@ td.number-cell {
   border: 0;
   flex: 1;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--type-body-large);
   outline: 0;
   padding: 8px 0;
 }
@@ -718,7 +718,7 @@ td.number-cell {
   border-radius: var(--radius-md);
   color: white;
   display: flex;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 700;
   gap: 6px;
   padding: 10px 13px;
@@ -786,7 +786,7 @@ td.number-cell {
 
 .discovery-intro h2 {
   font-family: var(--font-display);
-  font-size: 23px;
+  font-size: var(--type-heading-large);
   font-weight: 500;
   letter-spacing: -0.03em;
   margin: 29px 0 8px;
@@ -795,7 +795,7 @@ td.number-cell {
 .discovery-intro > p {
   color: var(--muted);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.5;
   margin: 0;
   max-width: 500px;
@@ -833,7 +833,7 @@ td.number-cell {
 
 .results-heading span {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--type-body-large);
   font-weight: 600;
 }
 
@@ -903,7 +903,7 @@ td.number-cell {
 
 .result-copy h3 {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--type-body-large);
   letter-spacing: -0.02em;
   margin: 5px 0 4px;
 }
@@ -918,7 +918,7 @@ td.number-cell {
   color: var(--muted);
   display: -webkit-box;
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.45;
   margin: 9px 0;
   overflow: hidden;
@@ -992,7 +992,7 @@ td.number-cell {
 
 .drawer-fixed-head > h2 {
   font-family: var(--font-display);
-  font-size: 25px;
+  font-size: var(--type-heading-large);
   font-weight: 500;
   letter-spacing: -0.035em;
   line-height: 1.13;
@@ -1002,7 +1002,7 @@ td.number-cell {
 .detail-authors {
   color: var(--muted);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   margin: 0;
 }
 
@@ -1067,7 +1067,7 @@ td.number-cell {
 .detail-section > p:last-child:not(.eyebrow) {
   color: #5e5664;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.58;
   margin: var(--space-eyebrow-gap) 0 0;
 }
@@ -1089,7 +1089,7 @@ td.number-cell {
   color: var(--brand-blue-strong);
   cursor: pointer;
   display: inline-flex;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
   gap: 5px;
   height: 26px;

@@ -393,7 +393,7 @@
   border: 0;
   box-sizing: border-box;
   font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: var(--type-control);
   inset: 0;
   line-height: 1.58;
   margin: 0;

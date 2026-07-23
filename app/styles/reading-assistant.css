@@ -48,7 +48,7 @@
 
 .reader-brand strong {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: var(--type-control);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -121,7 +121,7 @@
 
 .reader-notes > h2 {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: var(--type-heading);
   font-weight: 500;
   letter-spacing: -0.03em;
   line-height: 1.15;
@@ -131,7 +131,7 @@
 .reader-authors {
   color: var(--muted);
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   line-height: 1.5;
   margin: 0;
   overflow-wrap: anywhere;
@@ -210,13 +210,13 @@
 
 .reader-file-identity strong {
   color: #f7f9fc;
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 700;
 }
 
 .reader-file-identity > span {
   color: #aeb8c8;
-  font-size: 11px;
+  font-size: var(--type-label);
   margin-top: 1px;
 }
 
@@ -349,7 +349,7 @@
 
 .modal-header h2 {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: var(--type-heading);
   font-weight: 500;
   letter-spacing: -0.03em;
   margin: 0;
@@ -398,7 +398,7 @@
   background: transparent;
   border: 0;
   flex: 1;
-  font-size: 10px;
+  font-size: var(--type-micro);
   outline: 0;
   padding: 10px 0;
 }
@@ -449,7 +449,7 @@
 
 .modal-results h3 {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: var(--type-control);
   margin: 4px 0;
 }
 
@@ -547,7 +547,7 @@
   background: white;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: var(--type-micro);
   outline: 0;
   padding: 9px;
 }

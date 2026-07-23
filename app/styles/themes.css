@@ -28,7 +28,7 @@ body {
   background: linear-gradient(90deg, #55adff, #98d1ff);
   background-clip: text;
   color: transparent;
-  font-size: 14px;
+  font-size: var(--type-body-large);
   font-weight: 750;
 }
 
@@ -36,7 +36,7 @@ body {
 .nav-label,
 .eyebrow,
 .card-kicker {
-  font-size: 10px;
+  font-size: var(--type-micro);
   letter-spacing: 0.12em;
 }
 
@@ -44,7 +44,7 @@ body {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   font-weight: 500;
   min-height: 38px;
 }
@@ -74,11 +74,11 @@ body {
    both themes (it is a deliberately dark accent card), so no background
    override here. Only the sync-card sibling font sizes are tuned. */
 .sync-card strong {
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .sync-card small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .command-results > button:hover,
@@ -118,7 +118,7 @@ textarea::placeholder {
 
 .global-search {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   max-width: 470px;
   min-height: 39px;
 }
@@ -156,14 +156,14 @@ textarea::placeholder {
 }
 
 .stat-card strong {
-  font-size: 22px;
+  font-size: var(--type-heading-large);
   font-weight: 720;
 }
 
 .stat-card small,
 .recent-copy small,
 .paper-byline {
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .continue-copy h2 {
@@ -172,7 +172,7 @@ textarea::placeholder {
 
 .continue-copy > p:nth-of-type(2),
 .continue-abstract {
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 
 .section-title-row h3,
@@ -196,7 +196,7 @@ textarea::placeholder {
 }
 
 .inline-search input {
-  font-size: 11.5px;
+  font-size: var(--type-label);
 }
 
 .selection-actions,
@@ -224,7 +224,7 @@ textarea::placeholder {
 
 .paper-title-cell small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .compact-avatar,
@@ -245,7 +245,7 @@ textarea::placeholder {
 }
 
 .discover-search-box input {
-  font-size: 14px;
+  font-size: var(--type-body-large);
   font-weight: 500;
 }
 
@@ -255,7 +255,7 @@ textarea::placeholder {
 
 .provider-switch > span,
 .source-row > span {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .discovery-intro {
@@ -266,7 +266,7 @@ textarea::placeholder {
   background: linear-gradient(90deg, #60b7f4, #8fd0f8);
   background-clip: text;
   color: transparent;
-  font-size: 25px;
+  font-size: var(--type-heading-large);
   font-weight: 720;
 }
 
@@ -287,12 +287,12 @@ textarea::placeholder {
 
 .discovery-capabilities strong {
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: var(--type-control);
 }
 
 .discovery-capabilities small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   margin-top: 3px;
 }
 
@@ -303,11 +303,11 @@ textarea::placeholder {
 .result-meta,
 .result-tags span,
 .results-heading small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .result-authors {
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 
 .detail-drawer,
@@ -327,7 +327,7 @@ textarea::placeholder {
 }
 
 .drawer-fixed-head > h2 {
-  font-size: 24px;
+  font-size: var(--type-heading-large);
   font-weight: 680;
 }
 
@@ -341,25 +341,25 @@ textarea::placeholder {
 }
 
 .reader-notes > h2 {
-  font-size: 20px;
+  font-size: var(--type-heading);
   font-weight: 650;
 }
 
 .modal-results h3,
 .settings-card-title strong,
 .integration-name strong {
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .modal-results small,
 .modal-results span,
 .settings-card-title small,
 .integration-name small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .modal-header h2 {
-  font-size: 20px;
+  font-size: var(--type-heading);
   font-weight: 680;
 }
 
@@ -369,7 +369,7 @@ textarea::placeholder {
 .entity-form input,
 .entity-form textarea,
 .entity-form select {
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .identifier-import-form {
@@ -391,12 +391,12 @@ textarea::placeholder {
 
 .identifier-source-grid strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .identifier-source-grid small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.35;
   margin-top: 3px;
 }
@@ -404,7 +404,7 @@ textarea::placeholder {
 .identifier-footnote {
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   line-height: 1.5;
   margin: 2px 0 0;
   padding-top: 12px;
@@ -414,25 +414,25 @@ textarea::placeholder {
 .settings-form-grid label > span,
 .settings-toggle strong {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .entity-form label small,
 .settings-form-grid small,
 .settings-toggle small,
 .privacy-note {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .settings-nav strong,
 .settings-local-note strong {
-  font-size: 11.5px;
+  font-size: var(--type-label);
 }
 
 .settings-nav small,
 .settings-local-note small,
 .settings-heading p {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .settings-card-title > span:first-child,
@@ -444,18 +444,18 @@ textarea::placeholder {
 }
 
 .command-input input {
-  font-size: 14px;
+  font-size: var(--type-body-large);
   font-weight: 500;
 }
 
 .command-results strong {
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .command-results small,
 .command-results > p,
 .command-footer {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .markdown-content {
@@ -704,7 +704,7 @@ textarea::placeholder {
   border-radius: var(--radius-md);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: var(--type-label);
   line-height: 1.55;
   outline: 0;
   padding: 11px;
@@ -736,7 +736,7 @@ textarea::placeholder {
 .model-access-row > span {
   color: var(--muted);
   flex: 1;
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.4;
 }
 
@@ -794,7 +794,7 @@ textarea::placeholder {
 }
 
 .result-copy h3 {
-  font-size: 14px;
+  font-size: var(--type-body-large);
 }
 
 .new-paper-button,

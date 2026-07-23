@@ -75,7 +75,7 @@
 .paper-fact dt,
 .paper-field-label {
   color: var(--soft);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -84,7 +84,7 @@
 
 .paper-fact dd {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 600;
   line-height: 1.25;
   margin: 0;
@@ -120,7 +120,7 @@
   color: var(--muted);
   cursor: pointer;
   display: inline-flex;
-  font-size: 12px;
+  font-size: var(--type-control);
   font-weight: 600;
   gap: 6px;
   justify-content: center;
@@ -168,7 +168,7 @@
 
 .paper-field-empty {
   color: var(--soft);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   line-height: 1.35;
 }
 
@@ -695,7 +695,7 @@
 
 .feed-compose-hero h2 {
   color: var(--ink);
-  font-size: 25px;
+  font-size: var(--type-heading-large);
   font-weight: 680;
   letter-spacing: -0.02em;
   margin: 0;
@@ -1411,7 +1411,7 @@
 
 .feed-turn-user .feed-bubble {
   background: var(--brand-blue);
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+  border-radius: var(--radius-md);
   color: #fff;
   padding: 9px 13px;
 }
