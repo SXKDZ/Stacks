@@ -1413,7 +1413,41 @@ body {
 }
 
 .settings-card {
-  padding: 24px;
+  padding: 20px;
+}
+
+/* Consolidate settings-panel spacing so every card, list, row, and header shares
+   one horizontal rhythm (20px) and consistent row padding, instead of the mix of
+   13/15/17/24px the panels drifted into. */
+.settings-card-title,
+.integration-row,
+.settings-form-grid,
+.github-inbox-actions,
+.sync-status-card {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.settings-card-title,
+.integration-row {
+  padding-bottom: 14px;
+  padding-top: 14px;
+}
+
+/* Top-align the card header so a wrapping description keeps the icon and status
+   pill anchored to the first line rather than drifting to vertical center. */
+.settings-card-title {
+  align-items: flex-start;
+}
+
+.settings-card-title .connected-pill {
+  margin-top: 1px;
+}
+
+.settings-form-grid,
+.github-inbox-actions {
+  padding-bottom: 16px;
+  padding-top: 16px;
 }
 
 .modal-layer,
