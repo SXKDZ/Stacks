@@ -5,7 +5,7 @@
 .venue-table-wrap {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 
@@ -21,7 +21,7 @@
 
 .section-title-row h3 {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: var(--type-heading);
   font-weight: 500;
   letter-spacing: -0.025em;
   margin: 5px 0 0;
@@ -48,7 +48,7 @@
 
 .metric-ring span {
   color: var(--brand-blue-strong);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   position: relative;
 }
@@ -72,8 +72,8 @@
 
 .reading-bars span { color: var(--muted); }
 .reading-bars strong { font-size: var(--type-label); text-align: right; }
-.reading-bars i { background: #ebf0f4; border-radius: 10px; height: 5px; overflow: hidden; }
-.reading-bars b { background: var(--brand-blue); border-radius: 10px; display: block; height: 100%; }
+.reading-bars i { background: #ebf0f4; border-radius: var(--radius-md); height: 5px; overflow: hidden; }
+.reading-bars b { background: var(--brand-blue); border-radius: var(--radius-md); display: block; height: 100%; }
 .reading-bars .bar-cyan { background: var(--cyan); }
 .reading-bars .bar-amber { background: var(--amber); }
 
@@ -108,7 +108,7 @@
 .type-tile {
   align-items: center;
   background: var(--brand-blue-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--brand-blue);
   display: flex;
   height: 34px;
@@ -127,7 +127,7 @@
 
 .recent-copy strong {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -159,7 +159,7 @@
   align-items: stretch;
   background: rgba(255, 255, 255, 0.42);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   gap: 8px;
   padding: 7px;
 }
@@ -200,12 +200,13 @@
   white-space: nowrap;
 }
 
+/* Layout only: the theme normalization block (themes.css) supplies the surface
+   and .page-search.inline-search (management-workflows.css) the toolbar variant. */
 .inline-search {
   align-items: center;
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: #98909f;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--soft);
   display: flex;
   gap: 7px;
   min-height: 36px;
@@ -213,15 +214,11 @@
   width: min(310px, 30vw);
 }
 
-.inline-search:focus-within {
-  border-color: #9bcdf3;
-  box-shadow: 0 0 0 3px rgba(22,141,236,0.09);
-}
 
 .inline-search input {
   background: transparent;
   border: 0;
-  font-size: 10px;
+  font-size: var(--type-micro);
   min-width: 0;
   outline: 0;
   width: 100%;
@@ -289,7 +286,7 @@
 .table-sort-button {
   align-items: center;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: inherit;
   display: inline-flex;
   font: inherit;
@@ -322,7 +319,7 @@
 
 .column-resize-handle::after {
   background: var(--brand-blue);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   bottom: 8px;
   content: "";
   opacity: 0;
@@ -395,7 +392,7 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: white;
   display: inline-flex;
   height: 16px;
@@ -520,7 +517,7 @@ td.number-cell {
 .author-table-wrap {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -529,11 +526,11 @@ td.number-cell {
   align-items: center;
   background: linear-gradient(145deg, #edf7fe, #cfeafd);
   border: 1px solid #b8dcf8;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   flex: 0 0 auto;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   height: 34px;
   justify-content: center;
   width: 34px;
@@ -559,7 +556,7 @@ td.number-cell {
 .venue-monogram {
   align-items: center;
   background: #eef4f8;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: #5f5667;
   display: flex;
   flex: 0 0 38px;
@@ -592,7 +589,7 @@ td.number-cell {
 .collection-card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   padding: 12px;
@@ -612,7 +609,7 @@ td.number-cell {
 .collection-icon {
   align-items: center;
   background: var(--brand-blue-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--brand-blue);
   display: flex;
   height: 36px;
@@ -653,7 +650,7 @@ td.number-cell {
 .modal-placeholder > span {
   align-items: center;
   background: var(--brand-blue-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   color: var(--brand-blue);
   display: flex;
   height: 48px;
@@ -665,7 +662,7 @@ td.number-cell {
 .modal-placeholder h3,
 .import-form h3 {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: var(--type-heading-small);
   font-weight: 500;
   margin: 13px 0 5px;
 }
@@ -674,7 +671,7 @@ td.number-cell {
 .modal-placeholder p,
 .import-form > p {
   color: var(--soft);
-  font-size: 10px;
+  font-size: var(--type-micro);
   margin: 0;
 }
 
@@ -690,8 +687,8 @@ td.number-cell {
 .discover-search-box {
   align-items: center;
   background: white;
-  border: 1px solid #dbe3ea;
-  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
   box-shadow: 0 12px 35px rgba(15, 31, 42, 0.07);
   display: flex;
   gap: 11px;
@@ -707,18 +704,18 @@ td.number-cell {
   border: 0;
   flex: 1;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--type-body-large);
   outline: 0;
   padding: 8px 0;
 }
 
 .discover-search-box button {
   align-items: center;
-  background: var(--ink);
-  border-radius: 8px;
+  background-image: var(--brand-gradient);
+  border-radius: var(--radius-lg);
   color: white;
   display: flex;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 700;
   gap: 6px;
   padding: 10px 13px;
@@ -786,7 +783,7 @@ td.number-cell {
 
 .discovery-intro h2 {
   font-family: var(--font-display);
-  font-size: 23px;
+  font-size: var(--type-heading-large);
   font-weight: 500;
   letter-spacing: -0.03em;
   margin: 29px 0 8px;
@@ -795,7 +792,7 @@ td.number-cell {
 .discovery-intro > p {
   color: var(--muted);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.5;
   margin: 0;
   max-width: 500px;
@@ -833,7 +830,7 @@ td.number-cell {
 
 .results-heading span {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--type-body-large);
   font-weight: 600;
 }
 
@@ -854,7 +851,7 @@ td.number-cell {
 .discovery-results > .table-pagination {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   min-height: 0;
   padding: 10px 14px;
 }
@@ -863,7 +860,7 @@ td.number-cell {
   align-items: flex-start;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   display: grid;
   gap: 13px;
   grid-template-columns: auto 1fr auto;
@@ -879,7 +876,7 @@ td.number-cell {
 .result-source-icon {
   align-items: center;
   background: var(--brand-blue-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--brand-blue);
   display: flex;
   height: 34px;
@@ -903,7 +900,7 @@ td.number-cell {
 
 .result-copy h3 {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--type-body-large);
   letter-spacing: -0.02em;
   margin: 5px 0 4px;
 }
@@ -918,7 +915,7 @@ td.number-cell {
   color: var(--muted);
   display: -webkit-box;
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.45;
   margin: 9px 0;
   overflow: hidden;
@@ -932,12 +929,14 @@ td.number-cell {
   gap: 5px;
 }
 
+/* Shared neutral tag-chip spec (matches .feed-proposal-tag). */
 .result-tags span {
-  background: #f0f3f6;
-  border-radius: 4px;
-  color: #7b7381;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
   font-size: var(--type-micro);
-  padding: 3px 5px;
+  font-weight: 600;
+  padding: 3px 7px;
 }
 
 .drawer-layer,
@@ -992,7 +991,7 @@ td.number-cell {
 
 .drawer-fixed-head > h2 {
   font-family: var(--font-display);
-  font-size: 25px;
+  font-size: var(--type-heading-large);
   font-weight: 500;
   letter-spacing: -0.035em;
   line-height: 1.13;
@@ -1002,7 +1001,7 @@ td.number-cell {
 .detail-authors {
   color: var(--muted);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   margin: 0;
 }
 
@@ -1067,7 +1066,7 @@ td.number-cell {
 .detail-section > p:last-child:not(.eyebrow) {
   color: #5e5664;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.58;
   margin: var(--space-eyebrow-gap) 0 0;
 }
@@ -1085,12 +1084,12 @@ td.number-cell {
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line));
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   cursor: pointer;
   display: inline-flex;
-  font-size: 10px;
-  font-weight: 750;
+  font-size: var(--type-micro);
+  font-weight: 700;
   gap: 5px;
   height: 26px;
   letter-spacing: 0.04em;
@@ -1109,22 +1108,14 @@ td.number-cell {
 }
 
 .detail-section textarea {
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  line-height: 1.5;
   margin-top: var(--space-eyebrow-gap);
   min-height: 105px;
-  outline: 0;
-  padding: 10px;
-  resize: vertical;
-  width: 100%;
 }
 
 .summary-section {
   background: linear-gradient(145deg, #edf7fe, #f7fbfe);
   border: 1px solid #cfe6f7;
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   margin-top: 20px;
   padding: 16px;
 }

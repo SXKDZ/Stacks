@@ -24,17 +24,20 @@ export async function POST(
 
   // The reply box sends multipart when files/papers are attached, JSON otherwise.
   let reply = "";
+  let model: string | null = null;
   let files: File[] = [];
   let paperIds: string[] = [];
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
     reply = String(form.get("reply") ?? "").trim();
+    if (form.has("model")) model = String(form.get("model") ?? "").trim();
     paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
     files = form.getAll("files").filter((value): value is File => value instanceof File);
   } else {
-    const body = (await request.json().catch(() => ({}))) as { reply?: string };
+    const body = (await request.json().catch(() => ({}))) as { reply?: string; model?: string };
     reply = body.reply?.trim() ?? "";
+    if (typeof body.model === "string") model = body.model.trim();
   }
 
   const database = await ensureDatabase();
@@ -55,6 +58,28 @@ export async function POST(
   }
   if (!reply && !attachments.length) {
     return Response.json({ error: "Enter a follow-up message or attach a file." }, { status: 400 });
+  }
+
+  // The reply can switch the feed's model; the change persists so every later
+  // turn (including retries and GitHub-sync turns) uses it, and it is recorded
+  // in the thread (and thus mirrored to the GitHub issue by the next sync).
+  if (model !== null && model !== (snippet.model ?? "")) {
+    database
+      .update(feedSnippets)
+      .set({ model: model.slice(0, 200) || null })
+      .where(eq(feedSnippets.id, id))
+      .run();
+    database
+      .insert(feedMessages)
+      .values({
+        id: `msg-${crypto.randomUUID()}`,
+        snippetId: id,
+        role: "system",
+        kind: "text",
+        content: model ? `Switched to model ${model}.` : "Switched back to the default model.",
+        createdAt: new Date().toISOString(),
+      })
+      .run();
   }
 
   // Report the outcomes of proposals the user resolved since the last turn so

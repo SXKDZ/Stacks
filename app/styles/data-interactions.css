@@ -15,10 +15,10 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: var(--muted);
   display: inline-flex;
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   font-weight: 700;
   gap: 6px;
   height: 38px;
@@ -41,9 +41,9 @@
   align-items: center;
   background: var(--brand-blue);
   border-radius: 50%;
-  color: #fff;
+  color: var(--white);
   display: inline-flex;
-  font-size: 10px;
+  font-size: var(--type-micro);
   height: 18px;
   justify-content: center;
   min-width: 18px;
@@ -52,7 +52,7 @@
 .filter-builder-panel {
   background: color-mix(in srgb, var(--panel) 96%, transparent);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-sm);
   margin: -7px 0 12px;
   padding: 10px;
@@ -74,18 +74,18 @@
 
 .filter-builder-panel > header strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 
 .filter-builder-panel > header small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .filter-builder-panel > header > button {
   background: transparent;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   padding: 4px 6px;
 }
 
@@ -99,7 +99,7 @@
   align-items: center;
   background: var(--canvas);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -107,23 +107,18 @@
   padding: 4px 5px;
 }
 
-.filter-clause-row select {
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  color: var(--ink);
-  font-size: 10px;
-  height: 29px;
+/* The join/field pickers in a filter clause use the shared Select; keep them
+   compact so several fit on one clause row. */
+.filter-clause-select .app-select-trigger {
   max-width: 220px;
   min-width: 104px;
-  padding: 0 24px 0 7px;
 }
 
 .filter-value-combobox {
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: grid;
   flex: 1 1 190px;
   gap: 6px;
@@ -150,7 +145,7 @@
   border: 0;
   color: var(--ink);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--type-micro);
   height: 27px;
   min-width: 0;
   outline: 0;
@@ -183,10 +178,10 @@
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   display: flex;
-  font-size: 10px;
+  font-size: var(--type-micro);
   gap: 8px;
   justify-content: space-between;
   min-height: 30px;
@@ -208,7 +203,7 @@
 
 .filter-value-empty {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   padding: 8px;
   text-align: center;
 }
@@ -217,11 +212,11 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   display: inline-flex;
-  font-size: 10px;
-  font-weight: 750;
+  font-size: var(--type-micro);
+  font-weight: 700;
   gap: 4px;
   height: 29px;
   justify-content: center;
@@ -257,7 +252,7 @@
 .filter-start {
   color: var(--muted);
   flex: 0 0 48px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   letter-spacing: 0.04em;
   text-align: center;
@@ -351,11 +346,11 @@
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line));
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   display: inline-flex;
-  font-size: 10px;
-  font-weight: 750;
+  font-size: var(--type-micro);
+  font-weight: 700;
   gap: 5px;
   height: 29px;
   padding: 0 8px;
@@ -472,7 +467,7 @@
   color: var(--muted);
   display: flex;
   flex: 1 1 auto;
-  font-size: 11px;
+  font-size: var(--type-label);
   gap: 5px;
   line-height: 1.35;
   min-width: 0;
@@ -489,8 +484,8 @@
   background: transparent;
   color: var(--brand-blue-strong);
   flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 750;
+  font-size: var(--type-micro);
+  font-weight: 700;
   padding: 0;
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);
@@ -510,6 +505,47 @@
   flex-basis: 100%;
   overflow: visible;
   white-space: normal;
+}
+
+/* Clickable authors in the paper-row secondary line: each name is a link to its
+   author filter, so the byline reads as muted text with the names as accents. */
+.paper-secondary-line .expandable-author-buttons {
+  align-items: baseline;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-label);
+  gap: 4px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.paper-secondary-line .expandable-author-buttons > span > span > button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.paper-secondary-line .expandable-author-buttons > span > span > button:hover {
+  color: var(--brand-blue-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.paper-secondary-line .expandable-author-buttons .author-toggle {
+  background: transparent;
+  color: var(--brand-blue-strong);
+  cursor: pointer;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);
+  text-underline-offset: 2px;
 }
 
 .recent-title-button {
@@ -536,7 +572,7 @@
 }
 
 .research-grid .paper-secondary-line > .expandable-author-list {
-  font-size: 11.5px;
+  font-size: var(--type-label);
 }
 
 .research-grid .paper-secondary-line:has(.expandable-author-list.is-expanded) {
@@ -557,12 +593,12 @@
      near-white pill in dark mode). Matches the panel it opens. */
   background: var(--surface-floating);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   color: var(--ink);
   display: inline-flex;
-  font-size: 10.5px;
-  font-weight: 750;
+  font-size: var(--type-caption);
+  font-weight: 700;
   gap: 7px;
   height: 40px;
   padding: 0 11px;
@@ -582,7 +618,7 @@
   background: var(--surface-floating);
   backdrop-filter: blur(18px);
   border: 1px solid var(--line-strong);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-md);
   max-height: min(420px, calc(100dvh - 90px));
   overflow: hidden;
@@ -614,7 +650,7 @@
 }
 
 .background-task-panel > header .activity-clear {
-  font-size: 10px;
+  font-size: var(--type-micro);
   padding-inline: 6px;
 }
 
@@ -629,7 +665,7 @@
 
 .activity-log-empty {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   line-height: 1.5;
   margin: 0;
   padding: 16px 12px;
@@ -660,11 +696,11 @@
 
 .background-task-row strong {
   color: var(--ink);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .background-task-row small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .background-task-row.is-running > svg {
@@ -701,7 +737,7 @@
   .stat-card { min-height: 62px; padding: 10px; }
   .stat-card > svg { display: none; }
   .continue-copy { padding: 24px 20px; }
-  .continue-copy h2 { font-size: 24px; }
+  .continue-copy h2 { font-size: var(--type-heading-large); }
   .continue-actions { align-items: stretch; flex-direction: column; }
   .recent-panel { padding: 18px 14px 7px; }
   .recent-list { grid-template-columns: 1fr; }
@@ -885,7 +921,7 @@
   background: transparent;
   color: var(--muted);
   display: grid;
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   gap: 6px;
   grid-template-columns: 14px minmax(0, 1fr);
   min-height: 25px;
@@ -924,7 +960,7 @@
   border-top: 1px solid var(--line);
   color: var(--muted);
   display: flex;
-  font-size: 10px;
+  font-size: var(--type-micro);
   justify-content: space-between;
   min-height: 30px;
   padding-top: 5px;
@@ -966,7 +1002,7 @@
 .metadata-autocomplete-options {
   background: var(--panel-strong);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   max-height: 220px;
   overflow-y: auto;
@@ -1007,7 +1043,7 @@
 
 .metadata-autocomplete-options small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .prompt-settings-card {
@@ -1017,7 +1053,7 @@
 
 .prompt-template-section {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -1042,7 +1078,7 @@
 
 .prompt-template-section > summary small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .prompt-template-section > summary svg {
@@ -1067,7 +1103,7 @@
 
 .prompt-template-content small code {
   background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   font-family: var(--font-mono);
   font-size: 0.92em;
@@ -1077,7 +1113,7 @@
 
 .settings-card.prompt-settings-card {
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   gap: 0;
   overflow: hidden;
@@ -1106,12 +1142,12 @@
 }
 
 .prompt-settings-card .prompt-template-section > summary strong {
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 680;
 }
 
 .prompt-settings-card .prompt-template-section > summary small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .prompt-settings-card .prompt-template-section[open] > summary {
@@ -1165,7 +1201,7 @@
 .library-toolbar > .page-search.inline-search,
 .entity-toolbar > .page-search.inline-search,
 .compact-toolbar > .page-search.inline-search {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   flex: 0 0 390px;
   height: 42px;
   max-width: 100%;
@@ -1177,7 +1213,7 @@
 .library-toolbar > .page-search.inline-search input,
 .entity-toolbar > .page-search.inline-search input,
 .compact-toolbar > .page-search.inline-search input {
-  font-size: 12.5px;
+  font-size: var(--type-control);
 }
 
 /* Full pagination at both table edges. */
@@ -1293,7 +1329,7 @@
 .export-preview-panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -1397,7 +1433,7 @@
   display: grid;
   gap: 12px;
   grid-template-columns: auto 1fr;
-  max-width: 460px;
+  max-width: 620px;
   padding: 20px;
   width: 100%;
 }
@@ -1429,9 +1465,9 @@
 
 .asset-acquisition-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
   grid-column: 1 / -1;
   justify-content: flex-end;
   margin-top: 4px;
+  white-space: nowrap;
 }

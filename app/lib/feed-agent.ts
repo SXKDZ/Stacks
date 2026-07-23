@@ -80,23 +80,31 @@ export function subscribeFeed(snippetId: string, listener: (event: FeedEvent) =>
   return () => handle.subscribers.delete(listener);
 }
 
-export async function stopFeed(snippetId: string): Promise<void> {
+function signalRun(snippetId: string, signal: NodeJS.Signals): void {
   const handle = runs.get(snippetId);
   if (handle?.child.pid) {
     try {
-      process.kill(-handle.child.pid, "SIGTERM");
+      // Signal the whole process group (detached spawn), so child tools die too.
+      process.kill(-handle.child.pid, signal);
     } catch {
-      handle.child.kill("SIGTERM");
+      handle.child.kill(signal);
     }
   }
+}
+
+export async function stopFeed(snippetId: string): Promise<void> {
+  signalRun(snippetId, "SIGTERM");
 }
 
 /**
  * Stop a running agent and wait until its process has fully exited (the close
  * handler removes it from `runs`). Callers that immediately start a new turn on
  * the same session must await this, so two `claude -p --resume` processes never
- * write the same transcript at once. Resolves immediately if not running, and
- * gives up after `timeoutMs` so a stuck process can't hang the caller forever.
+ * write the same transcript at once. Resolves immediately if not running.
+ *
+ * Escalates to SIGKILL near the deadline rather than returning while the process
+ * is still alive: a caller that starts a new --resume turn against a
+ * still-running process would corrupt the shared session transcript.
  */
 export async function stopFeedAndWait(snippetId: string, timeoutMs = 8000): Promise<void> {
   if (!runs.has(snippetId)) {
@@ -104,8 +112,24 @@ export async function stopFeedAndWait(snippetId: string, timeoutMs = 8000): Prom
   }
   await stopFeed(snippetId);
   const start = Date.now();
+  let escalated = false;
   while (runs.has(snippetId) && Date.now() - start < timeoutMs) {
+    // If SIGTERM hasn't landed by 75% of the budget, force-kill so we never
+    // leave a live process behind when we return.
+    if (!escalated && Date.now() - start > timeoutMs * 0.75) {
+      signalRun(snippetId, "SIGKILL");
+      escalated = true;
+    }
     await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  // Final backstop: if it still hasn't exited, SIGKILL and wait a short grace so
+  // the caller doesn't proceed to a second --resume on the same session.
+  if (runs.has(snippetId)) {
+    signalRun(snippetId, "SIGKILL");
+    const graceEnd = Date.now() + 2000;
+    while (runs.has(snippetId) && Date.now() < graceEnd) {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
   }
 }
 
@@ -259,44 +283,70 @@ export async function runFeedAgent(options: {
   let settle: (result: AgentTurnResult) => void;
   const completion = new Promise<AgentTurnResult>((resolve) => { settle = resolve; });
   const workingDir = feedWorkingDir(snippetId);
-  mkdirSync(workingDir, { recursive: true });
-  mkdirSync(claudeConfigDir(), { recursive: true });
 
-  // Issue a per-run token the agent uses (via Bash + curl) to reach the
-  // agent-facing library APIs. Reads run live; writes enqueue approvals.
-  const feedToken = issueFeedToken(snippetId);
+  // Everything up to the spawn can throw (disk full, DB locked, bad env). Do it
+  // all here so a failure is turned into a visible "error" status rather than a
+  // rejected promise the callers swallow with .catch(() => {}), which would
+  // strand the snippet in "queued"/"running" and poll forever.
+  let child: ReturnType<typeof spawn>;
+  try {
+    mkdirSync(workingDir, { recursive: true });
+    mkdirSync(claudeConfigDir(), { recursive: true });
 
-  const args = [
-    "-p",
-    prompt,
-    "--output-format",
-    "stream-json",
-    "--verbose",
-    "--max-turns",
-    MAX_TURNS,
-    "--add-dir",
-    workingDir,
-    // Headless: with no user to answer prompts, the default mode auto-denies
-    // every Bash/network/temp-file call, so the agent can't even read the
-    // library. "auto" keeps the background safety classifier as a guardrail
-    // while letting normal operations run. Library WRITES stay safe regardless:
-    // the feed API only queues proposals for the user to approve.
-    "--permission-mode",
-    "auto",
-    ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
-  ];
+    // The per-feed model choice lives on the snippet row, so every turn (create,
+    // reply, fork retry, GitHub sync) runs with the same model automatically.
+    const database = await ensureDatabase();
+    const snippetModel = database
+      .select({ model: feedSnippets.model })
+      .from(feedSnippets)
+      .where(eq(feedSnippets.id, snippetId))
+      .get()?.model?.trim();
 
-  const child = spawn(CLAUDE_BIN, args, {
-    cwd: workingDir,
-    env: await agentEnv(feedToken),
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-  });
+    // Resolve the environment (secrets, config dir) before spawn so no await
+    // sits between spawn() and the listener attachment below.
+    const env = await agentEnv(issueFeedToken(snippetId));
+
+    const args = [
+      "-p",
+      prompt,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--max-turns",
+      MAX_TURNS,
+      "--add-dir",
+      workingDir,
+      ...(snippetModel ? ["--model", snippetModel] : []),
+      // Headless: with no user to answer prompts, the default mode auto-denies
+      // every Bash/network/temp-file call, so the agent can't even read the
+      // library. "auto" keeps the background safety classifier as a guardrail
+      // while letting normal operations run. Library WRITES stay safe regardless:
+      // the feed API only queues proposals for the user to approve.
+      "--permission-mode",
+      "auto",
+      ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
+    ];
+
+    await setStatus(snippetId, "running");
+    emit(snippetId, { type: "status", status: "running" });
+
+    child = spawn(CLAUDE_BIN, args, {
+      cwd: workingDir,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The agent could not be started.";
+    revokeFeedToken(snippetId);
+    await persistMessage(snippetId, "system", "error", message);
+    await setStatus(snippetId, "error", message);
+    emit(snippetId, { type: "done", status: "error" });
+    return { status: "error", text: "", error: message };
+  }
 
   const handle: RunHandle = { child, subscribers: new Set() };
   runs.set(snippetId, handle);
-  await setStatus(snippetId, "running");
-  emit(snippetId, { type: "status", status: "running" });
 
   let buffer = "";
   let stderr = "";
@@ -359,8 +409,15 @@ export async function runFeedAgent(options: {
       const isError = Boolean(event.is_error);
       const text = typeof event.result === "string" ? event.result : "";
       if (!isError && text.trim()) finalText = text;
-      // Accumulate this turn's usage onto the snippet (tokens, duration, turns).
-      await recordUsage(snippetId, event);
+      // A resume can fail if the session transcript is missing (e.g. it was
+      // created under a different config dir). We retry once as a fresh session.
+      const willRetry = isError && resume && !resumeRetried && /no conversation found|session id/i.test(text);
+      // Accumulate this turn's usage onto the snippet (tokens, duration, turns),
+      // but not for a failed attempt we're about to retry — else the failed try
+      // and the fresh-session retry would both count against the snippet totals.
+      if (!willRetry) {
+        await recordUsage(snippetId, event);
+      }
       // The result event repeats the final assistant text. Only persist it when
       // it differs from the last assistant message (else the reply shows twice);
       // otherwise reuse that message as the anchor for parsed proposals.
@@ -373,10 +430,8 @@ export async function runFeedAgent(options: {
         emit(snippetId, message);
       }
       if (isError) {
-        // A resume can fail if the session transcript is missing (e.g. it was
-        // created under a different config dir). Rather than dead-end the
-        // thread, retry once as a fresh session seeded with the transcript.
-        if (resume && !resumeRetried && /no conversation found|session id/i.test(text)) {
+        // Rather than dead-end the thread, restart as a fresh session (below).
+        if (willRetry) {
           resumeFallback = true;
           return;
         }
@@ -404,12 +459,21 @@ export async function runFeedAgent(options: {
     stderr += chunk.toString();
   });
 
+  // Release the run slot only if THIS handle still owns it. If a later turn
+  // (e.g. after a stop-timeout) already replaced the entry, we must not evict
+  // its handle or revoke its token when our stale process finally exits.
+  const releaseRun = () => {
+    if (runs.get(snippetId) === handle) {
+      runs.delete(snippetId);
+      revokeFeedToken(snippetId);
+    }
+  };
+
   child.on("error", async (error) => {
+    releaseRun();
     await persistMessage(snippetId, "system", "error", error.message);
     await setStatus(snippetId, "error", error.message);
     emit(snippetId, { type: "done", status: "error" });
-    revokeFeedToken(snippetId);
-    runs.delete(snippetId);
     settle({ status: "error", text: "", error: error.message });
   });
 
@@ -417,8 +481,7 @@ export async function runFeedAgent(options: {
     if (buffer.trim()) {
       await handleLine(buffer);
     }
-    revokeFeedToken(snippetId);
-    runs.delete(snippetId);
+    releaseRun();
 
     // The resume failed with a missing-session error: restart this turn as a
     // fresh session seeded with the thread transcript, so the reply still lands.

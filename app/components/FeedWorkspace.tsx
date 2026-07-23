@@ -4,9 +4,10 @@ import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, ChevronUp, Circ
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AttachBox, type AttachSubmit, type LibraryPaper } from "@/app/components/feed/AttachBox";
+import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
+import { readError } from "@/app/lib/http";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
@@ -36,25 +37,83 @@ interface FeedProposal {
   createdAt: string;
 }
 
-/** Parse a paper proposal's raw operation JSON into the meta chips shown on its
- *  card — the paper type and venue, which the summary line doesn't carry. The
- *  entity/action is already conveyed by the summary ("Add '…'"), so it's omitted
- *  to avoid a redundant "create paper" chip. */
-function proposalTags(operation: string): string[] {
+/** A meta chip on a proposal card. The `action` chip (e.g. "Create paper") is
+ *  the primary, brand-tinted label; the rest (paper type, venue) are neutral. */
+interface ProposalTag {
+  label: string;
+  kind: "action" | "meta";
+}
+
+/** Parse a proposal's operation JSON into the chips shown on its card: the
+ *  action + entity ("Create paper"), and for papers the type and venue. */
+function proposalTags(operation: string): ProposalTag[] {
   try {
-    const op = JSON.parse(operation) as { entity?: string; data?: Record<string, unknown> };
-    if (op.entity !== "paper") return [];
-    const tags: string[] = [];
-    const type = typeof op.data?.paperType === "string" ? op.data.paperType : "";
-    if (type) tags.push(type);
-    const venue = typeof op.data?.venueAcronym === "string" && op.data.venueAcronym
-      ? op.data.venueAcronym
-      : typeof op.data?.venueName === "string" ? op.data.venueName : "";
-    if (venue) tags.push(venue);
+    const op = JSON.parse(operation) as { entity?: string; action?: string; data?: Record<string, unknown> };
+    const tags: ProposalTag[] = [];
+    if (op.action && op.entity) {
+      const action = op.action.charAt(0).toUpperCase() + op.action.slice(1);
+      tags.push({ label: `${action} ${op.entity}`, kind: "action" });
+    }
+    if (op.entity === "paper") {
+      const type = typeof op.data?.paperType === "string" ? op.data.paperType : "";
+      if (type) tags.push({ label: type, kind: "meta" });
+      const venue = typeof op.data?.venueAcronym === "string" && op.data.venueAcronym
+        ? op.data.venueAcronym
+        : typeof op.data?.venueName === "string" ? op.data.venueName : "";
+      if (venue) tags.push({ label: venue, kind: "meta" });
+    }
     return tags;
   } catch {
     return [];
   }
+}
+
+/** "venueAcronym" → "Venue acronym" for the structured proposal fields. */
+function fieldLabel(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Render a proposal data value as a readable line (arrays joined, objects as JSON). */
+function fieldValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(", ");
+  return JSON.stringify(value);
+}
+
+/** The expanded view of a proposal card: the operation's fields as labeled rows,
+ *  with the raw JSON tucked in a collapsible block underneath (this replaces the
+ *  separate "Proposed changes (raw)" dump that used to sit next to the cards). */
+function ProposalDetails({ operation }: { operation: string }) {
+  interface ProposalOperation { entity?: string; action?: string; id?: string; data?: Record<string, unknown> }
+  let op: ProposalOperation | null = null;
+  let pretty = operation;
+  try {
+    const parsed = JSON.parse(operation) as ProposalOperation;
+    op = parsed;
+    pretty = JSON.stringify(parsed, null, 2);
+  } catch {
+    // Unparseable operation: fall through to the raw block alone.
+  }
+  const fields = Object.entries(op?.data ?? {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
+  return (
+    <div className="feed-proposal-detail">
+      {op ? (
+        <div className="feed-proposal-fields">
+          <div className="feed-proposal-field"><span>Action</span><strong>{[op.action, op.entity].filter(Boolean).join(" ") || "unknown"}</strong></div>
+          {op.id ? <div className="feed-proposal-field"><span>Target</span><strong>{op.id}</strong></div> : null}
+          {fields.map(([key, value]) => (
+            <div key={key} className="feed-proposal-field"><span>{fieldLabel(key)}</span><strong>{fieldValue(value)}</strong></div>
+          ))}
+        </div>
+      ) : null}
+      <details className="feed-tool-call feed-proposal-json">
+        <summary><Code2 size={12} /> <span>Raw JSON</span></summary>
+        <div className="feed-tool-io"><MarkdownContent content={toolFence(pretty, "json")} className="feed-tool-md" /></div>
+      </details>
+    </div>
+  );
 }
 
 interface FeedSnippet {
@@ -62,6 +121,7 @@ interface FeedSnippet {
   title: string;
   instruction: string;
   status: string;
+  model?: string | null;
   error: string | null;
   inputTokens?: number;
   outputTokens?: number;
@@ -433,9 +493,11 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, onBack, onChanged }: {
+function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onChanged }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
+  models: FeedModelOption[];
+  defaultModelLabel: string;
   onBack: () => void;
   onChanged: () => void;
 }) {
@@ -444,47 +506,49 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const [replying, setReplying] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolvingAll, setResolvingAll] = useState<"approve" | "reject" | null>(null);
+  // Which proposal card is expanded to its structured change details.
+  const [expandedProposal, setExpandedProposal] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
-  // Forces one scroll-to-bottom on the next content change, regardless of the
-  // near-bottom gate: set when the thread first opens and whenever the user
-  // sends a reply, so both land the view at the latest message.
-  const forceScrollRef = useRef(true);
+  // Stick-to-bottom: while pinned, every content change scrolls to the latest
+  // message (a thread opens pinned, and a reply re-pins). History streams in
+  // over several batches, so a one-shot scroll would strand the view partway;
+  // instead the pin persists until the user scrolls up, and re-arms when they
+  // return to the bottom.
+  const pinnedToBottomRef = useRef(true);
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
+    pinnedToBottomRef.current = true;
     if (body) body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
   }, []);
 
-  // Auto-scroll to the newest content as it streams in when the user is already
-  // near the bottom (so scrolling up to re-read isn't yanked back), or when a
-  // force is pending (thread just opened, or the user just replied). Content
-  // growth doesn't fire a scroll event, so we re-measure the near-bottom state
-  // here too, which is why opening a long thread shows the jump-to-latest button.
+  // Auto-scroll to the newest content as it streams in while pinned. Content
+  // growth doesn't fire a scroll event, so re-measure the bottom state here too.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
-    const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
-    // A pending force only resolves once there is scrollable content to land on,
-    // so a thread that opens empty still scrolls once its history streams in.
-    const force = forceScrollRef.current && body.scrollHeight > body.clientHeight;
-    if (nearBottom || force) {
+    if (pinnedToBottomRef.current) {
       body.scrollTop = body.scrollHeight;
-    }
-    if (force) {
-      forceScrollRef.current = false;
     }
     setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
   }, [messages, proposals, running]);
 
-  // Track whether the user is near the bottom, to toggle the jump-to-latest button.
+  // Scroll events either come from our own pin (which lands at the bottom) or
+  // from the user. A position away from the bottom therefore means the user
+  // scrolled up: unpin so streaming stops yanking them back. Returning to the
+  // bottom re-pins.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
-    const onScroll = () => setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
+    const onScroll = () => {
+      const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
+      pinnedToBottomRef.current = nearBottom;
+      setAtBottom(nearBottom);
+    };
     onScroll();
     body.addEventListener("scroll", onScroll, { passive: true });
     return () => body.removeEventListener("scroll", onScroll);
@@ -518,6 +582,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
       if (payload.files.length || payload.paperIds.length) {
         const form = new FormData();
         form.set("reply", payload.text);
+        form.set("model", payload.model);
         for (const file of payload.files) form.append("files", file);
         for (const paperId of payload.paperIds) form.append("paperIds", paperId);
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, { method: "POST", body: form });
@@ -525,18 +590,18 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reply: payload.text }),
+          body: JSON.stringify({ reply: payload.text, model: payload.model }),
         });
       }
       if (response.ok) {
-        // Pull the view down to the new turn even if the user had scrolled up.
-        forceScrollRef.current = true;
+        // Re-pin the view to the bottom so the new turn (and the incoming
+        // response) stays in view even if the user had scrolled up.
+        pinnedToBottomRef.current = true;
         setStreamNonce((nonce) => nonce + 1);
         onChanged();
         return true;
       }
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      setError(body.error ?? `Reply failed (${response.status}).`);
+      setError(await readError(response));
       return false;
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Reply failed.");
@@ -632,25 +697,39 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
             </div>
           ) : null}
         </div>
-        {list.map((proposal) => (
-          <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
-            <div className="feed-proposal-body">
-              {proposalTags(proposal.operation).length ? (
-                <div className="feed-proposal-tags">
-                  {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
-                </div>
-              ) : null}
-              <span className="feed-proposal-summary">{proposal.summary}</span>
-              <span className="feed-proposal-status">{proposal.status}</span>
-            </div>
-            {proposal.status === "pending" ? (
-              <div className="feed-proposal-actions">
-                <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
-                <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+        {list.map((proposal) => {
+          const expanded = expandedProposal === proposal.id;
+          return (
+            <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status} ${expanded ? "is-expanded" : ""}`}>
+              <div className="feed-proposal-row">
+                <button
+                  type="button"
+                  className="feed-proposal-body"
+                  onClick={() => setExpandedProposal(expanded ? null : proposal.id)}
+                  aria-expanded={expanded}
+                >
+                  <span className="feed-proposal-summary">
+                    {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <span className="feed-proposal-summary-text">{proposal.summary}</span>
+                  </span>
+                  <span className="feed-proposal-meta">
+                    <span className={`feed-proposal-status feed-proposal-status-${proposal.status}`}>{proposal.status}</span>
+                    {proposalTags(proposal.operation).map((tag) => (
+                      <span key={tag.label} className={`feed-proposal-tag feed-proposal-tag-${tag.kind}`}>{tag.label}</span>
+                    ))}
+                  </span>
+                </button>
+                {proposal.status === "pending" ? (
+                  <div className="feed-proposal-actions">
+                    <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
+                    <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        ))}
+              {expanded ? <ProposalDetails operation={proposal.operation} /> : null}
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -760,6 +839,13 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                 );
                 continue;
               }
+              // System notices (e.g. a model switch) render as a subtle centered line.
+              if (message.role === "system") {
+                nodes.push(
+                  <div key={message.id} className="feed-message feed-system-note">{message.content}</div>,
+                );
+                continue;
+              }
               const { prose: rawProse, raw } = message.role === "user" ? { prose: message.content, raw: null } : splitProposalBlock(message.content);
               const messageAttachments = message.role === "user" ? parseAttachments(message.attachments) : [];
               // Drop the "(attached N files)" placeholder when the chips convey it.
@@ -773,7 +859,11 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                   </div>,
                 );
               }
-              if (raw) {
+              // The proposal cards below carry the structured details (and raw
+              // JSON) per change, so the block is only dumped as-is when no
+              // cards were parsed out of it (e.g. a malformed agent block).
+              const anchored = proposalsByMessage.get(message.id);
+              if (raw && !anchored) {
                 nodes.push(
                   <details key={`${message.id}-raw`} className="feed-tool-call feed-proposal-raw">
                     <summary><Code2 size={12} /> <span>Proposed changes (raw)</span></summary>
@@ -781,7 +871,6 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
                   </details>,
                 );
               }
-              const anchored = proposalsByMessage.get(message.id);
               if (anchored) {
                 nodes.push(renderProposals(anchored, `props-${message.id}`));
               }
@@ -804,6 +893,9 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         ) : null}
         <AttachBox
           library={library}
+          models={models}
+          initialModel={snippet.model ?? ""}
+          defaultModelLabel={defaultModelLabel}
           placeholder={running ? "Message the agent…" : "Reply to continue this thread."}
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
@@ -857,6 +949,13 @@ export default function FeedWorkspace() {
     window.addEventListener("pointerup", onUp, { once: true });
   }, [sidebarWidth]);
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
+  const [models, setModels] = useState<FeedModelOption[]>([]);
+  const [defaultModelId, setDefaultModelId] = useState("");
+  // A new feed starts on the model the user last picked (persisted per browser).
+  const [lastUsedModel, setLastUsedModel] = useState("");
+  useEffect(() => {
+    setLastUsedModel(window.localStorage.getItem("stacks-feed-model") ?? "");
+  }, []);
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
@@ -875,6 +974,11 @@ export default function FeedWorkspace() {
     });
   }, []);
   const clearSyncLog = useCallback(() => { setSyncLog([]); writeSyncLog([]); }, []);
+
+  // The configured default model's friendly label (falls back to the raw id).
+  const defaultModelLabel = defaultModelId
+    ? models.find((option) => option.id === defaultModelId)?.label ?? defaultModelId
+    : "";
 
   // ⌘ on macOS, Ctrl elsewhere. Set after mount so SSR and client agree.
   const [modKey, setModKey] = useState("⌃");
@@ -904,15 +1008,17 @@ export default function FeedWorkspace() {
     }
   }, []);
 
-  // Read the authoritative settings: the library name and whether GitHub inbox
-  // sync is configured (repo + token).
+  // Read the authoritative settings: the library name, whether GitHub inbox
+  // sync is configured (repo + token), and the configured default model id
+  // (Settings → AI model) so the composer's picker can name the default.
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/local-settings", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { libraryName?: string; github?: { repo?: string; connected?: boolean } } | null) => {
+      .then((data: { libraryName?: string; ai?: { modelId?: string }; github?: { repo?: string; connected?: boolean } } | null) => {
         if (cancelled || !data) return;
         if (data.libraryName?.trim()) setLibraryName(data.libraryName.trim());
+        if (data.ai?.modelId?.trim()) setDefaultModelId(data.ai.modelId.trim());
         setGithubReady(Boolean(data.github?.repo && data.github.connected));
       })
       .catch(() => {});
@@ -924,11 +1030,11 @@ export default function FeedWorkspace() {
     setNotice(null);
     try {
       const response = await fetch("/api/feed/github/sync", { method: "POST" });
+      if (!response.ok) throw new Error(await readError(response));
       // Read the body defensively: a stale/misrouted server can answer with an
       // HTML error page, which would otherwise blow up JSON.parse with a cryptic
       // "Unexpected token '<'" instead of a legible failure.
-      const data = (await response.json().catch(() => ({}))) as { counts?: Record<string, number>; truncated?: boolean; error?: string };
-      if (!response.ok) throw new Error(data.error ?? `GitHub sync failed (${response.status}).`);
+      const data = (await response.json().catch(() => ({}))) as { counts?: Record<string, number>; truncated?: boolean };
       const c = data.counts ?? {};
       const parts = [
         c.issuesCreated ? `${c.issuesCreated} issue${c.issuesCreated === 1 ? "" : "s"} created` : "",
@@ -974,25 +1080,54 @@ export default function FeedWorkspace() {
     }
   }, [snippets]);
 
-  // Load the library once so papers can be attached (and the ?paper= param
-  // pre-attaches one, opening straight into the composer).
+  // Load the library so papers can be attached (and the ?paper= param
+  // pre-attaches one, opening straight into the composer). Reload on tab focus
+  // so papers added on the main page are attachable without a manual refresh.
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/library", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { papers?: LibraryPaper[] } | null) => {
-        if (cancelled || !data?.papers) return;
-        setLibrary(data.papers);
-        const params = new URLSearchParams(window.location.search);
-        const paperId = params.get("paper");
-        if (paperId) {
-          const paper = data.papers.find((item) => item.id === paperId);
-          if (paper) {
-            setInitialPapers([paper]);
-            setInitialText("Discuss this paper with me. Read the attached file first.");
-            setComposing(true);
+    let first = true;
+    const load = () => {
+      void fetch("/api/library", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { papers?: LibraryPaper[] } | null) => {
+          if (cancelled || !data?.papers) return;
+          setLibrary(data.papers);
+          if (!first) return;
+          first = false;
+          const params = new URLSearchParams(window.location.search);
+          const paperId = params.get("paper");
+          if (paperId) {
+            const paper = data.papers.find((item) => item.id === paperId);
+            if (paper) {
+              setInitialPapers([paper]);
+              setInitialText("Discuss this paper with me. Read the attached file first.");
+              setComposing(true);
+            }
           }
-        }
+        })
+        .catch(() => {});
+    };
+    load();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // Load the Bedrock model catalog (the same list Settings shows) so each feed
+  // can pick the agent model instead of always running the most powerful one.
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/models", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { models?: Array<{ id: string; label: string }> } | null) => {
+        if (!cancelled && data?.models) setModels(data.models.map(({ id, label }) => ({ id, label })));
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -1096,6 +1231,7 @@ export default function FeedWorkspace() {
       if (payload.files.length || payload.paperIds.length) {
         const form = new FormData();
         form.set("instruction", payload.text);
+        form.set("model", payload.model);
         for (const file of payload.files) form.append("files", file);
         for (const paperId of payload.paperIds) form.append("paperIds", paperId);
         response = await fetch("/api/feed/snippets", { method: "POST", body: form });
@@ -1103,11 +1239,13 @@ export default function FeedWorkspace() {
         response = await fetch("/api/feed/snippets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instruction: payload.text }),
+          body: JSON.stringify({ instruction: payload.text, model: payload.model }),
         });
       }
       if (response.ok) {
         const { id } = await response.json() as { id: string };
+        setLastUsedModel(payload.model);
+        window.localStorage.setItem("stacks-feed-model", payload.model);
         setInitialText("");
         setInitialPapers([]);
         setComposing(false);
@@ -1271,6 +1409,8 @@ export default function FeedWorkspace() {
             key={selected.id}
             snippet={selected}
             library={library}
+            models={models}
+            defaultModelLabel={defaultModelLabel}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
           />
@@ -1300,6 +1440,9 @@ export default function FeedWorkspace() {
             <AttachBox
               key={`${initialText}:${initialPapers.map((p) => p.id).join(",")}`}
               library={library}
+              models={models}
+              initialModel={lastUsedModel}
+              defaultModelLabel={defaultModelLabel}
               placeholder="Capture anything. A link or a note, and what to do with it."
               submitLabel="Add to feed"
               submitting={submitting}

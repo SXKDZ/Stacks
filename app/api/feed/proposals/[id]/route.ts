@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedProposals } from "@/db/schema";
 import { applyLibraryMutation } from "@/app/lib/library-mutations";
@@ -28,12 +28,22 @@ export async function POST(
     return Response.json({ error: `This proposal was already ${proposal.status}.` }, { status: 409 });
   }
 
+  // Atomically claim the proposal out of "pending" before doing any work, so two
+  // concurrent resolves (e.g. the same feed open in two tabs) can't both apply
+  // the mutation. Only the request that flips the row proceeds; the loser gets a
+  // 409. The claim status also survives a crash mid-apply, so an applied change
+  // is never re-armed as pending.
+  const claimStatus = decision === "reject" ? "rejected" : "approved";
+  const claimed = database
+    .update(feedProposals)
+    .set({ status: claimStatus, resolvedAt: new Date().toISOString() })
+    .where(and(eq(feedProposals.id, id), eq(feedProposals.status, "pending")))
+    .run();
+  if (claimed.changes === 0) {
+    return Response.json({ error: "This proposal was already resolved." }, { status: 409 });
+  }
+
   if (decision === "reject") {
-    database
-      .update(feedProposals)
-      .set({ status: "rejected", resolvedAt: new Date().toISOString() })
-      .where(eq(feedProposals.id, id))
-      .run();
     return Response.json({ status: "rejected" });
   }
 

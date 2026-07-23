@@ -34,10 +34,23 @@ function jsonError(message: string, status = 400): Response {
 }
 
 /** Turn raw SQLite errors into user-facing messages, hiding internal detail. */
+/** Thrown when a paper create is a duplicate of an existing library record. The
+ *  check runs inside the insert transaction (so it can't race a concurrent
+ *  create), and the unique indexes on doi/arxiv_id/semantic_scholar_id are the
+ *  final backstop if two transactions still interleave. */
+class DuplicatePaperError extends Error {
+  constructor() {
+    super("This paper is already in your library.");
+    this.name = "DuplicatePaperError";
+  }
+}
+
 function describeDbError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   if (/UNIQUE constraint failed/i.test(raw)) {
     if (/papers\.doi/i.test(raw)) return "A paper with this DOI is already in your library.";
+    if (/papers\.arxiv_id/i.test(raw)) return "A paper with this arXiv id is already in your library.";
+    if (/papers\.semantic_scholar_id/i.test(raw)) return "A paper with this Semantic Scholar id is already in your library.";
     return "This record already exists in your library.";
   }
   if (/FOREIGN KEY constraint failed/i.test(raw)) {
@@ -406,8 +419,13 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
   const database = await ensureDatabase();
   const id = createId("paper");
   // The whole paper — venue, row, authorship, collection links — commits in one
-  // transaction so a mid-flight failure can never leave a partial record.
+  // transaction so a mid-flight failure can never leave a partial record. The
+  // duplicate check runs inside the same transaction so it can't race a
+  // concurrent create (two feeds/imports of the same arXiv paper).
   database.transaction((tx) => {
+    if (findDuplicatePaper(tx, data)) {
+      throw new DuplicatePaperError();
+    }
     const venueId = resolveVenueId(tx, data);
     const collectionIds = Array.isArray(data.collectionNames)
       ? resolveCollectionIdsByName(tx, data.collectionNames)
@@ -758,11 +776,14 @@ export async function POST(request: Request): Promise<Response> {
 
     if (body.action === "create") {
       if (body.entity === "paper") {
-        const database = await ensureDatabase();
-        if (findDuplicatePaper(database, data)) {
-          return jsonError("This paper is already in your library.", 409);
+        try {
+          await createPaper(data);
+        } catch (error) {
+          if (error instanceof DuplicatePaperError) {
+            return jsonError(error.message, 409);
+          }
+          throw error;
         }
-        await createPaper(data);
       } else {
         await createEntity(body.entity, data);
       }
@@ -782,6 +803,10 @@ export async function POST(request: Request): Promise<Response> {
           continue;
         }
         const record = paper as Record<string, unknown>;
+        // A cheap pre-check skips the common duplicate without opening a
+        // transaction; createPaper re-checks inside the transaction, so a
+        // concurrent insert that slips past here is still caught (and surfaces
+        // as a DuplicatePaperError, counted as skipped rather than failed).
         try {
           if (findDuplicatePaper(database, record)) {
             skipped += 1;
@@ -790,6 +815,10 @@ export async function POST(request: Request): Promise<Response> {
           await createPaper(record);
           added += 1;
         } catch (error) {
+          if (error instanceof DuplicatePaperError) {
+            skipped += 1;
+            continue;
+          }
           // Isolate per-record failures so one bad entry doesn't abort the import.
           failed.push({
             title: cleanString(record.title) ?? "Untitled",

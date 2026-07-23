@@ -3,10 +3,6 @@ import { currentSettings, persistSettings, runSync, type SettingsPayload } from 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(): Promise<Response> {
-  return Response.json(currentSettings().sync);
-}
-
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await request.json().catch(() => ({})) as { data?: SettingsPayload };

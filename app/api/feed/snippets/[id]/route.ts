@@ -1,6 +1,8 @@
+import { rmSync } from "node:fs";
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
+import { feedWorkingDir, isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -63,13 +65,25 @@ export async function PATCH(
   return Response.json({ ok: true, title: changes.title ?? snippet.title, collapsed: changes.collapsed ?? snippet.collapsed });
 }
 
-/** Delete a feed and its messages/proposals (cascade). */
+/** Delete a feed and its messages/proposals (cascade), plus the on-disk working
+ *  directory that holds its staged attachments and agent session transcripts. */
 export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await context.params;
+  // Stop a running agent first so nothing writes back into the dir we remove.
+  if (isFeedRunning(id)) {
+    await stopFeedAndWait(id);
+  }
   const database = await ensureDatabase();
   database.delete(feedSnippets).where(eq(feedSnippets.id, id)).run();
+  // Remove the feed/<id> tree (uploaded files + copied library PDFs + session
+  // transcripts). Best-effort: a failure here must not fail the delete.
+  try {
+    rmSync(feedWorkingDir(id), { recursive: true, force: true });
+  } catch {
+    // The DB rows are already gone; a leftover dir is harmless.
+  }
   return Response.json({ ok: true });
 }

@@ -45,7 +45,7 @@ import { DEFAULT_FEED_SKILLS, FEED_SKILL_ICONS, type FeedSkill, feedSkillIcon } 
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { readError } from "@/app/lib/http";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
-import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
+import { ActionButton, ActionLink, Scrim, Select, SelectCard, TabButton } from "@/app/components/ui/controls";
 import type { Paper } from "@/app/lib/types";
 
 type SettingsTab = "appearance" | "model" | "prompts" | "skills" | "workflows" | "storage" | "sync" | "integrations" | "about";
@@ -293,6 +293,26 @@ function timeLabel(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+/** OneDrive backup is a folder copy, not an OAuth connection: it is "on" once a
+ *  destination folder is set (and the local library exists). The status headline
+ *  reflects that configured state rather than whether a backup ran this session
+ *  (the last-run time resets on restart). */
+function syncStatusTitle(settings: SettingsSnapshot): string {
+  if (!settings.local) return "Local companion required";
+  if (settings.sync.lastResult?.summary) return settings.sync.lastResult.summary;
+  if (!settings.sync.remotePath.trim()) return "Choose a OneDrive backup folder";
+  return settings.sync.autoSync ? "Backing up automatically" : "Backup folder ready";
+}
+
+function syncStatusDetail(settings: SettingsSnapshot): string {
+  if (!settings.local) return settings.sync.unavailableReason ?? "Backups need Stacks running on this computer.";
+  if (settings.sync.lastSyncAt) return `Last backed up ${timeLabel(settings.sync.lastSyncAt)}`;
+  if (!settings.sync.remotePath.trim()) return "No backup folder set yet";
+  return settings.sync.autoSync
+    ? `Backs up to your OneDrive folder ${settings.sync.autoSyncInterval}s after each change`
+    : "Auto-backup is off; use Back up now to copy your library";
 }
 
 function byteLabel(bytes: number): string {
@@ -824,14 +844,14 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "model" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<Bot size={19} />} title="AI model" />
+            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose the model and sampling for summaries and the feed." />
             <div className="settings-card">
               <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>Connected with an API key</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
               <div className="settings-form-grid">
-                <label className="span-2"><span>Model</span><select value={knownModel ? settings.ai.modelId : "custom"} onChange={(event) => updateAi("modelId", event.target.value === "custom" ? "" : event.target.value)}>{modelOptions.map((model) => <option value={model.id} key={model.id}>{model.label}</option>)}<option value="custom">Custom Bedrock model ID…</option></select><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
+                <label className="span-2"><span>Model</span><Select value={knownModel ? settings.ai.modelId : "custom"} onChange={(next) => updateAi("modelId", next === "custom" ? "" : next)} ariaLabel="Model" options={[...modelOptions.map((model) => ({ value: model.id, label: model.label })), { value: "custom", label: "Custom Bedrock model ID…" }]} /><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /></label> : null}
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Seeing a model in the list doesn't mean your key can use it. Use Test access to check."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
-                <label><span>AWS region</span><select value={settings.ai.region} onChange={(event) => updateAi("region", event.target.value)}><option value="us-east-1">US East (N. Virginia) · us-east-1</option><option value="us-east-2">US East (Ohio) · us-east-2</option><option value="us-west-2">US West (Oregon) · us-west-2</option><option value="eu-west-1">Europe (Ireland) · eu-west-1</option><option value="eu-central-1">Europe (Frankfurt) · eu-central-1</option><option value="ap-northeast-1">Asia Pacific (Tokyo) · ap-northeast-1</option><option value="ap-southeast-1">Asia Pacific (Singapore) · ap-southeast-1</option><option value="ap-southeast-2">Asia Pacific (Sydney) · ap-southeast-2</option></select></label>
+                <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
                 <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
               </div>
@@ -955,9 +975,9 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         {!loading && tab === "sync" ? (
           <form onSubmit={save}>
             <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up Stacks’s library database, PDFs, and HTML snapshots." />
-            <div className="sync-status-card">
-              <span className={`sync-status-icon ${settings.sync.lastResult?.ok ? "is-success" : ""}`}><FolderSync size={20} /></span>
-              <div><strong>{settings.sync.lastResult?.summary ?? (settings.local ? "Ready to connect OneDrive" : "Local companion required")}</strong><small>{settings.local ? timeLabel(settings.sync.lastSyncAt) : settings.sync.unavailableReason}</small></div>
+            <div className="settings-card sync-status-card">
+              <span className="sync-status-icon"><FolderSync size={16} /></span>
+              <div><strong>{syncStatusTitle(settings)}</strong><small>{syncStatusDetail(settings)}</small></div>
               <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "Stacks’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up Stacks now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
             </div>
             <div className="settings-card">
@@ -1476,6 +1496,7 @@ function PromptEditor({ inputRef, promptKey, value, onChange }: {
       value={value}
       onChange={onChange}
       variables
+      rows={12}
       textareaRef={(node) => { inputRef.current[promptKey] = node; }}
       ariaLabel={`${promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
     />

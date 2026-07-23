@@ -25,17 +25,13 @@
 .modal-results article > button,
 .toast,
 .assistant-orb {
-  background: var(--brand-cta);
+  background-image: var(--brand-gradient);
   border-color: var(--brand-cta-border);
   box-shadow: 0 7px 18px var(--brand-cta-shadow);
 }
 
 .assistant-orb svg {
-  color: #ffffff;
-}
-
-[data-theme="dark"] .assistant-orb {
-  background: var(--brand-cta);
+  color: var(--white);
 }
 
 .brand strong {
@@ -374,7 +370,7 @@
 .prompt-code-editor {
   background: color-mix(in srgb, var(--panel) 90%, var(--canvas));
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   /* Default height matches the prompt editors; callers can shorten it with the
      --code-editor-height var without any other style changes. */
   height: var(--code-editor-height, 248px);
@@ -393,7 +389,7 @@
   border: 0;
   box-sizing: border-box;
   font-family: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: var(--type-control);
   inset: 0;
   line-height: 1.58;
   margin: 0;
@@ -567,4 +563,158 @@
   overflow: visible;
   position: relative;
   z-index: 46;
+}
+
+/* Editable multi-line textareas share one spec (entity forms, paper notes,
+   settings prompts). Backgrounds stay with the theme normalization blocks in
+   themes.css; per-context rules keep only min-height/margins. */
+.entity-form textarea,
+.detail-section textarea,
+.settings-form-grid textarea {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  line-height: 1.5;
+  outline: 0;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+/* One tokenized focus ring for every bare field and textarea (replaces the
+   hardcoded #8ac4ef / rgba(22,141,236,.08) literals and gives the notes
+   textarea a ring it lacked). 72% matches the ring recipe used elsewhere. */
+.settings-form-grid input:focus,
+.settings-form-grid textarea:focus,
+.integration-row input:focus,
+.entity-form input:focus,
+.entity-form textarea:focus,
+.detail-section textarea:focus {
+  border-color: color-mix(in srgb, var(--brand-blue) 72%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--brand-blue-soft);
+}
+
+/* One focus ring for every search-input wrapper (library toolbar, feed sidebar,
+   modal search rows, and the discover hero box, which previously had none). */
+.inline-search:focus-within,
+.feed-search:focus-within,
+.modal-search-row label:focus-within,
+.large-field:focus-within,
+.discover-search-box:focus-within {
+  border-color: color-mix(in srgb, var(--brand-blue) 70%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--brand-blue-soft);
+}
+
+/* The universal Select control (app/components/ui/controls.tsx). A native
+   <select> can't style its option popup, so this is a bordered trigger + a
+   portaled listbox using the shared menu chrome. */
+.app-select {
+  display: inline-flex;
+}
+
+.app-select-trigger {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--type-control);
+  gap: 7px;
+  justify-content: space-between;
+  /* Reset ambient label styling: the trigger is a <span> child of form labels
+     (.entity-form/.settings-form-grid label > span), whose eyebrow rule would
+     otherwise make the value bold + uppercase + letter-spaced. */
+  font-weight: 500;
+  letter-spacing: normal;
+  min-height: 38px;
+  padding: 0 10px;
+  text-transform: none;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
+  width: 100%;
+}
+
+.app-select-trigger-sm {
+  font-size: var(--type-micro);
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 8px;
+}
+
+.app-select-trigger:hover:not(:disabled),
+.app-select-trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--brand-blue) 38%, var(--line-strong));
+}
+
+.app-select-trigger[aria-expanded="true"] {
+  box-shadow: 0 0 0 3px var(--brand-blue-soft);
+}
+
+.app-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-select-trigger > svg {
+  color: var(--soft);
+  flex-shrink: 0;
+}
+
+.app-select-label {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-select-menu {
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  padding: 5px;
+  z-index: 1200;
+}
+
+.app-select-option {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--type-control);
+  gap: 8px;
+  padding: 7px 9px;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.app-select-option > svg {
+  color: var(--brand-blue-strong);
+  flex-shrink: 0;
+}
+
+.app-select-check-gap {
+  flex-shrink: 0;
+  height: 14px;
+  width: 14px;
+}
+
+.app-select-option:hover {
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue-strong);
+}
+
+.app-select-option.is-selected {
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue-strong);
+  font-weight: 600;
 }

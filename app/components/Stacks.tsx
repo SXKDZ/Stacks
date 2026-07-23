@@ -35,7 +35,6 @@ import {
   PanelRightClose,
   Pencil,
   Plus,
-  RefreshCw,
   Save,
   Search,
   Settings2,
@@ -47,7 +46,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type { AriaAttributes, ChangeEvent, Dispatch, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { readError } from "@/app/lib/http";
@@ -58,7 +57,7 @@ import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
+import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, Select, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
 import { useTheme } from "@/app/lib/use-theme";
 import {
   downloadReferences,
@@ -431,6 +430,12 @@ function matchesSearch(values: Array<string | number | null | undefined>, query:
 }
 
 function matchesLibraryClause(paper: Paper, clause: LibraryFilterClause): boolean {
+  // An unset clause (no value chosen yet, or switched to a kind with no options)
+  // must not filter everything out — treat it as always-true so it's a no-op,
+  // even when negated.
+  if (!clause.valueId) {
+    return true;
+  }
   const matches = clause.kind === "author"
     ? paper.authors.some((author) => author.id === clause.valueId)
     : clause.kind === "venue"
@@ -672,7 +677,6 @@ function StacksWorkspace() {
   const [view, setView] = useState<ViewId>("home");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
@@ -698,10 +702,10 @@ function StacksWorkspace() {
     }, 3200);
   }, []);
 
-  async function loadLibrary(showSync = false) {
-    if (showSync) {
-      setSyncing(true);
-    }
+  // Fetches the latest library snapshot. Runs on mount and whenever the tab
+  // regains focus/visibility, so the sidebar and views stay fresh without a
+  // manual refresh control.
+  async function loadLibrary() {
     try {
       const response = await fetch("/api/library", { cache: "no-store" });
       if (!response.ok) {
@@ -721,7 +725,6 @@ function StacksWorkspace() {
       setDemoMode(true);
     } finally {
       setLoading(false);
-      setSyncing(false);
     }
   }
 
@@ -757,7 +760,20 @@ function StacksWorkspace() {
     const timer = window.setTimeout(() => {
       void loadLibrary();
     }, 0);
-    return () => window.clearTimeout(timer);
+    // Refresh whenever the tab regains focus so changes made elsewhere (the
+    // feed page approving a proposal, another window) show up without a manual
+    // reload.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadLibrary();
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The library name is a real setting (settings.json), loaded from the API so
@@ -928,7 +944,7 @@ function StacksWorkspace() {
           </span>
           <span className="assistant-card-copy">
             <strong>AI feed</strong>
-            <small>Put an agent to work on your library</small>
+            <small>Put an agent to work</small>
           </span>
           <ArrowUpRight size={16} className="assistant-card-arrow" />
         </button>
@@ -938,7 +954,6 @@ function StacksWorkspace() {
             <strong>{demoMode ? "Preview library" : libraryName.trim() || "My Paper Library"}</strong>
             <small>{demoMode ? "Loading library" : `${snapshot.stats.papers} papers · Local library`}</small>
           </span>
-          <ActionButton variant="ghost" size="icon" onClick={() => void loadLibrary(true)} aria-label="Refresh library" icon={<RefreshCw className={syncing ? "spin" : ""} />} />
         </div>
       </aside>
 
@@ -991,6 +1006,8 @@ function StacksWorkspace() {
                 setModal({ kind: "export", papers: snapshot.papers.filter((paper) => selectedIds.has(paper.id)) });
               }}
               updatePaper={updatePaper}
+              onOpenAuthor={(authorId, authorName) => { setQuery(""); setLibraryFilters([createLibraryFilter("author", authorId, authorName)]); }}
+              onOpenCollection={(collectionId, collectionName) => { setQuery(""); setLibraryFilters([createLibraryFilter("collection", collectionId, collectionName)]); }}
             />
           ) : view === "authors" ? (
             <AuthorsView
@@ -1307,6 +1324,8 @@ function LibraryView({
   deleteSelected,
   exportSelected,
   updatePaper,
+  onOpenAuthor,
+  onOpenCollection,
 }: {
   papers: Paper[];
   query: string;
@@ -1314,12 +1333,14 @@ function LibraryView({
   filters: LibraryFilterClause[];
   setFilters: (filters: LibraryFilterClause[]) => void;
   selected: string[];
-  setSelected: (value: string[]) => void;
+  setSelected: Dispatch<SetStateAction<string[]>>;
   openPaper: (paper: Paper) => void;
   editSelected: () => void;
   deleteSelected: () => void;
   exportSelected: () => void;
   updatePaper: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
+  onOpenAuthor: (authorId: string, authorName: string) => void;
+  onOpenCollection: (collectionId: string, collectionName: string) => void;
 }) {
   const [status, setStatus] = useState("all");
   const [filterKind, setFilterKind] = useState<LibraryFilterKind>("collection");
@@ -1374,6 +1395,21 @@ function LibraryView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedPapers = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Keep the selection confined to currently-visible papers. Without this, a
+  // search/status/filter change can hide selected rows while the toolbar still
+  // counts them, so bulk Delete/Export would act on papers not on screen. Prune
+  // whenever the filtered set changes; only write when something actually drops.
+  useEffect(() => {
+    const visible = new Set(filtered.map((paper) => paper.id));
+    setSelected((current) => {
+      const pruned = current.filter((id) => visible.has(id));
+      return pruned.length === current.length ? current : pruned;
+    });
+    // filtered is derived from query/status/filters/papers/sort; keying on its
+    // ids prunes on any of those changes without over-firing on re-sorts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered]);
   const filterOptions = useMemo<Record<LibraryFilterKind, LibraryFilterOption[]>>(() => {
     function collectionOptions() {
       const options = new Map<string, string>();
@@ -1478,10 +1514,10 @@ function LibraryView({
           <div className="filter-clause-list">
             {filters.map((clause, index) => (
               <div className="filter-clause-row" key={clause.key}>
-                {index ? <select aria-label={`Relationship before ${clause.label}`} value={clause.join} onChange={(event) => updateFilter(clause.key, { join: event.target.value as LibraryFilterJoin })}><option value="AND">AND</option><option value="OR">OR</option></select> : <span className="filter-start">WHERE</span>}
+                {index ? <Select className="filter-clause-select" size="small" ariaLabel={`Relationship before ${clause.label}`} value={clause.join} onChange={(next) => updateFilter(clause.key, { join: next as LibraryFilterJoin })} options={[{ value: "AND", label: "AND" }, { value: "OR", label: "OR" }]} /> : <span className="filter-start">WHERE</span>}
                 <button type="button" className={clause.openGroups ? "is-active" : ""} onClick={() => updateFilter(clause.key, { openGroups: (clause.openGroups + 1) % 3 })} aria-label="Add opening parenthesis">{clause.openGroups ? "(".repeat(clause.openGroups) : "("}</button>
                 <button type="button" className={clause.negated ? "is-active" : ""} onClick={() => updateFilter(clause.key, { negated: !clause.negated })} aria-pressed={clause.negated}>NOT</button>
-                <select aria-label={`Field for ${clause.label}`} value={clause.kind} onChange={(event) => changeFilterKind(clause, event.target.value as LibraryFilterKind)}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
+                <Select className="filter-clause-select" size="small" ariaLabel={`Field for ${clause.label}`} value={clause.kind} onChange={(next) => changeFilterKind(clause, next as LibraryFilterKind)} options={[{ value: "collection", label: "Collection" }, { value: "author", label: "Author" }, { value: "venue", label: "Venue" }, { value: "year", label: "Year" }]} />
                 <span>=</span>
                 <FilterValueCombobox
                   kind={clause.kind}
@@ -1498,7 +1534,7 @@ function LibraryView({
             ))}
             <div className="filter-clause-row filter-clause-add">
               <span className="filter-start">ADD</span>
-              <select aria-label="New filter field" value={filterKind} onChange={(event) => { setFilterKind(event.target.value as LibraryFilterKind); setFilterValue(""); }}><option value="collection">Collection</option><option value="author">Author</option><option value="venue">Venue</option><option value="year">Year</option></select>
+              <Select className="filter-clause-select" size="small" ariaLabel="New filter field" value={filterKind} onChange={(next) => { setFilterKind(next as LibraryFilterKind); setFilterValue(""); }} options={[{ value: "collection", label: "Collection" }, { value: "author", label: "Author" }, { value: "venue", label: "Venue" }, { value: "year", label: "Year" }]} />
               <span>=</span>
               <FilterValueCombobox
                 kind={filterKind}
@@ -1588,13 +1624,13 @@ function LibraryView({
                         >
                           <strong>{paper.title}</strong>
                         </button>
-                        <span className="paper-secondary-line">
-                          <ExpandableAuthorNames paper={paper} />
+                        <span className="paper-secondary-line" onClick={(event) => event.stopPropagation()}>
+                          <ExpandableAuthorButtons paper={paper} onOpenAuthor={(authorName) => { const author = paper.authors.find((candidate) => candidate.displayName === authorName); if (author) onOpenAuthor(author.id, author.displayName); }} />
                         </span>
                         {paper.collections.length ? (
-                          <span className="paper-collection-line" aria-label="Collections">
+                          <span className="paper-collection-line" aria-label="Collections" onClick={(event) => event.stopPropagation()}>
                             {paper.collections.slice(0, 3).map((collection) => (
-                              <CollectionChip key={collection.id} size="small" name={collection.name} color={collection.color} />
+                              <CollectionChip key={collection.id} size="small" name={collection.name} color={collection.color} onClick={() => onOpenCollection(collection.id, collection.name)} />
                             ))}
                           </span>
                         ) : null}
@@ -2015,7 +2051,7 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
           <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
         </button>
         <div className="collection-actions">
-          <ActionButton variant="ghost" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} title="Edit" />
+          <ActionButton variant="secondary" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} title="Edit" />
           <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} title="Delete" />
         </div>
       </header>
@@ -3527,7 +3563,7 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
           <label className="field-span-2"><span>Paper title *</span><input name="title" required autoFocus placeholder="A precise, complete title" /></label>
           <AuthorNamesField authors={authors} />
           <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={new Date().getFullYear()} /></label>
-          <label><span>Paper type</span><select name="paperType" value={manualPaperType} onChange={(event) => setManualPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+          <label><span>Paper type</span><Select ariaLabel="Paper type" value={manualPaperType} onChange={(next) => setManualPaperType(next as EditablePaperType)} options={paperTypeOptions.map((option) => ({ value: option.value, label: option.label }))} /></label>
           <PaperMetadataFields paperType={manualPaperType} venues={venues} notify={notify} onPaperTypeChange={setManualPaperType} />
           <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} placeholder="What this paper contributes…" /></label>
           <label className="field-span-2"><span>Summary</span><textarea name="summary" rows={4} placeholder="A short summary for your library…" /></label>
@@ -3752,7 +3788,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         <div className="modal-body entity-form edit-paper-fields">
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
         <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
-        <label><span>Paper type</span><select name="paperType" value={paperType} onChange={(event) => setPaperType(event.target.value as EditablePaperType)}>{paperTypeOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+        <label><span>Paper type</span><Select ariaLabel="Paper type" value={paperType} onChange={(next) => setPaperType(next as EditablePaperType)} options={paperTypeOptions.map((option) => ({ value: option.value, label: option.label }))} /></label>
         <AuthorNamesField authors={authors} defaultValue={paper.authors.map((author) => author.displayName).join(", ")} />
         <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} onPaperTypeChange={setPaperType} />
         <CollectionNamesField collections={collections} value={collectionNames} onChange={setCollectionNames} />
@@ -3835,6 +3871,11 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
   const [collectionColor, setCollectionColor] = useState<string>(
     entity === "collection" ? ((record as Collection | undefined)?.color ?? DEFAULT_COLLECTION_COLOR) : DEFAULT_COLLECTION_COLOR,
   );
+  // The venue "Type" is a controlled Select posting through a hidden input, so
+  // it needs its own state (was an uncontrolled native select defaultValue).
+  const [venueType, setVenueType] = useState<string>(
+    entity === "venue" ? ((record as Venue | undefined)?.type ?? "conference") : "conference",
+  );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data: Record<string, unknown> = Object.fromEntries(new FormData(event.currentTarget).entries());
@@ -3894,7 +3935,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
         </> : entity === "venue" ? <>
           <label className="field-span-2"><span>Full venue name *</span><input name="name" defaultValue={venue?.name} required autoFocus /></label>
           <label><span>Acronym</span><input name="acronym" defaultValue={venue?.acronym ?? ""} placeholder="NeurIPS" /></label>
-          <label><span>Type</span><select name="type" defaultValue={venue?.type ?? "conference"}><option value="conference">Conference</option><option value="journal">Journal</option><option value="workshop">Workshop</option><option value="preprint">Preprint archive</option><option value="book">Book / proceedings</option><option value="other">Other</option></select></label>
+          <label><span>Type</span><Select name="type" ariaLabel="Venue type" value={venueType} onChange={setVenueType} options={[{ value: "conference", label: "Conference" }, { value: "journal", label: "Journal" }, { value: "workshop", label: "Workshop" }, { value: "preprint", label: "Preprint archive" }, { value: "book", label: "Book / proceedings" }, { value: "other", label: "Other" }]} /></label>
           <label className="field-span-2"><span>Publisher or society</span><input name="publisher" defaultValue={venue?.publisher ?? ""} /></label>
           <label className="field-span-2"><span>Website</span><input name="url" type="url" defaultValue={venue?.url ?? ""} /></label>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={3} defaultValue={venue?.notes ?? ""} /></label>
@@ -3991,6 +4032,8 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
   onComplete: () => void;
 }) {
+  // "" = leave unchanged; only non-empty fields are applied (see submit).
+  const [bulkVenueType, setBulkVenueType] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -4012,7 +4055,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
         {entity === "author" ? <>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </> : <>
-          <label><span>Type</span><select name="type" defaultValue=""><option value="">Leave unchanged</option><option value="conference">Conference</option><option value="journal">Journal</option><option value="workshop">Workshop</option><option value="preprint">Preprint archive</option><option value="other">Other</option></select></label>
+          <label><span>Type</span><Select name="type" ariaLabel="Venue type" value={bulkVenueType} onChange={setBulkVenueType} options={[{ value: "", label: "Leave unchanged" }, { value: "conference", label: "Conference" }, { value: "journal", label: "Journal" }, { value: "workshop", label: "Workshop" }, { value: "preprint", label: "Preprint archive" }, { value: "other", label: "Other" }]} /></label>
           <label><span>Publisher</span><input name="publisher" placeholder="Apply a publisher" /></label>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </>}

@@ -271,6 +271,57 @@ test("persists collection membership through the paper-collection composite key"
   assert.match(controls, /collection-chip-dot/);
 });
 
+test("enforces paper identifier uniqueness and atomic proposal/seed handling", async () => {
+  const [schema, bootstrap, library, proposal] = await Promise.all([
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/proposals/[id]/route.ts", import.meta.url), "utf8"),
+  ]);
+  // arXiv / Semantic Scholar ids are unique (import dedup relies on it), and the
+  // bootstrap creates the indexes after unlinking any pre-existing duplicates.
+  assert.match(schema, /uniqueIndex\("papers_arxiv_id_unique"\)/);
+  assert.match(schema, /uniqueIndex\("papers_semantic_scholar_id_unique"\)/);
+  assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_arxiv_id_unique/);
+  assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_semantic_scholar_id_unique/);
+  assert.match(bootstrap, /ROW_NUMBER\(\) OVER \(PARTITION BY \$\{column\}/);
+  // The duplicate check runs inside the insert transaction (not check-then-insert
+  // before it), so a concurrent create can't slip a duplicate past it.
+  assert.match(library, /if \(findDuplicatePaper\(tx, data\)\) \{\s*throw new DuplicatePaperError/);
+  // Feeds are one-per-issue and GitHub sync is serialized by a run mutex.
+  assert.match(schema, /uniqueIndex\("feed_snippets_issue_number_unique"\)/);
+  // Proposal approval atomically claims the row out of pending before applying,
+  // so two concurrent resolves can't both apply the mutation.
+  assert.match(proposal, /and\(eq\(feedProposals\.id, id\), eq\(feedProposals\.status, "pending"\)\)/);
+  assert.match(proposal, /claimed\.changes === 0/);
+  // The demo seed is gated on a persistent marker, not an empty papers table, so
+  // deleting every paper never resurrects the demo content.
+  assert.match(bootstrap, /user_version/);
+  assert.match(bootstrap, /pragma\("user_version = 1"\)/);
+});
+
+test("surfaces failed agent launches and keeps filters/selection consistent", async () => {
+  const [agent, application] = await Promise.all([
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+  ]);
+  // A pre-spawn failure (disk full, DB locked, bad env) is turned into a visible
+  // "error" status instead of a rejected promise the caller swallows.
+  assert.match(agent, /} catch \(error\) \{[\s\S]*?setStatus\(snippetId, "error"/);
+  // Process listeners attach synchronously after spawn (no await between), and
+  // cleanup only fires for the handle that still owns the run slot.
+  assert.match(agent, /const releaseRun = \(\) => \{[\s\S]*?runs\.get\(snippetId\) === handle/);
+  // stopFeedAndWait escalates to SIGKILL rather than returning with a live
+  // process a second --resume could then race on the same transcript.
+  assert.match(agent, /signalRun\(snippetId, "SIGKILL"\)/);
+  // An unset filter clause is a no-op, not an always-false that hides everything.
+  assert.match(application, /An unset clause[\s\S]*?if \(!clause\.valueId\) \{\s*return true;/);
+  // Selection is pruned to the visible/filtered set so bulk actions never touch
+  // hidden rows.
+  assert.match(application, /Keep the selection confined to currently-visible papers/);
+  assert.match(application, /const visible = new Set\(filtered\.map/);
+});
+
 test("uses integrated sortable table headers without a detached sort control", async () => {
   const [component, styles] = await Promise.all([
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
@@ -297,7 +348,8 @@ test("combines exact linked-record filters with boolean relationships", async ()
   assert.match(application, /collection\.id === clause\.valueId/);
   assert.match(application, /paper\.venueId === clause\.valueId/);
   assert.match(application, /String\(paper\.year \?\? ""\) === clause\.valueId/);
-  assert.match(application, /<option value="AND">AND<\/option><option value="OR">OR<\/option>/);
+  // The join picker is the shared Select control (no native <select>/<option>).
+  assert.match(application, /options=\{\[\{ value: "AND", label: "AND" \}, \{ value: "OR", label: "OR" \}\]\}/);
   assert.match(application, />NOT<\/button>/);
   assert.match(application, /Add opening parenthesis/);
   assert.match(application, /createLibraryFilter\("collection", collection\.id/);
@@ -379,6 +431,12 @@ test("runs Claude Code workflow scripts through the approval-gated feed", async 
   assert.match(runtime, /base\.parallel =/);
   assert.match(runtime, /base\.pipeline =/);
   assert.match(runtime, /vm\.runInContext/);
+  // node:vm is not a sandbox: the runtime must NOT inject host-realm intrinsics
+  // (Object/Array/Promise/...) into the context — that is what makes
+  // `Object.constructor('return process')()` reach the host. The context's own
+  // realm supplies working built-ins; primitive results are re-homed to it.
+  assert.doesNotMatch(runtime, /JSON,\s*Math,\s*Array,\s*Object/);
+  assert.match(runtime, /realmResult/);
   // Each agent() turn goes through the feed runner, so writes stay approval-gated.
   assert.match(runtime, /runFeedAgent/);
   // runFeedAgent now resolves with the turn result so a workflow can await it.
@@ -407,6 +465,8 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   // next pass rather than dropping them.
   assert.match(sync, /githubCommentId/);
   assert.match(sync, /isFeedRunning/);
+  // Only one sync runs at a time; overlapping runs would duplicate issues/feeds.
+  assert.match(sync, /syncInProgress/);
   // Full pagination (follow Link rel=next) and incremental pulls (since=).
   assert.match(client, /rel="next"/);
   assert.match(client, /since=/);

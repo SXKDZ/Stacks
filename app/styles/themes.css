@@ -1,4 +1,4 @@
-/* AIScientist-aligned application skin: Inter typography, indigo glass, dark wells. */
+/* AIScientist-aligned application skin: Geist typography, indigo glass, dark wells. */
 html {
   color-scheme: dark;
 }
@@ -28,23 +28,15 @@ body {
   background: linear-gradient(90deg, #55adff, #98d1ff);
   background-clip: text;
   color: transparent;
-  font-size: 14px;
-  font-weight: 750;
-}
-
-.brand-copy span,
-.nav-label,
-.eyebrow,
-.card-kicker {
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: var(--type-body-large);
+  font-weight: 700;
 }
 
 .nav-item {
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   font-weight: 500;
   min-height: 38px;
 }
@@ -74,11 +66,11 @@ body {
    both themes (it is a deliberately dark accent card), so no background
    override here. Only the sync-card sibling font sizes are tuned. */
 .sync-card strong {
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .sync-card small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .command-results > button:hover,
@@ -101,12 +93,11 @@ body {
 .large-field,
 .entity-form input,
 .entity-form textarea,
-.entity-form select,
 .settings-form-grid input,
-.settings-form-grid select,
+.settings-form-grid textarea,
 .integration-row input,
 .detail-section textarea {
-  background: rgba(0, 0, 0, 0.26);
+  background-color: rgba(0, 0, 0, 0.26);
   border-color: var(--line-strong);
   color: var(--ink);
 }
@@ -118,7 +109,7 @@ textarea::placeholder {
 
 .global-search {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   max-width: 470px;
   min-height: 39px;
 }
@@ -156,14 +147,14 @@ textarea::placeholder {
 }
 
 .stat-card strong {
-  font-size: 22px;
+  font-size: var(--type-heading-large);
   font-weight: 720;
 }
 
 .stat-card small,
 .recent-copy small,
 .paper-byline {
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .continue-copy h2 {
@@ -172,12 +163,12 @@ textarea::placeholder {
 
 .continue-copy > p:nth-of-type(2),
 .continue-abstract {
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 
 .section-title-row h3,
 .settings-heading h2 {
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .metric-ring {
@@ -189,14 +180,12 @@ textarea::placeholder {
 }
 
 .reading-bars i,
-.status-pill,
-.result-tags span,
-.integration-state {
+.status-pill {
   background: rgba(255, 255, 255, 0.055);
 }
 
 .inline-search input {
-  font-size: 11.5px;
+  font-size: var(--type-label);
 }
 
 .selection-actions,
@@ -224,7 +213,7 @@ textarea::placeholder {
 
 .paper-title-cell small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .compact-avatar,
@@ -245,7 +234,7 @@ textarea::placeholder {
 }
 
 .discover-search-box input {
-  font-size: 14px;
+  font-size: var(--type-body-large);
   font-weight: 500;
 }
 
@@ -255,7 +244,7 @@ textarea::placeholder {
 
 .provider-switch > span,
 .source-row > span {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .discovery-intro {
@@ -266,7 +255,7 @@ textarea::placeholder {
   background: linear-gradient(90deg, #60b7f4, #8fd0f8);
   background-clip: text;
   color: transparent;
-  font-size: 25px;
+  font-size: var(--type-heading-large);
   font-weight: 720;
 }
 
@@ -287,12 +276,12 @@ textarea::placeholder {
 
 .discovery-capabilities strong {
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: var(--type-control);
 }
 
 .discovery-capabilities small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   margin-top: 3px;
 }
 
@@ -301,13 +290,12 @@ textarea::placeholder {
 }
 
 .result-meta,
-.result-tags span,
 .results-heading small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .result-authors {
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 
 .detail-drawer,
@@ -327,7 +315,7 @@ textarea::placeholder {
 }
 
 .drawer-fixed-head > h2 {
-  font-size: 24px;
+  font-size: var(--type-heading-large);
   font-weight: 680;
 }
 
@@ -341,25 +329,26 @@ textarea::placeholder {
 }
 
 .reader-notes > h2 {
-  font-size: 20px;
-  font-weight: 650;
+  font-size: var(--type-heading);
+  font-weight: 700;
 }
 
 .modal-results h3,
 .settings-card-title strong,
 .integration-name strong {
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .modal-results small,
 .modal-results span,
 .settings-card-title small,
 .integration-name small {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
-.modal-header h2 {
-  font-size: 20px;
+.modal-header h2,
+.doctor-modal-head h2 {
+  font-size: var(--type-heading);
   font-weight: 680;
 }
 
@@ -367,9 +356,8 @@ textarea::placeholder {
 .modal-search-row input,
 .large-field input,
 .entity-form input,
-.entity-form textarea,
-.entity-form select {
-  font-size: 12px;
+.entity-form textarea {
+  font-size: var(--type-control);
 }
 
 .identifier-import-form {
@@ -391,12 +379,12 @@ textarea::placeholder {
 
 .identifier-source-grid strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .identifier-source-grid small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.35;
   margin-top: 3px;
 }
@@ -404,7 +392,7 @@ textarea::placeholder {
 .identifier-footnote {
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   line-height: 1.5;
   margin: 2px 0 0;
   padding-top: 12px;
@@ -414,29 +402,31 @@ textarea::placeholder {
 .settings-form-grid label > span,
 .settings-toggle strong {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
 }
 
 .entity-form label small,
 .settings-form-grid small,
 .settings-toggle small,
 .privacy-note {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .settings-nav strong,
 .settings-local-note strong {
-  font-size: 11.5px;
+  font-size: var(--type-label);
 }
 
 .settings-nav small,
 .settings-local-note small,
 .settings-heading p {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .settings-card-title > span:first-child,
 .integration-icon,
+.storage-doctor-icon,
+.sync-status-icon,
 .command-icon {
   background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
   border-color: color-mix(in srgb, var(--brand-blue) 22%, transparent);
@@ -444,18 +434,17 @@ textarea::placeholder {
 }
 
 .command-input input {
-  font-size: 14px;
+  font-size: var(--type-body-large);
   font-weight: 500;
 }
 
 .command-results strong {
-  font-size: 12px;
+  font-size: var(--type-control);
 }
 
 .command-results small,
-.command-results > p,
 .command-footer {
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .markdown-content {
@@ -540,7 +529,7 @@ textarea::placeholder {
 .markdown-content blockquote {
   background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
   border-left: 3px solid var(--brand-blue);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
   color: #c3cad8;
   margin: 0.85em 0;
   padding: 0.65em 0.85em;
@@ -553,7 +542,7 @@ textarea::placeholder {
 .markdown-content code {
   background: color-mix(in srgb, var(--brand-blue) 13%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 14%, transparent);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--brand-highlight);
   font-family: var(--font-mono);
   font-size: 0.88em;
@@ -563,7 +552,7 @@ textarea::placeholder {
 .markdown-content pre {
   background: #05070d;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   margin: 0.9em 0;
   overflow-x: auto;
   padding: 0.85em 1em;
@@ -600,7 +589,7 @@ textarea::placeholder {
 .markdown-content th {
   background: color-mix(in srgb, var(--brand-blue) 10%, transparent);
   color: var(--ink);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .markdown-content hr {
@@ -610,7 +599,7 @@ textarea::placeholder {
 }
 
 .markdown-content .katex {
-  color: #eef1f7;
+  color: var(--ink);
   font-size: 1.04em;
 }
 
@@ -619,7 +608,7 @@ textarea::placeholder {
 .markdown-content .katex-display {
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   margin: 0.9em 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -698,25 +687,6 @@ textarea::placeholder {
   display: none;
 }
 
-.settings-form-grid textarea {
-  background: #0a0f1b;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 11.5px;
-  line-height: 1.55;
-  outline: 0;
-  padding: 11px;
-  resize: vertical;
-  width: 100%;
-}
-
-.settings-form-grid textarea:focus {
-  border-color: color-mix(in srgb, var(--brand-blue) 64%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-blue) 9%, transparent);
-}
-
 .path-picker-control {
   display: grid;
   gap: 8px;
@@ -727,7 +697,7 @@ textarea::placeholder {
   align-items: center;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   display: flex;
   gap: 7px;
   padding: 9px;
@@ -736,7 +706,7 @@ textarea::placeholder {
 .model-access-row > span {
   color: var(--muted);
   flex: 1;
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.4;
 }
 
@@ -759,14 +729,14 @@ textarea::placeholder {
 .prompt-variable-list > span {
   color: var(--muted);
   font-size: var(--type-label);
-  font-weight: 650;
+  font-weight: 600;
   margin-right: 3px;
 }
 
 .prompt-variable-list > button {
   background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 20%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   font-family: var(--font-mono);
   font-size: var(--type-label);
@@ -794,7 +764,7 @@ textarea::placeholder {
 }
 
 .result-copy h3 {
-  font-size: 14px;
+  font-size: var(--type-body-large);
 }
 
 .new-paper-button,
@@ -805,11 +775,10 @@ textarea::placeholder {
 .large-field input,
 .entity-form input,
 .entity-form textarea,
-.entity-form select,
 .settings-form-grid input,
-.settings-form-grid select,
 .settings-form-grid textarea,
-.integration-row input {
+.integration-row input,
+.detail-section textarea {
   font-size: var(--type-control);
 }
 
@@ -981,7 +950,7 @@ textarea::placeholder {
 .prompt-variable-reference {
   background: color-mix(in srgb, var(--brand-blue) 5%, transparent);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: var(--muted);
   padding: 9px 11px;
 }
@@ -990,7 +959,7 @@ textarea::placeholder {
   color: var(--ink);
   cursor: pointer;
   font-size: var(--type-label);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .prompt-variable-reference > div {
@@ -1040,6 +1009,9 @@ textarea::placeholder {
   --brand-blue: #168dec;
   --brand-blue-strong: #086dc4;
   --brand-blue-soft: rgba(22, 141, 236, 0.1);
+  /* A brighter, airier primary gradient for the light canvas, so buttons and the
+     chat bubble stay vivid against white rather than looking heavy. */
+  --brand-gradient: linear-gradient(135deg, #3aa6ff 0%, #4f86f0 52%, #6a6ff0 100%);
   --cyan: #177d8d;
   --cyan-soft: rgba(23, 125, 141, 0.1);
   --amber: #9a6816;
@@ -1097,13 +1069,11 @@ textarea::placeholder {
 [data-theme="light"] .large-field,
 [data-theme="light"] .entity-form input,
 [data-theme="light"] .entity-form textarea,
-[data-theme="light"] .entity-form select,
 [data-theme="light"] .settings-form-grid input,
-[data-theme="light"] .settings-form-grid select,
 [data-theme="light"] .settings-form-grid textarea,
 [data-theme="light"] .integration-row input,
 [data-theme="light"] .detail-section textarea {
-  background: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.9);
   color: var(--ink);
 }
 

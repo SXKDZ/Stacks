@@ -122,6 +122,25 @@ def clear_stale_lock(path):
     raise RuntimeError("Another Stacks backup is already running.")
 
 
+def sweep_syncing_temps(remote_directory):
+    """Delete leftover .*.syncing temp files in the backup tree.
+
+    copy_file/copy_database write to a uniquely-named .<name>.<uuid>.syncing
+    file before an atomic os.replace. If the bridge is hard-killed (the Node
+    side SIGKILLs it after a timeout), that temp is stranded and, because every
+    attempt uses a fresh uuid, never overwritten — it just accumulates in the
+    cloud folder. This runs while holding the lock, which guarantees no other
+    bridge is mid-copy, so every *.syncing file present is by definition dead."""
+    if not remote_directory.exists():
+        return
+    for path in remote_directory.rglob("*.syncing"):
+        if path.name.startswith(".") and path.is_file():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
 @contextmanager
 def sync_locks(local_directory, remote_directory):
     lock_paths = [
@@ -142,6 +161,7 @@ def sync_locks(local_directory, remote_directory):
     try:
         for path in lock_paths:
             path.write_text(lock_data, encoding="utf8")
+        sweep_syncing_temps(remote_directory)
         yield
     finally:
         for path in lock_paths:

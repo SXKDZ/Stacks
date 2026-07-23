@@ -50,8 +50,11 @@
   --muted-strong: var(--muted);
   --surface: var(--panel);
   --scrim: rgba(2, 3, 8, 0.66);
-  /* Brand CTA gradient, applied identically in both themes. */
-  --brand-gradient: linear-gradient(135deg, #168dec 0%, #258de4 52%, #357fd8 100%);
+  /* The single primary-action gradient: sidebar Add paper, primary buttons, and
+     the user chat bubble all use this so every "primary blue" surface matches.
+     Dark theme runs a deeper, richer blue that settles against the dark canvas;
+     the light theme overrides it with a brighter one (see themes.css). */
+  --brand-gradient: linear-gradient(135deg, #1c72d2 0%, #2a5cc2 52%, #3b41b0 100%);
   --cyan: #5fd9e8;
   --cyan-soft: rgba(95, 217, 232, 0.12);
   --amber: #ffcf5c;
@@ -93,16 +96,22 @@
   --shadow-1: 0 2px 6px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.28);
   --shadow-2: 0 4px 10px rgba(0, 0, 0, 0.36), 0 20px 48px rgba(0, 0, 0, 0.4);
   --sidebar: 252px;
-  --font-ui: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
-  --type-micro: 10px;
-  --type-caption: 10.5px;
-  --type-label: 11px;
-  --type-control: 12.5px;
-  --type-body: 13px;
-  --type-body-large: 14px;
-  --type-heading-small: 17px;
+  /* One coherent type ramp with clear, distinguishable steps (no near-duplicate
+     0.5px gaps). Every font-size in the app resolves to one of these. */
+  /* 11px is the absolute floor (micro: eyebrows, badges, counts); body and chat
+     text sit at 12px and up. One coherent ramp, no near-duplicate steps. */
+  --type-micro: 11px;
+  --type-caption: 12px;
+  --type-label: 12px;
+  --type-control: 13px;
+  --type-body: 14px;
+  --type-body-large: 15px;
+  --type-heading-small: 18px;
+  --type-heading: 22px;
+  --type-heading-large: 28px;
   /* Radius scale, nudged up a step for a softer, more modern feel.
      --radius-control (11px) is the button/input default. */
   --radius-sm: 7px;
@@ -139,7 +148,7 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--type-body-large);
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.006em;
   min-width: 320px;
@@ -200,7 +209,7 @@ body {
 ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--muted) 52%, transparent);
   border: 2px solid transparent;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background-clip: padding-box;
 }
 
@@ -242,7 +251,7 @@ body {
 /* The Stacks logo (public/favicon.svg) is a self-contained tiled mark, so it
    needs no background box — just size and round it. Used in place of a glyph. */
 .brand-logo {
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: block;
   flex-shrink: 0;
   height: 34px;
@@ -266,21 +275,14 @@ body {
 
 .brand-copy strong {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--type-body-large);
   letter-spacing: -0.025em;
 }
 
-.brand-copy span {
-  color: var(--soft);
-  font-size: var(--type-label);
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
 
 .brand-copy .brand-slogan {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 560;
   letter-spacing: 0.01em;
   line-height: 1.25;
@@ -288,14 +290,15 @@ body {
   white-space: nowrap;
 }
 
-/* Sidebar "Add paper" CTA. */
+/* Sidebar "Add paper" CTA. Shares the one --brand-gradient with the primary
+   buttons and the user chat bubble so every primary-blue surface matches. */
 .new-paper-button {
   align-items: center;
-  background-color: var(--brand-cta);
-  border: 1px solid var(--brand-cta-border);
-  border-radius: 11px;
+  background-image: var(--brand-gradient);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
   box-shadow: 0 7px 18px var(--brand-cta-shadow);
-  color: #fff;
+  color: var(--white);
   display: flex;
   font-size: var(--type-control);
   font-weight: 700;
@@ -304,16 +307,13 @@ body {
   margin: 0 1px 18px;
   min-height: 39px;
   padding: 10px 11px;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), filter var(--motion-fast), transform var(--motion-fast);
 }
 
-/* Use background-color on both states (not the `background` shorthand + a
-   gradient) so the transition animates color→color. Mixing a solid base with a
-   gradient-image hover made background-color flash through white on hover-out. */
 .new-paper-button:hover,
 .new-paper-button:focus-visible {
-  background-color: var(--brand-cta-hover);
-  border-color: var(--brand-cta-border);
+  border-color: rgba(255, 255, 255, 0.2);
+  filter: brightness(1.1);
   transform: translateY(-1px);
 }
 
@@ -337,13 +337,22 @@ body {
   gap: 3px;
 }
 
+/* Section eyebrows / group labels share one spec app-wide. Per-instance rules
+   keep only layout (margins, padding, flex bits); .card-kicker's brighter color
+   is a deliberate hero-card exception set later. */
 .nav-label,
 .eyebrow,
-.card-kicker {
+.card-kicker,
+.brand-copy span,
+.settings-nav > p,
+.command-results > p,
+.feed-tool-tag,
+.doctor-modal-kind,
+.reader-brand small {
   color: var(--soft);
-  font-size: var(--type-label);
+  font-size: var(--type-micro);
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   margin: 0;
   text-transform: uppercase;
 }
@@ -355,10 +364,10 @@ body {
 .nav-item {
   align-items: center;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: #68616f;
   display: flex;
-  font-size: 12px;
+  font-size: var(--type-control);
   font-weight: 600;
   gap: 10px;
   padding: 8px 9px;
@@ -373,7 +382,7 @@ body {
 
 .nav-count {
   color: #9b94a2;
-  font-size: 10px;
+  font-size: var(--type-micro);
   margin-left: auto;
 }
 
@@ -450,14 +459,14 @@ body {
 
 .assistant-card-copy strong {
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .assistant-card-copy small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -479,9 +488,9 @@ body {
 
 .assistant-orb {
   align-items: center;
-  background: linear-gradient(145deg, #43a8ff, #0b74c9);
+  background-image: var(--brand-gradient);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   box-shadow: 0 6px 16px rgba(22, 141, 236, 0.38), var(--edge-highlight);
   color: white;
   display: flex;
@@ -494,7 +503,7 @@ body {
 }
 
 .assistant-orb.large {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   height: 38px;
   width: 38px;
 }
@@ -543,10 +552,10 @@ body {
   align-items: center;
   background: rgba(255,255,255,0.76);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: #938c9b;
   display: flex;
-  font-size: 11px;
+  font-size: var(--type-label);
   gap: 8px;
   max-width: 405px;
   padding: 8px 9px;
@@ -567,7 +576,7 @@ body {
   align-items: center;
   background: #f2f5f7;
   border: 1px solid #e1e7ec;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: #7c7483;
   display: flex;
   font-size: var(--type-label);
@@ -606,7 +615,7 @@ body {
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-sm);
   display: flex;
   gap: 11px;
@@ -622,7 +631,7 @@ button.stat-card:hover {
 
 .stat-icon {
   align-items: center;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   display: flex;
   height: 36px;
   justify-content: center;
@@ -642,7 +651,7 @@ button.stat-card:hover {
 
 .stat-card strong {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: var(--type-heading);
   font-weight: 500;
   line-height: 1;
 }
@@ -660,7 +669,7 @@ button.stat-card:hover {
 .continue-card {
   background: linear-gradient(125deg, #18212d 0%, #202b39 50%, #273548 100%);
   border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 15px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 20px 48px rgba(15, 31, 42, 0.17);
   color: white;
   display: grid;
@@ -715,7 +724,7 @@ button.stat-card:hover {
   color: var(--muted);
   display: -webkit-box;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: var(--type-control);
   line-height: 1.55;
   margin: 0;
   max-width: 560px;
@@ -764,7 +773,7 @@ button.stat-card:hover {
 
 .document-stack,
 .document-sheet {
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   bottom: -30px;
   height: 255px;
   position: absolute;
@@ -844,7 +853,7 @@ button.stat-card:hover {
 
 .sheet-chart i {
   background: var(--brand-blue);
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   display: block;
   height: 40%;
   width: 13px;
@@ -881,7 +890,7 @@ button.stat-card:hover {
 }
 
 .error-boundary h1 {
-  font-size: 21px;
+  font-size: var(--type-heading);
   font-weight: 680;
   letter-spacing: -0.02em;
   margin: 4px 0 0;

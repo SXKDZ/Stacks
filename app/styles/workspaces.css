@@ -75,7 +75,7 @@
 .paper-fact dt,
 .paper-field-label {
   color: var(--soft);
-  font-size: 10.5px;
+  font-size: var(--type-caption);
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -84,7 +84,7 @@
 
 .paper-fact dd {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 600;
   line-height: 1.25;
   margin: 0;
@@ -120,7 +120,7 @@
   color: var(--muted);
   cursor: pointer;
   display: inline-flex;
-  font-size: 12px;
+  font-size: var(--type-control);
   font-weight: 600;
   gap: 6px;
   justify-content: center;
@@ -168,7 +168,7 @@
 
 .paper-field-empty {
   color: var(--soft);
-  font-size: 12.5px;
+  font-size: var(--type-control);
   line-height: 1.35;
 }
 
@@ -319,11 +319,6 @@
   transition: border-color var(--motion-control), box-shadow var(--motion-control);
 }
 
-.feed-search:focus-within {
-  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--line-strong));
-  box-shadow: 0 0 0 3px var(--brand-blue-soft);
-}
-
 .feed-search input {
   background: transparent;
   border: 0;
@@ -468,8 +463,10 @@
   min-width: 0;
 }
 
+/* Row titles read at full ink like every other page's primary row text (the
+   library table, recent rows); only the meta line below stays soft. */
 .feed-row-title {
-  color: var(--muted);
+  color: var(--ink);
   font-size: var(--type-control);
   font-weight: 500;
   min-width: 0;
@@ -480,9 +477,11 @@
 
 /* Count of library changes awaiting approval, pushed to the far end of the meta
    line so it never sits under the top-right kebab. */
+/* Shared amber pending-approval badge spec (matches .feed-detail-badge); the row
+   variant additionally centers its count and pushes to the end of the meta line. */
 .feed-row-pending {
   align-items: center;
-  background: var(--amber-soft, color-mix(in srgb, var(--amber) 18%, transparent));
+  background: var(--amber-soft);
   border-radius: var(--radius-pill);
   color: var(--amber);
   display: inline-flex;
@@ -492,7 +491,8 @@
   justify-content: center;
   margin-left: auto;
   min-width: 18px;
-  padding: 1px 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
 }
 
 /* No dot separator before the badge: it reads as a standalone pill, and the
@@ -513,7 +513,7 @@
 /* Second line: status, relative time, and usage, dot-separated. */
 .feed-row-meta {
   align-items: center;
-  color: var(--soft);
+  color: var(--muted);
   display: flex;
   flex-wrap: wrap;
   font-size: var(--type-caption);
@@ -695,7 +695,7 @@
 
 .feed-compose-hero h2 {
   color: var(--ink);
-  font-size: 25px;
+  font-size: var(--type-heading-large);
   font-weight: 680;
   letter-spacing: -0.02em;
   margin: 0;
@@ -727,7 +727,7 @@
   cursor: pointer;
   display: inline-flex;
   font-size: var(--type-control);
-  font-weight: 550;
+  font-weight: 500;
   gap: 6px;
   padding: 6px 12px;
   transition: border-color var(--motion-control), background var(--motion-control), color var(--motion-control);
@@ -784,7 +784,7 @@
   color: var(--brand-blue-strong);
   display: flex;
   font-size: var(--type-control);
-  font-weight: 650;
+  font-weight: 600;
   gap: 8px;
   inset: 0;
   justify-content: center;
@@ -868,7 +868,7 @@
 .feed-dock-hint kbd {
   background: var(--surface-1);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 0.94em;
@@ -1015,7 +1015,7 @@
    resets the border to 0, since this modal renders inside the dock form). */
 .feed-text-editor .feed-text-editor-area {
   background: var(--canvas);
-  border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
   border-radius: var(--radius-md);
   color: var(--ink);
   flex: 1;
@@ -1310,13 +1310,15 @@
 }
 
 .feed-detail-badge {
+  align-items: center;
   background: var(--amber-soft);
   border-radius: var(--radius-pill);
   color: var(--amber);
+  display: inline-flex;
   flex-shrink: 0;
   font-size: var(--type-micro);
   font-weight: 800;
-  padding: 3px 10px;
+  padding: 3px 8px;
   white-space: nowrap;
 }
 
@@ -1410,9 +1412,9 @@
 }
 
 .feed-turn-user .feed-bubble {
-  background: var(--brand-blue);
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
-  color: #fff;
+  background-image: var(--brand-gradient);
+  border-radius: var(--radius-md);
+  color: var(--white);
   padding: 9px 13px;
 }
 
@@ -1464,12 +1466,12 @@
    white wash so selected text stays readable. */
 .feed-turn-user .feed-bubble ::selection {
   background: rgba(255, 255, 255, 0.32);
-  color: #fff;
+  color: var(--white);
 }
 
 /* Links and inline code stay legible on the blue user bubble. */
 .feed-turn-user .feed-bubble a {
-  color: #fff;
+  color: var(--white);
   text-decoration: underline;
   word-break: break-all;
 }
@@ -1477,7 +1479,7 @@
 .feed-turn-user .feed-bubble code {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.24);
-  color: #fff;
+  color: var(--white);
 }
 
 .feed-bubble {
@@ -1544,14 +1546,74 @@
 }
 
 .feed-proposal {
-  align-items: center;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  padding: 11px 13px;
+}
+
+.feed-proposal-row {
+  align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  padding: 11px 13px;
+}
+
+.feed-proposal-summary svg {
+  color: var(--soft);
+  flex-shrink: 0;
+}
+
+.feed-proposal-row .feed-proposal-actions {
+  align-self: flex-start;
+}
+
+.feed-proposal.is-expanded {
+  border-color: color-mix(in srgb, var(--brand-blue) 30%, var(--line-strong));
+}
+
+/* Structured operation view inside an expanded card. */
+.feed-proposal-detail {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.feed-proposal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.feed-proposal-field {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 118px minmax(0, 1fr);
+}
+
+.feed-proposal-field > span {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding-top: 1px;
+  text-transform: uppercase;
+}
+
+.feed-proposal-field > strong {
+  color: var(--ink);
+  font-size: var(--type-caption);
+  font-weight: 500;
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feed-proposal-json summary {
+  color: var(--soft);
 }
 
 .feed-proposal-applied {
@@ -1563,46 +1625,81 @@
   opacity: 0.7;
 }
 
+/* The card body is a button: click to expand the structured change details. */
 .feed-proposal-body {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: 7px;
   min-width: 0;
+  padding: 0;
+  text-align: left;
 }
 
 .feed-proposal-summary {
+  align-items: baseline;
   color: var(--ink);
+  display: flex;
   font-size: var(--type-body);
+  gap: 7px;
+}
+
+.feed-proposal-summary svg {
+  align-self: center;
+}
+
+.feed-proposal-summary-text {
+  font-weight: 500;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+/* The meta line under the summary: a status pill followed by at-a-glance chips
+   (the action, e.g. "Create paper", plus paper type and venue). Indented to
+   align with the summary text past the chevron. */
+.feed-proposal-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 21px;
 }
 
 .feed-proposal-status {
+  border-radius: var(--radius-pill);
   color: var(--muted);
-  font-size: var(--type-label);
+  font-size: var(--type-micro);
   font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.feed-proposal-applied .feed-proposal-status { color: var(--status-complete); }
-.feed-proposal-failed .feed-proposal-status { color: var(--rose); }
-
-/* At-a-glance chips for what the change is (e.g. "create paper", the paper type,
-   and venue) so the type is visible without opening the raw JSON block. */
-.feed-proposal-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 2px;
-}
+.feed-proposal-status-applied { color: var(--status-complete); }
+.feed-proposal-status-rejected,
+.feed-proposal-status-failed { color: var(--rose); }
+.feed-proposal-status-pending { color: var(--amber); }
 
 .feed-proposal-tag {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
   border-radius: var(--radius-sm);
-  color: var(--muted);
   font-size: var(--type-micro);
   font-weight: 600;
   letter-spacing: 0.02em;
   padding: 2px 7px;
   text-transform: capitalize;
+}
+
+/* The action chip (Create paper / Update venue …) is the primary label. */
+.feed-proposal-tag-action {
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue-strong);
+}
+
+.feed-proposal-tag-meta {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--muted);
 }
 
 .feed-proposal-actions {
@@ -1654,12 +1751,7 @@
 /* Sub-labels separating a request from its folded-in result. The result tag
    carries a divider so request and response read as distinct blocks. */
 .feed-tool-tag {
-  color: var(--soft);
-  font-size: var(--type-micro);
-  font-weight: 800;
-  letter-spacing: 0.1em;
   padding: 8px 11px 0;
-  text-transform: uppercase;
 }
 
 .feed-tool-io .feed-tool-md + .feed-tool-tag {
@@ -1794,4 +1886,60 @@
   .feed-detail-back {
     display: inline-flex;
   }
+}
+
+/* --- Card radius consolidation -------------------------------------------
+   One curve for every top-level panel/card surface across the app, so the
+   library dashboard, settings panels, feed, reader, and modals share the same
+   rounded corner. Loaded last so it wins over the per-component declarations
+   that had drifted between md/control/lg. Inner controls (inputs, chips,
+   buttons, tiles) keep their own smaller radii. */
+.stat-card,
+.insight-card,
+.recent-panel,
+.continue-card,
+.collection-card,
+.discovery-result,
+.settings-card,
+.integration-list,
+.prompt-settings-card,
+.sync-status-card,
+.version-status-card,
+.storage-location-card,
+.storage-doctor-card,
+.github-inbox-card,
+.feed-skills-list,
+.feed-skills-editor,
+.modal-card,
+.add-modal,
+.command-card,
+.detail-drawer,
+.paper-table-wrap,
+.author-table-wrap,
+.venue-table-wrap,
+.data-grid-shell {
+  border-radius: var(--radius-lg);
+}
+
+/* The composer/reply model picker is the shared Select (.app-select); cap its
+   trigger width so a long model label doesn't stretch the tool row, and show the
+   Cpu leading icon in the muted tool-row ink. */
+.feed-model-select .app-select-trigger {
+  color: var(--muted);
+  max-width: 240px;
+}
+
+.feed-model-select .app-select-trigger:hover,
+.feed-model-select .app-select-trigger[aria-expanded="true"] {
+  color: var(--ink);
+}
+
+/* System notices in the thread (e.g. "Switched to model X."): a quiet centered line. */
+.feed-system-note {
+  align-self: center;
+  color: var(--soft);
+  font-size: var(--type-caption);
+  font-style: italic;
+  padding: 2px 0;
+  text-align: center;
 }

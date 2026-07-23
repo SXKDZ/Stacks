@@ -619,3 +619,21 @@ async function fireAutoSync(): Promise<void> {
     }
   }
 }
+
+// The last-run time is in-memory, so it resets on restart. When auto-backup is
+// on, run one backup shortly after boot: it re-establishes the "last backed up"
+// status and, more importantly, protects any changes made while the server was
+// down. Runs at most once per process. Failures are swallowed (best-effort).
+let startupSyncDone = false;
+export function syncOnStartup(): void {
+  if (startupSyncDone) return;
+  startupSyncDone = true;
+  const sync = currentSettings().sync;
+  if (!sync.autoSync || !sync.sourceExists || !sync.remotePath.trim()) {
+    return;
+  }
+  const timer = setTimeout(() => { void fireAutoSync(); }, 4000);
+  if (typeof timer === "object" && timer && "unref" in timer) {
+    (timer as { unref: () => void }).unref();
+  }
+}

@@ -8,10 +8,7 @@
  */
 export async function readError(response: Response): Promise<string> {
   try {
-    const payload = (await response.json()) as { error?: string; detail?: string };
-    if (payload.error && payload.detail) {
-      return `${payload.error} ${payload.detail}`;
-    }
+    const payload = (await response.json()) as { error?: string };
     return payload.error || `Request failed with ${response.status}.`;
   } catch {
     return `Request failed with ${response.status}.`;

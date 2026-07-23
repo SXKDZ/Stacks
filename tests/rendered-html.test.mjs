@@ -32,7 +32,7 @@ test("ships the Stacks application shell and product metadata", async () => {
 
   assert.match(page, /<Stacks \/>/);
   assert.match(layout, /title: "Stacks"/);
-  assert.match(layout, /@fontsource-variable\/inter/);
+  assert.match(layout, /@fontsource-variable\/geist/);
   assert.match(layout, /@fontsource-variable\/jetbrains-mono/);
   assert.match(layout, /katex\/dist\/katex\.min\.css/);
   assert.doesNotMatch(layout, /manrope|newsreader/i);
@@ -127,9 +127,20 @@ test("button archetypes route through shared primitives, not hand-written CSS", 
 
   // The expanded primitive set must exist so components have a home for every
   // button archetype instead of re-declaring styles in CSS.
-  for (const primitive of ["ActionButton", "TabButton", "Chip", "TextButton", "SelectCard", "Scrim", "PaginationButton"]) {
+  for (const primitive of ["ActionButton", "TabButton", "Chip", "TextButton", "SelectCard", "Scrim", "PaginationButton", "Select"]) {
     assert.match(controls, new RegExp(`export function ${primitive}\\b`), `missing primitive ${primitive}`);
   }
+  // Dropdowns go through the one shared Select control (a native <select> can't
+  // style its option popup). No raw <select> should remain in any component.
+  const componentFiles = ["Stacks.tsx", "SettingsView.tsx", "feed/AttachBox.tsx", "FeedWorkspace.tsx"];
+  for (const file of componentFiles) {
+    const source = await readFile(new URL(`../app/components/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /<select\b/, `${file} still uses a native <select>`);
+  }
+  // The Select renders a portaled listbox and closes on Escape, but does NOT
+  // dismiss on scroll inside its own menu (that bug closed it while scrolling).
+  assert.match(controls, /role="listbox"/);
+  assert.match(controls, /listRef\.current\?\.contains\(event\.target as Node\)/);
 
   // Tailwind v4 treats an untyped arbitrary var() text value as a color. Font-size tokens
   // must use the explicit length hint or controls silently fall back to 14px.
@@ -156,14 +167,19 @@ test("button archetypes route through shared primitives, not hand-written CSS", 
   assert.doesNotMatch(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?rgba\(124,\s*156,\s*255/);
   assert.match(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?var\(--brand-blue\) 10%/);
 
-  // Storage & Doctor uses deliberately sectioned settings cards. Losing these
-  // rules makes the headings, path summary, form, and metrics collapse into a
-  // single unpadded white surface.
-  assert.match(styles, /\.storage-location-heading\s*\{[\s\S]*?padding:\s*14px 16px/);
+  // Storage & Doctor uses deliberately sectioned settings cards. The heading
+  // shares the consolidated settings-card header spec; losing the group makes
+  // the headings, path summary, form, and metrics collapse into a single
+  // unpadded white surface.
+  assert.match(styles, /\.settings-card-title,\s*\.storage-location-heading,\s*\.storage-doctor-heading\s*\{[\s\S]*?padding:\s*13px 15px/);
   assert.match(styles, /\.storage-root-summary\s*\{[\s\S]*?background:\s*transparent[\s\S]*?border:\s*0/);
   assert.match(styles, /\.storage-move-field\s*\{[\s\S]*?padding:\s*12px 16px 16px/);
   assert.match(settings, /body:\s*JSON\.stringify\(\{ target: "storage" \}\)/);
   assert.match(settings, />Browse<\/ActionButton>/);
+  // The sync status icon uses the shared 29px settings-card icon treatment;
+  // it must not restore the old green-glyph-on-blue-background exception.
+  assert.match(settings, /className="sync-status-icon"><FolderSync size=\{16\}/);
+  assert.doesNotMatch(styles, /\.sync-status-icon\.is-success/);
   assert.doesNotMatch(settings, /variant="ghost"[\s\S]{0,120}>Restore (?:discussion|summary|extraction) default/);
   assert.match(settings, /variant="secondary" size="small" className="mt-0\.5 justify-self-start"[\s\S]{0,160}>Restore summary default/);
 

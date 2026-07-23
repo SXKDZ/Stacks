@@ -133,7 +133,7 @@ export function downloadReferences(papers: Paper[], format: ReferenceExportForma
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `pa-references-${new Date().toISOString().slice(0, 10)}.${metadata.extension}`;
+  link.download = `stacks-references-${new Date().toISOString().slice(0, 10)}.${metadata.extension}`;
   document.body.appendChild(link);
   link.click();
   link.remove();
