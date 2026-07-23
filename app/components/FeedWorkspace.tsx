@@ -449,23 +449,33 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const running = snippet.status === "running" || snippet.status === "queued";
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
+  // Forces one scroll-to-bottom on the next content change, regardless of the
+  // near-bottom gate: set when the thread first opens and whenever the user
+  // sends a reply, so both land the view at the latest message.
+  const forceScrollRef = useRef(true);
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
     if (body) body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
   }, []);
 
-  // Auto-scroll to the newest content as it streams in, but only when the user
-  // is already near the bottom — so scrolling up to re-read isn't yanked back.
-  // Content growth doesn't fire a scroll event, so we also re-measure the
-  // near-bottom state here (not just on the scroll listener), which is why
-  // opening a long thread correctly shows the jump-to-latest button.
+  // Auto-scroll to the newest content as it streams in when the user is already
+  // near the bottom (so scrolling up to re-read isn't yanked back), or when a
+  // force is pending (thread just opened, or the user just replied). Content
+  // growth doesn't fire a scroll event, so we re-measure the near-bottom state
+  // here too, which is why opening a long thread shows the jump-to-latest button.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
     const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
-    if (nearBottom) {
+    // A pending force only resolves once there is scrollable content to land on,
+    // so a thread that opens empty still scrolls once its history streams in.
+    const force = forceScrollRef.current && body.scrollHeight > body.clientHeight;
+    if (nearBottom || force) {
       body.scrollTop = body.scrollHeight;
+    }
+    if (force) {
+      forceScrollRef.current = false;
     }
     setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
   }, [messages, proposals, running]);
@@ -519,6 +529,8 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
         });
       }
       if (response.ok) {
+        // Pull the view down to the new turn even if the user had scrolled up.
+        forceScrollRef.current = true;
         setStreamNonce((nonce) => nonce + 1);
         onChanged();
         return true;
