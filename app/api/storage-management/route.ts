@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, statSync } from "node:fs";
+import { cpSync, existsSync, rmSync, statSync } from "node:fs";
 import { arch, platform, release } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { ensureDatabase } from "@/db/bootstrap";
 import { getRawConnection } from "@/db/client";
 import { databasePath, ensureLibraryDirectories, libraryRoot, setLibraryRoot, settingsPath } from "@/db/library-paths";
@@ -57,10 +57,10 @@ const orphanRecordQueries = {
 
 /**
  * Move the whole library to `targetDirectory`: a transactionally-consistent
- * copy of library.db plus settings.json and the pdfs/ and html_snapshots/
- * assets, then repoint storage.json so the next libraryRoot() resolves there.
- * Returns the new root. The original folder is left in place (the UI's second
- * confirmation covers removing it manually, or a later cleanup).
+ * copy of library.db plus settings.json and the pdfs/, html_snapshots/, and
+ * feed/ trees, then repoint storage.json so the next libraryRoot() resolves
+ * there. Once the new copy is verified (the DB reopens there), the original
+ * folder is removed, matching the UI's promise. Returns the new root.
  */
 async function moveLibrary(targetDirectory: string): Promise<string> {
   const target = resolve(targetDirectory.trim());
@@ -71,7 +71,9 @@ async function moveLibrary(targetDirectory: string): Promise<string> {
   if (target === current) {
     throw new Error("The destination is already the current library folder.");
   }
-  if (target.startsWith(`${current}/`) || current.startsWith(`${target}/`)) {
+  // Compare with the platform separator (win32 resolve() yields backslashes, so
+  // a hardcoded "/" would never match and let a nested move through).
+  if (target.startsWith(`${current}${sep}`) || current.startsWith(`${target}${sep}`)) {
     throw new Error("The destination must not be nested inside the current library folder (or vice versa).");
   }
   const parent = dirname(target);
@@ -100,7 +102,10 @@ async function moveLibrary(targetDirectory: string): Promise<string> {
   if (existsSync(currentSettings)) {
     cpSync(currentSettings, join(target, "settings.json"));
   }
-  for (const dir of ["pdfs", "html_snapshots"]) {
+  // Copy every managed asset tree. feed/ holds each feed's staged attachments
+  // and its .claude session transcripts, which the app resolves through
+  // libraryRoot() — omitting it 404s existing attachments and breaks --resume.
+  for (const dir of ["pdfs", "html_snapshots", "feed"]) {
     const from = join(current, dir);
     if (existsSync(from)) {
       cpSync(from, join(target, dir), { recursive: true });
@@ -110,6 +115,15 @@ async function moveLibrary(targetDirectory: string): Promise<string> {
   // Repoint Stacks at the new folder. getLibraryDb reopens on the changed path.
   setLibraryRoot(target);
   await ensureDatabase();
+
+  // The copy is verified (the DB reopened at the new root); remove the old
+  // folder as the UI promises. Best-effort: a leftover old folder is harmless
+  // and must not fail an otherwise-successful move.
+  try {
+    rmSync(current, { recursive: true, force: true });
+  } catch {
+    // Old folder left behind (e.g. locked on Windows); the move still succeeded.
+  }
   return target;
 }
 

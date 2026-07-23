@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
+import { readError } from "@/app/lib/http";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
@@ -590,8 +591,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
         onChanged();
         return true;
       }
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      setError(body.error ?? `Reply failed (${response.status}).`);
+      setError(await readError(response));
       return false;
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Reply failed.");
@@ -1020,11 +1020,11 @@ export default function FeedWorkspace() {
     setNotice(null);
     try {
       const response = await fetch("/api/feed/github/sync", { method: "POST" });
+      if (!response.ok) throw new Error(await readError(response));
       // Read the body defensively: a stale/misrouted server can answer with an
       // HTML error page, which would otherwise blow up JSON.parse with a cryptic
       // "Unexpected token '<'" instead of a legible failure.
-      const data = (await response.json().catch(() => ({}))) as { counts?: Record<string, number>; truncated?: boolean; error?: string };
-      if (!response.ok) throw new Error(data.error ?? `GitHub sync failed (${response.status}).`);
+      const data = (await response.json().catch(() => ({}))) as { counts?: Record<string, number>; truncated?: boolean };
       const c = data.counts ?? {};
       const parts = [
         c.issuesCreated ? `${c.issuesCreated} issue${c.issuesCreated === 1 ? "" : "s"} created` : "",

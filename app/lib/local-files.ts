@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { databasePath, libraryRoot } from "@/db/library-paths";
@@ -348,6 +349,24 @@ async function fetchWithLimit(
   return { contents, contentType: response.headers.get("content-type") ?? "" };
 }
 
+/**
+ * Write freshly-acquired bytes to `target`, replacing any existing file. A
+ * re-acquire is an explicit refresh (the filename is content-addressed by the
+ * source URL, so the same source resolves to the same path), so we must not keep
+ * the stale copy. Write to a temp sibling first, then atomically rename over the
+ * target so a crash mid-write never leaves a truncated file.
+ */
+function writeAcquiredFile(target: string, contents: Buffer | string): void {
+  const temp = `${target}.${randomUUID()}.partial`;
+  try {
+    writeFileSync(temp, contents);
+    renameSync(temp, target);
+  } catch (error) {
+    try { unlinkSync(temp); } catch { /* temp may not exist */ }
+    throw error;
+  }
+}
+
 function acquisitionFilename(title: string | undefined, source: URL, extension: ".pdf" | ".html"): string {
   const stem = (title?.trim() || basename(source.pathname, extname(source.pathname)) || "paper")
     .normalize("NFKD")
@@ -385,9 +404,7 @@ async function acquirePdf(payload: SourceAcquisitionRequest): Promise<Acquisitio
       mkdirSync(directory, { recursive: true });
       const storedPath = acquisitionFilename(payload.title, candidate, ".pdf");
       const target = join(directory, storedPath);
-      if (!existsSync(target)) {
-        writeFileSync(target, contents, { flag: "wx" });
-      }
+      writeAcquiredFile(target, contents);
       return { kind: "pdf", storedPath, fileUrl: `/stacks-files/pdfs/${encodeURIComponent(storedPath)}`, sourceUrl: candidate.href };
     } catch (error) {
       failures.push(`${candidate.hostname}: ${error instanceof Error ? error.message : "download failed"}`);
@@ -412,9 +429,7 @@ async function acquireHtml(payload: SourceAcquisitionRequest): Promise<Acquisiti
   mkdirSync(directory, { recursive: true });
   const storedPath = acquisitionFilename(payload.title, source, ".html");
   const target = join(directory, storedPath);
-  if (!existsSync(target)) {
-    writeFileSync(target, snapshot.html, { flag: "wx" });
-  }
+  writeAcquiredFile(target, snapshot.html);
   return { kind: "html", storedPath, fileUrl: `/stacks-files/html/${encodeURIComponent(storedPath)}`, sourceUrl: source.href };
 }
 
