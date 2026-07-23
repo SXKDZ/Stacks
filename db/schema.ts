@@ -56,7 +56,12 @@ export const papers = sqliteTable(
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
+    // Strong identifiers are unique so import dedup (findDuplicatePaper) is
+    // enforced by the DB, not just a check-then-insert. All three are nullable
+    // and stored as NULL when absent, so SQLite allows many rows without one.
     uniqueIndex("papers_doi_unique").on(table.doi),
+    uniqueIndex("papers_arxiv_id_unique").on(table.arxivId),
+    uniqueIndex("papers_semantic_scholar_id_unique").on(table.semanticScholarId),
     index("papers_title_idx").on(table.title),
     index("papers_year_idx").on(table.year),
     index("papers_venue_idx").on(table.venueId),
@@ -175,7 +180,12 @@ export const feedSnippets = sqliteTable(
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
-  (table) => [index("feed_snippets_updated_idx").on(table.updatedAt)],
+  (table) => [
+    index("feed_snippets_updated_idx").on(table.updatedAt),
+    // One feed per GitHub issue (nullable until synced), so overlapping syncs
+    // can't link two feeds to the same issue or create duplicate issues.
+    uniqueIndex("feed_snippets_issue_number_unique").on(table.issueNumber),
+  ],
 );
 
 export const feedMessages = sqliteTable(

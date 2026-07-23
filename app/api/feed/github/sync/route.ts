@@ -24,6 +24,13 @@ import { buildFollowUpPrompt, buildForkPrompt, buildSnippetPrompt } from "@/app/
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// One sync at a time. The route is a long chain of check-then-write GitHub +
+// DB calls; two overlapping runs would each see a feed as unlinked or a comment
+// as un-ingested and duplicate issues, feeds, agents, and messages. A single
+// Node process serves every request, so a module-scope flag is a sufficient
+// mutex (the unique index on feed_snippets.issue_number is the DB backstop).
+let syncInProgress = false;
+
 // Only prose turns are mirrored to GitHub — tool calls and raw proposal blocks
 // are local implementation detail, not something to read on a phone.
 const MIRRORED_KINDS = new Set(["text", "result"]);
@@ -112,6 +119,12 @@ export async function POST(): Promise<Response> {
     return Response.json({ error: "Set the GitHub repo and access token in Settings → Integrations first." }, { status: 400 });
   }
   const config: GitHubConfig = { repo, token };
+
+  // Refuse to start while another sync is running (see syncInProgress above).
+  if (syncInProgress) {
+    return Response.json({ error: "A GitHub sync is already running." }, { status: 409 });
+  }
+  syncInProgress = true;
 
   const database = await ensureDatabase();
   const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0, issuesClosed: 0, issuesReopened: 0 };
@@ -318,5 +331,7 @@ export async function POST(): Promise<Response> {
   } catch (error) {
     const message = error instanceof GitHubError || error instanceof Error ? error.message : "GitHub sync failed.";
     return Response.json({ error: message }, { status: 400 });
+  } finally {
+    syncInProgress = false;
   }
 }

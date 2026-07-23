@@ -249,6 +249,35 @@ async function initializeDatabase(): Promise<void> {
   if (!feedSnippetColumns.has("issue_state_synced")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_state_synced TEXT").run();
   }
+
+  // Enforce arXiv / Semantic Scholar id uniqueness (import dedup relies on it).
+  // Created here, not in schemaStatements, because on an upgraded database the
+  // CREATE UNIQUE INDEX fails if pre-existing rows already collide — so first
+  // null out the duplicates (keep the earliest-added row for each id).
+  for (const column of ["arxiv_id", "semantic_scholar_id"] as const) {
+    raw.prepare(
+      `UPDATE papers SET ${column} = NULL WHERE id IN (
+         SELECT id FROM (
+           SELECT id, ROW_NUMBER() OVER (PARTITION BY ${column} ORDER BY added_at, id) AS rn
+           FROM papers WHERE ${column} IS NOT NULL AND ${column} != ''
+         ) WHERE rn > 1
+       )`,
+    ).run();
+  }
+  raw.prepare("CREATE UNIQUE INDEX IF NOT EXISTS papers_arxiv_id_unique ON papers(arxiv_id)").run();
+  raw.prepare("CREATE UNIQUE INDEX IF NOT EXISTS papers_semantic_scholar_id_unique ON papers(semantic_scholar_id)").run();
+
+  // One feed per GitHub issue. Unlink duplicate issue links (keep the earliest
+  // feed) before creating the unique index, so an upgraded DB doesn't fail.
+  raw.prepare(
+    `UPDATE feed_snippets SET issue_number = NULL WHERE id IN (
+       SELECT id FROM (
+         SELECT id, ROW_NUMBER() OVER (PARTITION BY issue_number ORDER BY created_at, id) AS rn
+         FROM feed_snippets WHERE issue_number IS NOT NULL
+       ) WHERE rn > 1
+     )`,
+  ).run();
+  raw.prepare("CREATE UNIQUE INDEX IF NOT EXISTS feed_snippets_issue_number_unique ON feed_snippets(issue_number)").run();
   // Backfill a spread of accent colors onto any collections created before the
   // color column existed (deterministic from the id, so it never shifts).
   const uncolored = raw.prepare("SELECT id FROM collections WHERE color IS NULL").all() as Array<{ id: string }>;
@@ -265,14 +294,24 @@ async function initializeDatabase(): Promise<void> {
     }
   }
 
+  // Seed the demo library exactly once, tracked by a persistent marker rather
+  // than an empty papers table. Inferring "first run" from a zero row count
+  // conflated it with "the user deleted every paper" and resurrected the demo
+  // content on the next start. user_version 0 = never seeded; 1 = seeded.
+  const seededVersion = Number((raw.pragma("user_version", { simple: true }) as number) ?? 0);
   const paperCount = raw.prepare("SELECT COUNT(*) AS count FROM papers").get() as { count: number };
-  if (Number(paperCount?.count ?? 0) === 0) {
-    const seed = raw.transaction(() => {
-      for (const [statement, values] of seedStatements) {
-        raw.prepare(statement).run(...values);
-      }
-    });
-    seed();
+  if (seededVersion === 0) {
+    if (Number(paperCount?.count ?? 0) === 0) {
+      const seed = raw.transaction(() => {
+        for (const [statement, values] of seedStatements) {
+          raw.prepare(statement).run(...values);
+        }
+      });
+      seed();
+    }
+    // Mark as seeded whether or not we inserted, so an existing (non-empty)
+    // library upgraded to this version is never treated as first-run either.
+    raw.pragma("user_version = 1");
   }
 }
 
