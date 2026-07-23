@@ -1764,7 +1764,7 @@ function AuthorsView({
                 </td>
                 <td className="entity-number-cell">{author.paperCount}</td>
                 <td className="entity-number-cell">{author.latestYear ?? "—"}</td>
-                <td className="actions-cell"><ActionButton variant="ghost" size="small" onClick={() => onEdit(author)} icon={<Pencil />}>Edit</ActionButton></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(author)} icon={<Pencil />} aria-label={`Edit ${author.displayName}`} title="Edit" /></td>
               </tr>
             ))}
           </tbody>
@@ -1901,7 +1901,7 @@ function VenuesView({
                 <td className="entity-meta-cell">{venue.publisher || "—"}</td>
                 <td className="entity-number-cell">{venue.paperCount}</td>
                 <td className="entity-number-cell">{venue.latestYear ?? "—"}</td>
-                <td className="actions-cell"><ActionButton variant="ghost" size="small" onClick={() => onEdit(venue)} icon={<Pencil />}>Edit</ActionButton></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(venue)} icon={<Pencil />} aria-label={`Edit ${venue.name}`} title="Edit" /></td>
               </tr>
             ))}
           </tbody>
