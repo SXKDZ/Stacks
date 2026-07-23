@@ -70,17 +70,13 @@ body {
   color: var(--muted);
 }
 
-.assistant-card {
-  background: rgba(255, 255, 255, 0.045);
-  border-color: var(--line);
-}
-
-.assistant-card strong,
+/* The AI feed CTA keeps the rich dark treatment defined in foundation.css in
+   both themes (it is a deliberately dark accent card), so no background
+   override here. Only the sync-card sibling font sizes are tuned. */
 .sync-card strong {
   font-size: 12px;
 }
 
-.assistant-card small,
 .sync-card small {
   font-size: 10px;
 }
@@ -1091,17 +1087,8 @@ textarea::placeholder {
   background: rgba(247, 248, 252, 0.82);
 }
 
-[data-theme="light"] .assistant-card,
 [data-theme="light"] .model-access-row {
   background: rgba(255, 255, 255, 0.72);
-}
-
-[data-theme="light"] .assistant-card {
-  color: var(--ink);
-}
-
-[data-theme="light"] .assistant-card small {
-  color: var(--muted);
 }
 
 [data-theme="light"] .global-search,

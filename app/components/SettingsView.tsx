@@ -1254,14 +1254,33 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
         </div>
       </div>
       <div className="feed-skills-editor-actions">
-        <ActionButton variant="secondary" size="small" onClick={restoreDefaults} icon={<RefreshCw size={14} />}>Restore defaults</ActionButton>
-        <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save skills</ActionButton>
+        <ActionButton variant="secondary" onClick={restoreDefaults} icon={<RefreshCw size={14} />}>Restore defaults</ActionButton>
+        <ActionButton variant="primary" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save skills</ActionButton>
       </div>
     </div>
   );
 }
 
 interface StoredWorkflow { id: string; name: string; description: string; script: string }
+
+/** Read a string field out of the script's `meta` block for live display. The
+ *  server re-derives name/description authoritatively (node:vm) on save; this is
+ *  just so the header reflects edits before the user saves. */
+function metaField(script: string, field: "name" | "description"): string {
+  const match = new RegExp(`${field}\\s*:\\s*(['"\`])((?:\\\\.|(?!\\1).)*)\\1`).exec(script);
+  return match ? match[2] : "";
+}
+
+/** Write a string field back into the script's `meta` block so the header inputs
+ *  edit the same meta the script defines. Preserves the existing quote style and
+ *  escapes the value so a typed quote or backslash cannot break the string. */
+function setMetaField(script: string, field: "name" | "description", value: string): string {
+  const match = new RegExp(`(${field}\\s*:\\s*)(['"\`])((?:\\\\.|(?!\\2).)*)\\2`).exec(script);
+  if (!match) return script;
+  const quote = match[2];
+  const escaped = value.replace(/\\/g, "\\\\").replaceAll(quote, `\\${quote}`);
+  return `${script.slice(0, match.index)}${match[1]}${quote}${escaped}${quote}${script.slice(match.index + match[0].length)}`;
+}
 
 const WORKFLOW_STARTER = `export const meta = {
   name: 'Tag untagged papers',
@@ -1273,7 +1292,7 @@ const result = await agent(
   'List papers in my library that are not in any collection, then propose ' +
   'adding each to a fitting collection (create one if needed).',
 )
-log('Proposed collection changes — approve them above.')
+log('Proposed collection changes. Approve them above.')
 `;
 
 function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "info") => void }) {
@@ -1379,7 +1398,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
               <div className={`feed-skill-item ${active ? "is-active" : ""}`} key={workflow.id}>
                 <button type="button" className="feed-skill-item-main" role="option" aria-selected={active} onClick={() => setSelectedId(workflow.id)}>
                   <span className="feed-skill-item-icon"><Workflow size={15} /></span>
-                  <span className="feed-skill-item-label">{workflow.name || "Untitled workflow"}</span>
+                  <span className="feed-skill-item-label">{metaField(workflow.script, "name") || workflow.name || "Untitled workflow"}</span>
                 </button>
                 <div className="feed-skill-item-actions">
                   <button type="button" className="is-danger" onClick={() => remove(workflow.id)} aria-label="Remove workflow"><Trash2 size={13} /></button>
@@ -1394,10 +1413,25 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
         <div className="feed-skills-detail">
           {selected ? (
             <>
-              <div className="feed-skill-detail-head">
-                <span className="feed-skill-label-input" aria-live="polite"><strong>{selected.name || "Untitled workflow"}</strong>{selected.description ? ` — ${selected.description}` : ""}</span>
+              <div className="workflow-meta-fields">
+                <input
+                  className="feed-skill-label-input"
+                  value={metaField(selected.script, "name")}
+                  maxLength={80}
+                  placeholder="Workflow name"
+                  aria-label="Workflow name"
+                  onChange={(event) => update(selected.id, setMetaField(selected.script, "name", event.target.value))}
+                />
+                <input
+                  className="feed-skill-label-input workflow-meta-description"
+                  value={metaField(selected.script, "description")}
+                  maxLength={300}
+                  placeholder="What this workflow does"
+                  aria-label="Workflow description"
+                  onChange={(event) => update(selected.id, setMetaField(selected.script, "description", event.target.value))}
+                />
               </div>
-              <MarkdownCodeEditor value={selected.script} onChange={(value) => update(selected.id, value)} ariaLabel={`${selected.name || "Workflow"} script`} rows={16} placeholder="A Claude Code workflow: export const meta = { name, description } then use agent()/parallel()/pipeline()/log()/phase()." />
+              <MarkdownCodeEditor value={selected.script} onChange={(value) => update(selected.id, value)} language="javascript" ariaLabel={`${metaField(selected.script, "name") || "Workflow"} script`} rows={16} placeholder="A Claude Code workflow: export const meta = { name, description } then use agent()/parallel()/pipeline()/log()/phase()." />
             </>
           ) : (
             <div className="feed-skill-empty"><Workflow size={22} /><p>No workflows yet. Add one or import a .js file.</p></div>
@@ -1405,8 +1439,8 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
         </div>
       </div>
       <div className="feed-skills-editor-actions">
-        <ActionButton variant="secondary" size="small" onClick={() => void run()} disabled={running || !selected} icon={running ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}>Run in feed</ActionButton>
-        <ActionButton variant="primary" size="small" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save workflows</ActionButton>
+        <ActionButton variant="secondary" onClick={() => void run()} disabled={running || !selected} icon={running ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}>Run in feed</ActionButton>
+        <ActionButton variant="primary" onClick={() => void save()} disabled={saving} icon={saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}>Save workflows</ActionButton>
       </div>
     </div>
   );

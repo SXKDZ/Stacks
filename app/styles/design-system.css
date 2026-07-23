@@ -424,23 +424,8 @@
   background: rgba(22, 141, 236, 0.24);
 }
 
-.prompt-code-editor .is-variable {
-  color: var(--brand-blue-strong);
-  font-weight: 720;
-}
-
-.prompt-code-editor .is-heading {
-  color: var(--cyan);
-  font-weight: 720;
-}
-
-.prompt-code-editor .is-code {
-  color: var(--amber);
-}
-
-.prompt-code-editor .is-math {
-  color: var(--green);
-}
+/* Token colors live with the shared .hljs-* theme in workspaces.css, so the code
+   editor and the Markdown renderer highlight from one source. */
 
 /* Responsive pagination must not inherit a 520px vertical flex basis. */
 @media (max-width: 900px) {

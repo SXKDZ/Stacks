@@ -788,12 +788,13 @@
   z-index: 40;
 }
 
-/* The label is the skill's editable name — always show a border so it reads as
-   an input, not a heading. */
+/* The label is the skill's editable name: it pairs with the code editor below
+   it, so it reuses that control's surface, radius, and focus ring rather than a
+   near-miss of its own. */
 .feed-skill-label-input {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--panel) 90%, var(--canvas));
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   color: var(--ink);
   flex: 1;
   font: inherit;
@@ -802,6 +803,7 @@
   letter-spacing: -0.01em;
   min-width: 0;
   padding: 8px 11px;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
 }
 
 .feed-skill-label-input:hover {
@@ -809,9 +811,23 @@
 }
 
 .feed-skill-label-input:focus {
-  border-color: color-mix(in srgb, var(--brand-blue) 60%, var(--line-strong));
+  border-color: color-mix(in srgb, var(--brand-blue) 72%, var(--line-strong));
   box-shadow: 0 0 0 3px var(--brand-blue-soft);
   outline: none;
+}
+
+/* A workflow's name/description live in its script's meta block. These inputs
+   edit that meta directly (writing back into the script), so they use the same
+   control styling as the skill name box and stack above the code editor. */
+.workflow-meta-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-meta-description {
+  font-size: var(--type-control);
+  font-weight: 500;
 }
 
 .feed-skill-icon-option {

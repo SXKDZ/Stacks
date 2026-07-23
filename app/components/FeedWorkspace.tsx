@@ -395,7 +395,6 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
         <span className="feed-row-body">
           <span className="feed-row-title-line">
             <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
-            {snippet.pendingProposals ? <span className="feed-row-pending" title={`${snippet.pendingProposals} change${snippet.pendingProposals === 1 ? "" : "s"} to approve`}>{snippet.pendingProposals}</span> : null}
           </span>
           <span className="feed-row-meta">
             <span className={`feed-row-status feed-status-${snippet.status}`}>{statusLabel(snippet.status)}</span>
@@ -405,6 +404,7 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
               return tokens ? <span>{compactTokens(tokens)} tok</span> : null;
             })()}
             {snippet.turns ? <span>{snippet.turns} {snippet.turns === 1 ? "turn" : "turns"}</span> : null}
+            {snippet.pendingProposals ? <span className="feed-row-pending" title={`${snippet.pendingProposals} change${snippet.pendingProposals === 1 ? "" : "s"} to approve`}>{snippet.pendingProposals}</span> : null}
           </span>
         </span>
       </button>
@@ -443,6 +443,7 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
+  const [resolvingAll, setResolvingAll] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
@@ -537,26 +538,50 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
     await fetch(`/api/feed/snippets/${snippet.id}/stop`, { method: "POST" });
   }
 
+  // Resolve one proposal and fold the outcome into local state. Returns whether
+  // the server applied it, so the bulk path can refresh once at the end.
+  async function postResolution(proposalId: string, decision: "approve" | "reject"): Promise<boolean> {
+    const response = await fetch(`/api/feed/proposals/${proposalId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    });
+    const payload = await response.json().catch(() => ({})) as { status?: string; error?: string };
+    const nextStatus = response.ok ? (payload.status ?? decision) : "failed";
+    setProposals((current) => current.map((proposal) =>
+      proposal.id === proposalId
+        ? { ...proposal, status: nextStatus, summary: payload.error ? `${proposal.summary}: ${payload.error}` : proposal.summary }
+        : proposal,
+    ));
+    return response.ok;
+  }
+
   async function resolveProposal(proposalId: string, decision: "approve" | "reject") {
     setResolving(proposalId);
     try {
-      const response = await fetch(`/api/feed/proposals/${proposalId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision }),
-      });
-      const payload = await response.json().catch(() => ({})) as { status?: string; error?: string };
-      const nextStatus = response.ok ? (payload.status ?? decision) : "failed";
-      setProposals((current) => current.map((proposal) =>
-        proposal.id === proposalId
-          ? { ...proposal, status: nextStatus, summary: payload.error ? `${proposal.summary}: ${payload.error}` : proposal.summary }
-          : proposal,
-      ));
       // Refresh the snippet list so the sidebar's pending-proposal badge (computed
       // server-side) reflects the resolved proposal instead of a stale count.
-      if (response.ok) onChanged();
+      if (await postResolution(proposalId, decision)) onChanged();
     } finally {
       setResolving(null);
+    }
+  }
+
+  // Resolve every currently-pending proposal one at a time, in list order, so a
+  // "create collection" applies before the papers that join it. A single failure
+  // is recorded on its card and does not abort the rest.
+  async function resolveAll(decision: "approve" | "reject") {
+    const pending = proposals.filter((proposal) => proposal.status === "pending");
+    if (!pending.length) return;
+    setResolvingAll(decision);
+    try {
+      let applied = false;
+      for (const proposal of pending) {
+        if (await postResolution(proposal.id, decision)) applied = true;
+      }
+      if (applied) onChanged();
+    } finally {
+      setResolvingAll(null);
     }
   }
 
@@ -582,9 +607,19 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
 
   function renderProposals(list: FeedProposal[], key: string): ReactNode {
     if (!list.length) return null;
+    const pendingHere = list.filter((proposal) => proposal.status === "pending").length;
+    const busy = resolvingAll !== null || resolving !== null;
     return (
       <div className="feed-proposals" key={key}>
-        <h2><Check size={13} /> Proposed library changes</h2>
+        <div className="feed-proposals-head">
+          <h2><Check size={13} /> Proposed library changes</h2>
+          {pendingHere > 1 ? (
+            <div className="feed-proposals-bulk">
+              <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveAll("reject")} icon={resolvingAll === "reject" ? <LoaderCircle className="spin" size={13} /> : <X size={13} />}>Reject all</ActionButton>
+              <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveAll("approve")} icon={resolvingAll === "approve" ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve all</ActionButton>
+            </div>
+          ) : null}
+        </div>
         {list.map((proposal) => (
           <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
             <div className="feed-proposal-body">
@@ -598,8 +633,8 @@ function FeedDetail({ snippet, library, onBack, onChanged }: {
             </div>
             {proposal.status === "pending" ? (
               <div className="feed-proposal-actions">
-                <ActionButton variant="secondary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
-                <ActionButton variant="primary" size="small" disabled={resolving === proposal.id} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+                <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
+                <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
               </div>
             ) : null}
           </div>

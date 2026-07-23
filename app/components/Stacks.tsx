@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  Bot,
   Building2,
   Check,
   CheckCircle2,
@@ -921,14 +922,15 @@ function StacksWorkspace() {
         <BackgroundTaskDock />
 
         <button className="assistant-card" onClick={() => openFeedWorkspace()}>
+          <span className="assistant-card-glow" aria-hidden="true" />
           <span className="assistant-orb">
-            <Sparkles size={17} />
+            <Bot size={18} />
           </span>
-          <span>
+          <span className="assistant-card-copy">
             <strong>AI feed</strong>
-            
+            <small>Put an agent to work on your library</small>
           </span>
-          <ArrowUpRight size={16} />
+          <ArrowUpRight size={16} className="assistant-card-arrow" />
         </button>
 
         <div className="sync-card">

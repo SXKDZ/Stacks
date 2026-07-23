@@ -381,50 +381,116 @@ body {
   flex: 1;
 }
 
+/* AI feed CTA: built from theme tokens so it adapts to light and dark, with a
+   brand-tinted corner glow. Designed as one piece so the icon, copy, glow, and
+   arrow all react together on hover. */
 .assistant-card {
   align-items: center;
-  background: linear-gradient(135deg, #171e29, #202938);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 11px;
-  color: white;
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--brand-blue-soft), transparent 60%),
+    var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
   display: grid;
-  gap: 9px;
+  gap: 11px;
   grid-template-columns: auto 1fr auto;
   margin: 12px 1px;
-  padding: 11px;
+  overflow: hidden;
+  padding: 12px 13px;
+  position: relative;
   text-align: left;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control), transform var(--motion-control);
 }
 
-.assistant-card:hover .assistant-orb {
-  transform: rotate(8deg) scale(1.05);
+/* Soft corner glow that intensifies on hover, giving the whole card life. */
+.assistant-card-glow {
+  background: radial-gradient(circle, var(--brand-blue), transparent 70%);
+  filter: blur(15px);
+  height: 96px;
+  opacity: 0.28;
+  pointer-events: none;
+  position: absolute;
+  right: -28px;
+  top: -40px;
+  transition: opacity var(--motion-control);
+  width: 96px;
 }
 
-.assistant-card > span:nth-child(2) {
+.assistant-card:hover,
+.assistant-card:focus-visible {
+  border-color: color-mix(in srgb, var(--brand-blue) 46%, var(--line-strong));
+  box-shadow: var(--shadow-1);
+  transform: translateY(-1px);
+}
+
+.assistant-card:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.assistant-card:hover .assistant-orb,
+.assistant-card:focus-visible .assistant-orb {
+  transform: rotate(6deg) scale(1.06);
+}
+
+.assistant-card:hover .assistant-card-glow,
+.assistant-card:focus-visible .assistant-card-glow {
+  opacity: 0.5;
+}
+
+.assistant-card-copy {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
-.assistant-card strong {
-  font-size: 11px;
+.assistant-card-copy strong {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
-.assistant-card small {
-  color: #a9a2b3;
-  font-size: var(--type-label);
-  margin-top: 2px;
+.assistant-card-copy small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-card-arrow {
+  color: var(--soft);
+  position: relative;
+  transition: transform var(--motion-control), color var(--motion-control);
+  z-index: 1;
+}
+
+.assistant-card:hover .assistant-card-arrow,
+.assistant-card:focus-visible .assistant-card-arrow {
+  color: var(--brand-blue-strong);
+  transform: translate(2px, -2px);
 }
 
 .assistant-orb {
   align-items: center;
-  background: linear-gradient(145deg, #2d9cff, #0874c9);
-  border-radius: 8px;
-  box-shadow: 0 6px 14px rgba(22,141,236,0.3);
+  background: linear-gradient(145deg, #43a8ff, #0b74c9);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
+  box-shadow: 0 6px 16px rgba(22, 141, 236, 0.38), var(--edge-highlight);
+  color: white;
   display: flex;
-  height: 31px;
+  height: 34px;
   justify-content: center;
+  position: relative;
   transition: transform var(--motion-control);
-  width: 31px;
+  width: 34px;
+  z-index: 1;
 }
 
 .assistant-orb.large {

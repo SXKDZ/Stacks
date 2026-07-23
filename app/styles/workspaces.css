@@ -520,7 +520,8 @@
   white-space: nowrap;
 }
 
-/* Count of library changes awaiting approval in this feed. */
+/* Count of library changes awaiting approval, pushed to the far end of the meta
+   line so it never sits under the top-right kebab. */
 .feed-row-pending {
   align-items: center;
   background: var(--amber-soft, color-mix(in srgb, var(--amber) 18%, transparent));
@@ -531,8 +532,15 @@
   font-size: var(--type-micro);
   font-weight: 800;
   justify-content: center;
+  margin-left: auto;
   min-width: 18px;
   padding: 1px 6px;
+}
+
+/* No dot separator before the badge: it reads as a standalone pill, and the
+   auto margin already sets it apart from the usage stats. */
+.feed-row-meta > .feed-row-pending::before {
+  display: none;
 }
 
 .feed-row:hover .feed-row-title,
@@ -1551,6 +1559,14 @@
   padding: 15px 16px;
 }
 
+.feed-proposals-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
 .feed-proposals h2 {
   align-items: center;
   color: var(--brand-blue-strong);
@@ -1559,8 +1575,14 @@
   font-weight: 800;
   gap: 7px;
   letter-spacing: 0.08em;
-  margin: 0 0 2px;
+  margin: 0;
   text-transform: uppercase;
+}
+
+.feed-proposals-bulk {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
 }
 
 .feed-proposal {
@@ -1727,37 +1749,72 @@
 }
 
 /* highlight.js token classes mapped onto the app palette (works in both themes).
-   Scoped to .markdown-content and marked !important so they beat the higher-
-   specificity base `pre code` color rules (incl. the light-theme override). */
+   Shared by the Markdown renderer and the workflow code editor, marked
+   !important so they beat the higher-specificity base `pre code` color rules
+   (incl. the light-theme override). */
 .markdown-content .hljs-comment,
-.markdown-content .hljs-quote { color: var(--soft) !important; font-style: italic; }
+.markdown-content .hljs-quote,
+.prompt-code-editor .hljs-comment,
+.prompt-code-editor .hljs-quote { color: var(--soft) !important; font-style: italic; }
 .markdown-content .hljs-keyword,
 .markdown-content .hljs-selector-tag,
 .markdown-content .hljs-literal,
 .markdown-content .hljs-section,
 .markdown-content .hljs-doctag,
-.markdown-content .hljs-name { color: var(--brand-blue-strong) !important; }
+.markdown-content .hljs-name,
+.prompt-code-editor .hljs-keyword,
+.prompt-code-editor .hljs-selector-tag,
+.prompt-code-editor .hljs-literal,
+.prompt-code-editor .hljs-section,
+.prompt-code-editor .hljs-doctag,
+.prompt-code-editor .hljs-name { color: var(--brand-blue-strong) !important; }
 .markdown-content .hljs-string,
 .markdown-content .hljs-attr,
 .markdown-content .hljs-meta .hljs-string,
-.markdown-content .hljs-addition { color: var(--green) !important; }
+.markdown-content .hljs-addition,
+.prompt-code-editor .hljs-string,
+.prompt-code-editor .hljs-attr,
+.prompt-code-editor .hljs-meta .hljs-string,
+.prompt-code-editor .hljs-addition { color: var(--green) !important; }
 .markdown-content .hljs-number,
 .markdown-content .hljs-symbol,
 .markdown-content .hljs-bullet,
-.markdown-content .hljs-link { color: var(--amber) !important; }
+.markdown-content .hljs-link,
+.prompt-code-editor .hljs-number,
+.prompt-code-editor .hljs-symbol,
+.prompt-code-editor .hljs-bullet,
+.prompt-code-editor .hljs-link { color: var(--amber) !important; }
 .markdown-content .hljs-title,
 .markdown-content .hljs-title.function_,
 .markdown-content .hljs-built_in,
-.markdown-content .hljs-attribute { color: var(--cyan) !important; }
+.markdown-content .hljs-attribute,
+.prompt-code-editor .hljs-title,
+.prompt-code-editor .hljs-title.function_,
+.prompt-code-editor .hljs-built_in,
+.prompt-code-editor .hljs-attribute { color: var(--cyan) !important; }
 .markdown-content .hljs-variable,
 .markdown-content .hljs-template-variable,
 .markdown-content .hljs-type,
 .markdown-content .hljs-selector-attr,
-.markdown-content .hljs-selector-class { color: var(--brand-blue) !important; }
+.markdown-content .hljs-selector-class,
+.prompt-code-editor .hljs-variable,
+.prompt-code-editor .hljs-template-variable,
+.prompt-code-editor .hljs-type,
+.prompt-code-editor .hljs-selector-attr,
+.prompt-code-editor .hljs-selector-class { color: var(--brand-blue) !important; }
 .markdown-content .hljs-meta,
-.markdown-content .hljs-deletion { color: var(--muted) !important; }
-.markdown-content .hljs-emphasis { font-style: italic; }
-.markdown-content .hljs-strong { font-weight: 700; }
+.markdown-content .hljs-deletion,
+.prompt-code-editor .hljs-meta,
+.prompt-code-editor .hljs-deletion { color: var(--muted) !important; }
+.markdown-content .hljs-emphasis,
+.prompt-code-editor .hljs-emphasis { font-style: italic; }
+.markdown-content .hljs-strong,
+.prompt-code-editor .hljs-strong { font-weight: 700; }
+/* Prompt-template scopes: inline `code` and $math$ from the prompt grammar. */
+.markdown-content .hljs-code,
+.prompt-code-editor .hljs-code { color: var(--amber) !important; }
+.markdown-content .hljs-formula,
+.prompt-code-editor .hljs-formula { color: var(--green) !important; }
 
 /* Narrow screens: collapse to one pane. Show the list until a snippet is
    selected, then swap to the detail pane with a back button. */
