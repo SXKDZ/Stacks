@@ -947,7 +947,7 @@
 }
 
 .discover-search-box > button span {
-  font-size: 10.5px;
+  font-size: var(--type-body);
   font-weight: 700;
 }
 

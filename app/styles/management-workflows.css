@@ -2176,13 +2176,12 @@
 
 .discover-search-box > button {
   box-sizing: border-box;
-  flex: 0 0 96px;
-  height: 42px;
-  min-width: 96px;
+  flex: 0 0 auto;
+  height: 48px;
+  min-width: 118px;
   overflow: hidden;
-  padding: 0 13px;
+  padding: 0 20px;
   white-space: nowrap;
-  width: 96px;
 }
 
 .paper-table.research-grid .paper-secondary-line {
