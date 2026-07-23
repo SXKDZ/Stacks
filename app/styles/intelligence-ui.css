@@ -946,6 +946,24 @@ body {
   box-shadow: 0 12px 36px rgba(29, 52, 88, 0.07);
 }
 
+/* The reading-thread hero keeps its rich dark gradient in both themes (like the
+   AI feed card), so its text must stay light in light mode: the base theme
+   otherwise darkens the title, kicker, abstract, and byline onto a dark card.
+   Matches .focus-grid .continue-card specificity so it wins in the cascade. */
+[data-theme="light"] .focus-grid .continue-card {
+  color: #eef3fb;
+}
+
+[data-theme="light"] .focus-grid .continue-card .continue-copy h2 {
+  color: #f4f7ff;
+}
+
+[data-theme="light"] .focus-grid .continue-card .card-kicker,
+[data-theme="light"] .focus-grid .continue-card .paper-byline,
+[data-theme="light"] .focus-grid .continue-card .continue-abstract {
+  color: #aeb9cf;
+}
+
 @media (max-width: 1180px) {
   :root {
     --sidebar: 236px;
