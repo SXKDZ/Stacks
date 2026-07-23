@@ -43,6 +43,7 @@ import {
 } from "@/app/lib/ai-prompts";
 import { DEFAULT_FEED_SKILLS, FEED_SKILL_ICONS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
+import { WorkspaceHeader } from "@/app/components/ui/WorkspaceHeader";
 import { readError } from "@/app/lib/http";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, SelectCard, TabButton } from "@/app/components/ui/controls";
@@ -792,8 +793,22 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }, [checkVersion, checkingVersion, tab, versionInfo]);
 
   return (
-    <div className="settings-layout">
-      <aside className="settings-nav" aria-label="Settings sections">
+    <div className="settings-page workspace-view">
+      <WorkspaceHeader
+        eyebrow="Application controls"
+        title="Settings"
+        detail="Configure appearance, AI, prompts, storage, sync, and integrations."
+        icon={<Wrench size={22} />}
+        metrics={[
+          { label: "Library", value: settings.local ? "Local" : "Hosted", detail: "storage mode", tone: "green" },
+          { label: "Papers", value: papers.length, detail: "in this library", tone: "blue" },
+          { label: "Theme", value: theme === "dark" ? "Dark" : "Light", detail: "current appearance", tone: "violet" },
+          { label: "Sections", value: 9, detail: "configuration areas", tone: "aqua" },
+        ]}
+      />
+
+      <div className="settings-layout">
+        <aside className="settings-nav" aria-label="Settings sections">
         <p>Configuration</p>
         <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
         <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
@@ -805,9 +820,9 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
         <TabButton variant="nav" active={tab === "about"} onClick={() => setTab("about")} icon={<Info />}><span><strong>About &amp; updates</strong><small>Version and release status</small></span></TabButton>
         <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>Stored locally</strong><small>Settings and secrets live in the library folder&rsquo;s settings.json; keys are never displayed after saving.</small></span></div>
-      </aside>
+        </aside>
 
-      <div className="settings-content">
+        <div className="settings-content">
         {loading ? <div className="settings-loading"><LoaderCircle className="spin" size={22} /><span>Loading settings…</span></div> : null}
 
         {!loading && tab === "appearance" ? (
@@ -1011,6 +1026,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <p className="version-update-note">Local installs update from the Git repository, followed by <code>npm install</code>. Hosted installs update when you redeploy. Stacks never updates itself.</p>
           </section>
         ) : null}
+        </div>
       </div>
 
       {doctorModal ? (

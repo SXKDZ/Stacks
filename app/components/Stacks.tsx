@@ -63,6 +63,7 @@ import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
+import { WorkspaceHeader } from "@/app/components/ui/WorkspaceHeader";
 import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
 import { useTheme } from "@/app/lib/use-theme";
 import {
@@ -955,7 +956,7 @@ function StacksWorkspace() {
 
           <div className="topbar-context">
             <span>{navigation.find((item) => item.id === view)?.label ?? "Workspace"}</span>
-            <small><i /> Library intelligence online</small>
+            <small><i /> Library connected</small>
           </div>
           <button className="global-search" onClick={() => setCommandOpen(true)}>
             <Search size={17} />
@@ -1214,46 +1215,40 @@ function Dashboard({
   const focusCollections = [...snapshot.collections]
     .sort((left, right) => right.paperCount - left.paperCount)
     .slice(0, 3);
-  const leadCollection = focusCollections[0];
-  const intelligenceHeadline = leadCollection
-    ? `${leadCollection.name} is becoming a center of gravity.`
-    : currentPaper
-      ? "Your reading is starting to form a point of view."
-      : "Your research map is ready to take shape.";
   const intelligenceNarrative = snapshot.stats.papers
-    ? `Across ${snapshot.stats.papers} papers, Stacks sees ${snapshot.collections.length || "no named"} themes, ${recurringAuthors} recurring ${recurringAuthors === 1 ? "author" : "authors"}, and ${snapshot.stats.active} active reading ${snapshot.stats.active === 1 ? "thread" : "threads"}.`
-    : "Add a few papers and Stacks will surface themes, recurring voices, and useful tensions across your work.";
+    ? `${snapshot.stats.papers} papers, ${snapshot.collections.length} collections, ${snapshot.stats.authors} authors, and ${snapshot.stats.active} currently being read.`
+    : "Add papers to start building your research library.";
   return (
     <div className="intelligence-home">
       <section className="intelligence-stage">
         <article className="research-brief-card">
           <div className="brief-status-row">
-            <p className="card-kicker"><span /> Research intelligence</p>
-            <span className="live-analysis"><Activity size={13} /> Live context</span>
+            <p className="card-kicker"><span /> Workspace overview</p>
+            <span className="live-analysis"><Activity size={13} /> Library connected</span>
           </div>
-          <h1>{intelligenceHeadline}</h1>
+          <h1>Your research,<br />in one place.</h1>
           <p className="brief-narrative">{intelligenceNarrative}</p>
 
           <button className="intelligence-composer" type="button" onClick={() => openChat(currentPaper ?? null)}>
             <span className="composer-orb"><BrainCircuit size={19} /></span>
             <span>
-              <strong>Ask across your library</strong>
-              <small>Synthesize evidence, trace a claim, or find the missing paper</small>
+              <strong>Ask your library</strong>
+              <small>Summarize papers, compare findings, or find related work</small>
             </span>
-            <span className="composer-action"><Sparkles size={14} /> Think with Stacks</span>
+            <span className="composer-action"><Sparkles size={14} /> Open AI feed</span>
           </button>
 
           <div className="intelligence-prompts" aria-label="Suggested research directions">
-            <button type="button" onClick={() => openChat(currentPaper ?? null)}><GitBranch size={13} /> Map the debate</button>
-            <button type="button" onClick={() => openChat(currentPaper ?? null)}><Lightbulb size={13} /> Find a counterpoint</button>
-            <button type="button" onClick={() => openChat(currentPaper ?? null)}><Telescope size={13} /> Expose a research gap</button>
+            <button type="button" onClick={() => openChat(currentPaper ?? null)}><GitBranch size={13} /> Compare papers</button>
+            <button type="button" onClick={() => openChat(currentPaper ?? null)}><Lightbulb size={13} /> Summarize notes</button>
+            <button type="button" onClick={() => openChat(currentPaper ?? null)}><Telescope size={13} /> Find related work</button>
           </div>
 
           <div className="signal-metrics">
             <button type="button" onClick={() => setView("library")}><strong>{snapshot.stats.papers}</strong><span>sources</span></button>
-            <button type="button" onClick={() => setView("collections")}><strong>{snapshot.collections.length}</strong><span>themes</span></button>
-            <button type="button" onClick={() => setView("authors")}><strong>{recurringAuthors}</strong><span>recurring voices</span></button>
-            <button type="button" onClick={() => setView("library")}><strong>{readingProgress}%</strong><span>processed</span></button>
+            <button type="button" onClick={() => setView("collections")}><strong>{snapshot.collections.length}</strong><span>collections</span></button>
+            <button type="button" onClick={() => setView("authors")}><strong>{recurringAuthors}</strong><span>repeat authors</span></button>
+            <button type="button" onClick={() => setView("library")}><strong>{readingProgress}%</strong><span>reviewed</span></button>
           </div>
         </article>
 
@@ -1261,7 +1256,7 @@ function Dashboard({
           <div className="signal-map-heading">
             <div>
               <p className="eyebrow">Knowledge signal</p>
-              <h2>Library topology</h2>
+              <h2>Library connections</h2>
             </div>
             <span>{snapshot.stats.recent} new</span>
           </div>
@@ -1288,8 +1283,8 @@ function Dashboard({
             ) : null}
           </button>
           <div className="map-caption">
-            <span><i /> Connected themes</span>
-            <TextButton onClick={() => setView("collections")} trailingIcon={<ArrowRight />}>Explore map</TextButton>
+            <span><i /> Collections</span>
+            <TextButton onClick={() => setView("collections")} trailingIcon={<ArrowRight />}>View collections</TextButton>
           </div>
         </aside>
       </section>
@@ -1297,17 +1292,17 @@ function Dashboard({
       <section className="intelligence-rail" aria-label="Library pulse">
         <button type="button" onClick={() => setView("library")}>
           <span className="rail-icon"><Library size={16} /></span>
-          <span><small>Evidence base</small><strong>{snapshot.stats.papers} papers indexed</strong></span>
+          <span><small>Library</small><strong>{snapshot.stats.papers} papers indexed</strong></span>
           <ArrowUpRight size={14} />
         </button>
         <button type="button" onClick={() => setView("authors")}>
           <span className="rail-icon cyan"><UsersRound size={16} /></span>
-          <span><small>Network depth</small><strong>{snapshot.stats.authors} voices · {recurringAuthors} recurring</strong></span>
+          <span><small>Authors</small><strong>{snapshot.stats.authors} authors · {recurringAuthors} repeat</strong></span>
           <ArrowUpRight size={14} />
         </button>
         <button type="button" onClick={() => setView("library")}>
           <span className="rail-icon green"><Activity size={16} /></span>
-          <span><small>Reading pulse</small><strong>{completedPapers} read · {snapshot.stats.active} active</strong></span>
+          <span><small>Reading status</small><strong>{completedPapers} read · {snapshot.stats.active} active</strong></span>
           <ArrowUpRight size={14} />
         </button>
       </section>
@@ -1347,7 +1342,7 @@ function Dashboard({
           <div className="section-title-row">
             <div>
               <p className="eyebrow">Reading progress</p>
-              <h3>{readingProgress}% synthesized</h3>
+              <h3>{readingProgress}% reviewed</h3>
             </div>
             <span className="metric-ring" style={{ "--progress": `${readingProgress * 3.6}deg` } as React.CSSProperties}>
               <span>{readingProgress}</span>
@@ -1359,11 +1354,11 @@ function Dashboard({
             <div><span>Inbox</span><i><b className="bar-amber" style={{ width: `${Math.max(8, (snapshot.stats.unread / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.unread}</strong></div>
           </div>
           <div>
-            <p className="next-action-label"><Sparkles size={13} /> Suggested next move</p>
+            <p className="next-action-label"><Sparkles size={13} /> Queue status</p>
             <p className="next-action-copy">
               {snapshot.stats.unread
-                ? `Triage ${snapshot.stats.unread} unread ${snapshot.stats.unread === 1 ? "paper" : "papers"} before the next synthesis pass.`
-                : "Your inbox is clear. Extend the evidence base with a targeted discovery search."}
+                ? `${snapshot.stats.unread} unread ${snapshot.stats.unread === 1 ? "paper is" : "papers are"} waiting in your library.`
+                : "Your reading inbox is clear."}
             </p>
           </div>
           <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>Review reading queue</TextButton>
@@ -1373,8 +1368,8 @@ function Dashboard({
       <section className="recent-panel">
         <div className="section-title-row">
           <div>
-            <p className="eyebrow">Evidence stream</p>
-            <h3>Recently connected</h3>
+            <p className="eyebrow">Library activity</p>
+            <h3>Recently added</h3>
           </div>
           <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>View all</TextButton>
         </div>
@@ -1514,6 +1509,9 @@ function LibraryView({
     status: 88,
   };
   const resizablePaperColumnTotal = effectivePaperColumnWidths.title + effectivePaperColumnWidths.venue;
+  const readingCount = papers.filter((paper) => paper.readingStatus === "reading").length;
+  const inboxCount = papers.filter((paper) => paper.readingStatus === "inbox").length;
+  const favoriteCount = papers.filter((paper) => paper.favorite).length;
 
   function toggleSort(key: PaperColumnKey) {
     setSort((current) => current.key === key
@@ -1551,7 +1549,19 @@ function LibraryView({
   }
 
   return (
-    <div className="data-view">
+    <div className="data-view workspace-view">
+      <WorkspaceHeader
+        eyebrow="Research library"
+        title="Paper library"
+        detail="Read, filter, organize, and manage every paper from one workspace."
+        icon={<Library size={22} />}
+        metrics={[
+          { label: "Papers", value: papers.length, detail: "in the library", tone: "blue" },
+          { label: "Reading", value: readingCount, detail: "in progress", tone: "aqua" },
+          { label: "Inbox", value: inboxCount, detail: "to review", tone: "violet" },
+          { label: "Starred", value: favoriteCount, detail: "saved as favorites", tone: "amber" },
+        ]}
+      />
       <div className="view-toolbar library-toolbar">
         <PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search titles, authors, venues…" />
         <button type="button" className={`filter-builder-toggle ${filterBuilderOpen ? "is-open" : ""} ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} aria-pressed={filterBuilderOpen} title={filterBuilderOpen ? "Close library filters" : "Build library filters"}><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
@@ -1799,6 +1809,10 @@ function AuthorsView({
   const currentPage = Math.min(page, pageCount);
   const pagedAuthors = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const authorColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
+  const repeatAuthors = authors.filter((author) => author.paperCount > 1).length;
+  const latestAuthorYear = authors.reduce<number | null>((latest, author) => (
+    author.latestYear !== null && (latest === null || author.latestYear > latest) ? author.latestYear : latest
+  ), null);
   function toggleSort(key: typeof sort.key) {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
@@ -1813,7 +1827,18 @@ function AuthorsView({
     setSelected(Array.from(new Set([...selected, ...visibleIds])));
   }
   return (
-    <div className="data-view">
+    <div className="data-view workspace-view">
+      <WorkspaceHeader
+        eyebrow="Research graph"
+        title="Authors"
+        detail="Browse the people represented across your library and open their papers."
+        icon={<UsersRound size={22} />}
+        metrics={[
+          { label: "Authors", value: authors.length, detail: "profiles", tone: "blue" },
+          { label: "Repeat authors", value: repeatAuthors, detail: "with multiple papers", tone: "violet" },
+          { label: "Latest year", value: latestAuthorYear ?? "—", detail: "most recent publication", tone: "aqua" },
+        ]}
+      />
       <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search author names…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add author" />
       <div className="data-grid-shell author-table-wrap">
         <TablePagination
@@ -1930,6 +1955,11 @@ function VenuesView({
   const currentPage = Math.min(page, pageCount);
   const pagedVenues = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const venueColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
+  const journalCount = venues.filter((venue) => venue.type.toLowerCase().includes("journal")).length;
+  const conferenceCount = venues.filter((venue) => venue.type.toLowerCase().includes("conference")).length;
+  const latestVenueYear = venues.reduce<number | null>((latest, venue) => (
+    venue.latestYear !== null && (latest === null || venue.latestYear > latest) ? venue.latestYear : latest
+  ), null);
   function toggleSort(key: typeof sort.key) {
     setSort((current) => current.key === key
       ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
@@ -1944,7 +1974,19 @@ function VenuesView({
     setSelected(Array.from(new Set([...selected, ...visibleIds])));
   }
   return (
-    <div className="data-view">
+    <div className="data-view workspace-view">
+      <WorkspaceHeader
+        eyebrow="Publication index"
+        title="Venues"
+        detail="Track conferences, journals, workshops, and publishers represented in the library."
+        icon={<Building2 size={22} />}
+        metrics={[
+          { label: "Venues", value: venues.length, detail: "indexed", tone: "blue" },
+          { label: "Conferences", value: conferenceCount, detail: "conference records", tone: "violet" },
+          { label: "Journals", value: journalCount, detail: "journal records", tone: "green" },
+          { label: "Latest year", value: latestVenueYear ?? "—", detail: "most recent publication", tone: "aqua" },
+        ]}
+      />
       <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search venue names, types, and publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add venue" />
       <div className="data-grid-shell venue-table-wrap">
         <TablePagination
@@ -2048,21 +2090,24 @@ function CollectionsView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedCollections = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const paperAssignments = collections.reduce((total, collection) => total + collection.paperCount, 0);
+  const ungroupedPapers = papers.filter((paper) => !paper.collections.length).length;
+  const largestCollection = collections.reduce((largest, collection) => Math.max(largest, collection.paperCount), 0);
   return (
-    <div className="data-view collections-view">
+    <div className="data-view collections-view workspace-view">
+      <WorkspaceHeader
+        eyebrow="Research organization"
+        title="Collections"
+        detail="Group papers into reusable research sets without moving or duplicating files."
+        icon={<FolderOpen size={22} />}
+        metrics={[
+          { label: "Collections", value: collections.length, detail: "research sets", tone: "blue" },
+          { label: "Assignments", value: paperAssignments, detail: "paper links", tone: "violet" },
+          { label: "Ungrouped", value: ungroupedPapers, detail: "papers", tone: "amber" },
+          { label: "Largest", value: largestCollection, detail: "papers in one set", tone: "aqua" },
+        ]}
+      />
       <div className="view-toolbar compact-toolbar"><PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search collections…" /><ToolbarCreateButton label="Add collection" onClick={onCreate} /></div>
-      {filtered.length ? (
-        <TablePagination
-          page={currentPage}
-          pageSize={pageSize}
-          total={filtered.length}
-          itemLabel="collections"
-          pageSizeOptions={[6, 9, 12]}
-          pageSizeLabel="Collections"
-          onPageChange={setPage}
-          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
-        />
-      ) : null}
       <div className="collection-grid">
         {pagedCollections.map((collection) => (
           <CollectionCard
@@ -2506,7 +2551,25 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
   const pagedResults = results.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
-    <div className="discover-view">
+    <div className="discover-view workspace-view">
+      <WorkspaceHeader
+        eyebrow="External search"
+        title="Discover papers"
+        detail="Search academic sources, inspect the metadata, and add selected results to your library."
+        icon={<Telescope size={22} />}
+        actions={(
+          <>
+            <ActionButton variant="secondary" size="small" onClick={onSearchLibrary} icon={<Search />}>Search library</ActionButton>
+            <ActionButton variant="primary" size="small" onClick={onImport} icon={<Plus />}>Import paper</ActionButton>
+          </>
+        )}
+        metrics={[
+          { label: "Sources", value: discoveryProviders.length, detail: "search providers", tone: "blue" },
+          { label: "Active source", value: providerLabel(provider), detail: "selected provider", tone: "violet" },
+          { label: "Results", value: results.length, detail: query.trim() ? "current search" : "not searched", tone: "aqua" },
+          { label: "Added", value: added.length, detail: "this session", tone: "green" },
+        ]}
+      />
       <form className="discover-search" onSubmit={search}>
         <div className="provider-switch">
           <span>Search in</span>
@@ -2531,8 +2594,8 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
       {!results.length && !loading ? (
         <div className="discovery-intro">
           <div className="discovery-orbit"><span /><span /><span /><Sparkles size={28} /></div>
-          <h2>Search beyond your library.</h2>
-          <p>Authors, links, and IDs are kept intact.</p>
+          <h2>Start with a topic or identifier.</h2>
+          <p>Search results retain available authors, links, and scholarly identifiers.</p>
           <div className="prompt-suggestions">
             {["long-context retrieval agents", "human AI literature review", "scholarly knowledge graphs"].map((suggestion) => (
               <Chip key={suggestion} tone="neutral" onClick={() => setQuery(suggestion)} icon={<WandSparkles />}>{suggestion}</Chip>
