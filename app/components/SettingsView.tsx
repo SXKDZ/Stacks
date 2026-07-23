@@ -1375,7 +1375,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
       });
       if (!response.ok) throw new Error(await readError(response));
       const { id } = await response.json() as { id: string };
-      notify("Workflow started — follow it in the feed.", "success");
+      notify("Workflow started. Follow it in the feed.", "success");
       window.open(`/feed?snippet=${encodeURIComponent(id)}`, "_blank", "noopener,noreferrer");
     } catch (error) {
       notify(error instanceof Error ? error.message : "The workflow could not be started.", "error");

@@ -22,7 +22,7 @@ export default function Error({
       </span>
       <h1>Something went wrong</h1>
       <p>
-        The workspace hit an unexpected error. Your library is safe — reloading this
+        The workspace hit an unexpected error. Your library is safe. Reloading this
         view usually clears it.
       </p>
       {error.digest ? <code className="error-boundary-digest">Reference: {error.digest}</code> : null}

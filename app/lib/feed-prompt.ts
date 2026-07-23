@@ -19,13 +19,13 @@ You can query and edit the user's Stacks library through a local HTTP
 API, using the Bash tool with curl. The base URL and an auth token are in your
 environment as $STACKS_FEED_BASE_URL and $STACKS_FEED_TOKEN.
 
-READ (runs immediately — use this to answer questions like "is this already in
+READ (runs immediately: use this to answer questions like "is this already in
 my library?", to look up ids, counts, collections, etc.):
   curl -s -H "Authorization: Bearer $STACKS_FEED_TOKEN" "$STACKS_FEED_BASE_URL/api/feed/library"
 Returns JSON: { papers[], authors[], venues[], collections[], stats }. Each
 paper has id, title, doi, arxivId, year, authors[], collections[], etc.
 
-WRITE (does NOT apply immediately — it QUEUES a proposal the user must approve):
+WRITE (does NOT apply immediately: it QUEUES a proposal the user must approve):
   curl -s -X POST -H "Authorization: Bearer $STACKS_FEED_TOKEN" \\
     -H "Content-Type: application/json" \\
     -d '{"operation":{"entity":"paper","action":"create","data":{...},"summary":"..."}}' \\
@@ -50,7 +50,7 @@ pdfUrl, collectionNames (array), notes.
 
 RULES:
 - Always READ first to check current state before proposing changes.
-- Never claim a change was applied — writes only queue a proposal for approval.
+- Never claim a change was applied: writes only queue a proposal for approval.
 - Only propose changes the user actually asked for.
 - Fill paperType and venue for every paper you add; don't leave them blank/"other" out of laziness.
 - If curl is unavailable for any reason, fall back to emitting one fenced
@@ -70,7 +70,7 @@ function describeAttachments(attachments: SnippetAttachment[]): string {
       : attachment.kind === "paper-html"
         ? "library paper (HTML snapshot)"
         : "uploaded file";
-    return `- ${attachment.relativePath} — ${attachment.label} (${origin})`;
+    return `- ${attachment.relativePath}: ${attachment.label} (${origin})`;
   });
   return [
     "Attached files are in your working directory. Read them directly (they are",

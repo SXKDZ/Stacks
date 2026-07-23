@@ -2025,7 +2025,7 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
       </div>
       {papers.length > pageSize ? (
         <div className="collection-card-pagination">
-          <span>{start}–{end} of {papers.length}</span>
+          <span>{start}-{end} of {papers.length}</span>
           <PaginationPageNav
             page={currentPage}
             pageCount={pageCount}
@@ -2295,7 +2295,7 @@ function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [
   }
   return (
     <div className="table-pagination">
-      <span>Showing {start}–{end} of {total} {itemLabel}</span>
+      <span>Showing {start}-{end} of {total} {itemLabel}</span>
       <div className="table-pagination-controls">
         <div className="page-size-control">
           <span>{pageSizeLabel}</span>
@@ -3125,7 +3125,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify, onPaperTypeChan
       {visible.venueName ? <VenueFields venues={venues} label={venueLabel} defaultName={paper?.venueName ?? ""} defaultAcronym={paper?.venueAcronym ?? ""} placeholder={paperType === "preprint" ? "arXiv" : "Neural Information Processing Systems"} showAcronym={visible.venueAcronym} span={paperType !== "preprint"} /> : null}
       {visible.volumeIssue ? <label><span>Volume</span><input name="volume" defaultValue={paper?.volume ?? ""} placeholder="42" /></label> : null}
       {visible.volumeIssue ? <label><span>Issue</span><input name="issue" defaultValue={paper?.issue ?? ""} placeholder="3" /></label> : null}
-      {visible.pages ? <label><span>Pages</span><input name="pages" defaultValue={paper?.pages ?? ""} placeholder="101–118" /></label> : null}
+      {visible.pages ? <label><span>Pages</span><input name="pages" defaultValue={paper?.pages ?? ""} placeholder="101-118" /></label> : null}
       {visible.preprint ? <label><span>Category</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
       {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? paper?.arxivId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
@@ -3971,7 +3971,7 @@ function TransferPagination({ page, total, pageSize, onPageChange, label }: {
   const end = Math.min(currentPage * pageSize, total);
   return (
     <div className="transfer-pagination">
-      <span>{start}–{end} of {total}</span>
+      <span>{start}-{end} of {total}</span>
       <PaginationPageNav
         page={currentPage}
         pageCount={pageCount}

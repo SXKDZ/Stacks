@@ -93,7 +93,7 @@ function markdownEntry(paper: Paper): string {
   const authors = paper.authors.map((author) => author.displayName).join(", ") || "Unknown authors";
   const venue = clean(paper.venueAcronym) || clean(paper.venueName);
   const link = paper.url || paper.pdfUrl;
-  return `- **${paper.title}** — ${authors}${venue ? `, *${venue}*` : ""}${paper.year ? ` (${paper.year})` : ""}${paper.doi ? `. DOI: ${paper.doi}` : ""}${link ? ` [Source](${link})` : ""}`;
+  return `- **${paper.title}**. ${authors}${venue ? `, *${venue}*` : ""}${paper.year ? ` (${paper.year})` : ""}${paper.doi ? `. DOI: ${paper.doi}` : ""}${link ? ` [Source](${link})` : ""}`;
 }
 
 function escapeHtml(value: string): string {
