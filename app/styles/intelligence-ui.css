@@ -210,27 +210,34 @@ body {
 
 .workspace {
   max-width: 1500px;
-  padding: 30px 36px 64px;
+  padding: 26px 36px 30px;
 }
 
+/* The overview fills one screen: a fixed-height flex column (viewport minus the
+   68px topbar and the workspace's vertical padding) split into the hero stage
+   and the focus grid, each taking a share of the height so nothing scrolls. */
 .intelligence-home {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  height: calc(100vh - 68px - 56px);
+  min-height: 540px;
 }
 
 .intelligence-stage {
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1.5fr) minmax(330px, 0.7fr);
+  flex: 1.35;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.7fr);
+  min-height: 0;
 }
 
 .research-brief-card,
 .signal-map-card {
   border: 1px solid rgba(255, 255, 255, 0.085);
-  border-radius: 22px;
+  border-radius: 20px;
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  min-height: 432px;
+  min-height: 0;
   overflow: hidden;
   position: relative;
 }
@@ -240,7 +247,15 @@ body {
     radial-gradient(640px 380px at 98% -8%, rgba(70, 171, 255, 0.16), transparent 64%),
     radial-gradient(520px 340px at 58% 114%, rgba(139, 124, 255, 0.16), transparent 66%),
     linear-gradient(145deg, rgba(19, 24, 42, 0.98), rgba(10, 13, 24, 0.98));
-  padding: clamp(28px, 3.2vw, 46px);
+  display: flex;
+  flex-direction: column;
+  padding: clamp(22px, 2.6vw, 34px);
+}
+
+/* The composer and quick prompts sink to the bottom of the hero so the title
+   and narrative sit up top and the card fills its height without dead space. */
+.research-brief-card .intelligence-composer {
+  margin-top: auto;
 }
 
 .research-brief-card::before {
@@ -290,11 +305,11 @@ body {
 
 .research-brief-card h1 {
   font-family: var(--font-display);
-  font-size: clamp(30px, 3.6vw, 52px);
+  font-size: clamp(27px, 2.7vw, 40px);
   font-weight: 680;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-  margin: 38px 0 15px;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin: clamp(14px, 2vh, 26px) 0 12px;
   max-width: 780px;
   position: relative;
   text-wrap: balance;
@@ -751,13 +766,66 @@ body {
 
 .focus-grid {
   display: grid;
-  gap: 16px;
+  flex: 1;
+  gap: 14px;
   grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.55fr);
+  min-height: 0;
 }
 
 .focus-grid .continue-card {
   grid-column: auto;
-  min-height: 300px;
+  min-height: 0;
+}
+
+/* The right column of the reading card: an informative facts panel (status,
+   collections, source, updated) replacing the old decorative document mockup. */
+.continue-facts {
+  align-content: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 24px 26px;
+}
+
+.continue-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.continue-facts dt {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  font-weight: 750;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.continue-facts dd {
+  color: var(--ink);
+  font-size: var(--type-control);
+  font-weight: 560;
+  margin: 0;
+}
+
+.continue-fact-chips {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.continue-fact-more {
+  color: var(--soft);
+  font-size: var(--type-caption);
+  font-weight: 650;
+}
+
+.continue-fact-empty {
+  color: var(--soft);
+  font-weight: 500;
 }
 
 .focus-grid .insight-card {
@@ -951,22 +1019,19 @@ body {
   box-shadow: 0 12px 36px rgba(29, 52, 88, 0.07);
 }
 
-/* The reading-thread hero keeps its rich dark gradient in both themes (like the
-   AI feed card), so its text must stay light in light mode: the base theme
-   otherwise darkens the title, kicker, abstract, and byline onto a dark card.
-   Matches .focus-grid .continue-card specificity so it wins in the cascade. */
+/* The reading-thread hero is a light card in light theme (the base rule forces a
+   dark gradient, so override the surface at matching specificity). Text uses the
+   theme ink tokens, so no per-element color override is needed. */
 [data-theme="light"] .focus-grid .continue-card {
-  color: #eef3fb;
+  background:
+    radial-gradient(500px 280px at 90% 25%, rgba(22, 141, 236, 0.12), transparent 66%),
+    linear-gradient(135deg, #ffffff, #eef5fd);
+  border-color: rgba(37, 60, 99, 0.12);
+  color: var(--ink);
 }
 
-[data-theme="light"] .focus-grid .continue-card .continue-copy h2 {
-  color: #f4f7ff;
-}
-
-[data-theme="light"] .focus-grid .continue-card .card-kicker,
-[data-theme="light"] .focus-grid .continue-card .paper-byline,
-[data-theme="light"] .focus-grid .continue-card .continue-abstract {
-  color: #aeb9cf;
+[data-theme="light"] .continue-facts {
+  border-left-color: rgba(37, 60, 99, 0.12);
 }
 
 @media (max-width: 1180px) {

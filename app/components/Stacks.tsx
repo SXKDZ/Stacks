@@ -955,7 +955,6 @@ function StacksWorkspace() {
 
           <div className="topbar-context">
             <span>{navigation.find((item) => item.id === view)?.label ?? "Workspace"}</span>
-            <small><i /> Library connected</small>
           </div>
           <button className="global-search" onClick={() => setCommandOpen(true)}>
             <Search size={17} />
@@ -1205,7 +1204,6 @@ function Dashboard({
   setView: (view: ViewId) => void;
   openChat: (paper: Paper | null) => void;
 }) {
-  const recentPapers = snapshot.papers.slice(0, 8);
   const readingProgress = snapshot.stats.papers
     ? Math.round(((snapshot.stats.papers - snapshot.stats.unread) / snapshot.stats.papers) * 100)
     : 0;
@@ -1221,10 +1219,6 @@ function Dashboard({
     <div className="intelligence-home">
       <section className="intelligence-stage">
         <article className="research-brief-card">
-          <div className="brief-status-row">
-            <p className="card-kicker"><span /> Workspace overview</p>
-            <span className="live-analysis"><Activity size={13} /> Library connected</span>
-          </div>
           <h1>Your research,<br />in one place.</h1>
           <p className="brief-narrative">{intelligenceNarrative}</p>
 
@@ -1288,52 +1282,40 @@ function Dashboard({
         </aside>
       </section>
 
-      <section className="intelligence-rail" aria-label="Library pulse">
-        <button type="button" onClick={() => setView("library")}>
-          <span className="rail-icon"><Library size={16} /></span>
-          <span><small>Library</small><strong>{snapshot.stats.papers} papers indexed</strong></span>
-          <ArrowUpRight size={14} />
-        </button>
-        <button type="button" onClick={() => setView("authors")}>
-          <span className="rail-icon cyan"><UsersRound size={16} /></span>
-          <span><small>Authors</small><strong>{snapshot.stats.authors} authors · {recurringAuthors} repeat</strong></span>
-          <ArrowUpRight size={14} />
-        </button>
-        <button type="button" onClick={() => setView("library")}>
-          <span className="rail-icon green"><Activity size={16} /></span>
-          <span><small>Reading status</small><strong>{completedPapers} read · {snapshot.stats.active} active</strong></span>
-          <ArrowUpRight size={14} />
-        </button>
-      </section>
-
       <section className="focus-grid">
         {currentPaper ? (
           <article className="continue-card">
             <div className="continue-copy">
-              <p className="card-kicker"><span /> {currentPaper.readingStatus === "reading" ? "Active reading thread" : "Latest paper"}</p>
+              <p className="card-kicker"><span /> {currentPaper.readingStatus === "reading" ? "Continue reading" : "Most recent paper"}</p>
               <h2>{currentPaper.title}</h2>
-              <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
               <div className="paper-byline">
                 <span>{fullAuthorLine(currentPaper)}</span>
                 <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
               </div>
+              <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
               <div className="continue-actions">
                 <ActionButton variant="primary" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
                 <ActionButton variant="secondary" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Discuss in feed</ActionButton>
               </div>
             </div>
-            <div className="continue-visual" aria-hidden="true">
-              <div className="document-stack document-back" />
-              <div className="document-stack document-middle" />
-              <div className="document-sheet">
-                <div className="sheet-label">FOCUS / {new Date().getFullYear()}</div>
-                <div className="sheet-title" />
-                <div className="sheet-title short" />
-                <div className="sheet-rule" />
-                <div className="sheet-lines"><span /><span /><span /><span /></div>
-                <div className="sheet-chart"><i /><i /><i /><i /><i /></div>
+            <dl className="continue-facts">
+              <div>
+                <dt>Status</dt>
+                <dd><StatusPill status={currentPaper.readingStatus} /></dd>
               </div>
-            </div>
+              <div>
+                <dt>Collections</dt>
+                <dd>{currentPaper.collections.length ? <div className="continue-fact-chips">{currentPaper.collections.slice(0, 3).map((collection) => <CollectionChip key={collection.id} size="small" name={collection.name} color={collection.color} onClick={() => setView("collections")} />)}{currentPaper.collections.length > 3 ? <span className="continue-fact-more">+{currentPaper.collections.length - 3}</span> : null}</div> : <span className="continue-fact-empty">Not in a collection</span>}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd>{currentPaper.localPath ? "PDF saved" : currentPaper.htmlSnapshotPath ? "Web page saved" : currentPaper.pdfUrl || currentPaper.url ? "Link only" : "No source"}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd>{formatDate(currentPaper.updatedAt || currentPaper.addedAt)}</dd>
+              </div>
+            </dl>
           </article>
         ) : null}
 
@@ -1362,28 +1344,6 @@ function Dashboard({
           </div>
           <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>Review reading queue</TextButton>
         </aside>
-      </section>
-
-      <section className="recent-panel">
-        <div className="section-title-row">
-          <div>
-            <p className="eyebrow">Library activity</p>
-            <h3>Recently added</h3>
-          </div>
-          <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>View all</TextButton>
-        </div>
-        <div className="recent-list">
-          {recentPapers.map((paper) => (
-            <article className="recent-row" key={paper.id}>
-              <span className={`type-tile type-${paper.paperType}`}><FileText size={18} /></span>
-              <span className="recent-copy">
-                <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
-                <span className="recent-meta"><ExpandableAuthorNames paper={paper} /><span>{venueLine(paper)} {paper.year}</span></span>
-              </span>
-              <StatusPill className="recent-row-status" status={paper.readingStatus} />
-            </article>
-          ))}
-        </div>
       </section>
     </div>
   );
