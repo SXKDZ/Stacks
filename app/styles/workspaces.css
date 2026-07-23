@@ -1795,3 +1795,36 @@
     display: inline-flex;
   }
 }
+
+/* --- Card radius consolidation -------------------------------------------
+   One curve for every top-level panel/card surface across the app, so the
+   library dashboard, settings panels, feed, reader, and modals share the same
+   rounded corner. Loaded last so it wins over the per-component declarations
+   that had drifted between md/control/lg. Inner controls (inputs, chips,
+   buttons, tiles) keep their own smaller radii. */
+.stat-card,
+.insight-card,
+.recent-panel,
+.continue-card,
+.collection-card,
+.discovery-result,
+.settings-card,
+.integration-list,
+.prompt-settings-card,
+.sync-status-card,
+.version-status-card,
+.storage-location-card,
+.storage-doctor-card,
+.github-inbox-card,
+.feed-skills-list,
+.feed-skills-editor,
+.modal-card,
+.add-modal,
+.command-card,
+.detail-drawer,
+.paper-table-wrap,
+.author-table-wrap,
+.venue-table-wrap,
+.data-grid-shell {
+  border-radius: var(--radius-lg);
+}
