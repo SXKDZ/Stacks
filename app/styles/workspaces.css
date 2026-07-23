@@ -1546,14 +1546,70 @@
 }
 
 .feed-proposal {
-  align-items: center;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  padding: 11px 13px;
+}
+
+.feed-proposal-row {
+  align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  padding: 11px 13px;
+}
+
+.feed-proposal-summary svg {
+  color: var(--soft);
+  flex-shrink: 0;
+}
+
+.feed-proposal.is-expanded {
+  border-color: color-mix(in srgb, var(--brand-blue) 30%, var(--line-strong));
+}
+
+/* Structured operation view inside an expanded card. */
+.feed-proposal-detail {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.feed-proposal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.feed-proposal-field {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 118px minmax(0, 1fr);
+}
+
+.feed-proposal-field > span {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding-top: 1px;
+  text-transform: uppercase;
+}
+
+.feed-proposal-field > strong {
+  color: var(--ink);
+  font-size: var(--type-caption);
+  font-weight: 500;
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feed-proposal-json summary {
+  color: var(--soft);
 }
 
 .feed-proposal-applied {
@@ -1565,16 +1621,25 @@
   opacity: 0.7;
 }
 
+/* The card body is a button: click to expand the structured change details. */
 .feed-proposal-body {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  padding: 0;
+  text-align: left;
 }
 
 .feed-proposal-summary {
+  align-items: center;
   color: var(--ink);
+  display: flex;
   font-size: var(--type-body);
+  gap: 6px;
 }
 
 .feed-proposal-status {

@@ -57,6 +57,54 @@ function proposalTags(operation: string): string[] {
   }
 }
 
+/** "venueAcronym" → "Venue acronym" for the structured proposal fields. */
+function fieldLabel(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Render a proposal data value as a readable line (arrays joined, objects as JSON). */
+function fieldValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(", ");
+  return JSON.stringify(value);
+}
+
+/** The expanded view of a proposal card: the operation's fields as labeled rows,
+ *  with the raw JSON tucked in a collapsible block underneath (this replaces the
+ *  separate "Proposed changes (raw)" dump that used to sit next to the cards). */
+function ProposalDetails({ operation }: { operation: string }) {
+  interface ProposalOperation { entity?: string; action?: string; id?: string; data?: Record<string, unknown> }
+  let op: ProposalOperation | null = null;
+  let pretty = operation;
+  try {
+    const parsed = JSON.parse(operation) as ProposalOperation;
+    op = parsed;
+    pretty = JSON.stringify(parsed, null, 2);
+  } catch {
+    // Unparseable operation: fall through to the raw block alone.
+  }
+  const fields = Object.entries(op?.data ?? {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
+  return (
+    <div className="feed-proposal-detail">
+      {op ? (
+        <div className="feed-proposal-fields">
+          <div className="feed-proposal-field"><span>Action</span><strong>{[op.action, op.entity].filter(Boolean).join(" ") || "unknown"}</strong></div>
+          {op.id ? <div className="feed-proposal-field"><span>Target</span><strong>{op.id}</strong></div> : null}
+          {fields.map(([key, value]) => (
+            <div key={key} className="feed-proposal-field"><span>{fieldLabel(key)}</span><strong>{fieldValue(value)}</strong></div>
+          ))}
+        </div>
+      ) : null}
+      <details className="feed-tool-call feed-proposal-json">
+        <summary><Code2 size={12} /> <span>Raw JSON</span></summary>
+        <div className="feed-tool-io"><MarkdownContent content={toolFence(pretty, "json")} className="feed-tool-md" /></div>
+      </details>
+    </div>
+  );
+}
+
 interface FeedSnippet {
   id: string;
   title: string;
@@ -447,6 +495,8 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
   const [replying, setReplying] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolvingAll, setResolvingAll] = useState<"approve" | "reject" | null>(null);
+  // Which proposal card is expanded to its structured change details.
+  const [expandedProposal, setExpandedProposal] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
@@ -637,25 +687,39 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
             </div>
           ) : null}
         </div>
-        {list.map((proposal) => (
-          <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status}`}>
-            <div className="feed-proposal-body">
-              {proposalTags(proposal.operation).length ? (
-                <div className="feed-proposal-tags">
-                  {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
-                </div>
-              ) : null}
-              <span className="feed-proposal-summary">{proposal.summary}</span>
-              <span className="feed-proposal-status">{proposal.status}</span>
-            </div>
-            {proposal.status === "pending" ? (
-              <div className="feed-proposal-actions">
-                <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
-                <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+        {list.map((proposal) => {
+          const expanded = expandedProposal === proposal.id;
+          return (
+            <div key={proposal.id} className={`feed-proposal feed-proposal-${proposal.status} ${expanded ? "is-expanded" : ""}`}>
+              <div className="feed-proposal-row">
+                <button
+                  type="button"
+                  className="feed-proposal-body"
+                  onClick={() => setExpandedProposal(expanded ? null : proposal.id)}
+                  aria-expanded={expanded}
+                >
+                  {proposalTags(proposal.operation).length ? (
+                    <div className="feed-proposal-tags">
+                      {proposalTags(proposal.operation).map((tag) => <span key={tag} className="feed-proposal-tag">{tag}</span>)}
+                    </div>
+                  ) : null}
+                  <span className="feed-proposal-summary">
+                    {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    {proposal.summary}
+                  </span>
+                  <span className="feed-proposal-status">{proposal.status}</span>
+                </button>
+                {proposal.status === "pending" ? (
+                  <div className="feed-proposal-actions">
+                    <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "reject")} icon={<X size={13} />}>Reject</ActionButton>
+                    <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveProposal(proposal.id, "approve")} icon={resolving === proposal.id ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve</ActionButton>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        ))}
+              {expanded ? <ProposalDetails operation={proposal.operation} /> : null}
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -785,7 +849,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
                   </div>,
                 );
               }
-              if (raw) {
+              // The proposal cards below carry the structured details (and raw
+              // JSON) per change, so the block is only dumped as-is when no
+              // cards were parsed out of it (e.g. a malformed agent block).
+              const anchored = proposalsByMessage.get(message.id);
+              if (raw && !anchored) {
                 nodes.push(
                   <details key={`${message.id}-raw`} className="feed-tool-call feed-proposal-raw">
                     <summary><Code2 size={12} /> <span>Proposed changes (raw)</span></summary>
@@ -793,7 +861,6 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
                   </details>,
                 );
               }
-              const anchored = proposalsByMessage.get(message.id);
               if (anchored) {
                 nodes.push(renderProposals(anchored, `props-${message.id}`));
               }
