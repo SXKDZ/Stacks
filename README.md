@@ -185,17 +185,27 @@ version comes from `package.json`, and `CHANGELOG.md` records every release in
 [Keep a Changelog](https://keepachangelog.com) format.
 
 Note user-facing changes under `## [Unreleased]` in `CHANGELOG.md` as you work.
-To cut a release from a clean `main` in sync with origin, with `gh`
-authenticated:
+Releases are tag-driven, so nothing ever pushes directly to the protected
+`main`. From a clean `main` in sync with origin, with `gh` authenticated:
 
 ```bash
-npm run release -- patch      # or minor | major | an explicit X.Y.Z
-npm run release -- minor --dry-run   # preview the plan without changing anything
+npm run release -- minor --dry-run   # preview: version bump + notes, no changes
+npm run release -- minor             # or patch | major | an explicit X.Y.Z
 ```
 
-The script bumps `package.json`, rolls the `Unreleased` notes into a dated
-version entry, commits, tags `vX.Y.Z`, pushes, and publishes a GitHub release
-with those notes. Stacks checks that release feed in Settings → About & updates
-and reports when a newer version is published; it never updates itself, so a
-local install updates by pulling the repo and running `npm install`, and a
-hosted install updates on redeploy.
+`release` **prepares** the release: it bumps `package.json`, rolls the
+`Unreleased` notes into a dated version entry on a `release/vX.Y.Z` branch, and
+opens a PR. Review and merge it like any change (CI must pass). Then tag the
+merge commit to publish:
+
+```bash
+git checkout main && git pull
+git tag -a vX.Y.Z -m "Stacks X.Y.Z" && git push origin vX.Y.Z
+```
+
+The push triggers `.github/workflows/release.yml`, which re-runs lint, typecheck,
+and tests, then creates the GitHub release from that version's `CHANGELOG.md`
+section. Stacks checks that release feed in Settings → About & updates and
+reports when a newer version is published; it never updates itself, so a local
+install updates by pulling the repo and running `npm install`, and a hosted
+install updates on redeploy.
