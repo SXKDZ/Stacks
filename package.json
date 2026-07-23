@@ -13,7 +13,8 @@
     "test": "npm run build && node --test tests/rendered-html.test.mjs tests/schema.test.mjs && node --import tsx --test tests/metadata-normalize.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "audit:colors": "node scripts/generate-color-audit.mjs",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

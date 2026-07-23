@@ -2,7 +2,7 @@ import packageMetadata from "@/package.json";
 
 export const dynamic = "force-dynamic";
 
-const RELEASES_ENDPOINT = "https://api.github.com/repos/SXKDZ/PaperAssistant/releases/latest";
+const RELEASES_ENDPOINT = "https://api.github.com/repos/SXKDZ/Stacks/releases/latest";
 
 function versionParts(value: string): number[] {
   return value.replace(/^v/i, "").split(".").map((part) => Number(part.match(/^\d+/)?.[0] ?? 0));
