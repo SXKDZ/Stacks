@@ -6,6 +6,14 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- The unused drizzle-kit migration folder, config, `db:generate` script, and
+  dependency. `db/bootstrap.ts` is the single, self-migrating schema source and
+  Drizzle remains the query layer.
+- The stale OpenGraph social image and its metadata; a local app serves no
+  shared link previews.
+
 ## [0.1.0] - 2026-07-23
 
 Initial public release.
