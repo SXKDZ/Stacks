@@ -300,6 +300,28 @@ test("enforces paper identifier uniqueness and atomic proposal/seed handling", a
   assert.match(bootstrap, /pragma\("user_version = 1"\)/);
 });
 
+test("surfaces failed agent launches and keeps filters/selection consistent", async () => {
+  const [agent, application] = await Promise.all([
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+  ]);
+  // A pre-spawn failure (disk full, DB locked, bad env) is turned into a visible
+  // "error" status instead of a rejected promise the caller swallows.
+  assert.match(agent, /} catch \(error\) \{[\s\S]*?setStatus\(snippetId, "error"/);
+  // Process listeners attach synchronously after spawn (no await between), and
+  // cleanup only fires for the handle that still owns the run slot.
+  assert.match(agent, /const releaseRun = \(\) => \{[\s\S]*?runs\.get\(snippetId\) === handle/);
+  // stopFeedAndWait escalates to SIGKILL rather than returning with a live
+  // process a second --resume could then race on the same transcript.
+  assert.match(agent, /signalRun\(snippetId, "SIGKILL"\)/);
+  // An unset filter clause is a no-op, not an always-false that hides everything.
+  assert.match(application, /An unset clause[\s\S]*?if \(!clause\.valueId\) \{\s*return true;/);
+  // Selection is pruned to the visible/filtered set so bulk actions never touch
+  // hidden rows.
+  assert.match(application, /Keep the selection confined to currently-visible papers/);
+  assert.match(application, /const visible = new Set\(filtered\.map/);
+});
+
 test("uses integrated sortable table headers without a detached sort control", async () => {
   const [component, styles] = await Promise.all([
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),

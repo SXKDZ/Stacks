@@ -47,7 +47,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import type { AriaAttributes, ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type { AriaAttributes, ChangeEvent, Dispatch, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { readError } from "@/app/lib/http";
@@ -431,6 +431,12 @@ function matchesSearch(values: Array<string | number | null | undefined>, query:
 }
 
 function matchesLibraryClause(paper: Paper, clause: LibraryFilterClause): boolean {
+  // An unset clause (no value chosen yet, or switched to a kind with no options)
+  // must not filter everything out — treat it as always-true so it's a no-op,
+  // even when negated.
+  if (!clause.valueId) {
+    return true;
+  }
   const matches = clause.kind === "author"
     ? paper.authors.some((author) => author.id === clause.valueId)
     : clause.kind === "venue"
@@ -1327,7 +1333,7 @@ function LibraryView({
   filters: LibraryFilterClause[];
   setFilters: (filters: LibraryFilterClause[]) => void;
   selected: string[];
-  setSelected: (value: string[]) => void;
+  setSelected: Dispatch<SetStateAction<string[]>>;
   openPaper: (paper: Paper) => void;
   editSelected: () => void;
   deleteSelected: () => void;
@@ -1387,6 +1393,21 @@ function LibraryView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedPapers = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Keep the selection confined to currently-visible papers. Without this, a
+  // search/status/filter change can hide selected rows while the toolbar still
+  // counts them, so bulk Delete/Export would act on papers not on screen. Prune
+  // whenever the filtered set changes; only write when something actually drops.
+  useEffect(() => {
+    const visible = new Set(filtered.map((paper) => paper.id));
+    setSelected((current) => {
+      const pruned = current.filter((id) => visible.has(id));
+      return pruned.length === current.length ? current : pruned;
+    });
+    // filtered is derived from query/status/filters/papers/sort; keying on its
+    // ids prunes on any of those changes without over-firing on re-sorts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered]);
   const filterOptions = useMemo<Record<LibraryFilterKind, LibraryFilterOption[]>>(() => {
     function collectionOptions() {
       const options = new Map<string, string>();
