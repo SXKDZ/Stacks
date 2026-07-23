@@ -480,9 +480,11 @@
 
 /* Count of library changes awaiting approval, pushed to the far end of the meta
    line so it never sits under the top-right kebab. */
+/* Shared amber pending-approval badge spec (matches .feed-detail-badge); the row
+   variant additionally centers its count and pushes to the end of the meta line. */
 .feed-row-pending {
   align-items: center;
-  background: var(--amber-soft, color-mix(in srgb, var(--amber) 18%, transparent));
+  background: var(--amber-soft);
   border-radius: var(--radius-pill);
   color: var(--amber);
   display: inline-flex;
@@ -492,7 +494,8 @@
   justify-content: center;
   margin-left: auto;
   min-width: 18px;
-  padding: 1px 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
 }
 
 /* No dot separator before the badge: it reads as a standalone pill, and the
@@ -1310,13 +1313,15 @@
 }
 
 .feed-detail-badge {
+  align-items: center;
   background: var(--amber-soft);
   border-radius: var(--radius-pill);
   color: var(--amber);
+  display: inline-flex;
   flex-shrink: 0;
   font-size: var(--type-micro);
   font-weight: 800;
-  padding: 3px 10px;
+  padding: 3px 8px;
   white-space: nowrap;
 }
 
@@ -1601,7 +1606,7 @@
   font-size: var(--type-micro);
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 2px 7px;
+  padding: 3px 7px;
   text-transform: capitalize;
 }
 

@@ -932,12 +932,14 @@ td.number-cell {
   gap: 5px;
 }
 
+/* Shared neutral tag-chip spec (matches .feed-proposal-tag). */
 .result-tags span {
-  background: #f0f3f6;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
   border-radius: var(--radius-sm);
-  color: #7b7381;
+  color: var(--muted);
   font-size: var(--type-micro);
-  padding: 3px 5px;
+  font-weight: 600;
+  padding: 3px 7px;
 }
 
 .drawer-layer,

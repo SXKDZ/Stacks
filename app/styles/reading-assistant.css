@@ -347,7 +347,8 @@
   padding: 19px 21px 16px;
 }
 
-.modal-header h2 {
+.modal-header h2,
+.doctor-modal-head h2 {
   font-family: var(--font-display);
   font-size: var(--type-heading);
   font-weight: 500;

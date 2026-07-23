@@ -172,12 +172,7 @@
   justify-content: space-between;
 }
 
-.doctor-modal-head h2 {
-  color: var(--ink);
-  font-size: var(--type-heading-small);
-  font-weight: 640;
-  margin: 0;
-}
+/* Title spec shared with .modal-header h2 (reading-assistant.css + themes.css). */
 
 .doctor-modal-close {
   align-items: center;
@@ -436,9 +431,11 @@
   width: 100%;
 }
 
+/* Match the 13px heading-to-card and card-to-card rhythm the other settings
+   panels use (heading margin-bottom: 13px; github-inbox-card margin-top: 13px). */
 .settings-storage-section {
   display: grid;
-  gap: 16px;
+  gap: 13px;
 }
 
 .settings-storage-section > .settings-heading {
@@ -450,35 +447,12 @@
   gap: 0;
 }
 
-.storage-location-heading {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  gap: 10px;
-  padding: 14px 16px;
-}
-
-.storage-location-heading > div {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.storage-location-heading strong {
-  font-size: var(--type-body);
-}
-
-.storage-location-heading small,
+/* The location-card header shares .settings-card-title's spec (settings.css). */
 .storage-root-summary small,
 .storage-move-field small {
   color: var(--muted);
   font-size: var(--type-caption);
   line-height: 1.45;
-}
-
-.storage-location-heading small {
-  margin-top: 2px;
 }
 
 .storage-root-summary {

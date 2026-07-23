@@ -189,8 +189,7 @@ textarea::placeholder {
 }
 
 .reading-bars i,
-.status-pill,
-.result-tags span {
+.status-pill {
   background: rgba(255, 255, 255, 0.055);
 }
 
@@ -300,7 +299,6 @@ textarea::placeholder {
 }
 
 .result-meta,
-.result-tags span,
 .results-heading small {
   font-size: var(--type-micro);
 }
@@ -357,7 +355,8 @@ textarea::placeholder {
   font-size: var(--type-micro);
 }
 
-.modal-header h2 {
+.modal-header h2,
+.doctor-modal-head h2 {
   font-size: var(--type-heading);
   font-weight: 680;
 }
