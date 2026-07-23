@@ -1476,6 +1476,7 @@ function PromptEditor({ inputRef, promptKey, value, onChange }: {
       value={value}
       onChange={onChange}
       variables
+      rows={12}
       textareaRef={(node) => { inputRef.current[promptKey] = node; }}
       ariaLabel={`${promptKey === "summarySystem" ? "Summary" : "PDF extraction"} system prompt`}
     />

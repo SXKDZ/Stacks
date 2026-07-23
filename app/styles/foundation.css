@@ -50,8 +50,11 @@
   --muted-strong: var(--muted);
   --surface: var(--panel);
   --scrim: rgba(2, 3, 8, 0.66);
-  /* Brand CTA gradient, applied identically in both themes. */
-  --brand-gradient: linear-gradient(135deg, #168dec 0%, #258de4 52%, #357fd8 100%);
+  /* The single primary-action gradient: sidebar Add paper, primary buttons, and
+     the user chat bubble all use this so every "primary blue" surface matches.
+     Dark theme runs a deeper, richer blue that settles against the dark canvas;
+     the light theme overrides it with a brighter one (see themes.css). */
+  --brand-gradient: linear-gradient(135deg, #1c72d2 0%, #2a5cc2 52%, #3b41b0 100%);
   --cyan: #5fd9e8;
   --cyan-soft: rgba(95, 217, 232, 0.12);
   --amber: #ffcf5c;
@@ -290,11 +293,12 @@ body {
   white-space: nowrap;
 }
 
-/* Sidebar "Add paper" CTA. */
+/* Sidebar "Add paper" CTA. Shares the one --brand-gradient with the primary
+   buttons and the user chat bubble so every primary-blue surface matches. */
 .new-paper-button {
   align-items: center;
-  background-color: var(--brand-cta);
-  border: 1px solid var(--brand-cta-border);
+  background-image: var(--brand-gradient);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-control);
   box-shadow: 0 7px 18px var(--brand-cta-shadow);
   color: #fff;
@@ -306,16 +310,13 @@ body {
   margin: 0 1px 18px;
   min-height: 39px;
   padding: 10px 11px;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), filter var(--motion-fast), transform var(--motion-fast);
 }
 
-/* Use background-color on both states (not the `background` shorthand + a
-   gradient) so the transition animates color→color. Mixing a solid base with a
-   gradient-image hover made background-color flash through white on hover-out. */
 .new-paper-button:hover,
 .new-paper-button:focus-visible {
-  background-color: var(--brand-cta-hover);
-  border-color: var(--brand-cta-border);
+  border-color: rgba(255, 255, 255, 0.2);
+  filter: brightness(1.1);
   transform: translateY(-1px);
 }
 

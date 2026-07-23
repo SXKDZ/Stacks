@@ -1077,7 +1077,7 @@
 
 .settings-card.prompt-settings-card {
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   gap: 0;
   overflow: hidden;

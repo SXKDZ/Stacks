@@ -25,7 +25,7 @@ const actionVariants = cva(
     variants: {
       variant: {
         primary: [
-          "border-white/10 bg-[image:linear-gradient(135deg,#259cf2_0%,#367fdc_50%,#5869dd_100%)] text-white shadow-[0_10px_24px_rgba(37,126,222,0.24),inset_0_1px_0_rgba(255,255,255,0.18)]",
+          "border-white/10 bg-[image:var(--brand-gradient)] text-white shadow-[0_10px_24px_rgba(37,126,222,0.24),inset_0_1px_0_rgba(255,255,255,0.18)]",
           "hover:border-white/20 hover:brightness-110 hover:shadow-[0_14px_30px_rgba(37,126,222,0.32),inset_0_1px_0_rgba(255,255,255,0.22)]",
         ],
         secondary: [

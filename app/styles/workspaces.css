@@ -1410,7 +1410,7 @@
 }
 
 .feed-turn-user .feed-bubble {
-  background: var(--brand-blue);
+  background-image: var(--brand-gradient);
   border-radius: var(--radius-md);
   color: #fff;
   padding: 9px 13px;

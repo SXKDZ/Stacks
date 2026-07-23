@@ -1040,6 +1040,9 @@ textarea::placeholder {
   --brand-blue: #168dec;
   --brand-blue-strong: #086dc4;
   --brand-blue-soft: rgba(22, 141, 236, 0.1);
+  /* A brighter, airier primary gradient for the light canvas, so buttons and the
+     chat bubble stay vivid against white rather than looking heavy. */
+  --brand-gradient: linear-gradient(135deg, #3aa6ff 0%, #4f86f0 52%, #6a6ff0 100%);
   --cyan: #177d8d;
   --cyan-soft: rgba(23, 125, 141, 0.1);
   --amber: #9a6816;
