@@ -437,6 +437,8 @@ textarea::placeholder {
 
 .settings-card-title > span:first-child,
 .integration-icon,
+.storage-doctor-icon,
+.sync-status-icon,
 .command-icon {
   background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
   border-color: color-mix(in srgb, var(--brand-blue) 22%, transparent);

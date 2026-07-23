@@ -126,7 +126,8 @@
 
 .settings-card-title > span:first-child,
 .integration-icon,
-.storage-doctor-icon {
+.storage-doctor-icon,
+.sync-status-icon {
   align-items: center;
   background: #eef4f8;
   border-radius: var(--radius-sm);
@@ -357,9 +358,11 @@
 
 .sync-status-card {
   align-items: center;
-  background: linear-gradient(135deg, #252d37, #303b49);
-  border-radius: var(--radius-control);
-  color: white;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
   display: grid;
   gap: 10px;
   grid-template-columns: auto 1fr auto;
@@ -367,21 +370,11 @@
   padding: 14px;
 }
 
-.sync-status-icon {
-  align-items: center;
-  background: rgba(255,255,255,0.1);
-  border-radius: var(--radius-md);
-  color: #9dd3f7;
-  display: flex;
-  height: 39px;
-  justify-content: center;
-  width: 39px;
-}
 
 .sync-status-icon.is-success { color: #86e3bb; }
 .sync-status-card > div { display: flex; flex-direction: column; }
 .sync-status-card strong { font-family: var(--font-display); font-size: var(--type-label); font-weight: 500; }
-.sync-status-card small { color: #aaa0b0; font-size: var(--type-micro); margin-top: 3px; }
+.sync-status-card small { color: var(--soft); font-size: var(--type-micro); margin-top: 3px; }
 .settings-footer {
   align-items: center;
   display: flex;

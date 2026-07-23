@@ -486,7 +486,7 @@ body {
 
 .assistant-orb {
   align-items: center;
-  background: linear-gradient(145deg, #43a8ff, #0b74c9);
+  background-image: var(--brand-gradient);
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: var(--radius-md);
   box-shadow: 0 6px 16px rgba(22, 141, 236, 0.38), var(--edge-highlight);

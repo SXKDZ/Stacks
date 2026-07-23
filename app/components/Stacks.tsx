@@ -928,7 +928,7 @@ function StacksWorkspace() {
           </span>
           <span className="assistant-card-copy">
             <strong>AI feed</strong>
-            <small>Put an agent to work on your library</small>
+            <small>Put an agent to work</small>
           </span>
           <ArrowUpRight size={16} className="assistant-card-arrow" />
         </button>
