@@ -41,7 +41,7 @@
   align-items: center;
   background: var(--brand-blue);
   border-radius: 50%;
-  color: #fff;
+  color: var(--white);
   display: inline-flex;
   font-size: var(--type-micro);
   height: 18px;
@@ -562,7 +562,7 @@
   color: var(--ink);
   display: inline-flex;
   font-size: var(--type-caption);
-  font-weight: 750;
+  font-weight: 700;
   gap: 7px;
   height: 40px;
   padding: 0 11px;

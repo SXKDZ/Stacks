@@ -409,7 +409,7 @@
   background: #fbfbfd;
   border: 1px solid rgba(255,255,255,0.75);
   border-radius: var(--radius-lg);
-  box-shadow: 0 30px 80px rgba(15, 31, 42, 0.28);
+  box-shadow: var(--shadow-md);
   left: 50%;
   max-height: 70vh;
   overflow: hidden;

@@ -727,7 +727,7 @@
   cursor: pointer;
   display: inline-flex;
   font-size: var(--type-control);
-  font-weight: 550;
+  font-weight: 500;
   gap: 6px;
   padding: 6px 12px;
   transition: border-color var(--motion-control), background var(--motion-control), color var(--motion-control);
@@ -784,7 +784,7 @@
   color: var(--brand-blue-strong);
   display: flex;
   font-size: var(--type-control);
-  font-weight: 650;
+  font-weight: 600;
   gap: 8px;
   inset: 0;
   justify-content: center;
@@ -1412,7 +1412,7 @@
 .feed-turn-user .feed-bubble {
   background-image: var(--brand-gradient);
   border-radius: var(--radius-md);
-  color: #fff;
+  color: var(--white);
   padding: 9px 13px;
 }
 
@@ -1464,12 +1464,12 @@
    white wash so selected text stays readable. */
 .feed-turn-user .feed-bubble ::selection {
   background: rgba(255, 255, 255, 0.32);
-  color: #fff;
+  color: var(--white);
 }
 
 /* Links and inline code stay legible on the blue user bubble. */
 .feed-turn-user .feed-bubble a {
-  color: #fff;
+  color: var(--white);
   text-decoration: underline;
   word-break: break-all;
 }
@@ -1477,7 +1477,7 @@
 .feed-turn-user .feed-bubble code {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.24);
-  color: #fff;
+  color: var(--white);
 }
 
 .feed-bubble {

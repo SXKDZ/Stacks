@@ -177,7 +177,7 @@ textarea::placeholder {
 
 .section-title-row h3,
 .settings-heading h2 {
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .metric-ring {
@@ -342,7 +342,7 @@ textarea::placeholder {
 
 .reader-notes > h2 {
   font-size: var(--type-heading);
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .modal-results h3,
@@ -602,7 +602,7 @@ textarea::placeholder {
 .markdown-content th {
   background: color-mix(in srgb, var(--brand-blue) 10%, transparent);
   color: var(--ink);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .markdown-content hr {
@@ -761,7 +761,7 @@ textarea::placeholder {
 .prompt-variable-list > span {
   color: var(--muted);
   font-size: var(--type-label);
-  font-weight: 650;
+  font-weight: 600;
   margin-right: 3px;
 }
 
@@ -992,7 +992,7 @@ textarea::placeholder {
   color: var(--ink);
   cursor: pointer;
   font-size: var(--type-label);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .prompt-variable-reference > div {

@@ -1087,7 +1087,7 @@
   border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: var(--type-label);
-  font-weight: 650;
+  font-weight: 600;
   height: 42px;
   letter-spacing: 0.015em;
   padding: 0 12px;
@@ -1191,7 +1191,7 @@
 .research-grid .paper-title-cell strong {
   color: var(--ink);
   font-size: var(--type-body);
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.25;
   white-space: nowrap;
 }
@@ -1597,7 +1597,7 @@
 .collection-papers > small {
   color: var(--brand-blue-strong);
   font-size: var(--type-micro);
-  font-weight: 650;
+  font-weight: 600;
   padding-left: 20px;
 }
 
