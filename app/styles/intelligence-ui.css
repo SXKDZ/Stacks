@@ -1733,30 +1733,29 @@ body {
     linear-gradient(145deg, #f5f7fb, #f0f3f8);
 }
 
+/* The feed sidebar follows the theme: a light surface in light mode (it inherits
+   the light --ink/--surface tokens; only the background gradient is set here to
+   match the light feed page), a dark rail in dark mode. */
 [data-theme="light"] .feed-list-pane {
-  --ink: #eef3fb;
-  --muted: #a4afc2;
-  --soft: #758198;
-  --canvas: #0b0f18;
-  --panel: rgba(255, 255, 255, 0.035);
-  --line: rgba(255, 255, 255, 0.075);
-  --line-strong: rgba(255, 255, 255, 0.13);
-  --surface-1: #101521;
-  --surface-2: #171d2b;
-  --surface-floating: linear-gradient(var(--panel), var(--panel)), var(--canvas);
   background:
-    radial-gradient(360px 220px at 0% 0%, rgba(72, 111, 213, 0.1), transparent 72%),
-    linear-gradient(180deg, #111622, #0b0f18);
+    radial-gradient(360px 220px at 0% 0%, rgba(75, 111, 210, 0.07), transparent 72%),
+    linear-gradient(180deg, #ffffff, #f5f7fb);
+  border-right-color: rgba(35, 55, 88, 0.1);
 }
 
 [data-theme="light"] .feed-list-pane .brand-copy strong {
-  background: linear-gradient(100deg, #f1f5ff, #8ccfff 58%, #aa9eff);
+  background: linear-gradient(100deg, #1b2740, #2f6fd8 58%, #6a4bd0);
   background-clip: text;
   color: transparent;
 }
 
 [data-theme="light"] .feed-list-pane .brand-slogan {
-  color: #8290a8;
+  color: #6d788c;
+}
+
+[data-theme="light"] .feed-list-head {
+  background: rgba(248, 250, 253, 0.82);
+  border-color: rgba(35, 55, 88, 0.08);
 }
 
 [data-theme="light"] .feed-detail-head {
@@ -1946,16 +1945,18 @@ body {
   z-index: -1;
 }
 
+/* A full-width accent along the card's top edge. Pinned left-to-right and
+   clipped by the card's border-radius (overflow: hidden), so it reads as part
+   of the border instead of a detached notch floating over the rounded corner. */
 .workspace-view-header::after {
   background: linear-gradient(90deg, #3faaf3, #716aee 54%, #55d6cb);
-  border-radius: 0 0 8px 8px;
   content: "";
   height: 2px;
-  left: 25px;
-  opacity: 0.8;
+  left: 0;
+  opacity: 0.85;
   position: absolute;
+  right: 0;
   top: 0;
-  width: 112px;
 }
 
 .workspace-view-intro {

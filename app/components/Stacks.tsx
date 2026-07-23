@@ -1555,12 +1555,6 @@ function LibraryView({
         title="Paper library"
         detail="Read, filter, organize, and manage every paper from one workspace."
         icon={<Library size={22} />}
-        metrics={[
-          { label: "Papers", value: papers.length, detail: "in the library", tone: "blue" },
-          { label: "Reading", value: readingCount, detail: "in progress", tone: "aqua" },
-          { label: "Inbox", value: inboxCount, detail: "to review", tone: "violet" },
-          { label: "Starred", value: favoriteCount, detail: "saved as favorites", tone: "amber" },
-        ]}
       />
       <div className="view-toolbar library-toolbar">
         <PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search titles, authors, venues…" />
@@ -1833,11 +1827,6 @@ function AuthorsView({
         title="Authors"
         detail="Browse the people represented across your library and open their papers."
         icon={<UsersRound size={22} />}
-        metrics={[
-          { label: "Authors", value: authors.length, detail: "profiles", tone: "blue" },
-          { label: "Repeat authors", value: repeatAuthors, detail: "with multiple papers", tone: "violet" },
-          { label: "Latest year", value: latestAuthorYear ?? "—", detail: "most recent publication", tone: "aqua" },
-        ]}
       />
       <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search author names…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add author" />
       <div className="data-grid-shell author-table-wrap">
@@ -1980,12 +1969,6 @@ function VenuesView({
         title="Venues"
         detail="Track conferences, journals, workshops, and publishers represented in the library."
         icon={<Building2 size={22} />}
-        metrics={[
-          { label: "Venues", value: venues.length, detail: "indexed", tone: "blue" },
-          { label: "Conferences", value: conferenceCount, detail: "conference records", tone: "violet" },
-          { label: "Journals", value: journalCount, detail: "journal records", tone: "green" },
-          { label: "Latest year", value: latestVenueYear ?? "—", detail: "most recent publication", tone: "aqua" },
-        ]}
       />
       <EntityToolbar query={query} setQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Search venue names, types, and publishers…" selected={selected.length} onClear={() => setSelected([])} onBulk={onBulk} onDelete={onDelete} onCreate={onCreate} createLabel="Add venue" />
       <div className="data-grid-shell venue-table-wrap">
@@ -2100,12 +2083,6 @@ function CollectionsView({
         title="Collections"
         detail="Group papers into reusable research sets without moving or duplicating files."
         icon={<FolderOpen size={22} />}
-        metrics={[
-          { label: "Collections", value: collections.length, detail: "research sets", tone: "blue" },
-          { label: "Assignments", value: paperAssignments, detail: "paper links", tone: "violet" },
-          { label: "Ungrouped", value: ungroupedPapers, detail: "papers", tone: "amber" },
-          { label: "Largest", value: largestCollection, detail: "papers in one set", tone: "aqua" },
-        ]}
       />
       <div className="view-toolbar compact-toolbar"><PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search collections…" /><ToolbarCreateButton label="Add collection" onClick={onCreate} /></div>
       <div className="collection-grid">
@@ -2563,12 +2540,6 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
             <ActionButton variant="primary" size="small" onClick={onImport} icon={<Plus />}>Import paper</ActionButton>
           </>
         )}
-        metrics={[
-          { label: "Sources", value: discoveryProviders.length, detail: "search providers", tone: "blue" },
-          { label: "Active source", value: providerLabel(provider), detail: "selected provider", tone: "violet" },
-          { label: "Results", value: results.length, detail: query.trim() ? "current search" : "not searched", tone: "aqua" },
-          { label: "Added", value: added.length, detail: "this session", tone: "green" },
-        ]}
       />
       <form className="discover-search" onSubmit={search}>
         <div className="provider-switch">
