@@ -96,18 +96,22 @@
   --shadow-1: 0 2px 6px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.28);
   --shadow-2: 0 4px 10px rgba(0, 0, 0, 0.36), 0 20px 48px rgba(0, 0, 0, 0.4);
   --sidebar: 252px;
-  --font-ui: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
-  --type-micro: 10px;
-  --type-caption: 10.5px;
-  --type-label: 11px;
-  --type-control: 12.5px;
-  --type-body: 13px;
-  --type-body-large: 14px;
-  --type-heading-small: 17px;
-  --type-heading: 20px;
-  --type-heading-large: 24px;
+  /* One coherent type ramp with clear, distinguishable steps (no near-duplicate
+     0.5px gaps). Every font-size in the app resolves to one of these. */
+  /* 11px is the absolute floor (micro: eyebrows, badges, counts); body and chat
+     text sit at 12px and up. One coherent ramp, no near-duplicate steps. */
+  --type-micro: 11px;
+  --type-caption: 12px;
+  --type-label: 12px;
+  --type-control: 13px;
+  --type-body: 14px;
+  --type-body-large: 15px;
+  --type-heading-small: 18px;
+  --type-heading: 22px;
+  --type-heading-large: 28px;
   /* Radius scale, nudged up a step for a softer, more modern feel.
      --radius-control (11px) is the button/input default. */
   --radius-sm: 7px;
