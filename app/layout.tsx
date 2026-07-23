@@ -25,14 +25,12 @@ export const metadata: Metadata = {
     description:
       "Read, organize, summarize, and discuss your Stacks library in one modern workspace.",
     type: "website",
-    images: [{ url: "/og-paper-assistant.png", width: 1774, height: 887 }],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "Stacks",
     description:
       "Read, organize, summarize, and discuss your Stacks library in one modern workspace.",
-    images: ["/og-paper-assistant.png"],
   },
 };
 

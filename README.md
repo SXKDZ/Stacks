@@ -158,16 +158,16 @@ Never commit `.env`, `settings.json`, or database files.
 app/components/       React UI and interaction surfaces
 app/api/              library CRUD, discovery, import, AI, feed, and settings routes
 app/lib/              shared types, prompts, Bedrock, feed agent, and scholarly providers
-db/                   normalized Drizzle schema and SQLite bootstrap
-drizzle/              generated SQL migrations
-scripts/              color-audit and OneDrive backup bridge
+db/                   normalized Drizzle schema and self-migrating SQLite bootstrap
+scripts/              color-audit, release, and OneDrive backup bridge
 tests/                build, schema, UI-contract, and secret-safety checks
 ```
 
 The browser and backend ship together. `app/api/` contains the route handlers,
-and `db/` and `drizzle/` provide persistence via a local better-sqlite3
-`library.db` file served by Next.js on Node. There is no Cloudflare, Wrangler,
-or D1 runtime.
+and `db/` provides persistence via a local better-sqlite3 `library.db` file
+served by Next.js on Node. Drizzle is the query layer; `db/bootstrap.ts` creates
+and migrates the schema idempotently on boot, so there is no separate migration
+step. There is no Cloudflare, Wrangler, or D1 runtime.
 
 ## Verification
 
@@ -175,7 +175,6 @@ or D1 runtime.
 npm run lint
 npm exec tsc -- --noEmit
 npm test
-npm run db:generate
 ```
 
 ## Releasing

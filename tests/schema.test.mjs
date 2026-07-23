@@ -12,10 +12,12 @@ import { readApplicationStyles } from "./read-application-styles.mjs";
 const execFile = promisify(execFileCallback);
 
 test("normalizes authors and venues as first-class linked records", async () => {
-  const [schema, authorMigration, uiAlignmentMigration] = await Promise.all([
+  // db/schema.ts drives the typed queries and db/bootstrap.ts creates the tables;
+  // together they are the single source of truth for the schema (no migration
+  // files). Legacy author columns must be absent from both.
+  const [schema, bootstrap] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
-    readFile(new URL("../drizzle/0002_bumpy_arachne.sql", import.meta.url), "utf8"),
-    readFile(new URL("../drizzle/0004_broken_blacklash.sql", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
   ]);
   assert.match(schema, /export const authors = sqliteTable/);
   assert.match(schema, /export const venues = sqliteTable/);
@@ -25,10 +27,9 @@ test("normalizes authors and venues as first-class linked records", async () => 
   assert.match(schema, /onUpdate: "cascade"/);
   assert.doesNotMatch(schema, /email:/);
   assert.doesNotMatch(schema, /affiliation:|hIndex:|citationCount:/);
-  assert.match(authorMigration, /DROP COLUMN `email`/);
-  assert.match(uiAlignmentMigration, /DROP COLUMN `affiliation`/);
-  assert.match(uiAlignmentMigration, /DROP COLUMN `h_index`/);
-  assert.match(uiAlignmentMigration, /DROP COLUMN `citation_count`/);
+  const authorsTable = bootstrap.slice(bootstrap.indexOf("CREATE TABLE IF NOT EXISTS authors"));
+  const authorsCreate = authorsTable.slice(0, authorsTable.indexOf(")`"));
+  assert.doesNotMatch(authorsCreate, /email|affiliation|h_index|citation_count/);
 });
 
 test("keeps API credentials out of tracked examples", async () => {
@@ -231,12 +232,11 @@ test("imports BibTeX and RIS files into normalized paper records", async () => {
 });
 
 test("persists collection membership through the paper-collection composite key", async () => {
-  const [schema, library, application, controls, collectionMigration, bootstrap, types] = await Promise.all([
+  const [schema, library, application, controls, bootstrap, types] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../drizzle/0003_blushing_preak.sql", import.meta.url), "utf8"),
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/types.ts", import.meta.url), "utf8"),
   ]);
@@ -248,8 +248,10 @@ test("persists collection membership through the paper-collection composite key"
   assert.match(application, /Papers in collection/);
   assert.match(application, /All remaining papers/);
   assert.match(application, /aria-label="Remove selected paper from collection"/);
-  // The unused legacy description column is dropped; color is a real feature.
-  assert.match(collectionMigration, /DROP COLUMN `description`/);
+  // The unused legacy description column is gone; color is a real feature. The
+  // authoritative CREATE TABLE in bootstrap.ts must not carry description.
+  const collectionsTable = bootstrap.slice(bootstrap.indexOf("CREATE TABLE IF NOT EXISTS collections"));
+  assert.doesNotMatch(collectionsTable.slice(0, collectionsTable.indexOf(")`")), /description/);
   const collectionSchema = schema.slice(schema.indexOf("export const collections"), schema.indexOf("export const paperCollections"));
   assert.doesNotMatch(collectionSchema, /description: text\("description"\)/);
   assert.match(collectionSchema, /color: text\("color"\)/);
