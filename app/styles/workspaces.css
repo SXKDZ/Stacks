@@ -868,7 +868,7 @@
 .feed-dock-hint kbd {
   background: var(--surface-1);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 0.94em;

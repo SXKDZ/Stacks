@@ -15,7 +15,7 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: var(--muted);
   display: inline-flex;
   font-size: 10.5px;
@@ -52,7 +52,7 @@
 .filter-builder-panel {
   background: color-mix(in srgb, var(--panel) 96%, transparent);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-sm);
   margin: -7px 0 12px;
   padding: 10px;
@@ -99,7 +99,7 @@
   align-items: center;
   background: var(--canvas);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -110,7 +110,7 @@
 .filter-clause-row select {
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--ink);
   font-size: 10px;
   height: 29px;
@@ -123,7 +123,7 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: grid;
   flex: 1 1 190px;
   gap: 6px;
@@ -183,7 +183,7 @@
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   display: flex;
   font-size: 10px;
@@ -217,7 +217,7 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   display: inline-flex;
   font-size: 10px;
@@ -351,7 +351,7 @@
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line));
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   display: inline-flex;
   font-size: 10px;
@@ -557,7 +557,7 @@
      near-white pill in dark mode). Matches the panel it opens. */
   background: var(--surface-floating);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   color: var(--ink);
   display: inline-flex;
@@ -582,7 +582,7 @@
   background: var(--surface-floating);
   backdrop-filter: blur(18px);
   border: 1px solid var(--line-strong);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-md);
   max-height: min(420px, calc(100dvh - 90px));
   overflow: hidden;
@@ -966,7 +966,7 @@
 .metadata-autocomplete-options {
   background: var(--panel-strong);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   max-height: 220px;
   overflow-y: auto;
@@ -1017,7 +1017,7 @@
 
 .prompt-template-section {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -1067,7 +1067,7 @@
 
 .prompt-template-content small code {
   background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   font-family: var(--font-mono);
   font-size: 0.92em;
@@ -1077,7 +1077,7 @@
 
 .settings-card.prompt-settings-card {
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-sm);
   gap: 0;
   overflow: hidden;
@@ -1165,7 +1165,7 @@
 .library-toolbar > .page-search.inline-search,
 .entity-toolbar > .page-search.inline-search,
 .compact-toolbar > .page-search.inline-search {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   flex: 0 0 390px;
   height: 42px;
   max-width: 100%;
@@ -1293,7 +1293,7 @@
 .export-preview-panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;

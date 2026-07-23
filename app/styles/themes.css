@@ -42,7 +42,7 @@ body {
 
 .nav-item {
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: var(--muted);
   font-size: 12.5px;
   font-weight: 500;
@@ -540,7 +540,7 @@ textarea::placeholder {
 .markdown-content blockquote {
   background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
   border-left: 3px solid var(--brand-blue);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
   color: #c3cad8;
   margin: 0.85em 0;
   padding: 0.65em 0.85em;
@@ -553,7 +553,7 @@ textarea::placeholder {
 .markdown-content code {
   background: color-mix(in srgb, var(--brand-blue) 13%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 14%, transparent);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--brand-highlight);
   font-family: var(--font-mono);
   font-size: 0.88em;
@@ -563,7 +563,7 @@ textarea::placeholder {
 .markdown-content pre {
   background: #05070d;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   margin: 0.9em 0;
   overflow-x: auto;
   padding: 0.85em 1em;
@@ -619,7 +619,7 @@ textarea::placeholder {
 .markdown-content .katex-display {
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   margin: 0.9em 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -701,7 +701,7 @@ textarea::placeholder {
 .settings-form-grid textarea {
   background: #0a0f1b;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 11.5px;
@@ -727,7 +727,7 @@ textarea::placeholder {
   align-items: center;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   display: flex;
   gap: 7px;
   padding: 9px;
@@ -766,7 +766,7 @@ textarea::placeholder {
 .prompt-variable-list > button {
   background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 20%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   font-family: var(--font-mono);
   font-size: var(--type-label);
@@ -981,7 +981,7 @@ textarea::placeholder {
 .prompt-variable-reference {
   background: color-mix(in srgb, var(--brand-blue) 5%, transparent);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: var(--muted);
   padding: 9px 11px;
 }

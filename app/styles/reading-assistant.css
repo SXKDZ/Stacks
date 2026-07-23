@@ -64,7 +64,7 @@
 .reader-actions a {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   color: #f2f5f8;
   font-size: var(--type-caption);
   font-weight: 700;
@@ -277,7 +277,7 @@
   align-items: center;
   background: var(--brand-blue);
   border: 1px solid var(--brand-blue);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: white;
   display: inline-flex;
   gap: 6px;
@@ -324,7 +324,7 @@
 .modal-card {
   background: #fbfbfd;
   border: 1px solid rgba(255,255,255,0.7);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   left: 50%;
   max-height: min(760px, 90vh);
@@ -385,7 +385,7 @@
   align-items: center;
   background: white;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--soft);
   display: flex;
   flex: 1;
@@ -434,7 +434,7 @@
   align-items: flex-start;
   background: white;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   display: flex;
   gap: 10px;
   justify-content: space-between;
@@ -462,7 +462,7 @@
 .modal-results article > button {
   align-items: center;
   background: var(--ink);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: white;
   display: flex;
   flex: 0 0 auto;
@@ -483,7 +483,7 @@
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px dashed #a6d4f5;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   color: var(--brand-blue);
   display: flex;
   height: 72px;
@@ -495,7 +495,7 @@
 .import-illustration span {
   animation: import-ring 2.4s infinite ease-out;
   border: 1px solid #a6d4f5;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   inset: -8px;
   position: absolute;
 }
@@ -546,7 +546,7 @@
 .entity-form select {
   background: white;
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
   outline: 0;
   padding: 9px;
@@ -588,7 +588,7 @@
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px solid #cce7fb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: #0b669f;
   display: flex;
   font-size: var(--type-caption);

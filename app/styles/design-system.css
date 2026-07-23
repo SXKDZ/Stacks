@@ -374,7 +374,7 @@
 .prompt-code-editor {
   background: color-mix(in srgb, var(--panel) 90%, var(--canvas));
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   /* Default height matches the prompt editors; callers can shorten it with the
      --code-editor-height var without any other style changes. */
   height: var(--code-editor-height, 248px);

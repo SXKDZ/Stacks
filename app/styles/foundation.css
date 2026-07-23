@@ -200,7 +200,7 @@ body {
 ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--muted) 52%, transparent);
   border: 2px solid transparent;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background-clip: padding-box;
 }
 
@@ -242,7 +242,7 @@ body {
 /* The Stacks logo (public/favicon.svg) is a self-contained tiled mark, so it
    needs no background box — just size and round it. Used in place of a glyph. */
 .brand-logo {
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: block;
   flex-shrink: 0;
   height: 34px;
@@ -293,7 +293,7 @@ body {
   align-items: center;
   background-color: var(--brand-cta);
   border: 1px solid var(--brand-cta-border);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: 0 7px 18px var(--brand-cta-shadow);
   color: #fff;
   display: flex;
@@ -355,7 +355,7 @@ body {
 .nav-item {
   align-items: center;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: #68616f;
   display: flex;
   font-size: 12px;
@@ -481,7 +481,7 @@ body {
   align-items: center;
   background: linear-gradient(145deg, #43a8ff, #0b74c9);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   box-shadow: 0 6px 16px rgba(22, 141, 236, 0.38), var(--edge-highlight);
   color: white;
   display: flex;
@@ -494,7 +494,7 @@ body {
 }
 
 .assistant-orb.large {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   height: 38px;
   width: 38px;
 }
@@ -543,7 +543,7 @@ body {
   align-items: center;
   background: rgba(255,255,255,0.76);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   color: #938c9b;
   display: flex;
   font-size: 11px;
@@ -567,7 +567,7 @@ body {
   align-items: center;
   background: #f2f5f7;
   border: 1px solid #e1e7ec;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: #7c7483;
   display: flex;
   font-size: var(--type-label);
@@ -606,7 +606,7 @@ body {
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-sm);
   display: flex;
   gap: 11px;
@@ -622,7 +622,7 @@ button.stat-card:hover {
 
 .stat-icon {
   align-items: center;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   display: flex;
   height: 36px;
   justify-content: center;
@@ -660,7 +660,7 @@ button.stat-card:hover {
 .continue-card {
   background: linear-gradient(125deg, #18212d 0%, #202b39 50%, #273548 100%);
   border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 15px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 20px 48px rgba(15, 31, 42, 0.17);
   color: white;
   display: grid;
@@ -764,7 +764,7 @@ button.stat-card:hover {
 
 .document-stack,
 .document-sheet {
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   bottom: -30px;
   height: 255px;
   position: absolute;
@@ -844,7 +844,7 @@ button.stat-card:hover {
 
 .sheet-chart i {
   background: var(--brand-blue);
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   display: block;
   height: 40%;
   width: 13px;
