@@ -295,6 +295,26 @@ function timeLabel(value: string | null): string {
   }).format(new Date(value));
 }
 
+/** OneDrive backup is a folder copy, not an OAuth connection: it is "on" once a
+ *  destination folder is set (and the local library exists). The status headline
+ *  reflects that configured state rather than whether a backup ran this session
+ *  (the last-run time resets on restart). */
+function syncStatusTitle(settings: SettingsSnapshot): string {
+  if (!settings.local) return "Local companion required";
+  if (settings.sync.lastResult?.summary) return settings.sync.lastResult.summary;
+  if (!settings.sync.remotePath.trim()) return "Choose a OneDrive backup folder";
+  return settings.sync.autoSync ? "Backing up automatically" : "Backup folder ready";
+}
+
+function syncStatusDetail(settings: SettingsSnapshot): string {
+  if (!settings.local) return settings.sync.unavailableReason ?? "Backups need Stacks running on this computer.";
+  if (settings.sync.lastSyncAt) return `Last backed up ${timeLabel(settings.sync.lastSyncAt)}`;
+  if (!settings.sync.remotePath.trim()) return "No backup folder set yet";
+  return settings.sync.autoSync
+    ? `Backs up to your OneDrive folder ${settings.sync.autoSyncInterval}s after each change`
+    : "Auto-backup is off; use Back up now to copy your library";
+}
+
 function byteLabel(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return "0 B";
@@ -957,7 +977,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up Stacks’s library database, PDFs, and HTML snapshots." />
             <div className="settings-card sync-status-card">
               <span className="sync-status-icon"><FolderSync size={16} /></span>
-              <div><strong>{settings.sync.lastResult?.summary ?? (settings.local ? "Ready to connect OneDrive" : "Local companion required")}</strong><small>{settings.local ? timeLabel(settings.sync.lastSyncAt) : settings.sync.unavailableReason}</small></div>
+              <div><strong>{syncStatusTitle(settings)}</strong><small>{syncStatusDetail(settings)}</small></div>
               <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "Stacks’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up Stacks now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
             </div>
             <div className="settings-card">

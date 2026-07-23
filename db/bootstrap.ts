@@ -321,6 +321,15 @@ export async function ensureDatabase(): Promise<LibraryDb> {
       initializationPromise = null;
       throw error;
     });
+    // Once, right after the first DB init: if OneDrive auto-backup is configured,
+    // run a one-time backup so restart-time changes are protected and the sync
+    // status reflects a real last-run time. Dynamically imported to keep the DB
+    // layer decoupled from the settings/sync layer; best-effort (never blocks or
+    // fails DB init).
+    void initializationPromise
+      .then(() => import("@/app/lib/local-settings"))
+      .then((mod) => mod.syncOnStartup())
+      .catch(() => {});
   }
 
   await initializationPromise;
