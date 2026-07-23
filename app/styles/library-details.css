@@ -544,7 +544,6 @@ td.number-cell {
 .compact-avatar.avatar-3 { background: linear-gradient(145deg, #e2f5ea, #bfe9d3); border-color: #aee0c5; color: #247c5b; }
 .compact-avatar.avatar-4 { background: linear-gradient(145deg, #f9e7ec, #efc6d0); border-color: #e8b8c3; color: #a34255; }
 
-.entity-card-top,
 .collection-card-top {
   align-items: center;
   display: flex;

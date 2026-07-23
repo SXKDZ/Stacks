@@ -69,7 +69,6 @@ function result(overrides: Partial<DiscoveryResult>): DiscoveryResult {
     semanticScholarId: null,
     url: null,
     pdfUrl: null,
-    citationCount: 0,
     ...overrides,
   };
 }

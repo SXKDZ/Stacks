@@ -669,8 +669,7 @@ textarea::placeholder {
 }
 
 .summary-copy.markdown-content,
-.abstract-copy.markdown-content,
-.notes-copy.markdown-content {
+.abstract-copy.markdown-content {
   margin-top: var(--space-eyebrow-gap);
 }
 

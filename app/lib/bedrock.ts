@@ -79,7 +79,6 @@ function upstreamMessage(raw: string): string {
 
 export async function invokeBedrockMessages(options: BedrockInvocationOptions): Promise<{
   content: string;
-  usage: Record<string, unknown> | null;
   endpoint: "mantle" | "runtime";
   region: string;
 }> {
@@ -110,7 +109,7 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
     }
     const payload = JSON.parse(raw) as MantleResponse;
     const content = payload.content?.map((block) => block.text ?? "").join("\n").trim() ?? "";
-    return { content, usage: payload.usage ?? null, endpoint: "mantle", region: options.region };
+    return { content, endpoint: "mantle", region: options.region };
   }
 
   let lastError: BedrockInvocationError | null = null;
@@ -151,7 +150,7 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
     }
     const payload = JSON.parse(raw) as RuntimeResponse;
     const content = payload.output?.message?.content?.map((block) => block.text ?? "").join("\n").trim() ?? "";
-    return { content, usage: payload.usage ?? null, endpoint: "runtime", region };
+    return { content, endpoint: "runtime", region };
   }
   throw lastError ?? new BedrockInvocationError("No compatible Bedrock region was available.", 503);
 }

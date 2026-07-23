@@ -251,21 +251,6 @@
   position: relative;
 }
 
-.feed-sidebar-foot .feed-sync-notice {
-  margin: 0;
-}
-
-.feed-sync-bar {
-  align-items: center;
-  display: flex;
-  gap: 6px;
-}
-
-.feed-sync-bar .feed-sync-run {
-  flex: 1;
-  justify-content: center;
-}
-
 /* The dock is non-positioning in the footer so its popover anchors to the
    padded .feed-sidebar-foot — left-aligned with the full-width Activity toggle
    and spanning the whole rail, opening upward. */
@@ -319,13 +304,6 @@
   z-index: 30;
 }
 
-.feed-list-head-actions {
-  align-items: center;
-  display: flex;
-  flex-shrink: 0;
-  gap: 6px;
-}
-
 /* Filter the history list by title/instruction. */
 .feed-search {
   align-items: center;
@@ -369,26 +347,6 @@
 
 .feed-search button:hover {
   color: var(--ink);
-}
-
-/* Result of a manual GitHub inbox sync, shown just under the list header. */
-.feed-sync-notice {
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  font-size: var(--type-caption);
-  line-height: 1.45;
-  margin: 0 14px 8px;
-  padding: 7px 10px;
-}
-
-.feed-sync-notice.is-success {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.feed-sync-notice.is-error {
-  background: var(--rose-soft);
-  color: var(--rose);
 }
 
 /* The feed reuses the shared .brand lockup (same as the sidebar) as a link. */
@@ -1704,7 +1662,6 @@
   text-transform: uppercase;
 }
 
-.feed-tool-io .code-snippet + .feed-tool-tag,
 .feed-tool-io .feed-tool-md + .feed-tool-tag {
   border-top: 1px solid var(--line);
   margin-top: 4px;

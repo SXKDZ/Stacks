@@ -146,7 +146,6 @@ export const feedSnippets = sqliteTable(
     instruction: text("instruction").notNull().default(""),
     // queued | running | awaiting_input | done | error | stopped
     status: text("status").notNull().default("queued"),
-    workingDir: text("working_dir"),
     // The claude -p session id, used with --resume for follow-up turns.
     sessionId: text("session_id"),
     error: text("error"),

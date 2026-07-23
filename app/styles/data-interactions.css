@@ -1010,16 +1010,6 @@
   font-size: 10px;
 }
 
-.extraction-action-row {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-}
-
-.extraction-action-row small {
-  margin: 0;
-}
-
 .prompt-settings-card {
   display: grid;
   gap: 9px;

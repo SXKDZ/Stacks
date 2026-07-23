@@ -132,7 +132,6 @@ export interface DiscoveryResult {
   semanticScholarId: string | null;
   url: string | null;
   pdfUrl: string | null;
-  citationCount: number;
 }
 
 export type DiscoveryProvider =

@@ -75,7 +75,6 @@ const schemaStatements = [
     title TEXT NOT NULL DEFAULT '',
     instruction TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'queued',
-    working_dir TEXT,
     session_id TEXT,
     error TEXT,
     issue_number INTEGER,
@@ -225,15 +224,19 @@ async function initializeDatabase(): Promise<void> {
   }
 
   // The schema above is the authoritative, final shape; all historical column
-  // migrations have been folded into the CREATE TABLE statements. Drop the two
+  // migrations have been folded into the CREATE TABLE statements. Drop the
   // short-lived columns from the abandoned editable-note + prompt-chain-workflow
-  // experiments where they linger.
+  // experiments, plus the never-used working_dir column (the runtime derives the
+  // working directory from the snippet id instead), where they linger.
   const feedSnippetColumns = tableColumns(raw, "feed_snippets");
   if (feedSnippetColumns.has("note")) {
     raw.prepare("ALTER TABLE feed_snippets DROP COLUMN note").run();
   }
   if (feedSnippetColumns.has("workflow_steps")) {
     raw.prepare("ALTER TABLE feed_snippets DROP COLUMN workflow_steps").run();
+  }
+  if (feedSnippetColumns.has("working_dir")) {
+    raw.prepare("ALTER TABLE feed_snippets DROP COLUMN working_dir").run();
   }
   // Add the collapse-feature columns to feeds created before it existed.
   if (!feedSnippetColumns.has("collapsed")) {
