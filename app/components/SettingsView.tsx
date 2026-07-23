@@ -824,7 +824,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "model" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<Bot size={19} />} title="AI model" />
+            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose the model and sampling for summaries and the feed." />
             <div className="settings-card">
               <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>Connected with an API key</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
               <div className="settings-form-grid">

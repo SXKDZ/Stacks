@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  Activity,
   ArrowRight,
   ArrowUpRight,
+  BrainCircuit,
   BookOpen,
   Bot,
   Building2,
@@ -25,8 +27,10 @@ import {
   FileText,
   FileSearch,
   FolderOpen,
+  GitBranch,
   Home,
   Inbox,
+  Lightbulb,
   Library,
   Link2,
   ListFilter,
@@ -41,6 +45,7 @@ import {
   Settings2,
   Sparkles,
   Star,
+  Telescope,
   Trash2,
   Upload,
   UsersRound,
@@ -948,9 +953,13 @@ function StacksWorkspace() {
         <header className="topbar">
           <ActionButton variant="ghost" size="icon" className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Open navigation" icon={<Menu />} />
 
+          <div className="topbar-context">
+            <span>{navigation.find((item) => item.id === view)?.label ?? "Workspace"}</span>
+            <small><i /> Library intelligence online</small>
+          </div>
           <button className="global-search" onClick={() => setCommandOpen(true)}>
             <Search size={17} />
-            <span>Search papers, people, venues…</span>
+            <span>Search your research graph…</span>
             <span className="shortcut"><Command size={12} /> K</span>
           </button>
           <div className="topbar-actions">
@@ -1200,79 +1209,172 @@ function Dashboard({
   const readingProgress = snapshot.stats.papers
     ? Math.round(((snapshot.stats.papers - snapshot.stats.unread) / snapshot.stats.papers) * 100)
     : 0;
+  const completedPapers = Math.max(0, snapshot.stats.papers - snapshot.stats.unread - snapshot.stats.active);
+  const recurringAuthors = snapshot.authors.filter((author) => author.paperCount > 1).length;
+  const focusCollections = [...snapshot.collections]
+    .sort((left, right) => right.paperCount - left.paperCount)
+    .slice(0, 3);
+  const leadCollection = focusCollections[0];
+  const intelligenceHeadline = leadCollection
+    ? `${leadCollection.name} is becoming a center of gravity.`
+    : currentPaper
+      ? "Your reading is starting to form a point of view."
+      : "Your research map is ready to take shape.";
+  const intelligenceNarrative = snapshot.stats.papers
+    ? `Across ${snapshot.stats.papers} papers, Stacks sees ${snapshot.collections.length || "no named"} themes, ${recurringAuthors} recurring ${recurringAuthors === 1 ? "author" : "authors"}, and ${snapshot.stats.active} active reading ${snapshot.stats.active === 1 ? "thread" : "threads"}.`
+    : "Add a few papers and Stacks will surface themes, recurring voices, and useful tensions across your work.";
   return (
-    <div className="dashboard-grid">
-      <div className="stat-strip">
-        <button className="stat-card" onClick={() => setView("library")}>
-          <span className="stat-icon blue"><Library size={18} /></span>
-          <span><strong>{snapshot.stats.papers}</strong><small>Papers</small></span>
-          <ArrowUpRight size={15} />
-        </button>
-        <button className="stat-card" onClick={() => setView("authors")}>
-          <span className="stat-icon cyan"><UsersRound size={18} /></span>
-          <span><strong>{snapshot.stats.authors}</strong><small>Authors</small></span>
-          <ArrowUpRight size={15} />
-        </button>
-        <button className="stat-card" onClick={() => setView("venues")}>
-          <span className="stat-icon amber"><Building2 size={18} /></span>
-          <span><strong>{snapshot.stats.venues}</strong><small>Venues</small></span>
-          <ArrowUpRight size={15} />
-        </button>
-      </div>
-
-      {currentPaper ? (
-        <article className="continue-card">
-          <div className="continue-copy">
-            <p className="card-kicker"><span /> {currentPaper.readingStatus === "reading" ? "Continue reading" : "Latest paper"}</p>
-            <h2>{currentPaper.title}</h2>
-            <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
-            <div className="paper-byline">
-              <span>{fullAuthorLine(currentPaper)}</span>
-              <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
-            </div>
-            <div className="continue-actions">
-              <ActionButton variant="primary" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
-              <ActionButton variant="secondary" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Discuss in feed</ActionButton>
-            </div>
+    <div className="intelligence-home">
+      <section className="intelligence-stage">
+        <article className="research-brief-card">
+          <div className="brief-status-row">
+            <p className="card-kicker"><span /> Research intelligence</p>
+            <span className="live-analysis"><Activity size={13} /> Live context</span>
           </div>
-          <div className="continue-visual" aria-hidden="true">
-            <div className="document-stack document-back" />
-            <div className="document-stack document-middle" />
-            <div className="document-sheet">
-              <div className="sheet-label">PAPER / {new Date().getFullYear()}</div>
-              <div className="sheet-title" />
-              <div className="sheet-title short" />
-              <div className="sheet-rule" />
-              <div className="sheet-lines"><span /><span /><span /><span /></div>
-              <div className="sheet-chart"><i /><i /><i /><i /><i /></div>
-            </div>
+          <h1>{intelligenceHeadline}</h1>
+          <p className="brief-narrative">{intelligenceNarrative}</p>
+
+          <button className="intelligence-composer" type="button" onClick={() => openChat(currentPaper ?? null)}>
+            <span className="composer-orb"><BrainCircuit size={19} /></span>
+            <span>
+              <strong>Ask across your library</strong>
+              <small>Synthesize evidence, trace a claim, or find the missing paper</small>
+            </span>
+            <span className="composer-action"><Sparkles size={14} /> Think with Stacks</span>
+          </button>
+
+          <div className="intelligence-prompts" aria-label="Suggested research directions">
+            <button type="button" onClick={() => openChat(currentPaper ?? null)}><GitBranch size={13} /> Map the debate</button>
+            <button type="button" onClick={() => openChat(currentPaper ?? null)}><Lightbulb size={13} /> Find a counterpoint</button>
+            <button type="button" onClick={() => openChat(currentPaper ?? null)}><Telescope size={13} /> Expose a research gap</button>
+          </div>
+
+          <div className="signal-metrics">
+            <button type="button" onClick={() => setView("library")}><strong>{snapshot.stats.papers}</strong><span>sources</span></button>
+            <button type="button" onClick={() => setView("collections")}><strong>{snapshot.collections.length}</strong><span>themes</span></button>
+            <button type="button" onClick={() => setView("authors")}><strong>{recurringAuthors}</strong><span>recurring voices</span></button>
+            <button type="button" onClick={() => setView("library")}><strong>{readingProgress}%</strong><span>processed</span></button>
           </div>
         </article>
-      ) : null}
 
-      <aside className="insight-card">
-        <div className="section-title-row">
-          <div>
-            <p className="eyebrow">Reading progress</p>
-            <h3>{readingProgress}% read</h3>
+        <aside className="signal-map-card">
+          <div className="signal-map-heading">
+            <div>
+              <p className="eyebrow">Knowledge signal</p>
+              <h2>Library topology</h2>
+            </div>
+            <span>{snapshot.stats.recent} new</span>
           </div>
-          <span className="metric-ring" style={{ "--progress": `${readingProgress * 3.6}deg` } as React.CSSProperties}>
-            <span>{readingProgress}</span>
-          </span>
-        </div>
-        <div className="reading-bars">
-          <div><span>Read</span><i><b style={{ width: `${Math.max(8, ((snapshot.stats.papers - snapshot.stats.unread - snapshot.stats.active) / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.papers - snapshot.stats.unread - snapshot.stats.active}</strong></div>
-          <div><span>Active</span><i><b className="bar-cyan" style={{ width: `${Math.max(8, (snapshot.stats.active / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.active}</strong></div>
-          <div><span>Inbox</span><i><b className="bar-amber" style={{ width: `${Math.max(8, (snapshot.stats.unread / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.unread}</strong></div>
-        </div>
-        <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>Review reading queue</TextButton>
-      </aside>
+          <button className="knowledge-map" type="button" onClick={() => setView("collections")} aria-label="Open research collections">
+            <span className="map-orbit orbit-one" />
+            <span className="map-orbit orbit-two" />
+            <span className="map-line line-one" />
+            <span className="map-line line-two" />
+            <span className="map-line line-three" />
+            <span className="map-core">
+              <BrainCircuit size={20} />
+              <strong>{snapshot.stats.papers}</strong>
+              <small>papers</small>
+            </span>
+            {focusCollections.map((collection, index) => (
+              <span className={`map-node map-node-${index + 1} collection-${collection.color}`} key={collection.id}>
+                <i />
+                <b>{collection.name}</b>
+                <small>{collection.paperCount} linked</small>
+              </span>
+            ))}
+            {!focusCollections.length ? (
+              <span className="map-node map-node-1 collection-blue"><i /><b>First theme</b><small>waiting to emerge</small></span>
+            ) : null}
+          </button>
+          <div className="map-caption">
+            <span><i /> Connected themes</span>
+            <TextButton onClick={() => setView("collections")} trailingIcon={<ArrowRight />}>Explore map</TextButton>
+          </div>
+        </aside>
+      </section>
+
+      <section className="intelligence-rail" aria-label="Library pulse">
+        <button type="button" onClick={() => setView("library")}>
+          <span className="rail-icon"><Library size={16} /></span>
+          <span><small>Evidence base</small><strong>{snapshot.stats.papers} papers indexed</strong></span>
+          <ArrowUpRight size={14} />
+        </button>
+        <button type="button" onClick={() => setView("authors")}>
+          <span className="rail-icon cyan"><UsersRound size={16} /></span>
+          <span><small>Network depth</small><strong>{snapshot.stats.authors} voices · {recurringAuthors} recurring</strong></span>
+          <ArrowUpRight size={14} />
+        </button>
+        <button type="button" onClick={() => setView("library")}>
+          <span className="rail-icon green"><Activity size={16} /></span>
+          <span><small>Reading pulse</small><strong>{completedPapers} read · {snapshot.stats.active} active</strong></span>
+          <ArrowUpRight size={14} />
+        </button>
+      </section>
+
+      <section className="focus-grid">
+        {currentPaper ? (
+          <article className="continue-card">
+            <div className="continue-copy">
+              <p className="card-kicker"><span /> {currentPaper.readingStatus === "reading" ? "Active reading thread" : "Latest paper"}</p>
+              <h2>{currentPaper.title}</h2>
+              <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
+              <div className="paper-byline">
+                <span>{fullAuthorLine(currentPaper)}</span>
+                <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
+              </div>
+              <div className="continue-actions">
+                <ActionButton variant="primary" icon={<ArrowRight size={16} />} onClick={() => openPaper(currentPaper)}>Open paper</ActionButton>
+                <ActionButton variant="secondary" icon={<Sparkles size={15} />} onClick={() => openChat(currentPaper)}>Discuss in feed</ActionButton>
+              </div>
+            </div>
+            <div className="continue-visual" aria-hidden="true">
+              <div className="document-stack document-back" />
+              <div className="document-stack document-middle" />
+              <div className="document-sheet">
+                <div className="sheet-label">FOCUS / {new Date().getFullYear()}</div>
+                <div className="sheet-title" />
+                <div className="sheet-title short" />
+                <div className="sheet-rule" />
+                <div className="sheet-lines"><span /><span /><span /><span /></div>
+                <div className="sheet-chart"><i /><i /><i /><i /><i /></div>
+              </div>
+            </div>
+          </article>
+        ) : null}
+
+        <aside className="insight-card">
+          <div className="section-title-row">
+            <div>
+              <p className="eyebrow">Reading progress</p>
+              <h3>{readingProgress}% synthesized</h3>
+            </div>
+            <span className="metric-ring" style={{ "--progress": `${readingProgress * 3.6}deg` } as React.CSSProperties}>
+              <span>{readingProgress}</span>
+            </span>
+          </div>
+          <div className="reading-bars">
+            <div><span>Read</span><i><b style={{ width: `${Math.max(8, (completedPapers / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{completedPapers}</strong></div>
+            <div><span>Active</span><i><b className="bar-cyan" style={{ width: `${Math.max(8, (snapshot.stats.active / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.active}</strong></div>
+            <div><span>Inbox</span><i><b className="bar-amber" style={{ width: `${Math.max(8, (snapshot.stats.unread / Math.max(snapshot.stats.papers, 1)) * 100)}%` }} /></i><strong>{snapshot.stats.unread}</strong></div>
+          </div>
+          <div>
+            <p className="next-action-label"><Sparkles size={13} /> Suggested next move</p>
+            <p className="next-action-copy">
+              {snapshot.stats.unread
+                ? `Triage ${snapshot.stats.unread} unread ${snapshot.stats.unread === 1 ? "paper" : "papers"} before the next synthesis pass.`
+                : "Your inbox is clear. Extend the evidence base with a targeted discovery search."}
+            </p>
+          </div>
+          <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>Review reading queue</TextButton>
+        </aside>
+      </section>
 
       <section className="recent-panel">
         <div className="section-title-row">
           <div>
-            <p className="eyebrow">Recently added</p>
-            <h3>Fresh in your library</h3>
+            <p className="eyebrow">Evidence stream</p>
+            <h3>Recently connected</h3>
           </div>
           <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>View all</TextButton>
         </div>
@@ -1289,7 +1391,6 @@ function Dashboard({
           ))}
         </div>
       </section>
-
     </div>
   );
 }
