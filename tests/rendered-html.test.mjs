@@ -32,7 +32,7 @@ test("ships the Stacks application shell and product metadata", async () => {
 
   assert.match(page, /<Stacks \/>/);
   assert.match(layout, /title: "Stacks"/);
-  assert.match(layout, /@fontsource-variable\/inter/);
+  assert.match(layout, /@fontsource-variable\/geist/);
   assert.match(layout, /@fontsource-variable\/jetbrains-mono/);
   assert.match(layout, /katex\/dist\/katex\.min\.css/);
   assert.doesNotMatch(layout, /manrope|newsreader/i);
@@ -156,10 +156,11 @@ test("button archetypes route through shared primitives, not hand-written CSS", 
   assert.doesNotMatch(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?rgba\(124,\s*156,\s*255/);
   assert.match(styles, /\.nav-item\.is-active\s*\{[\s\S]{0,180}?var\(--brand-blue\) 10%/);
 
-  // Storage & Doctor uses deliberately sectioned settings cards. Losing these
-  // rules makes the headings, path summary, form, and metrics collapse into a
-  // single unpadded white surface.
-  assert.match(styles, /\.storage-location-heading\s*\{[\s\S]*?padding:\s*14px 16px/);
+  // Storage & Doctor uses deliberately sectioned settings cards. The heading
+  // shares the consolidated settings-card header spec; losing the group makes
+  // the headings, path summary, form, and metrics collapse into a single
+  // unpadded white surface.
+  assert.match(styles, /\.settings-card-title,\s*\.storage-location-heading,\s*\.storage-doctor-heading\s*\{[\s\S]*?padding:\s*13px 15px/);
   assert.match(styles, /\.storage-root-summary\s*\{[\s\S]*?background:\s*transparent[\s\S]*?border:\s*0/);
   assert.match(styles, /\.storage-move-field\s*\{[\s\S]*?padding:\s*12px 16px 16px/);
   assert.match(settings, /body:\s*JSON\.stringify\(\{ target: "storage" \}\)/);
