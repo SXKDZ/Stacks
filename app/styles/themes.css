@@ -190,8 +190,7 @@ textarea::placeholder {
 
 .reading-bars i,
 .status-pill,
-.result-tags span,
-.integration-state {
+.result-tags span {
   background: rgba(255, 255, 255, 0.055);
 }
 

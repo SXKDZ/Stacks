@@ -164,6 +164,10 @@ test("button archetypes route through shared primitives, not hand-written CSS", 
   assert.match(styles, /\.storage-move-field\s*\{[\s\S]*?padding:\s*12px 16px 16px/);
   assert.match(settings, /body:\s*JSON\.stringify\(\{ target: "storage" \}\)/);
   assert.match(settings, />Browse<\/ActionButton>/);
+  // The sync status icon uses the shared 29px settings-card icon treatment;
+  // it must not restore the old green-glyph-on-blue-background exception.
+  assert.match(settings, /className="sync-status-icon"><FolderSync size=\{16\}/);
+  assert.doesNotMatch(styles, /\.sync-status-icon\.is-success/);
   assert.doesNotMatch(settings, /variant="ghost"[\s\S]{0,120}>Restore (?:discussion|summary|extraction) default/);
   assert.match(settings, /variant="secondary" size="small" className="mt-0\.5 justify-self-start"[\s\S]{0,160}>Restore summary default/);
 

@@ -127,9 +127,11 @@
 .settings-card-title > span:first-child,
 .integration-icon,
 .storage-doctor-icon,
-.sync-status-icon {
+.sync-status-icon,
+.command-icon {
   align-items: center;
   background: #eef4f8;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--brand-blue-strong);
   display: flex;
@@ -167,17 +169,19 @@
 }
 
 .connected-pill,
-.integration-state {
+.integration-state,
+.version-status-pill {
   align-items: center;
   background: var(--green-soft);
-  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, currentColor 32%, transparent);
+  border-radius: var(--radius-pill);
   color: var(--green);
   display: inline-flex;
   font-size: var(--type-micro);
   font-style: normal;
-  font-weight: 800;
+  font-weight: 600;
   gap: 3px;
-  padding: 4px 6px;
+  padding: 4px 8px;
 }
 
 .connected-pill {
@@ -370,8 +374,6 @@
   padding: 14px;
 }
 
-
-.sync-status-icon.is-success { color: #86e3bb; }
 .sync-status-card > div { display: flex; flex-direction: column; }
 .sync-status-card strong { font-family: var(--font-display); font-size: var(--type-label); font-weight: 500; }
 .sync-status-card small { color: var(--soft); font-size: var(--type-micro); margin-top: 3px; }
@@ -396,7 +398,7 @@
 }
 
 .integration-state {
-  background: #f0f3f6;
+  background: color-mix(in srgb, var(--soft) 16%, transparent);
   color: var(--soft);
 }
 
@@ -487,17 +489,6 @@
   text-align: center;
 }
 
-.command-icon {
-  align-items: center;
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--brand-blue);
-  display: flex;
-  height: 31px;
-  justify-content: center;
-  width: 31px;
-}
 
 .command-results button > span:nth-child(2) {
   display: flex;

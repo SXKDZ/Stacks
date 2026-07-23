@@ -34,15 +34,8 @@
   font-size: var(--type-heading-small);
 }
 
-.version-status-pill {
-  background: var(--green-soft);
-  border: 1px solid color-mix(in srgb, var(--green) 32%, transparent);
-  border-radius: var(--radius-pill);
-  color: var(--green);
-  font-size: var(--type-micro);
-  font-weight: 700;
-  padding: 5px 8px;
-}
+/* Base pill spec is shared in settings.css (.connected-pill/.integration-state/
+   .version-status-pill); only the update-state variant differs. */
 
 .version-status-pill.is-update {
   background: var(--brand-blue-soft);
@@ -71,16 +64,6 @@
   }
 }
 
-.storage-doctor-icon {
-  align-items: center;
-  background: var(--brand-blue-soft);
-  border-radius: var(--radius-md);
-  color: var(--brand-blue-strong);
-  display: flex;
-  height: 34px;
-  justify-content: center;
-  width: 34px;
-}
 
 .storage-doctor-grid {
   display: grid;
@@ -1912,11 +1895,6 @@
   border: 1px solid var(--line);
   box-shadow: var(--shadow-sm);
   color: var(--ink);
-}
-
-[data-theme="light"] .sync-status-icon {
-  background: var(--brand-blue-soft);
-  color: var(--brand-blue);
 }
 
 [data-theme="light"] .sync-status-card small {

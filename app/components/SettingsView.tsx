@@ -956,7 +956,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
           <form onSubmit={save}>
             <SettingsHeading icon={<DatabaseBackup size={19} />} title="OneDrive sync" detail="Back up Stacks’s library database, PDFs, and HTML snapshots." />
             <div className="sync-status-card">
-              <span className={`sync-status-icon ${settings.sync.lastResult?.ok ? "is-success" : ""}`}><FolderSync size={20} /></span>
+              <span className="sync-status-icon"><FolderSync size={16} /></span>
               <div><strong>{settings.sync.lastResult?.summary ?? (settings.local ? "Ready to connect OneDrive" : "Local companion required")}</strong><small>{settings.local ? timeLabel(settings.sync.lastSyncAt) : settings.sync.unavailableReason}</small></div>
               <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "Stacks’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up Stacks now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
             </div>
