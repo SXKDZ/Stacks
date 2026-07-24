@@ -16,13 +16,20 @@ const eslintConfig = defineConfig([
     ".next-verify/**",
   ]),
   {
-    // React 19's strict compiler-era rules flag long-standing patterns here
-    // (hydration reads into state, latest-value refs). Keep them visible as
-    // warnings while they are cleaned up incrementally; CI fails on errors.
+    // set-state-in-effect fires on the mount-time reads of client-only values
+    // (localStorage, navigator) that keep SSR and the first client render in
+    // agreement, and on drafts re-syncing when the record they edit changes.
+    // A lazy initializer would trade the warning for a hydration mismatch, so
+    // these stay as warnings rather than being "fixed"; CI fails on errors.
     rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/static-components": "warn",
       "react-hooks/refs": "warn",
+      // next/image optimizes remote and build-time images through a loader.
+      // Every <img> here is either the local favicon SVG or a blob: URL for a
+      // file the user just attached, so there is nothing to optimize and the
+      // wrapper would only add layout constraints.
+      "@next/next/no-img-element": "off",
     },
   },
 ]);

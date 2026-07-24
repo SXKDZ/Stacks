@@ -6,6 +6,13 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The README now covers what Stacks does; implementation notes, deployment, and
+  the release process moved to `docs/ARCHITECTURE.md`.
+- CI and release workflows run on `actions/checkout@v5` and
+  `actions/setup-node@v5`, which no longer warn about the Node 20 deprecation.
+
 ## [0.2.2] - 2026-07-24
 
 ### Changed
