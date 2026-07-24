@@ -113,6 +113,15 @@ const schemaStatements = [
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS feed_github_outbox (
+    id TEXT PRIMARY KEY,
+    repo TEXT NOT NULL,
+    op TEXT NOT NULL,
+    issue_number INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   "CREATE INDEX IF NOT EXISTS papers_title_idx ON papers(title)",
   "CREATE INDEX IF NOT EXISTS papers_year_idx ON papers(year)",
   "CREATE INDEX IF NOT EXISTS papers_venue_idx ON papers(venue_id)",
@@ -121,6 +130,7 @@ const schemaStatements = [
   "CREATE INDEX IF NOT EXISTS feed_snippets_updated_idx ON feed_snippets(updated_at)",
   "CREATE INDEX IF NOT EXISTS feed_messages_snippet_idx ON feed_messages(snippet_id, created_at)",
   "CREATE INDEX IF NOT EXISTS feed_proposals_snippet_idx ON feed_proposals(snippet_id)",
+  "CREATE INDEX IF NOT EXISTS feed_github_outbox_repo_idx ON feed_github_outbox(repo)",
 ];
 
 const seedStatements = [
@@ -329,6 +339,12 @@ export async function ensureDatabase(): Promise<LibraryDb> {
     void initializationPromise
       .then(() => import("@/app/lib/local-settings"))
       .then((mod) => mod.syncOnStartup())
+      .catch(() => {});
+    // Also drain any GitHub actions queued while the app was closed (e.g. a feed
+    // deleted offline needs its issue closed so sync doesn't recreate it).
+    void initializationPromise
+      .then(() => import("@/app/lib/feed-github-outbox"))
+      .then((mod) => mod.flushGithubOutbox())
       .catch(() => {});
   }
 

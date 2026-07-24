@@ -19,6 +19,7 @@ import {
   type GitHubConfig,
 } from "@/app/lib/github-sync";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
+import { flushGithubOutbox } from "@/app/lib/feed-github-outbox";
 import { buildFollowUpPrompt, buildForkPrompt, buildSnippetPrompt } from "@/app/lib/feed-prompt";
 
 export const dynamic = "force-dynamic";
@@ -146,6 +147,11 @@ export async function POST(): Promise<Response> {
   const startedAt = new Date().toISOString();
 
   try {
+    // 0. Drain pending GitHub actions (e.g. closing the issue of a deleted feed)
+    //    BEFORE reading issues, so a just-deleted feed's issue is already closed
+    //    and the inbound pass won't recreate it from an open issue.
+    await flushGithubOutbox();
+
     // 1. OUTBOUND — ensure an issue per feed, push local renames, mirror
     //    unposted local messages. Runs over all feeds (not the incremental
     //    set), so a purely-local change is never missed.

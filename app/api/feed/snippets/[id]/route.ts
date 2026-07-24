@@ -3,8 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
-import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
-import { patchIssueState, type GitHubConfig } from "@/app/lib/github-sync";
+import { enqueueCloseIssue, flushGithubOutbox } from "@/app/lib/feed-github-outbox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,25 +80,14 @@ export async function DELETE(
   const database = await ensureDatabase();
   const snippet = database.select({ issueNumber: feedSnippets.issueNumber }).from(feedSnippets).where(eq(feedSnippets.id, id)).get();
 
-  // If this feed was mirrored to a GitHub issue, close that issue as part of the
-  // delete. Inbound sync only reads OPEN issues, so an open issue with no local
-  // feed is treated as brand-new and recreated from its title+body — meaning a
-  // deleted feed would otherwise reappear (rebuilt from scratch) on the next
-  // sync. Closing it is the tombstone. Best-effort: GitHub being unconfigured or
-  // unreachable must not block the local delete.
+  // If this feed was mirrored to a GitHub issue, its deletion has to reach
+  // GitHub: inbound sync recreates a feed from any open issue that has no local
+  // feed, so a deleted feed would otherwise reappear (rebuilt from scratch) on
+  // the next sync. Queue a durable "close issue" op (survives offline/restart,
+  // scoped to the active repo) and attempt it immediately; the queue retries on
+  // the next flush if GitHub is unreachable now.
   if (snippet?.issueNumber) {
-    try {
-      const runtime = await resolveRuntimeValues();
-      const repo = runtimeValue(runtime, "STACKS_GITHUB_REPO");
-      const token = runtimeValue(runtime, "GITHUB_TOKEN");
-      if (repo && token) {
-        const config: GitHubConfig = { repo, token };
-        await patchIssueState(config, snippet.issueNumber, "closed");
-      }
-    } catch {
-      // Leave the issue open if we can't reach GitHub; the user can close it,
-      // or a future sync of a still-open issue will recreate the feed.
-    }
+    await enqueueCloseIssue(snippet.issueNumber);
   }
 
   database.delete(feedSnippets).where(eq(feedSnippets.id, id)).run();
@@ -109,6 +97,11 @@ export async function DELETE(
     rmSync(feedWorkingDir(id), { recursive: true, force: true });
   } catch {
     // The DB rows are already gone; a leftover dir is harmless.
+  }
+  // Attempt the queued close now (fire-and-forget); if GitHub is down it stays
+  // queued and a later flush retries it, so the response isn't blocked on it.
+  if (snippet?.issueNumber) {
+    void flushGithubOutbox();
   }
   return Response.json({ ok: true });
 }

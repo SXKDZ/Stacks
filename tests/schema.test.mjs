@@ -530,6 +530,35 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   assert.match(sync, /issuesClosed/);
 });
 
+test("deleting a mirrored feed closes its issue via a durable, repo-scoped outbox", async () => {
+  const [schema, bootstrap, outbox, deleteRoute, sync, boot] = await Promise.all([
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-github-outbox.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+  ]);
+  // A standalone outbox table (not tied to feed_snippets: the feed is gone) with
+  // the repo the op targets, so switching repos never fires a stale close.
+  assert.match(schema, /export const feedGithubOutbox = sqliteTable/);
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS feed_github_outbox/);
+  assert.match(bootstrap, /repo TEXT NOT NULL/);
+  // The op is scoped + deduped by (repo, issue) and retried until GitHub confirms.
+  assert.match(outbox, /eq\(feedGithubOutbox\.repo, repo\)/);
+  assert.match(outbox, /patchIssueState\(config, item\.issueNumber, "closed"\)/);
+  // A 404/410 (already gone) is treated as done, not retried forever.
+  assert.match(outbox, /status === 404 \|\| status === 410/);
+  // Delete enqueues the close and flushes immediately (fire-and-forget).
+  assert.match(deleteRoute, /enqueueCloseIssue\(snippet\.issueNumber\)/);
+  assert.match(deleteRoute, /void flushGithubOutbox\(\)/);
+  // Sync drains the outbox BEFORE the inbound pass, so a deleted feed's issue is
+  // already closed and won't be recreated from an open issue.
+  assert.match(sync, /await flushGithubOutbox\(\)/);
+  // Startup also flushes, so a delete made offline still reaches GitHub.
+  assert.match(boot, /flushGithubOutbox/);
+});
+
 test("feeds can be collapsed without reordering the list", async () => {
   const [schema, bootstrap, patchRoute, feed] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),

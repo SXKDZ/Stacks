@@ -21,8 +21,10 @@ All notable changes to Stacks are documented here. The format follows
 
 ### Fixed
 
-- Deleting a feed that was mirrored to GitHub now closes its issue, so the feed
-  no longer reappears (rebuilt from scratch) on the next sync.
+- Deleting a feed that was mirrored to GitHub now closes its issue through a
+  durable, repo-scoped outbox (retried on the next sync and on startup if GitHub
+  is unreachable), so the feed no longer reappears, rebuilt from scratch, on a
+  later sync, even across an app restart or offline delete.
 - A feed created from a GitHub issue no longer shows its instruction twice when
   the issue body repeats the title.
 - The opening message of a feed keeps showing the text you typed even when a
