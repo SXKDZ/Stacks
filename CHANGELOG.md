@@ -6,6 +6,8 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-24
+
 ### Changed
 
 - Attaching a library paper to a feed no longer copies its PDF into the feed
@@ -114,7 +116,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.1
 [0.2.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.0
 [0.1.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.1.1
 [0.1.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.1.0
