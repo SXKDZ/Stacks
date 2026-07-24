@@ -373,6 +373,28 @@ test("manual add paper reuses the edit-paper fields and suppresses browser autof
   assert.match(application, /className="edit-paper-modal-form" autoComplete="off"/);
 });
 
+test("code editor overlay layers stay metric-identical under form skins", async () => {
+  // MarkdownCodeEditor paints text in a <pre> and takes input in a transparent
+  // <textarea> stacked on it; ANY context rule that restyles the textarea's
+  // metrics (padding, line-height, border, min/max-height, margin) desyncs the
+  // caret and selection from the visible glyphs. Form skins must therefore
+  // exclude the editor's inner textarea.
+  const styles = await readApplicationStyles();
+  const guard = ":not(:where(.prompt-code-editor *))";
+  for (const selector of [
+    `.entity-form textarea${guard}`,
+    `.detail-section textarea${guard}`,
+    `.settings-form-grid textarea${guard}`,
+    `.entity-form textarea:focus${guard}`,
+    `.detail-section textarea:focus${guard}`,
+    `.settings-form-grid textarea:focus${guard}`,
+  ]) {
+    assert.ok(styles.includes(selector), `missing editor guard on: ${selector}`);
+  }
+  // The old summary-field min/max-height override targeted the editor textarea.
+  assert.doesNotMatch(styles, /\.summary-field textarea/);
+});
+
 test("tracks long-running work and drives the AI feed instead of a chat workspace", async () => {
   const [tasks, application, settings, feed, attachBox, snippetsRoute, attachments] = await Promise.all([
     readFile(new URL("../app/components/BackgroundTasks.tsx", import.meta.url), "utf8"),

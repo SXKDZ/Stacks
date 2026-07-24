@@ -1245,12 +1245,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.summary-field textarea {
-  max-height: 220px;
-  min-height: 116px;
-  overflow-y: auto;
-}
-
 @media (max-width: 760px) {
   .research-grid {
     min-width: 620px;
