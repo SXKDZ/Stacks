@@ -6,6 +6,36 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Manually adding a paper now uses the same interface as editing one: the
+  summary, abstract, and notes fields get the highlighted Markdown editor, and
+  papers can be filed into collections at creation.
+- Closing or reopening a feed's GitHub issue from another device now collapses
+  or expands the feed locally, and comments on closed (collapsed) issues still
+  sync. Closed issues that never had a local feed are left alone.
+- Switching the GitHub inbox to a different repository now relinks feeds
+  safely: all stored issue and comment links are reset first (they belong to
+  the old repository), and the next sync mirrors every feed into fresh issues
+  in the new one instead of touching same-numbered strangers.
+
+### Fixed
+
+- The caret and text selection in the highlighted Markdown editors (summary,
+  abstract, notes) no longer drift off the visible text; shared form styles had
+  been reskinning the editor's input layer out of alignment with its display
+  layer.
+- Browser form-history suggestions no longer stack on top of the app's own
+  autocomplete in the add/edit paper, author, venue, and collection forms.
+- Feed comments posted from a phone while the agent was mid-run are no longer
+  at risk of being skipped permanently: the sync high-water mark only advances
+  once every deferred comment has been ingested.
+- The sync high-water mark is stamped with a clock-skew margin, so a fast local
+  clock can't hide remote changes from incremental pulls.
+- Comments ingested in one batch keep their GitHub order in the transcript.
+- The attachment-link backfill for old mirrored comments now runs once per
+  message instead of re-checking every comment on every sync.
+
 ## [0.2.1] - 2026-07-24
 
 ### Changed

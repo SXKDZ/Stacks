@@ -544,6 +544,24 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   assert.match(client, /since=/);
   assert.match(sync, /readGithubLastSyncedAt/);
   assert.match(sync, /writeGithubLastSyncedAt/);
+  // The high-water mark is stamped with a clock-skew margin (GitHub filters
+  // `since` on ITS clock) and never advances past deferred or truncated work.
+  assert.match(sync, /Date\.now\(\) - 5 \* 60 \* 1000/);
+  assert.match(sync, /deferredInbound = true/);
+  assert.match(sync, /!truncated && !deferredInbound/);
+  // Issue/comment links are repo-scoped: switching repos unlinks every feed,
+  // message, and proposal first, and restarts from a full (non-since) sweep.
+  assert.match(settingsLib, /linkedRepo/);
+  assert.match(sync, /readGithubLinkedRepo/);
+  assert.match(sync, /writeGithubLinkedRepo/);
+  assert.match(sync, /issueNumber: null, issueTitleSynced: null, issueStateSynced: null/);
+  assert.match(sync, /githubCommentId: null, attachmentsSynced: 0/);
+  assert.match(sync, /linkedRepo === repo \? readGithubLastSyncedAt\(\) : undefined/);
+  // Ingested comment batches keep their GitHub order (distinct timestamps).
+  assert.match(sync, /new Date\(now \+ index\)\.toISOString\(\)/);
+  // The attachment backfill probe runs once per message, not on every sync.
+  assert.match(sync, /attachmentsSynced/);
+  assert.match(sync, /message\.attachmentsSynced\) continue/);
   // Bidirectional title rename (3-way base) and comment-edit adoption.
   assert.match(client, /patchIssueTitle/);
   assert.match(sync, /issueTitleSynced/);
@@ -567,6 +585,14 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   assert.match(client, /patchIssueState/);
   assert.match(sync, /issueStateSynced/);
   assert.match(sync, /issuesClosed/);
+  // Close/reopen is bidirectional: the inbound list covers ALL issue states so
+  // a phone-side close/reopen is adopted as the local collapsed flag and
+  // comments on closed (collapsed) issues still sync. Closed UNLINKED issues
+  // never become feeds (that would resurrect deleted ones).
+  assert.match(client, /state=all/);
+  assert.doesNotMatch(client, /state=open/);
+  assert.match(sync, /issue\.state !== \(feed\.issueStateSynced \?\? "open"\)/);
+  assert.match(sync, /if \(issue\.state !== "open"\) continue/);
 });
 
 test("deleting a mirrored feed closes its issue via a durable, repo-scoped outbox", async () => {

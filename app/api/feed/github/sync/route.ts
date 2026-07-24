@@ -1,16 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, isNotNull } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
-import { readGithubLastSyncedAt, writeGithubLastSyncedAt } from "@/app/lib/local-settings";
+import { readGithubLastSyncedAt, readGithubLinkedRepo, writeGithubLastSyncedAt, writeGithubLinkedRepo } from "@/app/lib/local-settings";
 import {
   createIssue,
   editComment,
   getCommentBody,
   listComments,
-  listOpenIssues,
+  listIssues,
   patchIssueState,
   patchIssueTitle,
   postComment,
@@ -114,15 +114,20 @@ async function mirrorAttachments(
 
 /**
  * Reconcile the local feeds with their GitHub issues in one manual pass:
- *   outbound — create an issue per feed, push local renames, mirror new local
- *              messages as comments;
- *   inbound  — adopt remote renames, ingest new/edited human comments, turn new
- *              issues into feeds. New comments trigger a reply turn; edits just
- *              update the local copy (no re-run).
+ *   outbound — create an issue per feed, push local renames and collapse
+ *              state, mirror new local messages as comments;
+ *   inbound  — adopt remote renames and close/reopen (as collapse), ingest
+ *              new/edited human comments, turn new open issues into feeds.
+ *              New comments trigger a reply turn; edits just update the local
+ *              copy (no re-run).
  * Incremental: the inbound issue list is filtered by `since` the last successful
- * sync (sorted by updated_at), so each pass pulls only what changed; the first
- * sync does a full paginated sweep. Loop-safe: Stacks-authored comments carry a
- * marker and every mirrored/ingested message stores its comment id.
+ * sync (sorted by updated_at, stamped with a clock-skew margin), so each pass
+ * pulls only what changed; the first sync does a full paginated sweep. The mark
+ * only advances when nothing was truncated or deferred, so unprocessed changes
+ * are re-pulled. Loop-safe: Stacks-authored comments carry a marker and every
+ * mirrored/ingested message stores its comment id. Repo-safe: issue/comment ids
+ * are scoped to the repo they were created in (github.linkedRepo); switching
+ * repos unlinks everything first so no stale id touches the new repo's issues.
  */
 export async function POST(): Promise<Response> {
   const runtime = await resolveRuntimeValues();
@@ -140,16 +145,39 @@ export async function POST(): Promise<Response> {
   syncInProgress = true;
 
   const database = await ensureDatabase();
-  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0, issuesClosed: 0, issuesReopened: 0 };
-  const since = readGithubLastSyncedAt();
-  // Stamp the high-water mark from BEFORE the network calls, so anything that
-  // changes mid-sync is re-examined next time rather than skipped.
-  const startedAt = new Date().toISOString();
+  const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0, issuesClosed: 0, issuesReopened: 0, feedsUnlinked: 0 };
+  // Stamp the high-water mark from BEFORE the network calls, minus a skew
+  // margin: GitHub filters `since` against ITS clock, so a local clock running
+  // ahead would otherwise silently skip changes made right around the sync.
+  const startedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  // When any feed's inbound work is deferred (agent busy), the mark must not
+  // advance past it, or the deferred comments fall behind `since` forever.
+  let deferredInbound = false;
 
   try {
-    // 0. Drain pending GitHub actions (e.g. closing the issue of a deleted feed)
-    //    BEFORE reading issues, so a just-deleted feed's issue is already closed
-    //    and the inbound pass won't recreate it from an open issue.
+    // 0a. The issue/comment ids stored locally are only meaningful in the repo
+    //     they were created in. If the configured repo changed, unlink every
+    //     feed and message first — issue #N in the new repo is someone else's
+    //     issue, and touching it would rename/close/comment on the wrong thing.
+    //     Unlinked feeds then relink naturally: the outbound pass opens fresh
+    //     issues in the new repo and re-mirrors their messages and proposals.
+    const linkedRepo = readGithubLinkedRepo();
+    if (linkedRepo !== repo) {
+      if (linkedRepo) {
+        counts.feedsUnlinked = database.select({ id: feedSnippets.id }).from(feedSnippets).where(isNotNull(feedSnippets.issueNumber)).all().length;
+        database.update(feedSnippets).set({ issueNumber: null, issueTitleSynced: null, issueStateSynced: null }).run();
+        database.update(feedMessages).set({ githubCommentId: null, attachmentsSynced: 0 }).run();
+        database.update(feedProposals).set({ githubCommentId: null, githubStatusSynced: null }).run();
+      }
+      writeGithubLinkedRepo(repo);
+    }
+    // The incremental mark belongs to the linked repo's timeline; after a
+    // switch, start from a full sweep of the new repo.
+    const since = linkedRepo === repo ? readGithubLastSyncedAt() : undefined;
+
+    // 0b. Drain pending GitHub actions (e.g. closing the issue of a deleted
+    //     feed) BEFORE reading issues, so a just-deleted feed's issue is already
+    //     closed and the inbound pass won't recreate it from an open issue.
     await flushGithubOutbox();
 
     // 1. OUTBOUND — ensure an issue per feed, push local renames, mirror
@@ -198,14 +226,20 @@ export async function POST(): Promise<Response> {
         if (!MIRRORED_KINDS.has(message.kind)) continue;
         // Backfill: a message mirrored before attachment upload existed has a
         // comment but no "Attachments:" section. Upload its files and edit the
-        // comment to add the links, once.
+        // comment to add the links, once — attachmentsSynced records completion
+        // so the probe doesn't re-fetch every old comment on every sync.
         if (message.githubCommentId) {
-          if (!message.attachments) continue;
+          if (!message.attachments || message.attachmentsSynced) continue;
           const existing = await getCommentBody(config, message.githubCommentId);
-          if (existing === null || existing.includes("Attachments:")) continue;
-          const links = await mirrorAttachments(config, feed.id, message.attachments, counts);
-          if (!links) continue;
-          await editComment(config, message.githubCommentId, `${existing.replace(/\s+$/, "")}\n\n${links}`);
+          // Deleted upstream, already carrying links, or nothing uploadable:
+          // in every case there is nothing left to do on later syncs.
+          if (existing !== null && !existing.includes("Attachments:")) {
+            const links = await mirrorAttachments(config, feed.id, message.attachments, counts);
+            if (links) {
+              await editComment(config, message.githubCommentId, `${existing.replace(/\s+$/, "")}\n\n${links}`);
+            }
+          }
+          database.update(feedMessages).set({ attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
           continue;
         }
         const content = message.content.trim();
@@ -213,7 +247,7 @@ export async function POST(): Promise<Response> {
         if (!content && !attachmentLinks) continue;
         const body = [`${mirrorLabel(message.role)}\n\n${content}`, attachmentLinks].filter(Boolean).join("\n\n");
         const commentId = await postComment(config, issueNumber, body);
-        database.update(feedMessages).set({ githubCommentId: commentId }).where(eq(feedMessages.id, message.id)).run();
+        database.update(feedMessages).set({ githubCommentId: commentId, attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
         counts.commentsPosted += 1;
       }
 
@@ -240,12 +274,16 @@ export async function POST(): Promise<Response> {
     for (const feed of database.select().from(feedSnippets).all()) {
       if (feed.issueNumber) linked.set(feed.issueNumber, feed);
     }
-    const { issues, truncated } = await listOpenIssues(config, since);
+    const { issues, truncated } = await listIssues(config, since);
     for (const issue of issues) {
       if (issue.isPullRequest) continue;
       const feed = linked.get(issue.number);
 
       if (!feed) {
+        // Only OPEN unlinked issues become feeds. A closed unlinked issue is
+        // history — most importantly a deleted feed's issue (closed via the
+        // outbox), which must not resurrect the feed it belonged to.
+        if (issue.state !== "open") continue;
         // A brand-new issue (opened from a phone): start a feed for it.
         const id = `feed-${crypto.randomUUID()}`;
         const sessionId = crypto.randomUUID();
@@ -282,6 +320,18 @@ export async function POST(): Promise<Response> {
         counts.titlesRenamed += 1;
       }
 
+      // Adopt a remote close/reopen as the local collapsed state. The outbound
+      // pass already pushed any LOCAL change and re-baselined issueStateSynced,
+      // so a state that still differs from the base was changed on GitHub —
+      // closing an issue from the phone shelves the feed here, reopening it
+      // brings the feed back. (When both sides changed, outbound pushed first:
+      // local wins, matching the rename policy.)
+      if ((issue.state === "open" || issue.state === "closed") && issue.state !== (feed.issueStateSynced ?? "open")) {
+        const collapsed = issue.state === "closed";
+        database.update(feedSnippets).set({ collapsed, issueStateSynced: issue.state }).where(eq(feedSnippets.id, feed.id)).run();
+        counts[collapsed ? "issuesClosed" : "issuesReopened"] += 1;
+      }
+
       // Reconcile comments: ingest new human comments and adopt edits to ones
       // already synced (by comparing the remote body to the stored content).
       const localByComment = new Map<number, { id: string; content: string; role: string }>();
@@ -307,10 +357,18 @@ export async function POST(): Promise<Response> {
       if (!fresh.length) continue;
       // Leave new comments unrecorded if the agent is mid-run, so the next sync
       // (when it's free) ingests and acts on them rather than dropping them.
-      if (isFeedRunning(feed.id)) continue;
+      // Flag the deferral so the high-water mark stays put: these comments
+      // predate `startedAt`, and advancing past them would hide them from the
+      // next incremental pull if nothing else bumps the issue.
+      if (isFeedRunning(feed.id)) {
+        deferredInbound = true;
+        continue;
+      }
 
-      const now = new Date().toISOString();
-      for (const comment of fresh) {
+      const now = Date.now();
+      // Offset each comment by 1ms so the batch keeps its GitHub order when the
+      // transcript is read back sorted by createdAt.
+      fresh.forEach((comment, index) => {
         database.insert(feedMessages).values({
           id: `msg-${crypto.randomUUID()}`,
           snippetId: feed.id,
@@ -318,10 +376,10 @@ export async function POST(): Promise<Response> {
           kind: "text",
           content: comment.body.trim(),
           githubCommentId: comment.id,
-          createdAt: now,
+          createdAt: new Date(now + index).toISOString(),
         }).run();
         counts.commentsIngested += 1;
-      }
+      });
 
       // Kick off one reply turn covering the new comments.
       const reply = fresh.map((comment) => comment.body.trim()).join("\n\n");
@@ -346,9 +404,11 @@ export async function POST(): Promise<Response> {
       counts.repliesQueued += 1;
     }
 
-    // Advance the high-water mark only when the full changed set was seen; if
-    // the page cap truncated results, keep the old mark so the tail isn't lost.
-    if (!truncated) {
+    // Advance the high-water mark only when the full changed set was seen AND
+    // nothing was deferred: a truncated page cap or a busy feed both mean some
+    // already-published changes are still unprocessed, and moving the mark past
+    // them would hide them from every future incremental pull.
+    if (!truncated && !deferredInbound) {
       writeGithubLastSyncedAt(startedAt);
     }
     return Response.json({ ok: true, counts, truncated });

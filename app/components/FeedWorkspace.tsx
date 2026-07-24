@@ -1063,6 +1063,7 @@ export default function FeedWorkspace() {
         c.attachmentsUploaded ? `${c.attachmentsUploaded} file${c.attachmentsUploaded === 1 ? "" : "s"} uploaded` : "",
         c.proposalsPosted ? `${c.proposalsPosted} change${c.proposalsPosted === 1 ? "" : "s"} posted` : "",
         c.proposalsUpdated ? `${c.proposalsUpdated} change status${c.proposalsUpdated === 1 ? "" : "es"} updated` : "",
+        c.feedsUnlinked ? `${c.feedsUnlinked} feed${c.feedsUnlinked === 1 ? "" : "s"} relinked to the new repo` : "",
       ].filter(Boolean);
       const base = parts.length ? `Synced: ${parts.join(", ")}` : "Synced, already up to date";
       const message = data.truncated ? `${base} (more remain, sync again)` : base;
