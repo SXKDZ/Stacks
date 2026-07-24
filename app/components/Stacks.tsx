@@ -773,7 +773,6 @@ function StacksWorkspace() {
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Deep link: `/?paper=<id>` opens that paper's detail once the library has

@@ -36,7 +36,7 @@ import {
   X,
 } from "lucide-react";
 import type { FormEvent, ReactNode, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
@@ -1226,7 +1226,9 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
     return <div className="settings-card"><div className="storage-doctor-loading"><LoaderCircle className="spin" size={18} /><span>Loading feed skills…</span></div></div>;
   }
 
-  const SelectedIcon = selected ? feedSkillIcon(selected.icon) : Sparkles;
+  // Rendered via createElement rather than bound to a capitalized local, which
+  // the lint rule reads as defining a new component on every render.
+  const selectedIcon = createElement(selected ? feedSkillIcon(selected.icon) : Sparkles, { size: 16 });
 
   return (
     <div className="feed-skills-manager">
@@ -1256,7 +1258,7 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
             <>
               <div className="feed-skill-detail-head">
                 <details className="feed-skill-icon-picker">
-                  <summary aria-label="Choose an icon"><SelectedIcon size={16} /><ChevronDown size={13} /></summary>
+                  <summary aria-label="Choose an icon">{selectedIcon}<ChevronDown size={13} /></summary>
                   <div className="feed-skill-icon-menu">
                     {iconNames.map((name) => {
                       const OptionIcon = feedSkillIcon(name);

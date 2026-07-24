@@ -175,7 +175,7 @@ export function AttachBox({
   // URLs for removed files (and all of them on unmount) without stale closures.
   const [previews, setPreviews] = useState<Map<File, string>>(new Map());
   const previewsRef = useRef(previews);
-  previewsRef.current = previews;
+  useEffect(() => { previewsRef.current = previews; }, [previews]);
   useEffect(() => {
     setPreviews((current) => {
       const next = new Map<File, string>();

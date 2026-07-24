@@ -978,7 +978,10 @@ export default function FeedWorkspace() {
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
   const [githubReady, setGithubReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  // Sync outcomes are surfaced through the persistent sync log (below), so the
+  // transient notice is write-only: kept as a setter to clear/record state
+  // without rendering a second, duplicate banner.
+  const [, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [syncLog, setSyncLog] = useState<SyncLogEntry[]>([]);
 
   useEffect(() => { setSyncLog(readSyncLog()); }, []);
