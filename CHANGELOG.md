@@ -6,6 +6,8 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-24
+
 ### Changed
 
 - Manually adding a paper now uses the same interface as editing one: the
@@ -146,7 +148,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.2
 [0.2.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.1
 [0.2.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.0
 [0.1.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.1.1
