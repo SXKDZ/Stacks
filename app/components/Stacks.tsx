@@ -1147,6 +1147,7 @@ function StacksWorkspace() {
         <AddPaperModal
           authors={snapshot.authors}
           venues={snapshot.venues}
+          collections={snapshot.collections}
           onClose={() => setModal(null)}
           mutateLibrary={mutateLibrary}
           notify={notify}
@@ -3195,9 +3196,10 @@ function PaperMetadataFields({ paperType, paper, venues, notify, onPaperTypeChan
   );
 }
 
-function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
+function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, notify }: {
   authors: Author[];
   venues: Venue[];
+  collections: Collection[];
   onClose: () => void;
   mutateLibrary: (body: MutationBody, successMessage: string) => Promise<boolean>;
   notify: (message: string, tone?: ToastState["tone"]) => void;
@@ -3216,6 +3218,10 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<string[]>([]);
   const [manualPaperType, setManualPaperType] = useState<EditablePaperType>("conference");
+  const [manualAbstract, setManualAbstract] = useState("");
+  const [manualSummary, setManualSummary] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
+  const [manualCollectionNames, setManualCollectionNames] = useState<string[]>([]);
   const { runTask } = useBackgroundTasks();
 
   function acceptDroppedPdf(file: File | undefined) {
@@ -3448,9 +3454,10 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
       ...(visible.url ? { url: form.get("url") } : {}),
       ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
       ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
-      abstract: form.get("abstract"),
-      summary: form.get("summary"),
-      notes: form.get("notes"),
+      abstract: manualAbstract,
+      summary: manualSummary,
+      notes: manualNotes,
+      collectionNames: manualCollectionNames,
       readingStatus: "inbox",
     };
     const validationError = validatePaperWrite(data);
@@ -3582,15 +3589,16 @@ function AddPaperModal({ authors, venues, onClose, mutateLibrary, notify }: {
           <small className="privacy-note">Only the URL is sent to Jina Reader. Your local notes stay in Stacks.</small>
         </form>
       ) : (
-        <form className="modal-body entity-form" onSubmit={addManual}>
+        <form className="modal-body entity-form" autoComplete="off" onSubmit={addManual}>
           <label className="field-span-2"><span>Paper title *</span><input name="title" required autoFocus placeholder="A precise, complete title" /></label>
           <AuthorNamesField authors={authors} />
           <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={new Date().getFullYear()} /></label>
           <label><span>Paper type</span><Select ariaLabel="Paper type" value={manualPaperType} onChange={(next) => setManualPaperType(next as EditablePaperType)} options={paperTypeOptions.map((option) => ({ value: option.value, label: option.label }))} /></label>
           <PaperMetadataFields paperType={manualPaperType} venues={venues} notify={notify} onPaperTypeChange={setManualPaperType} />
-          <label className="field-span-2"><span>Abstract</span><textarea name="abstract" rows={5} placeholder="What this paper contributes…" /></label>
-          <label className="field-span-2"><span>Summary</span><textarea name="summary" rows={4} placeholder="A short summary for your library…" /></label>
-          <label className="field-span-2"><span>Research notes</span><textarea name="notes" rows={3} placeholder="Observations, questions, and connections…" /></label>
+          <CollectionNamesField collections={collections} value={manualCollectionNames} onChange={setManualCollectionNames} />
+          <label className="field-span-2"><span>Summary</span><MarkdownCodeEditor name="summary" ariaLabel="Summary" rows={4} value={manualSummary} onChange={setManualSummary} placeholder="A short summary for your library…" /></label>
+          <label className="field-span-2"><span>Abstract</span><MarkdownCodeEditor name="abstract" ariaLabel="Abstract" rows={5} value={manualAbstract} onChange={setManualAbstract} placeholder="What this paper contributes…" /></label>
+          <label className="field-span-2"><span>Research notes</span><MarkdownCodeEditor name="notes" ariaLabel="Research notes" rows={3} value={manualNotes} onChange={setManualNotes} placeholder="Observations, questions, and connections…" /></label>
           <div className="form-actions field-span-2"><ActionButton variant="secondary" icon={<X size={17} />} onClick={onClose}>Cancel</ActionButton><ActionButton type="submit" variant="primary" icon={<Plus size={17} />}>Add paper</ActionButton></div>
         </form>
       )}
@@ -3807,7 +3815,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
 
   return (
     <ModalFrame title="Edit paper" onClose={onClose} className="add-modal edit-paper-modal">
-      <form ref={formRef} className="edit-paper-modal-form" onSubmit={submit}>
+      <form ref={formRef} className="edit-paper-modal-form" autoComplete="off" onSubmit={submit}>
         <div className="modal-body entity-form edit-paper-fields">
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
         <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
@@ -3949,7 +3957,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
   }
   return (
     <ModalFrame title={title} subtitle={entity === "author" ? "Changes apply to every paper by this author." : entity === "venue" ? "Keep this venue's details consistent everywhere." : "Move papers between this collection and the rest of your library."} onClose={onClose} className={entity === "collection" ? "collection-manager-modal" : undefined}>
-      <form className="modal-body entity-form" onSubmit={submit}>
+      <form className="modal-body entity-form" autoComplete="off" onSubmit={submit}>
         {entity === "author" ? <>
           <label className="field-span-2"><span>Display name *</span><input name="displayName" defaultValue={author?.displayName} required autoFocus /></label>
           <label><span>Given name</span><input name="givenName" defaultValue={author?.givenName ?? ""} /></label>
@@ -4074,7 +4082,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
   }
   return (
     <ModalFrame title={`Bulk edit ${ids.length} ${entity}s`} subtitle="Only filled fields will be applied to every selected record." onClose={onClose}>
-      <form className="modal-body entity-form" onSubmit={submit}>
+      <form className="modal-body entity-form" autoComplete="off" onSubmit={submit}>
         {entity === "author" ? <>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </> : <>

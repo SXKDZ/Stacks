@@ -356,6 +356,23 @@ test("combines exact linked-record filters with boolean relationships", async ()
   assert.doesNotMatch(application, /onOpen=\{\(collection\) => \{\s*setQuery\(collection\.name\)/);
 });
 
+test("manual add paper reuses the edit-paper fields and suppresses browser autofill", async () => {
+  const application = await readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8");
+  // The manual tab shares the same description editors and collections picker as
+  // the edit modal, not bespoke plain textareas.
+  assert.match(application, /value=\{manualSummary\} onChange=\{setManualSummary\}/);
+  assert.match(application, /value=\{manualAbstract\} onChange=\{setManualAbstract\}/);
+  assert.match(application, /value=\{manualNotes\} onChange=\{setManualNotes\}/);
+  assert.match(application, /<CollectionNamesField collections=\{collections\} value=\{manualCollectionNames\}/);
+  // No plain <textarea> lingers in the manual paper form's description fields.
+  assert.doesNotMatch(application, /<textarea name="abstract"/);
+  assert.doesNotMatch(application, /<textarea name="summary"/);
+  // Data-entry forms opt out of the browser's own form-history dropdown, which
+  // otherwise stacks stale values on top of our DB-backed autocomplete.
+  assert.match(application, /onSubmit=\{addManual\}[\s\S]{0,40}autoComplete="off"|autoComplete="off"[\s\S]{0,40}onSubmit=\{addManual\}/);
+  assert.match(application, /className="edit-paper-modal-form" autoComplete="off"/);
+});
+
 test("tracks long-running work and drives the AI feed instead of a chat workspace", async () => {
   const [tasks, application, settings, feed, attachBox, snippetsRoute, attachments] = await Promise.all([
     readFile(new URL("../app/components/BackgroundTasks.tsx", import.meta.url), "utf8"),
