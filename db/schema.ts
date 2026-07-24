@@ -209,6 +209,10 @@ export const feedMessages = sqliteTable(
     // JSON array of files attached to this turn ({label, relativePath, kind}),
     // for reply turns that carried uploads/papers. Null when none.
     attachments: text("attachments"),
+    // 1 once this message's attachments are reflected in its GitHub comment
+    // (posted with links, or backfilled into an older comment). Lets sync skip
+    // the per-message backfill probe instead of re-fetching the comment forever.
+    attachmentsSynced: integer("attachments_synced").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("feed_messages_snippet_idx").on(table.snippetId, table.createdAt)],

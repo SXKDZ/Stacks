@@ -1107,7 +1107,9 @@ td.number-cell {
   opacity: 0.6;
 }
 
-.detail-section textarea {
+/* Excludes the code editor's inner textarea: a margin/min-height on it would
+   shift it off the highlight <pre> it must mirror exactly. */
+.detail-section textarea:not(:where(.prompt-code-editor *)) {
   margin-top: var(--space-eyebrow-gap);
   min-height: 105px;
 }

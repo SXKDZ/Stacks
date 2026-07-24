@@ -567,10 +567,14 @@
 
 /* Editable multi-line textareas share one spec (entity forms, paper notes,
    settings prompts). Backgrounds stay with the theme normalization blocks in
-   themes.css; per-context rules keep only min-height/margins. */
-.entity-form textarea,
-.detail-section textarea,
-.settings-form-grid textarea {
+   themes.css; per-context rules keep only min-height/margins. The zero-
+   specificity :not(:where(...)) keeps the code editor's inner textarea out of
+   this skin: it must mirror its highlight <pre>'s metrics exactly (padding,
+   line-height, border; see .prompt-code-editor above) or the caret and
+   selection drift off the rendered glyphs. */
+.entity-form textarea:not(:where(.prompt-code-editor *)),
+.detail-section textarea:not(:where(.prompt-code-editor *)),
+.settings-form-grid textarea:not(:where(.prompt-code-editor *)) {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
   line-height: 1.5;
@@ -584,11 +588,11 @@
    hardcoded #8ac4ef / rgba(22,141,236,.08) literals and gives the notes
    textarea a ring it lacked). 72% matches the ring recipe used elsewhere. */
 .settings-form-grid input:focus,
-.settings-form-grid textarea:focus,
+.settings-form-grid textarea:focus:not(:where(.prompt-code-editor *)),
 .integration-row input:focus,
 .entity-form input:focus,
-.entity-form textarea:focus,
-.detail-section textarea:focus {
+.entity-form textarea:focus:not(:where(.prompt-code-editor *)),
+.detail-section textarea:focus:not(:where(.prompt-code-editor *)) {
   border-color: color-mix(in srgb, var(--brand-blue) 72%, var(--line-strong));
   box-shadow: 0 0 0 3px var(--brand-blue-soft);
 }

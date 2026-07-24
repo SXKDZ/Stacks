@@ -144,16 +144,19 @@ function markerless(body: string): string {
 }
 
 /**
- * List open issues (excluding pull requests), following all pages. When `since`
- * is given, sorts by `updated` and returns only issues touched since then —
- * any edit (rename, new/edited comment) bumps updated_at, so this is the
- * incremental change-gate. `truncated` is true if the page cap was hit.
+ * List issues in every state (excluding pull requests), following all pages.
+ * Closed issues are included so a remote close/reopen (from the phone) can be
+ * adopted as the local collapsed state, and comments on closed issues still
+ * sync. When `since` is given, sorts by `updated` and returns only issues
+ * touched since then — any edit (rename, close, new/edited comment) bumps
+ * updated_at, so this is the incremental change-gate. `truncated` is true if
+ * the page cap was hit.
  */
-export async function listOpenIssues(config: GitHubConfig, since?: string): Promise<{ issues: GitHubIssue[]; truncated: boolean }> {
+export async function listIssues(config: GitHubConfig, since?: string): Promise<{ issues: GitHubIssue[]; truncated: boolean }> {
   const { owner, name } = parseRepo(config.repo);
   const query = since
-    ? `state=open&per_page=100&sort=updated&direction=asc&since=${encodeURIComponent(since)}`
-    : "state=open&per_page=100&sort=created&direction=asc";
+    ? `state=all&per_page=100&sort=updated&direction=asc&since=${encodeURIComponent(since)}`
+    : "state=all&per_page=100&sort=created&direction=asc";
   const { items, truncated } = await githubFetchAll<{ number: number; title: string; body: string | null; state: string; updated_at: string; pull_request?: unknown }>(
     config,
     `/repos/${owner}/${name}/issues?${query}`,

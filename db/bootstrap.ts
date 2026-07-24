@@ -99,6 +99,7 @@ const schemaStatements = [
     tool_use_id TEXT,
     github_comment_id INTEGER,
     attachments TEXT,
+    attachments_synced INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS feed_proposals (
@@ -258,6 +259,13 @@ async function initializeDatabase(): Promise<void> {
   }
   if (!feedSnippetColumns.has("issue_state_synced")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_state_synced TEXT").run();
+  }
+  // Track whether a message's attachments made it into its GitHub comment, so
+  // sync stops probing old comments once backfill is done. Backfill defaults to
+  // 0 (unknown) so pre-existing rows get (re)checked exactly once more.
+  const feedMessageColumns = tableColumns(raw, "feed_messages");
+  if (!feedMessageColumns.has("attachments_synced")) {
+    raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
   }
 
   // Enforce arXiv / Semantic Scholar id uniqueness (import dedup relies on it).

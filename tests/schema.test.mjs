@@ -356,6 +356,45 @@ test("combines exact linked-record filters with boolean relationships", async ()
   assert.doesNotMatch(application, /onOpen=\{\(collection\) => \{\s*setQuery\(collection\.name\)/);
 });
 
+test("manual add paper reuses the edit-paper fields and suppresses browser autofill", async () => {
+  const application = await readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8");
+  // The manual tab shares the same description editors and collections picker as
+  // the edit modal, not bespoke plain textareas.
+  assert.match(application, /value=\{manualSummary\} onChange=\{setManualSummary\}/);
+  assert.match(application, /value=\{manualAbstract\} onChange=\{setManualAbstract\}/);
+  assert.match(application, /value=\{manualNotes\} onChange=\{setManualNotes\}/);
+  assert.match(application, /<CollectionNamesField collections=\{collections\} value=\{manualCollectionNames\}/);
+  // No plain <textarea> lingers in the manual paper form's description fields.
+  assert.doesNotMatch(application, /<textarea name="abstract"/);
+  assert.doesNotMatch(application, /<textarea name="summary"/);
+  // Data-entry forms opt out of the browser's own form-history dropdown, which
+  // otherwise stacks stale values on top of our DB-backed autocomplete.
+  assert.match(application, /onSubmit=\{addManual\}[\s\S]{0,40}autoComplete="off"|autoComplete="off"[\s\S]{0,40}onSubmit=\{addManual\}/);
+  assert.match(application, /className="edit-paper-modal-form" autoComplete="off"/);
+});
+
+test("code editor overlay layers stay metric-identical under form skins", async () => {
+  // MarkdownCodeEditor paints text in a <pre> and takes input in a transparent
+  // <textarea> stacked on it; ANY context rule that restyles the textarea's
+  // metrics (padding, line-height, border, min/max-height, margin) desyncs the
+  // caret and selection from the visible glyphs. Form skins must therefore
+  // exclude the editor's inner textarea.
+  const styles = await readApplicationStyles();
+  const guard = ":not(:where(.prompt-code-editor *))";
+  for (const selector of [
+    `.entity-form textarea${guard}`,
+    `.detail-section textarea${guard}`,
+    `.settings-form-grid textarea${guard}`,
+    `.entity-form textarea:focus${guard}`,
+    `.detail-section textarea:focus${guard}`,
+    `.settings-form-grid textarea:focus${guard}`,
+  ]) {
+    assert.ok(styles.includes(selector), `missing editor guard on: ${selector}`);
+  }
+  // The old summary-field min/max-height override targeted the editor textarea.
+  assert.doesNotMatch(styles, /\.summary-field textarea/);
+});
+
 test("tracks long-running work and drives the AI feed instead of a chat workspace", async () => {
   const [tasks, application, settings, feed, attachBox, snippetsRoute, attachments] = await Promise.all([
     readFile(new URL("../app/components/BackgroundTasks.tsx", import.meta.url), "utf8"),
@@ -505,6 +544,24 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   assert.match(client, /since=/);
   assert.match(sync, /readGithubLastSyncedAt/);
   assert.match(sync, /writeGithubLastSyncedAt/);
+  // The high-water mark is stamped with a clock-skew margin (GitHub filters
+  // `since` on ITS clock) and never advances past deferred or truncated work.
+  assert.match(sync, /Date\.now\(\) - 5 \* 60 \* 1000/);
+  assert.match(sync, /deferredInbound = true/);
+  assert.match(sync, /!truncated && !deferredInbound/);
+  // Issue/comment links are repo-scoped: switching repos unlinks every feed,
+  // message, and proposal first, and restarts from a full (non-since) sweep.
+  assert.match(settingsLib, /linkedRepo/);
+  assert.match(sync, /readGithubLinkedRepo/);
+  assert.match(sync, /writeGithubLinkedRepo/);
+  assert.match(sync, /issueNumber: null, issueTitleSynced: null, issueStateSynced: null/);
+  assert.match(sync, /githubCommentId: null, attachmentsSynced: 0/);
+  assert.match(sync, /linkedRepo === repo \? readGithubLastSyncedAt\(\) : undefined/);
+  // Ingested comment batches keep their GitHub order (distinct timestamps).
+  assert.match(sync, /new Date\(now \+ index\)\.toISOString\(\)/);
+  // The attachment backfill probe runs once per message, not on every sync.
+  assert.match(sync, /attachmentsSynced/);
+  assert.match(sync, /message\.attachmentsSynced\) continue/);
   // Bidirectional title rename (3-way base) and comment-edit adoption.
   assert.match(client, /patchIssueTitle/);
   assert.match(sync, /issueTitleSynced/);
@@ -528,6 +585,14 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   assert.match(client, /patchIssueState/);
   assert.match(sync, /issueStateSynced/);
   assert.match(sync, /issuesClosed/);
+  // Close/reopen is bidirectional: the inbound list covers ALL issue states so
+  // a phone-side close/reopen is adopted as the local collapsed flag and
+  // comments on closed (collapsed) issues still sync. Closed UNLINKED issues
+  // never become feeds (that would resurrect deleted ones).
+  assert.match(client, /state=all/);
+  assert.doesNotMatch(client, /state=open/);
+  assert.match(sync, /issue\.state !== \(feed\.issueStateSynced \?\? "open"\)/);
+  assert.match(sync, /if \(issue\.state !== "open"\) continue/);
 });
 
 test("deleting a mirrored feed closes its issue via a durable, repo-scoped outbox", async () => {

@@ -54,6 +54,10 @@ interface StructuredSettingsFile {
     repo: string;
     /** ISO timestamp of the last successful inbox sync, for incremental pulls. */
     lastSyncedAt?: string;
+    /** The repo the local issue/comment links belong to. When it differs from
+     *  `repo` (the user switched repos), sync unlinks every feed first so stale
+     *  issue numbers can't touch the wrong repo's issues. */
+    linkedRepo?: string;
   };
   feedSkills?: Array<{ id: string; label: string; icon: string; prompt: string }>;
   // Saved Claude Code workflow scripts (the `export const meta` + body form),
@@ -262,8 +266,9 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
     },
     github: {
       repo: envValue("STACKS_GITHUB_REPO"),
-      // Preserve the sync high-water mark across unrelated settings writes.
+      // Preserve the sync high-water mark + link scope across unrelated writes.
       lastSyncedAt: existing?.github?.lastSyncedAt,
+      linkedRepo: existing?.github?.linkedRepo,
     },
     // Seed the secret baseline from the persisted settings file ONLY (no env
     // fallback). Otherwise a secret supplied purely through the environment
@@ -316,6 +321,19 @@ export function writeGithubLastSyncedAt(iso: string): void {
   writeStructuredSettings(next);
 }
 
+/** The repo the stored issue/comment links belong to (or undefined). */
+export function readGithubLinkedRepo(): string | undefined {
+  return readStructuredSettings()?.github?.linkedRepo;
+}
+
+/** Record which repo the local issue/comment links now belong to. */
+export function writeGithubLinkedRepo(repo: string): void {
+  const existing = readStructuredSettings();
+  const next = settingsFromCurrentValues(existing);
+  next.github = { ...existing?.github, repo: next.github?.repo ?? "", linkedRepo: repo };
+  writeStructuredSettings(next);
+}
+
 function saveStructuredSettings(updates: Record<string, string>): void {
   const next = settingsFromCurrentValues(readStructuredSettings());
   const setValue = (key: string, value: string) => {
@@ -329,7 +347,10 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "STACKS_ONEDRIVE_PATH": next.sync.remotePath = value; break;
       case "STACKS_AUTO_SYNC": next.sync.autoSync = value; break;
       case "STACKS_AUTO_SYNC_INTERVAL": next.sync.autoSyncInterval = value; break;
-      case "STACKS_GITHUB_REPO": next.github = { repo: value }; break;
+      // Changing the repo drops the sync high-water mark (it belongs to the old
+      // repo's timeline) but keeps linkedRepo: it names the repo the stored
+      // issue links belong to, which is how sync detects the switch and unlinks.
+      case "STACKS_GITHUB_REPO": next.github = { repo: value, linkedRepo: next.github?.linkedRepo }; break;
       case "STACKS_LIBRARY_NAME": next.libraryName = value; break;
       default:
         if (secretKeys.includes(key as typeof secretKeys[number])) {
