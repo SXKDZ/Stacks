@@ -387,7 +387,11 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   assert.match(attachBox, /feed-picker/);
   assert.match(snippetsRoute, /multipart\/form-data/);
   assert.match(snippetsRoute, /collectSnippetAttachments/);
-  assert.match(attachments, /storedDirectory/);
+  // Attached library papers are referenced by id, NOT copied into the feed dir
+  // (that duplicated large PDFs per turn); the agent reads the original via the
+  // token-gated file API. Only uploads are staged, so no copyFileSync remains.
+  assert.match(attachments, /kind: "paper", paperId/);
+  assert.doesNotMatch(attachments, /copyFileSync/);
   // The feed is always on: no enable gate remains.
   assert.doesNotMatch(feed, /feedEnabled/);
   assert.doesNotMatch(settings, /feedEnabled/);
@@ -416,6 +420,35 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   ]) {
     await assert.rejects(readFile(new URL(gone, import.meta.url), "utf8"));
   }
+});
+
+test("agent reads attached library papers via token-gated API, not eager copies", async () => {
+  const [attachments, metaRoute, fileRoute, prompt, agent, stacks] = await Promise.all([
+    readFile(new URL("../app/lib/feed-attachments.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/library/papers/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/library/papers/[id]/file/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-prompt.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+  ]);
+  // Papers are referenced by id (no file copy); only uploads are staged.
+  assert.match(attachments, /kind: "paper", paperId/);
+  assert.doesNotMatch(attachments, /copyFileSync/);
+  // Both agent endpoints are token-gated (same bearer token as /api/feed/library).
+  assert.match(metaRoute, /snippetForToken/);
+  assert.match(fileRoute, /snippetForToken/);
+  // Metadata is flat (hasFile/fileUrl merged onto the paper), so the agent reads
+  // paper.hasFile directly rather than digging for a sibling object.
+  assert.match(metaRoute, /\.\.\.paper,\s*\n\s*hasFile/);
+  // The file endpoint streams the original stored PDF/HTML, confined by resolveStoredFile.
+  assert.match(fileRoute, /servePdfFile|serveHtmlSnapshot/);
+  assert.match(fileRoute, /resolveStoredFile/);
+  // The agent gets /tmp as scratch space to download attached papers into.
+  assert.match(agent, /"--add-dir",\s*\n\s*"\/tmp"/);
+  // The prompt tells the agent to fetch the paper file into /tmp and read it.
+  assert.match(prompt, /api\/feed\/library\/papers\/<id>\/file/);
+  // Clicking a paper attachment deep-links to the library, consumed on load.
+  assert.match(stacks, /searchParams.*\.get\("paper"\)|URLSearchParams\(window\.location\.search\)\.get\("paper"\)/);
 });
 
 test("runs Claude Code workflow scripts through the approval-gated feed", async () => {
@@ -495,6 +528,35 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   assert.match(client, /patchIssueState/);
   assert.match(sync, /issueStateSynced/);
   assert.match(sync, /issuesClosed/);
+});
+
+test("deleting a mirrored feed closes its issue via a durable, repo-scoped outbox", async () => {
+  const [schema, bootstrap, outbox, deleteRoute, sync, boot] = await Promise.all([
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-github-outbox.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+  ]);
+  // A standalone outbox table (not tied to feed_snippets: the feed is gone) with
+  // the repo the op targets, so switching repos never fires a stale close.
+  assert.match(schema, /export const feedGithubOutbox = sqliteTable/);
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS feed_github_outbox/);
+  assert.match(bootstrap, /repo TEXT NOT NULL/);
+  // The op is scoped + deduped by (repo, issue) and retried until GitHub confirms.
+  assert.match(outbox, /eq\(feedGithubOutbox\.repo, repo\)/);
+  assert.match(outbox, /patchIssueState\(config, item\.issueNumber, "closed"\)/);
+  // A 404/410 (already gone) is treated as done, not retried forever.
+  assert.match(outbox, /status === 404 \|\| status === 410/);
+  // Delete enqueues the close and flushes immediately (fire-and-forget).
+  assert.match(deleteRoute, /enqueueCloseIssue\(snippet\.issueNumber\)/);
+  assert.match(deleteRoute, /void flushGithubOutbox\(\)/);
+  // Sync drains the outbox BEFORE the inbound pass, so a deleted feed's issue is
+  // already closed and won't be recreated from an open issue.
+  assert.match(sync, /await flushGithubOutbox\(\)/);
+  // Startup also flushes, so a delete made offline still reaches GitHub.
+  assert.match(boot, /flushGithubOutbox/);
 });
 
 test("feeds can be collapsed without reordering the list", async () => {

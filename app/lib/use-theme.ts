@@ -35,6 +35,18 @@ function ensureInitialized() {
     current = readInitial();
     apply(current);
     initialized = true;
+    // Sync across windows/tabs: the `storage` event fires in OTHER documents
+    // when localStorage changes here, so toggling the theme in the feed window
+    // updates the main window (and vice versa) without a reload.
+    window.addEventListener("storage", (event) => {
+      if (event.key !== "stacks-theme") return;
+      const next = event.newValue === "light" || event.newValue === "dark" ? event.newValue : null;
+      if (!next || next === current) return;
+      current = next;
+      document.documentElement.dataset.theme = current;
+      document.documentElement.style.colorScheme = current;
+      listeners.forEach((listener) => listener());
+    });
   }
 }
 

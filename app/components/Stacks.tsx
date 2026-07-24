@@ -776,6 +776,29 @@ function StacksWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Deep link: `/?paper=<id>` opens that paper's detail once the library has
+  // loaded (e.g. clicking a paper attachment on the feed page). Consumed once,
+  // then stripped from the URL so a refresh doesn't reopen it. Reads the param
+  // from window.location to avoid a Suspense boundary for useSearchParams.
+  const paperDeepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (paperDeepLinkHandled.current || !snapshot.papers.length) return;
+    const target = new URLSearchParams(window.location.search).get("paper");
+    if (!target) {
+      paperDeepLinkHandled.current = true;
+      return;
+    }
+    const paper = snapshot.papers.find((candidate) => candidate.id === target);
+    if (paper) {
+      paperDeepLinkHandled.current = true;
+      setView("library");
+      setSelectedPaper(paper);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("paper");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+  }, [snapshot.papers]);
+
   // The library name is a real setting (settings.json), loaded from the API so
   // it's consistent with the feed and survives a localStorage clear. The
   // localStorage read is a one-time migration fallback for pre-setting installs.

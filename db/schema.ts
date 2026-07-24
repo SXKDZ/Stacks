@@ -238,3 +238,26 @@ export const feedProposals = sqliteTable(
   (table) => [index("feed_proposals_snippet_idx").on(table.snippetId)],
 );
 
+// Pending GitHub actions that must reach the repo even if the app is offline or
+// a sync is mid-flight — currently just "close this issue" when a mirrored feed
+// is deleted. Standalone (not tied to feed_snippets: the feed is gone by the
+// time this matters). `repo` scopes each op so switching repos never fires a
+// stale close at the wrong repo. Drained by flushGithubOutbox on delete, sync,
+// and startup; retried until GitHub confirms.
+export const feedGithubOutbox = sqliteTable(
+  "feed_github_outbox",
+  {
+    id: text("id").primaryKey(),
+    // "owner/name" the op targets; skipped (not run) if it isn't the active repo.
+    repo: text("repo").notNull(),
+    // The action to perform. Only "close-issue" today.
+    op: text("op").notNull(),
+    // The issue the op acts on.
+    issueNumber: integer("issue_number").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("feed_github_outbox_repo_idx").on(table.repo)],
+);
+

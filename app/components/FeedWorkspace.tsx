@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -13,9 +13,10 @@ import { ActionButton } from "@/app/components/ui/controls";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 
 interface FeedAttachment {
-  relativePath: string;
+  kind: "upload" | "paper" | "paper-pdf" | "paper-html";
   label: string;
-  kind: "paper-pdf" | "paper-html" | "upload";
+  relativePath?: string;
+  paperId?: string;
 }
 
 interface FeedMessage {
@@ -167,22 +168,35 @@ function AttachmentChips({ snippetId, attachments }: { snippetId: string; attach
   return (
     <>
       <div className="feed-turn-attachments">
-        {attachments.map((attachment) => {
-          const name = attachment.relativePath.split("/").pop() ?? attachment.label;
+        {attachments.map((attachment, index) => {
+          // A referenced library paper: opens that paper in the library in a new
+          // tab (the deep link is consumed by Stacks on load), keeping the feed
+          // thread in place.
+          if (attachment.kind === "paper") {
+            const href = attachment.paperId ? `/?paper=${encodeURIComponent(attachment.paperId)}` : "/";
+            return (
+              <a key={attachment.paperId ?? `paper-${index}`} href={href} target="_blank" rel="noreferrer" className="feed-turn-attachment" title={`Open ${attachment.label} in your library`}>
+                <BookOpen size={12} />
+                <span>{attachment.label}</span>
+              </a>
+            );
+          }
+          // Uploads (and legacy staged paper copies) are files in the working dir.
+          const name = attachment.relativePath?.split("/").pop() ?? attachment.label;
           const href = `/api/feed/snippets/${snippetId}/attachments/${encodeURIComponent(name)}`;
           // Pasted/short text opens an in-app viewer (like the composer's text
           // editor); binary files (PDF/HTML/image) open in a new tab.
           const isText = /\.(txt|md|markdown)$/i.test(name);
           if (isText) {
             return (
-              <button type="button" key={attachment.relativePath} className="feed-turn-attachment" onClick={() => void openText(name, attachment.label)} disabled={loading} title={`View ${attachment.label}`}>
+              <button type="button" key={attachment.relativePath ?? `file-${index}`} className="feed-turn-attachment" onClick={() => void openText(name, attachment.label)} disabled={loading} title={`View ${attachment.label}`}>
                 <Paperclip size={12} />
                 <span>{attachment.label}</span>
               </button>
             );
           }
           return (
-            <a key={attachment.relativePath} href={href} target="_blank" rel="noreferrer" className="feed-turn-attachment" title={`Open ${attachment.label}`}>
+            <a key={attachment.relativePath ?? `file-${index}`} href={href} target="_blank" rel="noreferrer" className="feed-turn-attachment" title={`Open ${attachment.label}`}>
               <Paperclip size={12} />
               <span>{attachment.label}</span>
             </a>
@@ -761,14 +775,17 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
         <div className="feed-detail-body-inner">
         {(() => {
           const openingAttachments = parseAttachments(snippet.attachments);
-          const showOpening = (snippet.instruction && snippet.instruction !== snippet.title) || openingAttachments.length > 0;
-          if (!showOpening) return null;
+          // The opening "You" turn shows the instruction the user typed plus any
+          // attachments. Render the instruction bubble whenever it exists — it is
+          // the turn's content, distinct from the header title (which may be an
+          // identical, truncated copy). Suppressing it when it equaled the title
+          // dropped the user's query from the thread when a paper was attached.
+          const openingText = snippet.instruction?.trim() ?? "";
+          if (!openingText && openingAttachments.length === 0) return null;
           return (
             <div className="feed-message feed-turn feed-turn-user">
               <span className="feed-turn-label">You</span>
-              {snippet.instruction && snippet.instruction !== snippet.title
-                ? <MarkdownContent content={snippet.instruction} className="feed-bubble" />
-                : null}
+              {openingText ? <MarkdownContent content={openingText} className="feed-bubble" /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
             </div>
           );

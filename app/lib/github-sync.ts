@@ -40,7 +40,14 @@ export interface GitHubComment {
   fromStacks: boolean;
 }
 
-export class GitHubError extends Error {}
+export class GitHubError extends Error {
+  /** The HTTP status that caused it, or 0 for client-side/validation errors. */
+  readonly status: number;
+  constructor(message: string, status = 0) {
+    super(message);
+    this.status = status;
+  }
+}
 
 function parseRepo(repo: string): { owner: string; name: string } {
   const match = repo.trim().match(/^([\w.-]+)\/([\w.-]+)$/);
@@ -82,7 +89,7 @@ async function githubRequest(
       : response.status === 404
         ? " Check the repo exists and the token can see it."
         : "";
-    throw new GitHubError(`GitHub API ${response.status}.${hint}${detail ? ` ${detail.slice(0, 200)}` : ""}`);
+    throw new GitHubError(`GitHub API ${response.status}.${hint}${detail ? ` ${detail.slice(0, 200)}` : ""}`, response.status);
   }
   return response;
 }

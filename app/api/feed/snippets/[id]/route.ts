@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
+import { enqueueCloseIssue, flushGithubOutbox } from "@/app/lib/feed-github-outbox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -77,6 +78,18 @@ export async function DELETE(
     await stopFeedAndWait(id);
   }
   const database = await ensureDatabase();
+  const snippet = database.select({ issueNumber: feedSnippets.issueNumber }).from(feedSnippets).where(eq(feedSnippets.id, id)).get();
+
+  // If this feed was mirrored to a GitHub issue, its deletion has to reach
+  // GitHub: inbound sync recreates a feed from any open issue that has no local
+  // feed, so a deleted feed would otherwise reappear (rebuilt from scratch) on
+  // the next sync. Queue a durable "close issue" op (survives offline/restart,
+  // scoped to the active repo) and attempt it immediately; the queue retries on
+  // the next flush if GitHub is unreachable now.
+  if (snippet?.issueNumber) {
+    await enqueueCloseIssue(snippet.issueNumber);
+  }
+
   database.delete(feedSnippets).where(eq(feedSnippets.id, id)).run();
   // Remove the feed/<id> tree (uploaded files + copied library PDFs + session
   // transcripts). Best-effort: a failure here must not fail the delete.
@@ -84,6 +97,11 @@ export async function DELETE(
     rmSync(feedWorkingDir(id), { recursive: true, force: true });
   } catch {
     // The DB rows are already gone; a leftover dir is harmless.
+  }
+  // Attempt the queued close now (fire-and-forget); if GitHub is down it stays
+  // queued and a later flush retries it, so the response isn't blocked on it.
+  if (snippet?.issueNumber) {
+    void flushGithubOutbox();
   }
   return Response.json({ ok: true });
 }

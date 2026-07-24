@@ -310,8 +310,9 @@ export function readGithubLastSyncedAt(): string | undefined {
 
 /** Record when the GitHub inbox sync last completed, preserving the rest. */
 export function writeGithubLastSyncedAt(iso: string): void {
-  const next = settingsFromCurrentValues(readStructuredSettings());
-  next.github = { repo: next.github?.repo ?? "", lastSyncedAt: iso };
+  const existing = readStructuredSettings();
+  const next = settingsFromCurrentValues(existing);
+  next.github = { ...existing?.github, repo: next.github?.repo ?? "", lastSyncedAt: iso };
   writeStructuredSettings(next);
 }
 

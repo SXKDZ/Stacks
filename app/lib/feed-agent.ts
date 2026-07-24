@@ -316,6 +316,12 @@ export async function runFeedAgent(options: {
       MAX_TURNS,
       "--add-dir",
       workingDir,
+      // Scratch space: the agent fetches an attached paper's PDF (via the
+      // token-gated file API) into a temp file and reads it, rather than us
+      // copying every attached paper into the feed dir. /tmp is outside the
+      // library, so nothing it writes there can touch stored files.
+      "--add-dir",
+      "/tmp",
       ...(snippetModel ? ["--model", snippetModel] : []),
       // Headless: with no user to answer prompts, the default mode auto-denies
       // every Bash/network/temp-file call, so the agent can't even read the

@@ -19,6 +19,7 @@ import {
   type GitHubConfig,
 } from "@/app/lib/github-sync";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
+import { flushGithubOutbox } from "@/app/lib/feed-github-outbox";
 import { buildFollowUpPrompt, buildForkPrompt, buildSnippetPrompt } from "@/app/lib/feed-prompt";
 
 export const dynamic = "force-dynamic";
@@ -62,12 +63,19 @@ function proposalCommentBody(operation: string, status: string): string {
   return `**Proposed library change** · ${STATUS_LABEL[status] ?? status}\n\n${summary}\n\n_Approve or reject in Stacks; this reflects the current status._`;
 }
 
-interface StoredAttachment { relativePath: string; label: string }
+interface StoredAttachment {
+  kind?: "upload" | "paper" | "paper-pdf" | "paper-html";
+  relativePath?: string;
+  paperId?: string;
+  label: string;
+}
 
 /**
- * Upload a turn's attachments into the repo and return a Markdown link list to
- * append to the mirrored comment, so a phone can download them. Files are staged
- * at feed/<id>/attachments/<name> locally and mirrored to the same repo path.
+ * Build the "Attachments:" Markdown block for a mirrored comment. Uploaded files
+ * (and legacy staged paper copies) are uploaded into the repo so a phone can
+ * download them. Library papers attached by reference are NOT uploaded — there
+ * is no local copy — so they are mentioned by title (metadata), which is what
+ * matters on a phone anyway.
  */
 async function mirrorAttachments(
   config: GitHubConfig,
@@ -84,6 +92,11 @@ async function mirrorAttachments(
   }
   const links: string[] = [];
   for (const attachment of parsed) {
+    // A referenced library paper: mention it, don't upload (no local copy).
+    if (attachment.kind === "paper" || !attachment.relativePath) {
+      links.push(`- ${attachment.label} (library paper)`);
+      continue;
+    }
     const name = basename(attachment.relativePath);
     const localPath = join(feedWorkingDir(snippetId), "attachments", name);
     if (!existsSync(localPath)) continue;
@@ -134,6 +147,11 @@ export async function POST(): Promise<Response> {
   const startedAt = new Date().toISOString();
 
   try {
+    // 0. Drain pending GitHub actions (e.g. closing the issue of a deleted feed)
+    //    BEFORE reading issues, so a just-deleted feed's issue is already closed
+    //    and the inbound pass won't recreate it from an open issue.
+    await flushGithubOutbox();
+
     // 1. OUTBOUND — ensure an issue per feed, push local renames, mirror
     //    unposted local messages. Runs over all feeds (not the incremental
     //    set), so a purely-local change is never missed.
@@ -232,7 +250,13 @@ export async function POST(): Promise<Response> {
         const id = `feed-${crypto.randomUUID()}`;
         const sessionId = crypto.randomUUID();
         const now = new Date().toISOString();
-        const instruction = [issue.title, issue.body].filter(Boolean).join("\n\n").trim();
+        // Combine title + body, but don't repeat the title when the body just
+        // restates it (a phone issue often carries the same text in both, or the
+        // title is a truncated prefix of the body), which showed the query twice.
+        const issueTitle = issue.title.trim();
+        const issueBody = (issue.body ?? "").trim();
+        const bodyEchoesTitle = issueBody === issueTitle || issueBody.startsWith(issueTitle);
+        const instruction = (bodyEchoesTitle ? issueBody || issueTitle : [issueTitle, issueBody].filter(Boolean).join("\n\n")).trim();
         database.insert(feedSnippets).values({
           id,
           title: issue.title.slice(0, 120) || "Untitled",
