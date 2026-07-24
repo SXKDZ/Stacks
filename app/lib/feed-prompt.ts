@@ -58,25 +58,43 @@ RULES:
   your reply, and Stacks will pick it up.`;
 
 interface SnippetAttachment {
-  relativePath: string;
+  kind: "upload" | "paper" | "paper-pdf" | "paper-html";
   label: string;
-  kind: "paper-pdf" | "paper-html" | "upload";
+  relativePath?: string;
+  paperId?: string;
 }
 
 function describeAttachments(attachments: SnippetAttachment[]): string {
-  const lines = attachments.map((attachment) => {
-    const origin = attachment.kind === "paper-pdf"
-      ? "library paper (PDF)"
-      : attachment.kind === "paper-html"
-        ? "library paper (HTML snapshot)"
-        : "uploaded file";
-    return `- ${attachment.relativePath}: ${attachment.label} (${origin})`;
-  });
-  return [
-    "Attached files are in your working directory. Read them directly (they are",
-    "relative to your current directory) to ground your work:",
-    ...lines,
-  ].join("\n");
+  // Uploads live in the working directory (read by relative path). Library
+  // papers are referenced by id, not copied in: the agent fetches the original
+  // from the read-only file API into /tmp and reads that. (paper-pdf/paper-html
+  // are legacy staged copies from older feeds; still read by relative path.)
+  const uploads = attachments.filter((a) => a.kind === "upload" || a.kind === "paper-pdf" || a.kind === "paper-html");
+  const papers = attachments.filter((a) => a.kind === "paper" && a.paperId);
+  const lines: string[] = [];
+  if (uploads.length) {
+    lines.push(
+      "Attached files are in your working directory. Read them directly (paths are",
+      "relative to your current directory) to ground your work:",
+      ...uploads.map((a) => `- ${a.relativePath}: ${a.label}`),
+    );
+  }
+  if (papers.length) {
+    if (lines.length) lines.push("");
+    lines.push(
+      "Attached library papers (read the ORIGINAL, do not re-add them). For each,",
+      "fetch its metadata and file with your feed token:",
+      ...papers.map((a) => `- paper ${a.paperId}: ${a.label}`),
+      "  Metadata (returns the paper's fields, plus hasFile and fileUrl):",
+      "    curl -s -H \"Authorization: Bearer $STACKS_FEED_TOKEN\" \\",
+      "      \"$STACKS_FEED_BASE_URL/api/feed/library/papers/<id>\"",
+      "  File (when hasFile is true): download the PDF/HTML into /tmp and read it:",
+      "    curl -s -H \"Authorization: Bearer $STACKS_FEED_TOKEN\" \\",
+      "      \"$STACKS_FEED_BASE_URL/api/feed/library/papers/<id>/file\" -o /tmp/<id>.pdf",
+      "  then Read /tmp/<id>.pdf. If hasFile is false, use the paper's url/pdfUrl.",
+    );
+  }
+  return lines.join("\n");
 }
 
 export function buildSnippetPrompt(input: {

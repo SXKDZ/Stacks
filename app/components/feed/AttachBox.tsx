@@ -111,6 +111,7 @@ export function AttachBox({
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const trayRef = useRef<HTMLDivElement>(null);
+  const pickerSearchRef = useRef<HTMLInputElement>(null);
 
   // Pasted long text becomes an editable text attachment (chip), not textarea fill.
   const [texts, setTexts] = useState<Array<{ id: string; name: string; content: string }>>([]);
@@ -131,6 +132,16 @@ export function AttachBox({
 
   // Esc closes whichever overlay is open (library picker, zoomed image, or the
   // pasted-text editor), innermost first.
+  // Move focus into the picker's search box when it opens. `autoFocus` on a
+  // conditionally-rendered input is racy (the composer textarea can win the
+  // focus), which left keystrokes landing in the composer behind the modal.
+  useEffect(() => {
+    if (pickerOpen) {
+      const frame = requestAnimationFrame(() => pickerSearchRef.current?.focus());
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [pickerOpen]);
+
   const overlayOpen = pickerOpen || zoomedImage !== null || editingText !== null;
   useEffect(() => {
     if (!overlayOpen) return;
@@ -347,7 +358,7 @@ export function AttachBox({
             </header>
             <div className="feed-picker-search">
               <Search size={14} />
-              <input value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search your library…" autoFocus />
+              <input ref={pickerSearchRef} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search your library…" />
             </div>
             <div className="feed-picker-list">
               {library

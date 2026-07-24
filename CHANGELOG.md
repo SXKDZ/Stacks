@@ -6,6 +6,30 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Attaching a library paper to a feed no longer copies its PDF into the feed
+  folder (which duplicated large files on every turn). The agent reads the
+  original through a read-only, token-gated API instead: it fetches the paper's
+  metadata and, when there is a stored file, downloads it to a scratch directory
+  and reads that. GitHub sync mentions attached papers by title rather than
+  re-uploading them.
+- Clicking an attached paper in a feed opens that paper in the library in a new
+  tab (via a `/?paper=<id>` deep link).
+- The theme now stays in sync across open windows: switching light/dark in one
+  updates the others without a reload.
+
+### Fixed
+
+- Deleting a feed that was mirrored to GitHub now closes its issue, so the feed
+  no longer reappears (rebuilt from scratch) on the next sync.
+- A feed created from a GitHub issue no longer shows its instruction twice when
+  the issue body repeats the title.
+- The opening message of a feed keeps showing the text you typed even when a
+  paper is attached.
+- The library-picker search box takes focus when it opens, so typing filters the
+  list instead of landing in the composer behind it.
+
 ## [0.2.0] - 2026-07-23
 
 ### Added

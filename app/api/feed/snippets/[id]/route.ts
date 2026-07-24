@@ -3,6 +3,8 @@ import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
+import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { patchIssueState, type GitHubConfig } from "@/app/lib/github-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -77,6 +79,29 @@ export async function DELETE(
     await stopFeedAndWait(id);
   }
   const database = await ensureDatabase();
+  const snippet = database.select({ issueNumber: feedSnippets.issueNumber }).from(feedSnippets).where(eq(feedSnippets.id, id)).get();
+
+  // If this feed was mirrored to a GitHub issue, close that issue as part of the
+  // delete. Inbound sync only reads OPEN issues, so an open issue with no local
+  // feed is treated as brand-new and recreated from its title+body — meaning a
+  // deleted feed would otherwise reappear (rebuilt from scratch) on the next
+  // sync. Closing it is the tombstone. Best-effort: GitHub being unconfigured or
+  // unreachable must not block the local delete.
+  if (snippet?.issueNumber) {
+    try {
+      const runtime = await resolveRuntimeValues();
+      const repo = runtimeValue(runtime, "STACKS_GITHUB_REPO");
+      const token = runtimeValue(runtime, "GITHUB_TOKEN");
+      if (repo && token) {
+        const config: GitHubConfig = { repo, token };
+        await patchIssueState(config, snippet.issueNumber, "closed");
+      }
+    } catch {
+      // Leave the issue open if we can't reach GitHub; the user can close it,
+      // or a future sync of a still-open issue will recreate the feed.
+    }
+  }
+
   database.delete(feedSnippets).where(eq(feedSnippets.id, id)).run();
   // Remove the feed/<id> tree (uploaded files + copied library PDFs + session
   // transcripts). Best-effort: a failure here must not fail the delete.
