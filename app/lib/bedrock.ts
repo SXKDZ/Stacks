@@ -1,3 +1,6 @@
+import { parseJsonWith } from "@/app/lib/schemas/parse";
+import { joinTextBlocks, MantleResponseSchema, RuntimeResponseSchema, UpstreamErrorSchema } from "@/app/lib/schemas/bedrock";
+
 export interface BedrockMessage {
   role: "user" | "assistant";
   content: string;
@@ -12,20 +15,6 @@ interface BedrockInvocationOptions {
   maxTokens: number;
   temperature: number;
   signal?: AbortSignal;
-}
-
-interface RuntimeResponse {
-  output?: {
-    message?: {
-      content?: Array<{ text?: string }>;
-    };
-  };
-  usage?: Record<string, unknown>;
-}
-
-interface MantleResponse {
-  content?: Array<{ text?: string }>;
-  usage?: Record<string, unknown>;
 }
 
 export class BedrockInvocationError extends Error {
@@ -66,15 +55,11 @@ function canTryAnotherRegion(status: number, message: string): boolean {
 }
 
 function upstreamMessage(raw: string): string {
-  try {
-    const parsed = JSON.parse(raw) as {
-      message?: string;
-      error?: { message?: string };
-    };
-    return parsed.error?.message ?? parsed.message ?? raw.slice(0, 500);
-  } catch {
+  const parsed = parseJsonWith(UpstreamErrorSchema, raw);
+  if (!parsed.ok) {
     return raw.slice(0, 500);
   }
+  return parsed.data.error?.message ?? parsed.data.message ?? raw.slice(0, 500);
 }
 
 export async function invokeBedrockMessages(options: BedrockInvocationOptions): Promise<{
@@ -107,9 +92,13 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
     if (!response.ok) {
       throw new BedrockInvocationError(upstreamMessage(raw), response.status);
     }
-    const payload = JSON.parse(raw) as MantleResponse;
-    const content = payload.content?.map((block) => block.text ?? "").join("\n").trim() ?? "";
-    return { content, endpoint: "mantle", region: options.region };
+    // Validate rather than cast: a shape we don't recognize is reported instead
+    // of silently collapsing to an empty completion via optional chaining.
+    const payload = parseJsonWith(MantleResponseSchema, raw);
+    if (!payload.ok) {
+      throw new BedrockInvocationError(`Unexpected Bedrock response: ${payload.error}`, 502);
+    }
+    return { content: joinTextBlocks(payload.data.content), endpoint: "mantle", region: options.region };
   }
 
   let lastError: BedrockInvocationError | null = null;
@@ -148,9 +137,11 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
       }
       throw lastError;
     }
-    const payload = JSON.parse(raw) as RuntimeResponse;
-    const content = payload.output?.message?.content?.map((block) => block.text ?? "").join("\n").trim() ?? "";
-    return { content, endpoint: "runtime", region };
+    const payload = parseJsonWith(RuntimeResponseSchema, raw);
+    if (!payload.ok) {
+      throw new BedrockInvocationError(`Unexpected Bedrock response: ${payload.error}`, 502);
+    }
+    return { content: joinTextBlocks(payload.data.output?.message?.content), endpoint: "runtime", region };
   }
   throw lastError ?? new BedrockInvocationError("No compatible Bedrock region was available.", 503);
 }

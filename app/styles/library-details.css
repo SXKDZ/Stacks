@@ -264,6 +264,8 @@
   overflow: hidden;
 }
 
+/* The table always fits its pane, so column widths are proportional shares: there
+   is a fixed span to divide, and widening one column narrows its neighbours. */
 .paper-table {
   border-collapse: collapse;
   table-layout: fixed;
@@ -304,13 +306,16 @@
   position: relative;
 }
 
+/* Sits fully INSIDE the header cell. `.research-grid th` sets overflow:hidden
+   (for text truncation), so a handle straddling the cell edge with right:-5px
+   was clipped away and never received the pointerdown that starts a resize. */
 .column-resize-handle {
   background: transparent;
   bottom: 0;
   cursor: col-resize;
   padding: 0;
   position: absolute;
-  right: -5px;
+  right: 0;
   top: 0;
   touch-action: none;
   width: 10px;
@@ -324,7 +329,7 @@
   content: "";
   opacity: 0;
   position: absolute;
-  right: 4px;
+  right: 1px;
   top: 8px;
   transition: opacity var(--motion-fast);
   width: 2px;
@@ -477,6 +482,31 @@
   flex-direction: column;
 }
 
+/* The venue cell is a control when the paper has a venue record, mirroring the
+   clickable author names: it filters the library to that venue. It keeps the
+   cell's own layout so the row looks identical until hovered. */
+/* Sized to its text, not the cell: width:100% made the whole column clickable, so
+   clicking the empty space beside a venue name filtered the library. */
+.venue-cell-open {
+  align-items: flex-start;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: fit-content;
+}
+
+/* Underlined on HOVER only. A permanent underline on every row turned the column
+   into a wall of links that read louder than the paper titles beside it; on hover
+   it is the affordance that says this name is clickable. */
+.venue-cell-open:hover b,
+.venue-cell-open:focus-visible b {
+  color: var(--brand-blue-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .venue-cell b {
   font-size: var(--type-label);
 }
@@ -539,15 +569,7 @@ td.number-cell {
 .compact-avatar.avatar-1 { background: linear-gradient(145deg, #e0f7f5, #c1ece9); border-color: #afe0dd; color: #167f86; }
 .compact-avatar.avatar-2 { background: linear-gradient(145deg, #fff1db, #f5d8aa); border-color: #efd09d; color: #a36912; }
 .compact-avatar.avatar-3 { background: linear-gradient(145deg, #e2f5ea, #bfe9d3); border-color: #aee0c5; color: #247c5b; }
-.compact-avatar.avatar-4 { background: linear-gradient(145deg, #f9e7ec, #efc6d0); border-color: #e8b8c3; color: #a34255; }
-
-.collection-card-top {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-}
-
-.collection-actions {
+.compact-avatar.avatar-4 { background: linear-gradient(145deg, #f9e7ec, #efc6d0); border-color: #e8b8c3; color: #a34255; }.collection-actions {
   align-items: center;
   display: flex;
   gap: 6px;
@@ -577,16 +599,7 @@ td.number-cell {
 
 .compact-toolbar {
   justify-content: flex-start;
-}
-
-.collection-grid {
-  align-items: start;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.collection-card {
+}.collection-card {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -604,21 +617,7 @@ td.number-cell {
   position: absolute;
   right: 0;
   top: 0;
-}
-
-.collection-icon {
-  align-items: center;
-  background: var(--brand-blue-soft);
-  border-radius: var(--radius-md);
-  color: var(--brand-blue);
-  display: flex;
-  height: 36px;
-  justify-content: center;
-  width: 36px;
-}
-
-
-.collection-papers {
+}.collection-papers {
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;

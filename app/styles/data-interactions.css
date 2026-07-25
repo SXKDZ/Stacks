@@ -357,30 +357,6 @@
 }
 
 
-/* Collection editor: compact, screen-contained transfer workspace. */
-.collection-manager-modal {
-  max-height: calc(100dvh - 24px);
-  max-width: 1040px;
-  overflow: hidden;
-  width: min(1040px, calc(100vw - 32px));
-}
-
-.collection-manager-modal .modal-body {
-  max-height: calc(100dvh - 132px);
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.collection-manager-modal .collection-transfer-grid {
-  height: clamp(300px, calc(100dvh - 410px), 430px);
-  min-height: 0;
-}
-
-.collection-manager-modal .transfer-column {
-  grid-template-rows: 42px 46px minmax(0, 1fr) 38px;
-  min-height: 0;
-}
-
 .collection-manager-modal .transfer-column .page-search.inline-search {
   align-items: center;
   align-self: center;
@@ -452,13 +428,7 @@
 .collection-manager-modal .page-search.inline-search input {
   height: auto;
   padding: 0;
-}
-
-.transfer-paper-details {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.discover-search-box {
+}.discover-search-box {
   box-shadow: 0 2px 8px rgba(15, 31, 42, 0.04);
 }
 
@@ -494,32 +464,23 @@
 
 .expandable-author-list > button:hover {
   color: var(--brand-blue);
-}
-
-.expandable-author-list.is-expanded {
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-
-.expandable-author-list.is-expanded > span {
-  flex-basis: 100%;
-  overflow: visible;
-  white-space: normal;
-}
-
-/* Clickable authors in the paper-row secondary line: each name is a link to its
+}/* Clickable authors in the paper-row secondary line: each name is a link to its
    author filter, so the byline reads as muted text with the names as accents. */
+/* Inline, not flex: the names and the show-more toggle are one run of text, so the
+   toggle wraps after the last name instead of being placed on its own flex line. */
 .paper-secondary-line .expandable-author-buttons {
-  align-items: baseline;
   color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
+  display: inline;
   font-size: var(--type-label);
-  gap: 4px;
   line-height: 1.35;
   min-width: 0;
 }
 
+.paper-secondary-line .expandable-author-buttons > span {
+  display: inline;
+}
+
+.paper-secondary-line .expandable-author-buttons > span > button,
 .paper-secondary-line .expandable-author-buttons > span > span > button {
   background: transparent;
   border: 0;
@@ -530,6 +491,7 @@
   text-align: left;
 }
 
+.paper-secondary-line .expandable-author-buttons > span > button:hover,
 .paper-secondary-line .expandable-author-buttons > span > span > button:hover {
   color: var(--brand-blue-strong);
   text-decoration: underline;
@@ -538,6 +500,8 @@
 
 .paper-secondary-line .expandable-author-buttons .author-toggle {
   background: transparent;
+  display: inline;
+  white-space: nowrap;
   color: var(--brand-blue-strong);
   cursor: pointer;
   font-size: var(--type-micro);
@@ -565,13 +529,7 @@
   gap: 4px;
   margin-top: 4px;
   min-width: 0;
-}
-
-.recent-meta > span:last-child {
-  flex: 0 0 auto;
-}
-
-.research-grid .paper-secondary-line > .expandable-author-list {
+}.research-grid .paper-secondary-line > .expandable-author-list {
   font-size: var(--type-label);
 }
 
@@ -886,73 +844,129 @@
   padding-bottom: 3px;
   padding-top: 3px;
   vertical-align: middle;
-}
-
-.paper-table.research-grid tbody tr.has-collections .paper-title-cell,
-.paper-table.research-grid tbody tr.has-collections .paper-title-cell > span {
-  min-height: 58px;
-}
-
-.publication-detail-list {
-  gap: 2px;
-  margin-top: 7px;
-}
-
+}/* The grid row height is the card height: the cards hold a fixed number of paper
+   rows, so they are uniform, and the two values have to stay in step. */
 .collection-grid {
-  grid-auto-rows: 244px;
+  grid-auto-rows: 336px;
 }
 
-.collection-card {
-  height: 244px;
+/* Reading progress, shown only once something has been read (a "0 of 21 read"
+   line told the user nothing in the common case). */
+.collection-progress {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.collection-progress-track {
+  background: var(--line);
+  border-radius: var(--radius-pill);
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.collection-progress-fill {
+  background: var(--green);
+  border-radius: var(--radius-pill);
+  display: block;
+  height: 100%;
+}
+
+.collection-progress > small {
+  color: var(--soft);
+  flex: 0 0 auto;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
 }
 
 .collection-card .collection-papers {
-  display: grid;
-  gap: 1px;
-  grid-auto-rows: 25px;
-  margin-top: 7px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 2px;
+  list-style: none;
+  margin: 10px 0 0;
+  min-height: 0;
   overflow: hidden;
-  padding: 7px 1px 2px;
+  padding: 0;
 }
 
-.collection-card .collection-papers > button,
-.collection-card .collection-papers > span {
-  align-items: center;
+/* Keeps the rows top-aligned when a collection has fewer than a full page, so a
+   short card's rows line up with a full one's instead of centring. */
+.collection-card .collection-papers > li:last-child {
+  margin-bottom: auto;
+}
+
+/* Every row is the same height whether its title wraps to one line or two. Rows
+   that sized to their content needed up to 256px for four of them while the list
+   had 207px, so the last row was always partly cut off. */
+.collection-card .collection-papers > li {
+  height: 48px;
+  min-width: 0;
+}
+
+.collection-card .collection-papers > li > button {
   background: transparent;
-  color: var(--muted);
-  display: grid;
-  font-size: var(--type-caption);
-  gap: 6px;
-  grid-template-columns: 14px minmax(0, 1fr);
-  min-height: 25px;
-  padding: 0 2px;
-  text-align: left;
-}
-
-.collection-card .collection-papers > button {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  padding-inline: 7px;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  height: 100%;
+  justify-content: center;
+  overflow: hidden;
+  padding: 4px 8px;
+  text-align: left;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
+  width: 100%;
 }
 
-.collection-card .collection-papers > button:hover {
+.collection-card .collection-papers > li > button:hover {
   background: var(--brand-blue-soft);
-  border-color: color-mix(in srgb, var(--brand-blue) 22%, transparent);
-  color: var(--ink);
+  border-color: color-mix(in srgb, var(--brand-blue) 20%, transparent);
 }
 
-.collection-card .collection-papers > button:focus-visible {
+.collection-card .collection-papers > li > button:focus-visible {
   background: var(--brand-blue-soft);
   border-color: var(--brand-blue);
   outline: none;
 }
 
-.collection-card .collection-papers b {
-  font-weight: 520;
+/* Wraps to a second line rather than being cut mid-word, which is what made the
+   previous card unreadable: every title ended in a hard clip. */
+/* Ellipsized at the end of the line, not cut mid-word: the row height is fixed,
+   so a wrapping title would push the next row out of view. The full title is on
+   the button's tooltip. */
+.collection-card .collection-paper-title {
+  color: var(--ink);
+  font-size: var(--type-caption);
+  font-weight: 550;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  width: 100%;
+}
+
+/* Author, venue, and year: what makes a paper recognizable at a glance. */
+.collection-card .collection-paper-meta {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-papers-empty {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  font-size: var(--type-caption);
+  gap: 6px;
+  padding: 6px 8px;
 }
 
 .collection-card-pagination {
@@ -985,15 +999,7 @@
 .discover-search-box > button span {
   font-size: var(--type-body);
   font-weight: 700;
-}
-
-.discover-search-box > button {
-  flex: 0 0 auto;
-  min-width: 94px;
-  padding: 0 14px;
-}
-
-.autocomplete-field {
+}.autocomplete-field {
   position: relative;
 }
 

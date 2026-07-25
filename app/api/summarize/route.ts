@@ -12,22 +12,11 @@ import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { resolveStoredFile } from "@/app/lib/local-files";
 import { readPdfPages } from "@/app/lib/pdf-text";
 import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
+import { parseRequest } from "@/app/lib/schemas/parse";
+import { SummarizeRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-interface SummaryRequest {
-  paper?: {
-    title?: string;
-    abstract?: string;
-    authors?: string[];
-    venue?: string;
-    year?: number | null;
-    url?: string | null;
-    doi?: string | null;
-    localPath?: string | null;
-  };
-}
 
 /**
  * The paper's own text for {{paper}}: the stored PDF read page-by-page (honoring
@@ -64,8 +53,11 @@ async function readPaperText(
 export async function POST(request: Request): Promise<Response> {
   try {
     const runtime = await resolveRuntimeValues();
-    const body = (await request.json()) as SummaryRequest;
-    const paper = body.paper;
+    const parsed = await parseRequest(SummarizeRequestSchema, request);
+    if (!parsed.ok) {
+      return Response.json({ error: parsed.error }, { status: 400 });
+    }
+    const paper = parsed.data.paper;
     if (!paper?.title) {
       return Response.json({ error: "A paper title is required." }, { status: 400 });
     }

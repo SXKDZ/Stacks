@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { inArray } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { papers } from "@/db/schema";
+import type { SnippetAttachment } from "@/app/lib/schemas/attachments";
 
 /**
  * A thing the agent can ground its work on. Two shapes:
@@ -16,15 +17,7 @@ import { papers } from "@/db/schema";
  * `paper-pdf`/`paper-html` are legacy kinds from when papers were copied in;
  * old feeds still carry them (with a relativePath) and keep rendering.
  */
-export interface SnippetAttachment {
-  kind: "upload" | "paper" | "paper-pdf" | "paper-html";
-  /** A short human label for the prompt/UI (paper title or original filename). */
-  label: string;
-  /** Uploads (and legacy staged papers): path relative to the working dir. */
-  relativePath?: string;
-  /** Referenced library papers: the paper id the agent reads by API. */
-  paperId?: string;
-}
+export type { SnippetAttachment };
 
 const MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
 const ATTACHMENTS_DIR = "attachments";

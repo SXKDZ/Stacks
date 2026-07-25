@@ -760,3 +760,71 @@ test("auto-back up runs a debounced backup after live library changes", async ()
   assert.match(library, /import \{ scheduleAutoSync \} from "@\/app\/lib\/local-settings"/);
   assert.match(library, /scheduleAutoSync\(\);\s*\n\s*return Response\.json\(await readSnapshot\(\)\)/);
 });
+
+test("the GitHub sync survives a deleted issue, a repeated issue, and a long thread", async () => {
+  const [sync, client] = await Promise.all([
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
+  ]);
+  // A feed whose issue was deleted upstream 404s on every outbound call. That used
+  // to escape to the route as a 400, so no later feed was processed at all.
+  assert.match(sync, /error\.status === 404 \|\| error\.status === 410/);
+  assert.match(sync, /feedsUnlinked \+= 1/);
+  // Updated-sort pagination can return one issue twice; inserting it twice hit the
+  // unique index on issue_number and aborted the sync.
+  assert.match(sync, /const handled = new Set<number>\(\)/);
+  // A thread longer than the page cap was read as complete, so the high-water mark
+  // advanced past comments that were never ingested.
+  assert.match(client, /export async function listCommentsPaged/);
+  assert.match(sync, /commentsTruncated/);
+  // The stored title and its 3-way base must be the same string, or every later
+  // sync sees a phantom local rename and pushes the truncation to GitHub.
+  assert.match(sync, /issueTitleSynced: localTitle/);
+  assert.doesNotMatch(sync, /issueTitleSynced: issue\.title\b/);
+  // A repo segment of ".." would collapse the pinned /repos/owner/name path.
+  assert.match(client, /segment === "\." \|\| segment === "\.\."/);
+});
+
+test("tooltips are drawn by the app, not the browser", async () => {
+  const [layer, styles, layout] = await Promise.all([
+    readFile(new URL("../app/components/ui/TooltipLayer.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+  ]);
+  // Mounted once for the whole app, so every existing title="..." is covered
+  // without touching its call site.
+  assert.match(layout, /<TooltipLayer \/>/);
+  // It listens at the document level and portals a fixed-position element, which is
+  // what lets a tooltip escape a scroll container or modal clip.
+  assert.match(layer, /addEventListener\("pointerover"/);
+  assert.match(layer, /createPortal/);
+  // The native bubble is suppressed by moving the text aside during hover, and the
+  // attribute is always restored (including on unmount) so assistive tech keeps it.
+  assert.match(layer, /removeAttribute\("title"\)/);
+  assert.match(layer, /setAttribute\("title", text\)/);
+  assert.match(layer, /const restore = /);
+  // Keyboard focus shows it too, not just the pointer.
+  assert.match(layer, /addEventListener\("focusin"/);
+  assert.match(layer, /role="tooltip"/);
+  // Styled from the theme tokens, so it inverts with light/dark instead of looking
+  // like the operating system.
+  assert.match(styles, /\.app-tooltip \{/);
+  assert.match(styles, /background: var\(--ink\)/);
+  assert.match(styles, /max-width: 320px/);
+});
+
+test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
+  // The stylesheets accumulated selectors defined three and four times across
+  // files, where the later copy silently won: a value was set in one file and
+  // overridden in another, so editing the obvious one did nothing. Whenever a
+  // block's every property is re-declared by a later block with the identical
+  // selector, that block is dead weight and hides where the real value lives.
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = promisify(execFile);
+  const { stdout } = await run("python3", ["scripts/find-dead-css.py"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+  });
+  const count = Number(/superseded by a later same-selector block: (\d+)/.exec(stdout)?.[1] ?? "-1");
+  assert.equal(count, 0, `dead CSS blocks found (run scripts/find-dead-css.py):\n${stdout}`);
+});

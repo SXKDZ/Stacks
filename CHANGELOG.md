@@ -6,12 +6,67 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- A workflow script can no longer escape its sandbox. An injected helper's
+  `.constructor` was the host `Function` constructor, so a script could reach the
+  server process, its filesystem, and its shared prototypes. Merely opening a
+  saved workflow was enough to trigger it, because reading a script's `meta` runs
+  its body.
+- The guard against fetching private addresses no longer misses IPv4 addresses
+  mapped into IPv6, the unspecified address, trailing-dot hostnames, the full
+  IPv6 link-local range, or the carrier, benchmark, and multicast blocks. Every
+  redirect hop is now resolved and checked, and headers are dropped when a
+  redirect crosses origins.
+- Feed file paths are confined to the feed's own directory, closing a traversal
+  route out of it.
+
 ### Changed
 
+- Every request the browser sends to the app is now validated against a schema
+  before it is acted on, so a malformed body is refused with an explanation
+  instead of being partially applied.
+- Collection cards show what a collection actually contains: the papers in it,
+  each one's authors, venue, and year, and how much of it has been read. Every
+  card is the same height.
+- Tooltips use the app's own styling and appear at the cursor rather than in the
+  browser's default position, and only when they add something: a truncated
+  paper title, or the full name of a venue shown by acronym.
+- The library, author, and venue tables share one sorting and column-resizing
+  model. Sorting can be reset to the original order, resizing tracks the cursor,
+  and columns stay proportional instead of overflowing their neighbours.
+- Author names in the paper form are chips that can be reordered by dragging.
+- The library picker in a feed and the collection editor list papers the same way
+  the rest of the app does, and search there covers authors, venues, and years
+  rather than titles alone.
 - The README now covers what Stacks does; implementation notes, deployment, and
   the release process moved to `docs/ARCHITECTURE.md`.
 - CI and release workflows run on `actions/checkout@v5` and
   `actions/setup-node@v5`, which no longer warn about the Node 20 deprecation.
+
+### Fixed
+
+- Editing a single paper, author, or venue no longer silently does nothing.
+- A malformed save request no longer wipes every saved skill or workflow: it is
+  refused, and an explicitly empty list is still a legitimate save.
+- Bibliography import no longer loses entries or corrupts fields. One unbalanced
+  entry stops swallowing the rest of the file, commented-out entries stay out,
+  corporate authors in braces stay whole, and a tilde survives in a URL.
+- arXiv identifiers and DOIs are canonicalized, so duplicate detection catches
+  the spellings the app itself produces.
+- Imported metadata is derived from the URL that was actually fetched rather than
+  from the raw request text.
+- One unreadable GitHub issue no longer wedges a sync or truncates it silently.
+- Reading a workflow's `meta` cannot crash or stall the server, and a comment or
+  string mentioning the meta export no longer leaves the workflow nameless.
+- Library writes that would store unusable records are rejected rather than
+  saved.
+- The caret and selection in the highlighted Markdown editors stay aligned with
+  the text.
+
+### Removed
+
+- 31 dead CSS blocks that a later copy of the same selector already overrode.
 
 ## [0.2.2] - 2026-07-24
 

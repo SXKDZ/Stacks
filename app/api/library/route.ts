@@ -4,6 +4,8 @@ import type { LibraryQuerier } from "@/db/client";
 import { removeStoredFile } from "@/app/lib/local-files";
 import { normalizeAbstract, normalizeAuthorNames, normalizePages, normalizeTitle } from "@/app/lib/metadata-normalize";
 import { scheduleAutoSync } from "@/app/lib/local-settings";
+import { idList, LibraryMutationSchema } from "@/app/lib/schemas/library";
+import { parseRequest } from "@/app/lib/schemas/parse";
 import { normalizeCollectionColor } from "@/app/lib/types";
 import {
   authors,
@@ -16,14 +18,6 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-interface MutationRequest {
-  entity?: "paper" | "author" | "venue" | "collection";
-  action?: "create" | "bulk-create" | "update" | "delete" | "bulk-update" | "bulk-delete";
-  id?: string;
-  ids?: string[];
-  data?: Record<string, unknown>;
-}
 
 function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -63,7 +57,7 @@ function cleanString(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
-  const cleaned = value.trim();
+  const cleaned = stripControlCharacters(value).trim();
   return cleaned || null;
 }
 
@@ -78,13 +72,52 @@ function cleanNumber(value: unknown): number | null {
   return null;
 }
 
+/**
+ * A publication year: a whole number in a range a paper can actually carry.
+ *
+ * The column is declared INTEGER but SQLite is dynamically typed, so a fractional
+ * value was stored as REAL (2026.7) and 1e21 was stored in exponent form, both of
+ * which then sort and display as nonsense. Out-of-range values are dropped rather
+ * than clamped: a wrong year is worse than none.
+ */
+function cleanYear(value: unknown): number | null {
+  const parsed = cleanNumber(value);
+  if (parsed === null || !Number.isInteger(parsed)) {
+    return parsed === null ? null : (Number.isFinite(parsed) ? Math.trunc(parsed) : null);
+  }
+  return parsed >= 1000 && parsed <= 2200 ? parsed : null;
+}
+
+/**
+ * Strip control characters a client should never send in a stored string.
+ *
+ * A NUL byte reached SQLite raw, where the value is stored but C-string-based
+ * tooling sees a truncated title, so "N\0ul" reads as "N".
+ */
+function stripControlCharacters(value: string): string {
+  return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+}
+
+/**
+ * Coerce a client value to a boolean the way a form or an API caller means it.
+ * `Boolean("false")` and `Boolean("0")` are both true (every non-empty string
+ * is), so the string forms have to be handled explicitly: an importer or an agent
+ * sending "false" meant false.
+ */
+function booleanValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return !["", "false", "0", "no", "off"].includes(value.trim().toLowerCase());
+  }
+  return Boolean(value);
+}
+
 /** Coerce an arbitrary client value into something SQLite can bind as text. */
 function textValue(value: unknown): string | null {
   if (value === "" || value === null || value === undefined) {
     return null;
   }
   if (typeof value === "string") {
-    return value;
+    return stripControlCharacters(value);
   }
   if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
     return String(value);
@@ -386,9 +419,48 @@ function resolveCollectionIdsByName(querier: LibraryQuerier, collectionNames: un
  * identifier (DOI, arXiv id, or Semantic Scholar id), used to skip duplicates on
  * import. Title is intentionally not matched here — it is too noisy for dedup.
  */
+/**
+ * Canonical form of an arXiv id: the bare identifier, lowercased.
+ *
+ * The app's own producers disagree: the seed data writes "arXiv:2605.09104", the
+ * scholarly providers write the bare id, and a BibTeX import can carry either
+ * plus a full URL. Since dedup compares this column exactly, the same paper
+ * imported from two sources produced two rows (and the unique index never fired).
+ */
+function canonicalArxivId(value: unknown): string | null {
+  const raw = cleanString(value);
+  if (!raw) {
+    return null;
+  }
+  const stripped = raw
+    .replace(/^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\//i, "")
+    .replace(/^arxiv[:\s]*/i, "")
+    .replace(/v\d+$/i, "")
+    .replace(/\.pdf$/i, "")
+    .trim();
+  return stripped.toLowerCase() || null;
+}
+
+/**
+ * Canonical form of a DOI: lowercased, with any resolver prefix removed. DOIs are
+ * case-insensitive by spec, so comparing them raw let "10.1000/ABC" and
+ * "10.1000/abc" coexist as separate papers.
+ */
+function canonicalDoi(value: unknown): string | null {
+  const raw = cleanString(value);
+  if (!raw) {
+    return null;
+  }
+  const stripped = raw
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi[:\s]*/i, "")
+    .trim();
+  return stripped.toLowerCase() || null;
+}
+
 function findDuplicatePaper(querier: LibraryQuerier, data: Record<string, unknown>): string | null {
-  const doi = cleanString(data.doi);
-  const arxivId = cleanString(data.arxivId);
+  const doi = canonicalDoi(data.doi);
+  const arxivId = canonicalArxivId(data.arxivId);
   const semanticScholarId = cleanString(data.semanticScholarId);
   const checks: Array<ReturnType<typeof eq>> = [];
   if (doi) checks.push(eq(papers.doi, doi));
@@ -436,14 +508,14 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       id,
       title,
       abstract: normalizedAbstract,
-      year: cleanNumber(data.year),
+      year: cleanYear(data.year),
       paperType: cleanString(data.paperType) ?? "article",
       volume: cleanString(data.volume),
       issue: cleanString(data.issue),
       pages: normalizedPages,
       category: cleanString(data.category),
-      doi: cleanString(data.doi),
-      arxivId: cleanString(data.arxivId),
+      doi: canonicalDoi(data.doi),
+      arxivId: canonicalArxivId(data.arxivId),
       preprintId: cleanString(data.preprintId),
       semanticScholarId: cleanString(data.semanticScholarId),
       url: cleanString(data.url),
@@ -453,7 +525,7 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       summary: cleanString(data.summary) ?? "",
       notes: cleanString(data.notes) ?? "",
       readingStatus: cleanString(data.readingStatus) ?? "inbox",
-      favorite: Boolean(data.favorite),
+      favorite: booleanValue(data.favorite),
       venueId,
     }).run();
 
@@ -628,12 +700,22 @@ async function updateEntities(
   const fields = entityFields[entity];
   const table = entityTables[entity];
   const assignments: Record<string, unknown> = {};
+  // Own properties only: `in` walks the prototype chain, so `toString`,
+  // `constructor`, and `valueOf` all passed the guard and were written as columns.
   for (const [key, value] of Object.entries(data)) {
-    if (key in fields) {
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
       // A collection's color is constrained to the fixed palette (or null);
       // every other editable column on these entities is free TEXT, coerced so
       // a stray boolean/object from an API caller cannot crash the bind.
       assignments[key] = key === "color" ? normalizeCollectionColor(value) : textValue(value);
+    }
+  }
+  // The name is what identifies the record everywhere in the UI, so a rename to
+  // whitespace (or to nothing) is refused rather than producing an unnameable row.
+  // createEntity already enforces this; the update path did not.
+  for (const nameField of ["displayName", "name"]) {
+    if (nameField in assignments && !cleanString(assignments[nameField])) {
+      throw new Error(`A ${entity} name is required.`);
     }
   }
   const database = await ensureDatabase();
@@ -669,6 +751,13 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   if ("title" in data && !cleanString(data.title)) {
     throw new Error("A paper title is required.");
   }
+  // The paper has to exist. Without this the UPDATE matched no rows and still
+  // committed, so the route answered 200 for an edit that changed nothing, and any
+  // venue named in the payload was created anyway, leaving an orphan venue behind.
+  const existing = database.select({ id: papers.id }).from(papers).where(eq(papers.id, id)).get();
+  if (!existing) {
+    throw new Error("That paper is no longer in your library.");
+  }
   // Build a typed, coerced assignment set. Each column gets exactly the shape
   // SQLite expects (text/number/boolean-as-0/1), so no client value can crash
   // the bind the way the previous raw-passthrough did.
@@ -682,8 +771,8 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   if ("notes" in data) assignments.notes = typeof data.notes === "string" ? data.notes : "";
   if ("paperType" in data) assignments.paperType = cleanString(data.paperType) ?? "other";
   if ("readingStatus" in data) assignments.readingStatus = cleanString(data.readingStatus) ?? "inbox";
-  if ("year" in data) assignments.year = cleanNumber(data.year);
-  if ("favorite" in data) assignments.favorite = Boolean(data.favorite);
+  if ("year" in data) assignments.year = cleanYear(data.year);
+  if ("favorite" in data) assignments.favorite = booleanValue(data.favorite);
   for (const key of Object.keys(paperTextFields) as Array<keyof typeof paperTextFields>) {
     if (key in data) {
       const value = textValue(data[key]);
@@ -767,14 +856,19 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = (await request.json()) as MutationRequest;
-    if (!body.entity || !body.action) {
-      return jsonError("Both entity and action are required.");
+    // One parse against the action-discriminated union replaces the old
+    // entity/action presence checks and the per-action shape guards below: a
+    // bad request is a 400 naming the offending field, and every branch here
+    // reads only fields its own action is typed to carry.
+    const parsed = await parseRequest(LibraryMutationSchema, request);
+    if (!parsed.ok) {
+      return jsonError(parsed.error);
     }
-    const data = body.data ?? {};
-    const ids = body.ids ?? (body.id ? [body.id] : []);
+    const body = parsed.data;
+    const ids = idList(body);
 
     if (body.action === "create") {
+      const data = body.data ?? {};
       if (body.entity === "paper") {
         try {
           await createPaper(data);
@@ -788,17 +882,13 @@ export async function POST(request: Request): Promise<Response> {
         await createEntity(body.entity, data);
       }
     } else if (body.action === "bulk-create") {
-      if (body.entity !== "paper" || !Array.isArray(data.papers)) {
-        return jsonError("Bulk create requires a paper list.");
-      }
-      if (data.papers.length > 500) {
-        return jsonError("Import no more than 500 papers at a time.");
-      }
+      // The schema pins this branch to entity "paper" with a `papers` array of
+      // at most 500, so the presence, type, and cap checks are gone from here.
       const database = await ensureDatabase();
       let added = 0;
       let skipped = 0;
       const failed: Array<{ title: string; reason: string }> = [];
-      for (const paper of data.papers) {
+      for (const paper of body.data.papers) {
         if (!paper || typeof paper !== "object" || Array.isArray(paper)) {
           continue;
         }
@@ -829,11 +919,18 @@ export async function POST(request: Request): Promise<Response> {
       if (added) scheduleAutoSync();
       return Response.json({ ...(await readSnapshot()), importSummary: { added, skipped, failed } });
     } else if (body.action === "update" || body.action === "bulk-update") {
+      const data = body.data ?? {};
       if (body.entity === "paper") {
         if (!ids[0]) {
           return jsonError("A paper id is required for updates.");
         }
-        await updatePaper(ids[0], data);
+        // Every addressed paper, not just the first: a bulk-update of N ids used
+        // to write ids[0] alone and still answer 200, so the other N-1 rows were
+        // silently untouched. (The author/venue/collection branch below already
+        // applied to all of them.)
+        for (const paperId of ids) {
+          await updatePaper(paperId, data);
+        }
       } else {
         await updateEntities(body.entity, ids, data);
       }
@@ -847,7 +944,15 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(await readSnapshot());
   } catch (error) {
     const raw = error instanceof Error ? error.message : "";
-    const status = /UNIQUE constraint failed/i.test(raw) ? 409 : 500;
+    // A rejected request is the caller's fault (400), a duplicate is a conflict
+    // (409), and anything else is ours (500). Validation failures raised as plain
+    // Errors used to all surface as 500, which reads to a client as "the server
+    // broke" rather than "fix your input".
+    const status = /UNIQUE constraint failed/i.test(raw)
+      ? 409
+      : /is required|no longer in your library|already in your library/i.test(raw)
+        ? 400
+        : 500;
     return jsonError(describeDbError(error) || "The library change failed.", status);
   }
 }

@@ -188,7 +188,23 @@ export function normalizeTitle(rawTitle: string): string {
  */
 export function normalizeAuthorNames(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.map((author) => String(author).trim()).filter(Boolean);
+    // Only real names. `String(entry)` turned an object into the literal author
+    // "[object Object]", a number into "42", and null into "null", and each was
+    // then inserted as a permanent, shared author record. A structured entry that
+    // carries an obvious name field is read; anything else is dropped.
+    return value
+      .map((author) => {
+        if (typeof author === "string") {
+          return author.trim();
+        }
+        if (author && typeof author === "object") {
+          const record = author as Record<string, unknown>;
+          const named = record.displayName ?? record.name ?? record.family ?? "";
+          return typeof named === "string" ? named.trim() : "";
+        }
+        return "";
+      })
+      .filter(Boolean);
   }
   if (typeof value !== "string") {
     return [];

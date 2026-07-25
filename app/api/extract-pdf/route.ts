@@ -10,6 +10,8 @@ import {
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { readPdfPagesFromDocument } from "@/app/lib/pdf-text";
 import { getDocumentProxy, getMeta } from "unpdf";
+import { parseJsonWith } from "@/app/lib/schemas/parse";
+import { ExtractedMetadataSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -157,9 +159,15 @@ export async function POST(request: Request): Promise<Response> {
         maxTokens: 1800,
         temperature: 0,
       });
-      const parsed = JSON.parse(stripJsonFence(result.content)) as Record<string, unknown>;
+      // The model's JSON: validated as an object before normalizeMetadata reads
+      // fields off it, so a non-object reply (a bare string, an array, prose)
+      // falls into the catch below and returns the heuristic fallback.
+      const parsed = parseJsonWith(ExtractedMetadataSchema, stripJsonFence(result.content));
+      if (!parsed.ok) {
+        throw new Error(`The model did not return usable metadata JSON: ${parsed.error}`);
+      }
       return Response.json({
-        metadata: normalizeMetadata(parsed, fallback),
+        metadata: normalizeMetadata(parsed.data, fallback),
         analyzedPages: pageCount,
         totalPages: document.numPages,
         usedFallback: false,

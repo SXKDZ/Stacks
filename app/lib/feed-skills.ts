@@ -1,5 +1,7 @@
 import { BookmarkPlus, BookOpen, Brain, FileSearch, FileText, FlaskConical, GitCompare, Highlighter, Languages, Lightbulb, ListChecks, type LucideIcon, MessageSquareText, NotebookPen, Quote, Scale, Sigma, Sparkles, Tag, Telescope, Wand2, Wrench } from "lucide-react";
 
+import { normalizeSkillList } from "@/app/lib/schemas/feed-skills";
+
 /**
  * Feed skills: pickable starting prompts for common tasks. Users can add, edit,
  * remove, and reorder them in Settings → Feed skills; they persist in the
@@ -119,23 +121,17 @@ export const DEFAULT_FEED_SKILLS: FeedSkill[] = [
   },
 ];
 
-/** Validate + normalize a skills array coming from settings.json or the API. */
+/**
+ * Validate + normalize a skills array coming from settings.json or the API.
+ * The shape rules live in app/lib/schemas/feed-skills.ts; the icon map is passed
+ * in from here so that module stays independent of Lucide. A non-array (never
+ * saved, or a corrupt value) yields the seed defaults.
+ */
 export function normalizeFeedSkills(value: unknown): FeedSkill[] {
-  if (!Array.isArray(value)) {
-    return DEFAULT_FEED_SKILLS;
-  }
-  const skills: FeedSkill[] = [];
-  for (const item of value) {
-    if (!item || typeof item !== "object") continue;
-    const candidate = item as Record<string, unknown>;
-    const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
-    const prompt = typeof candidate.prompt === "string" ? candidate.prompt.trim() : "";
-    if (!label || !prompt) continue;
-    const icon = typeof candidate.icon === "string" && FEED_SKILL_ICONS[candidate.icon]
-      ? candidate.icon
-      : DEFAULT_FEED_SKILL_ICON;
-    const id = typeof candidate.id === "string" && candidate.id.trim() ? candidate.id.trim() : `skill-${skills.length}-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    skills.push({ id, label: label.slice(0, 60), icon, prompt: prompt.slice(0, 4000) });
-  }
-  return skills;
+  const skills = normalizeSkillList(
+    value,
+    (name) => Boolean(FEED_SKILL_ICONS[name]),
+    DEFAULT_FEED_SKILL_ICON,
+  );
+  return skills ?? DEFAULT_FEED_SKILLS;
 }

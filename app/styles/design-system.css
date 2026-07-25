@@ -139,11 +139,17 @@
 
 /* Prompt chips wrap naturally instead of forcing a horizontal scrollbar. */
 
-/* Author expansion controls stay immediately after the final visible author. */
+/* Author expansion controls stay immediately after the final visible author.
+
+   Every context here sets the author line inline INSIDE a run of text (the venue
+   and year follow it). Left as a flex item it takes the full line and pushes that
+   trailing text onto a second row. */
 .paper-table.research-grid .expandable-author-list,
 .paper-table.research-grid .expandable-author-list.is-expanded,
 .recent-meta .expandable-author-list,
-.recent-meta .expandable-author-list.is-expanded {
+.recent-meta .expandable-author-list.is-expanded,
+.transfer-paper-details .expandable-author-list,
+.transfer-paper-details .expandable-author-list.is-expanded {
   display: inline;
   height: auto;
   min-height: 0;
@@ -154,7 +160,9 @@
 .paper-table.research-grid .expandable-author-list > span,
 .paper-table.research-grid .expandable-author-list.is-expanded > span,
 .recent-meta .expandable-author-list > span,
-.recent-meta .expandable-author-list.is-expanded > span {
+.recent-meta .expandable-author-list.is-expanded > span,
+.transfer-paper-details .expandable-author-list > span,
+.transfer-paper-details .expandable-author-list.is-expanded > span {
   display: inline;
   max-height: none;
   overflow: visible;
@@ -219,7 +227,7 @@
 
 /* Year and status are fixed utility columns; only Paper and Venue expose handles. */
 .paper-table col.paper-column-year {
-  width: 88px !important;
+  width: 68px !important;
 }
 
 .paper-table col.paper-column-status {
@@ -286,13 +294,7 @@
   padding: 0;
   text-align: right;
   width: 74px;
-}
-
-.edit-paper-form-actions {
-  width: auto;
-}
-
-.edit-paper-form-actions .form-actions-spacer {
+}.edit-paper-form-actions .form-actions-spacer {
   flex: 1 1 auto;
 }
 
@@ -364,6 +366,48 @@
 [data-theme="light"] .paper-table tbody tr:hover,
 [data-theme="light"] .paper-table tbody tr.is-selected {
   background: rgba(22, 141, 236, 0.065);
+}
+
+/* The app's own tooltip, drawn by TooltipLayer in place of the browser's native
+   `title` bubble (which cannot be styled and looks like the OS, not Stacks).
+   Positioned in viewport coordinates and portaled to the body, so it escapes every
+   scroll container and modal clip.
+
+   Uses the same raised-surface recipe as the feed's popovers (--surface-2 with
+   --ink text) rather than an inverted chip: an inverted tooltip read as dark in
+   light theme, which looked like a different app's control sitting on the page. */
+.app-tooltip {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  color: var(--ink);
+  font-size: var(--type-micro);
+  font-weight: 500;
+  line-height: 1.4;
+  /* Long titles (a full paper title, a file path) wrap instead of running off.
+     `width: max-content` with a cap keeps the box the SAME size wherever it is
+     placed: without it the browser shrank the bubble to whatever room was left to
+     the right of its position, so one title wrapped over six lines near the screen
+     edge and two lines elsewhere. */
+  max-width: 320px;
+  width: max-content;
+  padding: 6px 9px;
+  pointer-events: none;
+  position: fixed;
+  white-space: pre-wrap;
+  word-break: break-word;
+  z-index: 90;
+  animation: tooltip-in 120ms ease-out;
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tooltip { animation: none; }
 }
 
 /* Prompt templates use one bordered Markdown editor with a synchronized syntax layer. */
@@ -586,11 +630,15 @@
 
 /* One tokenized focus ring for every bare field and textarea (replaces the
    hardcoded #8ac4ef / rgba(22,141,236,.08) literals and gives the notes
-   textarea a ring it lacked). 72% matches the ring recipe used elsewhere. */
+   textarea a ring it lacked). 72% matches the ring recipe used elsewhere.
+
+   A field inside a search wrapper is excluded: the wrapper draws the ring around
+   the icon and clear button too, so a second ring on the input alone appeared as a
+   stray inset box that stopped short of the wrapper's edge. */
 .settings-form-grid input:focus,
 .settings-form-grid textarea:focus:not(:where(.prompt-code-editor *)),
 .integration-row input:focus,
-.entity-form input:focus,
+.entity-form input:focus:not(:where(.inline-search, .feed-search, .large-field, .discover-search-box) *),
 .entity-form textarea:focus:not(:where(.prompt-code-editor *)),
 .detail-section textarea:focus:not(:where(.prompt-code-editor *)) {
   border-color: color-mix(in srgb, var(--brand-blue) 72%, var(--line-strong));

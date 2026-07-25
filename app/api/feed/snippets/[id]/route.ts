@@ -4,6 +4,8 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { enqueueCloseIssue, flushGithubOutbox } from "@/app/lib/feed-github-outbox";
+import { parseWith } from "@/app/lib/schemas/parse";
+import { FeedSnippetPatchSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,7 +40,8 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as { title?: string; collapsed?: boolean };
+  const parsedBody = parseWith(FeedSnippetPatchSchema, await request.json().catch(() => ({})));
+  const body = parsedBody.ok ? parsedBody.data : {};
   const database = await ensureDatabase();
   const snippet = database.select().from(feedSnippets).where(eq(feedSnippets.id, id)).get();
   if (!snippet) {
@@ -94,6 +97,8 @@ export async function DELETE(
   // Remove the feed/<id> tree (uploaded files + copied library PDFs + session
   // transcripts). Best-effort: a failure here must not fail the delete.
   try {
+    // feedWorkingDir validates the id: without that, an id of "../../x" made this
+    // a recursive delete of an arbitrary directory outside the library.
     rmSync(feedWorkingDir(id), { recursive: true, force: true });
   } catch {
     // The DB rows are already gone; a leftover dir is harmless.

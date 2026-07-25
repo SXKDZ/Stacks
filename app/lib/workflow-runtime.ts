@@ -34,6 +34,31 @@ export interface WorkflowMeta {
   phases?: Array<{ title: string; detail?: string }>;
 }
 
+/**
+ * Turn a script's `export const meta = ...` into an assignment the sandbox can
+ * read back, without being fooled by the same text appearing elsewhere.
+ *
+ * A plain `String.replace` with a non-global regex rewrites the FIRST textual
+ * occurrence, which for a script whose doc comment mentions
+ * `export const meta = { name, description }` was the comment: the real export
+ * kept its `export` keyword, failed to parse, and the workflow showed up with no
+ * name. Comments and string literals are blanked before the match is located, so
+ * only real code is rewritten.
+ */
+function rewriteMetaExport(script: string): string {
+  // A mask where every comment and string literal is replaced by spaces, so
+  // offsets still line up with the original text.
+  const mask = script
+    .replace(/\/\*[\s\S]*?\*\//g, (match) => " ".repeat(match.length))
+    .replace(/\/\/[^\n]*/g, (match) => " ".repeat(match.length))
+    .replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, (match) => " ".repeat(match.length));
+  const found = /export\s+const\s+meta\s*=/.exec(mask);
+  if (!found) {
+    return script;
+  }
+  return script.slice(0, found.index) + "globalThis.__meta =" + script.slice(found.index + found[0].length);
+}
+
 /** Pull the `meta` object out of a workflow script without running it, so the
  *  UI can list a saved workflow by name/description. Uses the sandbox with the
  *  primitives stubbed to no-ops, then reads the exported meta. Returns null if
@@ -41,11 +66,35 @@ export interface WorkflowMeta {
 export function readWorkflowMeta(script: string): WorkflowMeta | null {
   try {
     const sandbox = makeSandbox({ metaOnly: true });
-    const context = vm.createContext(sandbox);
-    // Wrap so a top-level `export const meta = {...}` parses as an assignment.
-    const wrapped = script.replace(/export\s+const\s+meta\s*=/, "globalThis.__meta =");
-    vm.runInContext(wrapped, context, { timeout: 1000 });
-    const meta = sandbox.__meta as WorkflowMeta | undefined;
+    // Only inert values go on the context directly; the callable primitives are
+    // installed as realm-native wrappers so the script can't walk back to the
+    // host Function constructor through one of them.
+    const { agent, parallel, pipeline, log, phase, ...inert } = sandbox;
+    const context = vm.createContext(inert);
+    installPrimitives(context, { agent, parallel, pipeline, log, phase });
+    // Wrap so a top-level `export const meta = {...}` parses as an assignment, and
+    // wrap the body in an async IIFE so a script using top-level await (which the
+    // app's own starter template does) still yields its meta. The meta literal
+    // must be assigned BEFORE the first await, which is the documented rule.
+    const wrapped = `(async () => {\n${rewriteMetaExport(script)}\n})();`;
+    // An async body means runInContext returns at the first await, so the vm
+    // timeout stops applying and a rejection would surface later as an unhandled
+    // rejection that kills the process. Swallow both here: this is a metadata
+    // read, and anything the script does after its meta assignment is irrelevant.
+    const result = vm.runInContext(wrapped, context, { timeout: 1000 }) as unknown;
+    if (result && typeof (result as Promise<unknown>).catch === "function") {
+      void (result as Promise<unknown>).catch(() => {});
+    }
+    // Read the meta back through the context (the sandbox object is no longer the
+    // context's global, since the primitives are installed inside the realm), and
+    // take it across as JSON so a getter cannot hand back a different value on a
+    // second read, and so no vm-realm object is retained by the host.
+    const encoded = vm.runInContext(
+      "JSON.stringify(globalThis.__meta ?? null)",
+      context,
+      { timeout: 1000 },
+    ) as string;
+    const meta = JSON.parse(encoded) as WorkflowMeta | null;
     if (meta && typeof meta.name === "string" && typeof meta.description === "string") {
       return { name: meta.name, description: meta.description, phases: Array.isArray(meta.phases) ? meta.phases : undefined };
     }
@@ -81,6 +130,58 @@ function realmResult<T>(realm: RealmIntrinsics, work: Promise<T>): Promise<T> {
   });
 }
 
+/**
+ * Install host functions into a vm context behind realm-native wrappers.
+ *
+ * Injecting a host function directly hands the script a HOST-realm object, and
+ * `hostFn.constructor` is then the host `Function` constructor: a script could do
+ * `log.constructor("return process")()` to reach the real process (spawn a
+ * command, read files, write the server's shared Object.prototype). That was
+ * reachable, and reachable during a mere SAVE, since reading a workflow's meta
+ * executes its body.
+ *
+ * The wrappers are compiled INSIDE the context and close over the host functions
+ * passed as arguments, so nothing host-realm is left on the global object for a
+ * script to reach.
+ */
+function installPrimitives(context: vm.Context, primitives: Record<string, unknown>): void {
+  const names = Object.keys(primitives);
+  // Parameter names are prefixed so the wrapper can shadow-free reference them.
+  const params = names.map((name) => `host_${name}`);
+  const body = names
+    .map((name) => `  globalThis["${name}"] = function ${name}(...args) { return host_${name}(...args); };`)
+    .join("\n");
+  const installer = vm.runInContext(
+    `(function (${params.join(", ")}) {\n${body}\n})`,
+    context,
+    { timeout: 1000 },
+  ) as (...values: unknown[]) => void;
+  installer(...names.map((name) => primitives[name]));
+}
+
+/**
+ * Re-create the caller's `args` value inside the vm realm.
+ *
+ * Assigning the host object directly would let a script reach the host realm via
+ * `args.constructor` (the same escape as an injected host function). Round-tripping
+ * through JSON inside the context yields a realm-native structure; `args` came
+ * from a JSON request body, so nothing is lost.
+ */
+function installArgs(context: vm.Context, args: unknown): void {
+  let encoded: string;
+  try {
+    encoded = JSON.stringify(args ?? null);
+  } catch {
+    encoded = "null";
+  }
+  const install = vm.runInContext(
+    "(function (json) { globalThis.args = JSON.parse(json); })",
+    context,
+    { timeout: 1000 },
+  ) as (json: string) => void;
+  install(encoded);
+}
+
 /** Build the vm globals shared by meta-extraction and execution. When
  *  `metaOnly`, the primitives are inert (never spawn agents). `realm` is the
  *  execution context's own intrinsics (absent during meta read). */
@@ -100,9 +201,17 @@ function makeSandbox(
   };
   if (options.metaOnly) {
     // Inert primitives so a script's top-level calls don't throw during meta read.
-    base.agent = async () => "";
-    base.parallel = async () => [];
-    base.pipeline = async () => [];
+    //
+    // They must never return a HOST promise: a script can attach `.then(...)` to
+    // one, and that callback then runs on the host microtask queue, where a throw
+    // (or a `while(true)`) escapes both the try/catch and the vm timeout. Returning
+    // a never-settling promise means such a callback is never invoked at all, which
+    // is right for a metadata read: only the meta assignment matters, and the
+    // documented rule is that it precedes any await.
+    const pending = () => new Promise(() => {});
+    base.agent = pending;
+    base.parallel = pending;
+    base.pipeline = pending;
     base.log = () => {};
     base.phase = () => {};
     return base;
@@ -210,7 +319,13 @@ export async function runWorkflow(options: { snippetId: string; script: string; 
   const context = vm.createContext({ console: { log: () => {}, error: () => {}, warn: () => {} }, Date: undefined });
   const realm = vm.runInContext("({ Array, Promise })", context) as RealmIntrinsics;
   const sandbox = makeSandbox({ metaOnly: false, ctx, realm });
-  Object.assign(context, sandbox, { args });
+  const { agent, parallel, pipeline, log, phase, ...inert } = sandbox;
+  Object.assign(context, inert);
+  installPrimitives(context, { agent, parallel, pipeline, log, phase });
+  // `args` is data the script reads, but a host OBJECT also exposes the host
+  // realm through its constructor, so it is rebuilt inside the context from its
+  // JSON form (it arrived as JSON from the request body anyway).
+  installArgs(context, args);
   // Strip the `export` from meta (already parsed) and run the body in an async
   // wrapper so top-level await works.
   const body = script.replace(/export\s+const\s+meta\s*=/, "const meta =");

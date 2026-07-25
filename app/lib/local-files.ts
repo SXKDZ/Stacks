@@ -42,7 +42,17 @@ export function storedFileExists(kind: AcquisitionKind, name: string | null): bo
   if (!name) {
     return false;
   }
-  return existsSync(join(storedDirectory(kind), name));
+  // A stored name is a single filename inside the managed directory. Without this
+  // check, ".." and "../../etc/passwd" were both answered from outside the library,
+  // so a stale path in a paper row could report a file that is not ours as present.
+  if (basename(name) !== name || name === "." || name === "..") {
+    return false;
+  }
+  const target = join(storedDirectory(kind), name);
+  if (resolve(target) !== target) {
+    return false;
+  }
+  return existsSync(target);
 }
 
 /**

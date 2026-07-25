@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowDownUp,
   ArrowRight,
   ArrowUpRight,
   BookOpen,
@@ -25,6 +26,7 @@ import {
   FileText,
   FileSearch,
   FolderOpen,
+  GripVertical,
   Home,
   Inbox,
   Library,
@@ -46,7 +48,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import type { AriaAttributes, ChangeEvent, Dispatch, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from "react";
+import type { AriaAttributes, ChangeEvent, Dispatch, DragEvent as ReactDragEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { readError } from "@/app/lib/http";
@@ -76,6 +78,8 @@ import type {
   Venue,
   ViewId,
 } from "@/app/lib/types";
+import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
+import { gapForPointer, moveItem, moveItemToGap } from "@/app/lib/reorder";
 import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
 
 const discoveryProviders: Array<{
@@ -129,6 +133,8 @@ interface PdfExtractionResponse {
   warning?: string;
 }
 
+// Default column widths as proportional shares of each table's resizable area
+// (only their ratio matters). Users drag from here and their choice persists.
 const defaultPaperColumnWidths: Record<PaperColumnKey, number> = {
   title: 56,
   venue: 18,
@@ -142,19 +148,69 @@ const defaultAuthorColumnWidths: Record<AuthorColumnKey, number> = {
   latest: 12,
 };
 
+// The venue name is the column people scan, so it gets the widest default; the
+// publisher is usually a short imprint and no longer takes more room than it.
 const defaultVenueColumnWidths: Record<VenueColumnKey, number> = {
-  venue: 32,
-  type: 13,
-  publisher: 22,
+  venue: 38,
+  type: 14,
+  publisher: 20,
   papers: 10,
   latest: 10,
 };
 
+/** A table's sort state: which column, and which way. */
+interface TableSort<Key extends string> {
+  key: Key;
+  direction: "asc" | "desc";
+}
+
+/**
+ * Cycle one column of a sortable table: first click sorts by `firstDirection`,
+ * second click reverses it, third returns to the table's default order.
+ *
+ * The third step matters because the default order (e.g. "most recently added")
+ * usually has no column of its own, so without it the user can never get back
+ * to how the table looked before they touched a header.
+ */
+function cycleTableSort<Key extends string>(
+  current: TableSort<Key>,
+  key: Key,
+  fallback: TableSort<Key>,
+  descendingFirst: (key: Key) => boolean,
+): TableSort<Key> {
+  const firstDirection: "asc" | "desc" = descendingFirst(key) ? "desc" : "asc";
+  if (current.key !== key) {
+    return { key, direction: firstDirection };
+  }
+  if (current.direction === firstDirection) {
+    return { key, direction: firstDirection === "asc" ? "desc" : "asc" };
+  }
+  return fallback;
+}
+
+/**
+ * Per-column widths for a resizable table, kept as PROPORTIONAL SHARES of the
+ * table's resizable area and persisted per table in localStorage.
+ *
+ * Shares rather than pixels because the table always fits its pane: there is a
+ * fixed amount of width to divide, so widening one column necessarily narrows its
+ * neighbours, and the layout stays correct when the window resizes. `minimums`
+ * are still expressed in pixels (that is how readability is judged) and are
+ * converted into share space per drag.
+ *
+ * Two things this has to get right, both of which were wrong before:
+ *  - the dragged edge must follow the cursor 1:1, which means the shares of the
+ *    resizable columns must sum to a constant instead of being renormalized;
+ *  - a column's narrowest width must not depend on which of its two edges was
+ *    grabbed, which means every neighbour's pixel minimum is enforced during the
+ *    drag, and no column carries an extra ratio cap of its own.
+ */
 function useResizableColumns<Key extends string>(
   storageKey: string,
   defaults: Record<Key, number>,
   minimums: Record<Key, number>,
-  maxRatios?: Partial<Record<Key, number>>,
+  /** The columns that carry a drag handle. Others are sized by CSS. */
+  resizableKeys: Key[] = Object.keys(defaults) as Key[],
 ) {
   const [widths, setWidths] = useState<Record<Key, number>>(defaults);
 
@@ -162,7 +218,7 @@ function useResizableColumns<Key extends string>(
     const frame = window.requestAnimationFrame(() => {
       try {
         const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as Partial<Record<Key, number>> | null;
-        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value))) {
+        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value) && value > 0)) {
           setWidths((current) => ({ ...current, ...saved }));
         }
       } catch {
@@ -182,13 +238,41 @@ function useResizableColumns<Key extends string>(
     }
     const startX = event.clientX;
     const startWidth = header.getBoundingClientRect().width;
-    const tableWidth = table.getBoundingClientRect().width;
-    const maximum = Math.max(minimums[key], tableWidth * (maxRatios?.[key] ?? 0.7));
+    // The pixel span the resizable columns divide between them.
+    const resizableWidth = [...table.querySelectorAll("th.is-resizable")]
+      .reduce((total, cell) => total + cell.getBoundingClientRect().width, 0)
+      || table.getBoundingClientRect().width;
+    const others = resizableKeys.filter((candidate) => candidate !== key);
+    const neighbourFloor = others.reduce((total, candidate) => total + minimums[candidate], 0);
+    // Grow until the neighbours are at their minimums, shrink to this column's own.
+    const ceiling = Math.max(minimums[key], resizableWidth - neighbourFloor);
+
     const onPointerMove = (moveEvent: PointerEvent) => {
-      const width = Math.min(maximum, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
-      const percentage = Number(((width / tableWidth) * 100).toFixed(2));
+      const targetWidth = Math.min(ceiling, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
       setWidths((current) => {
-        const next = { ...current, [key]: percentage };
+        const pool = resizableKeys.reduce((total, candidate) => total + current[candidate], 0);
+        if (pool <= 0) {
+          return current;
+        }
+        // Pixel minimums in the same units as the stored shares.
+        const floorFor = (candidate: Key) => (minimums[candidate] / resizableWidth) * pool;
+        const othersFloor = others.reduce((total, candidate) => total + floorFor(candidate), 0);
+        const share = Math.min(
+          Math.max(floorFor(key), (targetWidth / resizableWidth) * pool),
+          Math.max(floorFor(key), pool - othersFloor),
+        );
+        const next = { ...current, [key]: Number(share.toFixed(3)) } as Record<Key, number>;
+        // Hand the remainder to the neighbours: each keeps its floor, and what is
+        // left over is split by how much slack each currently has. The shares
+        // therefore still sum to `pool`, which is what keeps the edge under the
+        // cursor and the table inside its pane.
+        const surplus = Math.max(0, pool - share - othersFloor);
+        const slackTotal = others.reduce((total, candidate) => total + Math.max(0, current[candidate] - floorFor(candidate)), 0);
+        for (const candidate of others) {
+          const slack = Math.max(0, current[candidate] - floorFor(candidate));
+          const extra = slackTotal > 0 ? (slack / slackTotal) * surplus : surplus / (others.length || 1);
+          next[candidate] = Number((floorFor(candidate) + extra).toFixed(3));
+        }
         window.localStorage.setItem(storageKey, JSON.stringify(next));
         return next;
       });
@@ -378,6 +462,19 @@ function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: num
   );
 }
 
+/**
+ * Keep a click from reaching the row only when it actually hit a control.
+ *
+ * The author and collection lines are full-width flex containers, so a bare
+ * `stopPropagation` on them swallowed clicks anywhere to the right of the last
+ * name, leaving a dead strip where clicking a paper row did nothing.
+ */
+function stopIfInteractive(event: ReactMouseEvent<HTMLElement>): void {
+  if ((event.target as HTMLElement).closest("button, a")) {
+    event.stopPropagation();
+  }
+}
+
 function ExpandableAuthorButtons({ paper, onOpenAuthor, limit = 5 }: {
   paper: Paper;
   onOpenAuthor: (authorName: string) => void;
@@ -389,20 +486,35 @@ function ExpandableAuthorButtons({ paper, onOpenAuthor, limit = 5 }: {
   if (!paper.authors.length) {
     return <span>Authors not recorded</span>;
   }
+  // One inline run of text, so the toggle follows the last name in the flow rather
+  // than being laid out as a separate flex item: with a long author list the names
+  // filled the row and pushed "Show less" onto a line of its own.
   return (
     <span className="expandable-author-buttons">
-      <span>
-        {visibleAuthors.map((author, index) => (
-          <span key={author.id}><button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>{index < visibleAuthors.length - 1 ? ", " : ""}</span>
-        ))}
-      </span>
-      {hiddenCount ? <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button> : null}
+      {visibleAuthors.map((author, index) => (
+        <span key={author.id}><button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>{index < visibleAuthors.length - 1 ? ", " : ""}</span>
+      ))}
+      {hiddenCount ? <> <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button></> : null}
     </span>
   );
 }
 
 function venueLine(paper: Paper): string {
   return paper.venueAcronym || paper.venueName || "Unassigned venue";
+}
+
+/**
+ * The venue's full name, for a cell that only has room for the acronym.
+ *
+ * Undefined when there is nothing to add: no full name recorded, or a name the
+ * cell is already showing because no acronym exists.
+ */
+function venueFullNameHint(paper: Paper): string | undefined {
+  const name = paper.venueName?.trim();
+  if (!name || !paper.venueAcronym?.trim() || name === paper.venueAcronym.trim()) {
+    return undefined;
+  }
+  return name;
 }
 
 function statusLabel(value: string): string {
@@ -419,14 +531,6 @@ function StatusIcon({ status, size = 14 }: { status: string; size?: number }): R
   if (status === "complete") return <CheckCircle2 size={size} />;
   if (status === "reading") return <Clock3 size={size} />;
   return <Inbox size={size} />;
-}
-
-function matchesSearch(values: Array<string | number | null | undefined>, query: string): boolean {
-  if (!query.trim()) {
-    return true;
-  }
-  const normalized = query.trim().toLowerCase();
-  return values.some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
 
 function matchesLibraryClause(paper: Paper, clause: LibraryFilterClause): boolean {
@@ -1029,6 +1133,7 @@ function StacksWorkspace() {
               }}
               updatePaper={updatePaper}
               onOpenAuthor={(authorId, authorName) => { setQuery(""); setLibraryFilters([createLibraryFilter("author", authorId, authorName)]); }}
+              onOpenVenue={(venueId, venueLabel) => { setQuery(""); setLibraryFilters([createLibraryFilter("venue", venueId, venueLabel)]); }}
               onOpenCollection={(collectionId, collectionName) => { setQuery(""); setLibraryFilters([createLibraryFilter("collection", collectionId, collectionName)]); }}
             />
           ) : view === "authors" ? (
@@ -1348,6 +1453,7 @@ function LibraryView({
   exportSelected,
   updatePaper,
   onOpenAuthor,
+  onOpenVenue,
   onOpenCollection,
 }: {
   papers: Paper[];
@@ -1363,18 +1469,23 @@ function LibraryView({
   exportSelected: () => void;
   updatePaper: (paper: Paper, data: Record<string, unknown>, message: string) => Promise<void>;
   onOpenAuthor: (authorId: string, authorName: string) => void;
+  onOpenVenue: (venueId: string, venueLabel: string) => void;
   onOpenCollection: (collectionId: string, collectionName: string) => void;
 }) {
   const [status, setStatus] = useState("all");
   const [filterKind, setFilterKind] = useState<LibraryFilterKind>("collection");
   const [filterValue, setFilterValue] = useState("");
   const [filterBuilderOpen, setFilterBuilderOpen] = useState(false);
-  const [sort, setSort] = useState<{ key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" }>({ key: "recent", direction: "desc" });
+  const [sort, setSort] = useState<PaperSort>(DEFAULT_PAPER_SORT);
   const { widths: columnWidths, resizeColumn, resetColumnWidth } = useResizableColumns<PaperColumnKey>(
-    "stacks-paper-grid-widths-v3",
+    "stacks-paper-grid-widths-v4",
     defaultPaperColumnWidths,
-    { title: 280, venue: 140, year: 72, status: 72 },
-    { title: 0.68, venue: 0.32, year: 0.32, status: 0.32 },
+    // Minimum pixel widths. Venue holds a short acronym over a type label, so it
+    // shrinks well below the old 140px floor, which made the column feel stuck
+    // partway through a drag.
+    { title: 220, venue: 76, year: 72, status: 72 },
+    // Only Paper and Venue carry handles; checkbox, status, and year are fixed.
+    ["title", "venue"],
   );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -1465,19 +1576,24 @@ function LibraryView({
       year: yearOptions(),
     };
   }, [papers]);
-  const effectivePaperColumnWidths = {
-    title: Math.max(38, columnWidths.title),
-    venue: Math.min(28, Math.max(12, columnWidths.venue)),
-    year: 88,
-    status: 88,
-  };
-  const resizablePaperColumnTotal = effectivePaperColumnWidths.title + effectivePaperColumnWidths.venue;
+  // Floors only. The resize handler already enforces per-column minimum pixel
+  // widths and caps, and it keeps the two shares summing to a constant; clamping
+  // the venue share to a ceiling here as well used to silently discard part of a
+  // drag, so the column stopped following the cursor partway through.
+  // The two resizable columns divide the space the fixed ones leave, so their
+  // `<col>` percentages are normalized against each other.
+  const paperResizableTotal = columnWidths.title + columnWidths.venue;
 
+  /**
+   * Cycle a column: ascending, descending, then back to the library's default
+   * order (most recently added first). Without the third step the default is
+   * unreachable once any header has been clicked, since no header represents it.
+   */
   function toggleSort(key: PaperColumnKey) {
-    setSort((current) => current.key === key
-      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
-      : { key, direction: key === "year" ? "desc" : "asc" });
+    setSort((current) => cycleTableSort(current, key, DEFAULT_PAPER_SORT, (candidate) => candidate === "year"));
   }
+
+  const sortIsDefault = sort.key === DEFAULT_PAPER_SORT.key && sort.direction === DEFAULT_PAPER_SORT.direction;
 
   function toggleAll() {
     const visibleIds = pagedPapers.map((paper) => paper.id);
@@ -1513,6 +1629,13 @@ function LibraryView({
       <div className="view-toolbar library-toolbar">
         <PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search titles, authors, venues…" />
         <button type="button" className={`filter-builder-toggle ${filterBuilderOpen ? "is-open" : ""} ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} aria-pressed={filterBuilderOpen} title={filterBuilderOpen ? "Close library filters" : "Build library filters"}><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
+        {/* Only shown while a column sort is active, since it does nothing at
+            rest and the default order has no header of its own to click. */}
+        {sortIsDefault ? null : (
+          <button type="button" className="sort-reset-button" onClick={() => { setSort(DEFAULT_PAPER_SORT); setPage(1); }} title="Sort by date added again">
+            <ArrowDownUp size={15} /><span>Reset sort</span>
+          </button>
+        )}
         <div className="filter-tabs">
           {["all", "inbox", "reading", "complete", "favorite"].map((item) => (
             <TabButton key={item} variant="pill" active={status === item} onClick={() => { setStatus(item); setPage(1); }}>
@@ -1587,8 +1710,8 @@ function LibraryView({
             <colgroup>
               <col className="paper-column-check" />
               <col className="paper-column-status" />
-              <col style={{ width: `${(effectivePaperColumnWidths.title / resizablePaperColumnTotal) * 100}%` }} />
-              <col style={{ width: `${(effectivePaperColumnWidths.venue / resizablePaperColumnTotal) * 100}%` }} />
+              <col style={{ width: `${(columnWidths.title / paperResizableTotal) * 100}%` }} />
+              <col style={{ width: `${(columnWidths.venue / paperResizableTotal) * 100}%` }} />
               <col className="paper-column-year" />
             </colgroup>
             <thead>
@@ -1647,11 +1770,16 @@ function LibraryView({
                         >
                           <strong>{paper.title}</strong>
                         </button>
-                        <span className="paper-secondary-line" onClick={(event) => event.stopPropagation()}>
+                        {/* These lines stretch the full column width, so they
+                            must not swallow clicks on their empty space: only a
+                            click that landed on an actual control (an author
+                            name, the show-more toggle, a chip) is kept from
+                            reaching the row. */}
+                        <span className="paper-secondary-line" onClick={stopIfInteractive}>
                           <ExpandableAuthorButtons paper={paper} onOpenAuthor={(authorName) => { const author = paper.authors.find((candidate) => candidate.displayName === authorName); if (author) onOpenAuthor(author.id, author.displayName); }} />
                         </span>
                         {paper.collections.length ? (
-                          <span className="paper-collection-line" aria-label="Collections" onClick={(event) => event.stopPropagation()}>
+                          <span className="paper-collection-line" aria-label="Collections" onClick={stopIfInteractive}>
                             {paper.collections.slice(0, 3).map((collection) => (
                               <CollectionChip key={collection.id} size="small" name={collection.name} color={collection.color} onClick={() => onOpenCollection(collection.id, collection.name)} />
                             ))}
@@ -1660,7 +1788,23 @@ function LibraryView({
                       </span>
                     </div>
                   </td>
-                  <td><span className="venue-cell"><b>{paper.venueAcronym || paper.venueName || "—"}</b><small>{paper.paperType}</small></span></td>
+                  {/* The cell shows the acronym, so the tooltip spells the venue out.
+                      Only when both are recorded and differ: otherwise it would just
+                      repeat the text already in the cell. */}
+                  <td>
+                    {paper.venueId ? (
+                      <button
+                        type="button"
+                        className="venue-cell venue-cell-open"
+                        title={venueFullNameHint(paper)}
+                        onClick={(event) => { event.stopPropagation(); onOpenVenue(paper.venueId!, venueLine(paper)); }}
+                      >
+                        <b>{paper.venueAcronym || paper.venueName}</b><small>{paper.paperType}</small>
+                      </button>
+                    ) : (
+                      <span className="venue-cell" title={venueFullNameHint(paper)}><b>{paper.venueAcronym || paper.venueName || "—"}</b><small>{paper.paperType}</small></span>
+                    )}
+                  </td>
                   <td className="muted-cell year-cell">{paper.year ?? "—"}</td>
                 </tr>
               ))}
@@ -1681,6 +1825,19 @@ function LibraryView({
     </div>
   );
 }
+
+interface PaperSort {
+  key: "recent" | "title" | "venue" | "year" | "status";
+  direction: "asc" | "desc";
+}
+
+/** The library's resting order: most recently added first. Reachable again by
+ *  cycling any sorted column past its second click. */
+const DEFAULT_PAPER_SORT: PaperSort = { key: "recent", direction: "desc" };
+
+/** Resting orders for the entity tables: alphabetical by name. */
+const DEFAULT_AUTHOR_SORT: TableSort<AuthorColumnKey> = { key: "author", direction: "asc" };
+const DEFAULT_VENUE_SORT: TableSort<VenueColumnKey> = { key: "venue", direction: "asc" };
 
 function SortablePaperHeader({ label, sortKey, sort, onSort, onResize, onResetWidth, resizable = true }: {
   label: string;
@@ -1736,13 +1893,16 @@ function AuthorsView({
   onCreate: () => void;
   onOpenPapers: (author: Author) => void;
 }) {
-  const [sort, setSort] = useState<{ key: "author" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "author", direction: "asc" });
+  const [sort, setSort] = useState<TableSort<AuthorColumnKey>>(DEFAULT_AUTHOR_SORT);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<AuthorColumnKey>(
-    "stacks-author-grid-widths-v3",
+  // The authors table has no draggable column: the name takes whatever the two
+  // fixed-width count columns leave, so there is nothing to store or restore.
+  const { resizeColumn, resetColumnWidth } = useResizableColumns<AuthorColumnKey>(
+    "stacks-author-grid-widths-v4",
     defaultAuthorColumnWidths,
     { author: 260, papers: 80, latest: 80 },
+    [],
   );
   const filtered = useMemo(() => authors
     .filter((author) => matchesSearch([author.displayName, author.givenName, author.familyName, author.notes], query))
@@ -1756,11 +1916,8 @@ function AuthorsView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedAuthors = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const authorColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
   function toggleSort(key: typeof sort.key) {
-    setSort((current) => current.key === key
-      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
-      : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
+    setSort((current) => cycleTableSort(current, key, DEFAULT_AUTHOR_SORT, (candidate) => candidate === "papers" || candidate === "latest"));
   }
   function toggleAll() {
     const visibleIds = pagedAuthors.map((author) => author.id);
@@ -1785,9 +1942,9 @@ function AuthorsView({
         <table className="paper-table research-grid entity-research-grid author-grid">
           <colgroup>
             <col className="paper-column-check" />
-            <col style={{ width: `${(widths.author / authorColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.papers / authorColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.latest / authorColumnTotal) * 90}%` }} />
+            <col style={{ width: "100%" }} />
+            <col style={{ width: "84px" }} />
+            <col style={{ width: "84px" }} />
             <col className="entity-column-actions" />
           </colgroup>
           <thead>
@@ -1797,9 +1954,9 @@ function AuthorsView({
                   <SelectionBox checked={Boolean(pagedAuthors.length) && pagedAuthors.every((author) => selected.includes(author.id))} />
                 </button>
               </th>
-              <SortableEntityHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
-              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <SortableEntityHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
+              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
               <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -1823,7 +1980,7 @@ function AuthorsView({
                 </td>
                 <td className="entity-number-cell">{author.paperCount}</td>
                 <td className="entity-number-cell">{author.latestYear ?? "—"}</td>
-                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(author)} icon={<Pencil />} aria-label={`Edit ${author.displayName}`} title="Edit" /></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(author)} icon={<Pencil />} aria-label={`Edit ${author.displayName}`} /></td>
               </tr>
             ))}
           </tbody>
@@ -1865,13 +2022,15 @@ function VenuesView({
   onCreate: () => void;
   onOpenPapers: (venue: Venue) => void;
 }) {
-  const [sort, setSort] = useState<{ key: "venue" | "type" | "publisher" | "papers" | "latest"; direction: "asc" | "desc" }>({ key: "venue", direction: "asc" });
+  const [sort, setSort] = useState<TableSort<VenueColumnKey>>(DEFAULT_VENUE_SORT);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<VenueColumnKey>(
-    "stacks-venue-grid-widths-v2",
+    "stacks-venue-grid-widths-v4",
     defaultVenueColumnWidths,
     { venue: 220, type: 100, publisher: 150, papers: 80, latest: 80 },
+    // Only the name and publisher are draggable; type and the counts are fixed.
+    ["venue", "publisher"],
   );
   const filtered = useMemo(() => venues
     .filter((venue) => matchesSearch([venue.name, venue.acronym, venue.type, venue.publisher], query))
@@ -1887,11 +2046,9 @@ function VenuesView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedVenues = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const venueColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
+  const venueResizableTotal = widths.venue + widths.publisher;
   function toggleSort(key: typeof sort.key) {
-    setSort((current) => current.key === key
-      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
-      : { key, direction: key === "papers" || key === "latest" ? "desc" : "asc" });
+    setSort((current) => cycleTableSort(current, key, DEFAULT_VENUE_SORT, (candidate) => candidate === "papers" || candidate === "latest"));
   }
   function toggleAll() {
     const visibleIds = pagedVenues.map((venue) => venue.id);
@@ -1916,11 +2073,11 @@ function VenuesView({
         <table className="paper-table research-grid entity-research-grid venue-grid">
           <colgroup>
             <col className="paper-column-check" />
-            <col style={{ width: `${(widths.venue / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.type / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.publisher / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.papers / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.latest / venueColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.venue / venueResizableTotal) * 100}%` }} />
+            <col style={{ width: "112px" }} />
+            <col style={{ width: `${(widths.publisher / venueResizableTotal) * 100}%` }} />
+            <col style={{ width: "84px" }} />
+            <col style={{ width: "84px" }} />
             <col className="entity-column-actions" />
           </colgroup>
           <thead>
@@ -1931,10 +2088,10 @@ function VenuesView({
                 </button>
               </th>
               <SortableEntityHeader label="Venue" columnKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Type" columnKey="type" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableEntityHeader label="Type" columnKey="type" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
               <SortableEntityHeader label="Publisher" columnKey="publisher" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
-              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
               <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -1960,7 +2117,7 @@ function VenuesView({
                 <td className="entity-meta-cell">{venue.publisher || "—"}</td>
                 <td className="entity-number-cell">{venue.paperCount}</td>
                 <td className="entity-number-cell">{venue.latestYear ?? "—"}</td>
-                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(venue)} icon={<Pencil />} aria-label={`Edit ${venue.name}`} title="Edit" /></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(venue)} icon={<Pencil />} aria-label={`Edit ${venue.name}`} /></td>
               </tr>
             ))}
           </tbody>
@@ -2059,29 +2216,73 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
   onOpen: () => void;
   onOpenPaper: (paper: Paper) => void;
 }) {
-  const pageSize = 5;
+  const pageSize = 4;
   const [page, setPage] = useState(1);
   const pageCount = Math.max(1, Math.ceil(papers.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const visiblePapers = papers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const start = papers.length ? (currentPage - 1) * pageSize + 1 : 0;
   const end = Math.min(currentPage * pageSize, papers.length);
+
+  // Reading progress, shown as a bar rather than a "0 of 21 read" line that told
+  // the user nothing in the common case where nothing is read yet.
+  const readCount = papers.filter((paper) => paper.readingStatus === "complete").length;
+  const readPercent = papers.length ? Math.round((readCount / papers.length) * 100) : 0;
+
+  // The years the collection spans. Deliberately NOT a "most common venue": on a
+  // collection of preprints that is always "arXiv", which says nothing about the
+  // collection and reads as though the whole set were published there.
+  const years = papers.map((paper) => paper.year).filter((year): year is number => typeof year === "number");
+  const yearSpan = years.length
+    ? (Math.min(...years) === Math.max(...years) ? String(Math.min(...years)) : `${Math.min(...years)}–${Math.max(...years)}`)
+    : "";
+
   return (
     <article className="collection-card">
       <header className="collection-card-top">
         <button type="button" className="collection-heading" onClick={onOpen}>
-          <span className={`collection-icon swatch-${collection.color}`}><FolderOpen size={18} /></span>
-          <span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span>
+          <span className={`collection-icon swatch-${collection.color}`}><FolderOpen size={16} /></span>
+          <span>
+            <strong>{collection.name}</strong>
+            <small>
+              {collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}
+              {yearSpan ? ` · ${yearSpan}` : ""}
+            </small>
+          </span>
         </button>
         <div className="collection-actions">
-          <ActionButton variant="secondary" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} title="Edit" />
-          <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} title="Delete" />
+          {/* The tooltip names the collection, like the aria-label: a bare "Edit"
+              adds nothing that the pencil icon does not already say. */}
+          <ActionButton variant="secondary" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} />
+          <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} />
         </div>
       </header>
-      <div className="collection-papers" aria-label={`Papers in ${collection.name}`}>
-        {visiblePapers.map((paper) => <button type="button" onClick={() => onOpenPaper(paper)} key={paper.id}><FileText size={14} /><b>{paper.title}</b></button>)}
-        {!papers.length ? <span className="row-muted"><FileText size={14} /><b>No papers in this collection</b></span> : null}
+      {/* Always present, so every card has the same structure and therefore the
+          same height, and so "nothing read yet" is stated rather than implied by
+          an absent row. */}
+      {/* The exact counts, which the percentage beside it does not give. */}
+      <div className="collection-progress" title={`${readCount} of ${papers.length} papers read`}>
+        <span className="collection-progress-track">
+          <span className="collection-progress-fill" style={{ width: `${readPercent}%` }} />
+        </span>
+        <small>{readCount ? `${readPercent}% read` : "None read"}</small>
       </div>
+      <ul className="collection-papers" aria-label={`Papers in ${collection.name}`}>
+        {visiblePapers.map((paper) => (
+          <li key={paper.id}>
+            <button type="button" onClick={() => onOpenPaper(paper)} title={paper.title}>
+              {/* The title wraps to a second line instead of being cut mid-word,
+                  which is what made these cards unreadable. */}
+              <span className="collection-paper-title">{paper.title}</span>
+              {/* Up to three names, like the paper detail panel, then "+N". */}
+              <small className="collection-paper-meta">{paperMetaLine(paper)}</small>
+            </button>
+          </li>
+        ))}
+        {!papers.length ? (
+          <li className="collection-papers-empty"><FileText size={14} /><span>No papers in this collection</span></li>
+        ) : null}
+      </ul>
       {papers.length > pageSize ? (
         <div className="collection-card-pagination">
           <span>{start}-{end} of {papers.length}</span>
@@ -2107,6 +2308,7 @@ function SortableEntityHeader<Key extends string>({
   onResize,
   onResetWidth,
   centered = false,
+  resizable = true,
 }: {
   label: string;
   columnKey: Key;
@@ -2115,25 +2317,27 @@ function SortableEntityHeader<Key extends string>({
   onResize: (event: ReactPointerEvent<HTMLButtonElement>, key: Key) => void;
   onResetWidth: (event: ReactMouseEvent<HTMLButtonElement>, key: Key) => void;
   centered?: boolean;
+  /** Narrow, fixed-content columns (a count, a short type label) carry no handle. */
+  resizable?: boolean;
 }) {
   const active = sort.key === columnKey;
   const ariaSort: AriaAttributes["aria-sort"] = active
     ? sort.direction === "asc" ? "ascending" : "descending"
     : "none";
   return (
-    <th aria-sort={ariaSort} className={`is-resizable ${centered ? "is-centered" : ""}`}>
+    <th aria-sort={ariaSort} className={`${resizable ? "is-resizable" : "is-fixed-width"} ${centered ? "is-centered" : ""}`}>
       <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(columnKey)}>
         <span>{label}</span>
         {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
       </button>
-      <button
+      {resizable ? <button
         type="button"
         className="column-resize-handle"
         aria-label={`Resize ${label} column`}
         title={`Drag to resize ${label}; double-click to reset`}
         onPointerDown={(event) => onResize(event, columnKey)}
         onDoubleClick={(event) => onResetWidth(event, columnKey)}
-      />
+      /> : null}
     </th>
   );
 }
@@ -2166,7 +2370,9 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
 }
 
 function ToolbarCreateButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <ActionButton variant="primary" className="toolbar-add-action ml-auto" onClick={onClick} aria-label={label} title={label} icon={<Plus />}>{label}</ActionButton>;
+  // No `title`: the label is already the button's visible text, so a tooltip
+  // repeating it says nothing.
+  return <ActionButton variant="primary" className="toolbar-add-action ml-auto" onClick={onClick} aria-label={label} icon={<Plus />}>{label}</ActionButton>;
 }
 
 function PageSearch({ value, onChange, placeholder }: {
@@ -2178,7 +2384,7 @@ function PageSearch({ value, onChange, placeholder }: {
     <label className="inline-search page-search">
       <Search size={18} aria-hidden="true" />
       <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label={placeholder} />
-      {value ? <button type="button" onClick={() => onChange("")} aria-label="Clear search" title="Clear search"><X size={14} /></button> : null}
+      {value ? <button type="button" onClick={() => onChange("")} aria-label="Clear search"><X size={14} /></button> : null}
     </label>
   );
 }
@@ -2315,7 +2521,7 @@ function PaginationPageNav({ page, pageCount, onPageChange, label, className, wi
   const compact = iconSize <= 13;
   return (
     <nav className={cx("flex items-center gap-1", className)} aria-label={label}>
-      <PaginationButton compact={compact} onClick={() => onPageChange(1)} disabled={currentPage <= 1} aria-label="First page" title="First page"><ChevronsLeft size={iconSize} /></PaginationButton>
+      <PaginationButton compact={compact} onClick={() => onPageChange(1)} disabled={currentPage <= 1} aria-label="First page"><ChevronsLeft size={iconSize} /></PaginationButton>
       {visiblePages.map((visiblePage) => (
         <PaginationButton
           compact={compact}
@@ -2327,7 +2533,7 @@ function PaginationPageNav({ page, pageCount, onPageChange, label, className, wi
           {visiblePage}
         </PaginationButton>
       ))}
-      <PaginationButton compact={compact} onClick={() => onPageChange(normalizedCount)} disabled={currentPage >= normalizedCount} aria-label="Last page" title="Last page"><ChevronsRight size={iconSize} /></PaginationButton>
+      <PaginationButton compact={compact} onClick={() => onPageChange(normalizedCount)} disabled={currentPage >= normalizedCount} aria-label="Last page"><ChevronsRight size={iconSize} /></PaginationButton>
     </nav>
   );
 }
@@ -2530,7 +2736,7 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
                   <MarkdownContent content={result.abstract || "No abstract is available for this result."} className="result-abstract markdown-compact" />
                   <div className="result-tags"><span>{result.venueName || "Venue unknown"}</span>{result.doi ? <span>DOI {result.doi}</span> : null}{result.pdfUrl ? <span>Open PDF</span> : null}</div>
                 </div>
-                <ActionButton variant={isAdded ? "success" : "primary"} size="small" className="self-start" disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} title={isAdded ? "Added to library" : "Add to library"} icon={isAdded ? <Check /> : <Plus />}>
+                <ActionButton variant={isAdded ? "success" : "primary"} size="small" className="self-start" disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} icon={isAdded ? <Check /> : <Plus />}>
                   {isAdded ? "Added" : "Add"}
                 </ActionButton>
               </article>
@@ -2672,7 +2878,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             <dl className="paper-facts">
               <div className="paper-fact">
                 <dt>Venue</dt>
-                <dd><TextButton link className="max-w-full truncate capitalize text-[var(--ink)]" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></dd>
+                <dd><TextButton link className="max-w-full truncate capitalize text-[var(--ink)]" title={venueFullNameHint(paper)} onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></dd>
               </div>
               <div className="paper-fact">
                 <dt>Year</dt>
@@ -2945,7 +3151,7 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
       <span>{label}</span>
       <div className="local-file-control">
         <input ref={pathInput} name={name} defaultValue={defaultValue} placeholder={kind === "pdf" ? "paper.pdf" : "paper.html"} />
-        <ActionButton type="button" variant="secondary" size="icon" className="h-auto w-[42px] self-stretch" onClick={() => fileInput.current?.click()} disabled={uploading} aria-label={`Choose local ${kind === "pdf" ? "PDF" : "HTML"} file`} title="Choose from local files" icon={uploading ? <LoaderCircle className="spin" /> : <FolderOpen />} />
+        <ActionButton type="button" variant="secondary" size="icon" className="h-auto w-[42px] self-stretch" onClick={() => fileInput.current?.click()} disabled={uploading} aria-label={`Choose local ${kind === "pdf" ? "PDF" : "HTML"} file`} icon={uploading ? <LoaderCircle className="spin" /> : <FolderOpen />} />
         <input
           ref={fileInput}
           className="local-file-picker"
@@ -3001,29 +3207,200 @@ function AnchoredOptions({ anchorRef, open, className, id, children }: {
   );
 }
 
+/**
+ * Author names as reorderable chips.
+ *
+ * Author order is meaningful (it is stored as `author_order` and decides who
+ * reads as first author), so the field makes it directly editable: each name is
+ * a chip that can be dragged into position, and the order on screen is the order
+ * submitted. A hidden input carries the comma-joined value, so the surrounding
+ * form contract is unchanged.
+ */
 function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; defaultValue?: string }) {
   const listboxId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState(defaultValue);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [names, setNames] = useState<string[]>(() =>
+    defaultValue.split(",").map((name) => name.trim()).filter(Boolean),
+  );
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const fragment = value.split(",").at(-1)?.trim().toLowerCase() ?? "";
-  const selectedNames = new Set(value.split(",").slice(0, -1).map((name) => name.trim().toLowerCase()));
-  const matches = fragment ? authors
-    .filter((author) => author.displayName.toLowerCase().includes(fragment) && !selectedNames.has(author.displayName.toLowerCase()))
-    .slice(0, 8) : [];
-  function choose(author: Author) {
-    const parts = value.split(",");
-    parts[parts.length - 1] = ` ${author.displayName}`;
-    setValue(`${parts.join(",").trimStart()}, `);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  // Where the dragged chip would be inserted: the gap before this many chips.
+  // Tracked as a gap (0..names.length) rather than a target chip so the caret
+  // renders between two names, which is what a drop actually does.
+  const [dropGap, setDropGap] = useState<number | null>(null);
+
+  const taken = new Set(names.map((name) => name.toLowerCase()));
+  const fragment = query.trim().toLowerCase();
+  const matches = fragment
+    ? authors
+      .filter((author) => author.displayName.toLowerCase().includes(fragment) && !taken.has(author.displayName.toLowerCase()))
+      .slice(0, 8)
+    : [];
+
+  function addName(name: string) {
+    const cleaned = name.trim();
+    if (!cleaned || taken.has(cleaned.toLowerCase())) {
+      setQuery("");
+      return;
+    }
+    setNames((current) => [...current, cleaned]);
+    setQuery("");
     setOpen(false);
   }
+
+  /** Move a chip to a new slot, keeping every other name's relative order. */
+  function moveName(from: number, to: number) {
+    setNames((current) => moveItem(current, from, to));
+  }
+
+  /** Drop the dragged chip into an insertion gap (see app/lib/reorder.ts). */
+  function dropIntoGap(gap: number) {
+    if (dragIndex === null) return;
+    setNames((current) => moveItemToGap(current, dragIndex, gap));
+    setDragIndex(null);
+    setDropGap(null);
+  }
+
+  /** The gap nearest the cursor: before this chip, or after it. */
+  function pointerGap(event: ReactDragEvent<HTMLElement>, index: number): number {
+    return gapForPointer(event.currentTarget.getBoundingClientRect(), event.clientX, index);
+  }
+
   return (
-    <label className="field-span-2 autocomplete-field">
-      <span>Authors</span>
-      <input ref={inputRef} name="authors" value={value} onChange={(event) => { setValue(event.target.value); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && Boolean(matches.length)} aria-controls={listboxId} placeholder="Amina Rahman, Theo Martins" />
-      <AnchoredOptions anchorRef={inputRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options" id={listboxId}>{matches.map((author) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(author)} key={author.id}><UsersRound size={14} /><span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}</AnchoredOptions>
-      <small>Separate names with commas.</small>
-    </label>
+    <div className="paper-author-field field-span-2">
+      <span className="paper-author-label">Authors</span>
+      <div
+        className="author-tag-editor"
+        ref={editorRef}
+        // Dropping in the empty space past the last chip moves the name to the
+        // end, and leaving the editor clears the caret so it can't linger.
+        onDragOver={(event) => {
+          if (dragIndex === null) return;
+          event.preventDefault();
+          if (event.target === event.currentTarget) setDropGap(names.length);
+        }}
+        onDrop={(event) => {
+          if (dragIndex === null) return;
+          event.preventDefault();
+          dropIntoGap(dropGap ?? names.length);
+        }}
+        onDragLeave={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setDropGap(null);
+        }}
+      >
+        {names.map((name, index) => (
+          <span
+            key={`${name}-${index}`}
+            className={cx(
+              "author-chip",
+              dragIndex === index && "is-dragging",
+              // Only the chip adjacent to the target gap draws the caret, and
+              // never on the side facing the chip's own original position.
+              dropGap === index && dragIndex !== index && "is-drop-before",
+              dropGap === index + 1 && dragIndex !== index && index === names.length - 1 && "is-drop-after",
+            )}
+            draggable
+            onDragStart={(event) => {
+              setDragIndex(index);
+              event.dataTransfer.effectAllowed = "move";
+              // Firefox needs some payload set for a drag to start at all.
+              event.dataTransfer.setData("text/plain", name);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              // Same reason as onDrop: the editor's handler would otherwise
+              // overwrite this gap with "past the last chip".
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = "move";
+              if (dragIndex !== null) setDropGap(pointerGap(event, index));
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              // Must not bubble: the editor also handles drop (for the empty
+              // space past the last chip), and because setDragIndex(null) here
+              // doesn't apply until the next render, that handler would still
+              // see the old dragIndex and move the name a second time.
+              event.stopPropagation();
+              dropIntoGap(pointerGap(event, index));
+            }}
+            onDragEnd={() => { setDragIndex(null); setDropGap(null); }}
+            title={`${name} (drag to reorder)`}
+          >
+            <GripVertical size={12} className="author-chip-grip" aria-hidden="true" />
+            <span className="author-chip-name">{name}</span>
+            {/* Keyboard path for reordering, so it isn't drag-only. */}
+            <button
+              type="button"
+              className="author-chip-move"
+              onClick={() => moveName(index, index - 1)}
+              disabled={index === 0}
+              aria-label={`Move ${name} earlier`}
+              title="Move earlier"
+            ><ChevronUp size={11} /></button>
+            <button
+              type="button"
+              className="author-chip-move"
+              onClick={() => moveName(index, index + 1)}
+              disabled={index === names.length - 1}
+              aria-label={`Move ${name} later`}
+              title="Move later"
+            ><ChevronDown size={11} /></button>
+            <button
+              type="button"
+              className="author-chip-remove"
+              onClick={() => setNames((current) => current.filter((_, position) => position !== index))}
+              aria-label={`Remove ${name}`}
+            ><X size={11} /></button>
+          </span>
+        ))}
+        <input
+          value={query}
+          onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => { addName(query); setOpen(false); }, 120)}
+          onKeyDown={(event) => {
+            // Comma keeps working for people pasting a comma-separated list.
+            if (event.key === "Enter" || event.key === ",") {
+              event.preventDefault();
+              addName(query);
+            }
+            if (event.key === "Backspace" && !query && names.length) {
+              setNames((current) => current.slice(0, -1));
+            }
+          }}
+          onPaste={(event) => {
+            const pasted = event.clipboardData.getData("text");
+            if (!pasted.includes(",")) return;
+            event.preventDefault();
+            const incoming = pasted.split(",").map((name) => name.trim()).filter(Boolean);
+            setNames((current) => {
+              const seen = new Set(current.map((name) => name.toLowerCase()));
+              return [...current, ...incoming.filter((name) => !seen.has(name.toLowerCase()) && seen.add(name.toLowerCase()))];
+            });
+            setQuery("");
+          }}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open && Boolean(matches.length)}
+          aria-controls={listboxId}
+          autoComplete="off"
+          placeholder={names.length ? "Add another author…" : "Amina Rahman"}
+        />
+      </div>
+      {/* The submitted value: first author first, in the order shown. */}
+      <input type="hidden" name="authors" value={names.join(", ")} />
+      <AnchoredOptions anchorRef={editorRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options" id={listboxId}>
+        {matches.map((author) => (
+          <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => addName(author.displayName)} key={author.id}>
+            <UsersRound size={14} />
+            <span><strong>{author.displayName}</strong><small>{author.paperCount} {author.paperCount === 1 ? "paper" : "papers"}</small></span>
+          </button>
+        ))}
+      </AnchoredOptions>
+      <small>Drag to reorder; the first name is the first author.</small>
+    </div>
   );
 }
 
@@ -3926,10 +4303,10 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
   const collection = entity === "collection" ? (record as Collection | undefined) : undefined;
   const papersInCollection = entity === "collection" ? papers
     .filter((paper) => collectionPaperIds.includes(paper.id))
-    .filter((paper) => matchesSearch([paper.title, authorLine(paper), venueLine(paper)], collectionPaperQuery)) : [];
+    .filter((paper) => matchesSearch(paperSearchValues(paper), collectionPaperQuery)) : [];
   const papersOutsideCollection = entity === "collection" ? papers
     .filter((paper) => !collectionPaperIds.includes(paper.id))
-    .filter((paper) => matchesSearch([paper.title, authorLine(paper), venueLine(paper)], availablePaperQuery)) : [];
+    .filter((paper) => matchesSearch(paperSearchValues(paper), availablePaperQuery)) : [];
   const transferPageSize = 10;
   const collectionPageCount = Math.max(1, Math.ceil(papersInCollection.length / transferPageSize));
   const availablePageCount = Math.max(1, Math.ceil(papersOutsideCollection.length / transferPageSize));
@@ -4000,8 +4377,8 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
                 <TransferPagination page={currentCollectionPage} total={papersInCollection.length} pageSize={transferPageSize} onPageChange={setCollectionPaperPage} label="collection papers" />
               </div>
               <div className="transfer-actions" aria-label="Move papers">
-                <ActionButton variant="secondary" size="icon" onClick={addSelectedPaperToCollection} disabled={!selectedAvailablePaperId} aria-label="Add selected paper to collection" title="Add to collection" icon={<ChevronLeft />} />
-                <ActionButton variant="secondary" size="icon" onClick={removeSelectedPaperFromCollection} disabled={!selectedCollectionPaperId} aria-label="Remove selected paper from collection" title="Remove from collection" icon={<ChevronRight />} />
+                <ActionButton variant="secondary" size="icon" onClick={addSelectedPaperToCollection} disabled={!selectedAvailablePaperId} aria-label="Add selected paper to collection" icon={<ChevronLeft />} />
+                <ActionButton variant="secondary" size="icon" onClick={removeSelectedPaperFromCollection} disabled={!selectedCollectionPaperId} aria-label="Remove selected paper from collection" icon={<ChevronRight />} />
               </div>
               <div className="transfer-column">
                 <header><strong>All remaining papers</strong><small>{papers.length - collectionPaperIds.length}</small></header>
@@ -4014,7 +4391,9 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
               </div>
             </div>
             <div className="transfer-paper-details">
-              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small>{fullAuthorLine(selectedTransferPaper) || "Authors unavailable"} · {venueLine(selectedTransferPaper) || "Venue unavailable"} · {selectedTransferPaper.year ?? "Year unavailable"}</small></span> : <small>Select a paper to inspect it before moving.</small>}
+              {/* The same expandable author line as the paper detail panel, so the
+                  hidden names are reachable here instead of being a dead "+5". */}
+              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><ExpandableAuthorNames paper={selectedTransferPaper} limit={3} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to inspect it before moving.</small>}
             </div>
           </section>
         </>}

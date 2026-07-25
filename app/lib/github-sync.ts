@@ -54,7 +54,14 @@ function parseRepo(repo: string): { owner: string; name: string } {
   if (!match) {
     throw new GitHubError('Set the GitHub repo as "owner/name" (e.g. octocat/stacks-inbox).');
   }
-  return { owner: match[1], name: match[2] };
+  const [, owner, name] = match;
+  // `.` is a legal repo-name character, so ".." matched the pattern: the request
+  // path became /repos/../../issues, and URL resolution collapses the dot segments,
+  // aiming the call at a different API endpoint than the one this module pins.
+  if ([owner, name].some((segment) => segment === "." || segment === "..")) {
+    throw new GitHubError('Set the GitHub repo as "owner/name" (e.g. octocat/stacks-inbox).');
+  }
+  return { owner, name };
 }
 
 // A defensive ceiling on pages walked per list, so a runaway Link chain can't
@@ -176,17 +183,31 @@ export async function listIssues(config: GitHubConfig, since?: string): Promise<
 
 /** List every comment on an issue (all pages), oldest first. */
 export async function listComments(config: GitHubConfig, issueNumber: number): Promise<GitHubComment[]> {
+  return (await listCommentsPaged(config, issueNumber)).comments;
+}
+
+/**
+ * List an issue's comments, reporting whether the page cap cut the list short.
+ *
+ * `listComments` dropped the `truncated` flag, so a very long thread was silently
+ * read as complete: the sync then advanced its high-water mark past comments it
+ * had never seen, and they were never ingested.
+ */
+export async function listCommentsPaged(
+  config: GitHubConfig,
+  issueNumber: number,
+): Promise<{ comments: GitHubComment[]; truncated: boolean }> {
   const { owner, name } = parseRepo(config.repo);
-  const { items } = await githubFetchAll<{ id: number; body: string | null; updated_at: string }>(
+  const { items, truncated } = await githubFetchAll<{ id: number; body: string | null; updated_at: string }>(
     config,
     `/repos/${owner}/${name}/issues/${issueNumber}/comments?per_page=100`,
   );
-  return items.map((comment) => ({
+  return { truncated, comments: items.map((comment) => ({
     id: comment.id,
     body: markerless(comment.body ?? ""),
     updatedAt: comment.updated_at,
     fromStacks: (comment.body ?? "").includes(STACKS_MARKER),
-  }));
+  })) };
 }
 
 /** Rename an issue to match a locally-renamed feed (title push, local wins). */

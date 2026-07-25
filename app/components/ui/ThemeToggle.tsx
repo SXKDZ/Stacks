@@ -18,7 +18,6 @@ export function ThemeToggle() {
       size="icon"
       onClick={toggleTheme}
       aria-label={label}
-      title={label}
       icon={theme === "dark" ? <Sun /> : <Moon />}
     />
   );

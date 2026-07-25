@@ -10,7 +10,7 @@
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/schema.test.mjs && node --import tsx --test tests/metadata-normalize.test.ts",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/schema.test.mjs && node --import tsx --test tests/metadata-normalize.test.ts tests/schemas/*.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "audit:colors": "node scripts/generate-color-audit.mjs",
     "release": "node scripts/release.mjs prepare"
@@ -35,7 +35,8 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "tailwind-merge": "^3.6.0",
-    "unpdf": "^1.6.2"
+    "unpdf": "^1.6.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.2.1",

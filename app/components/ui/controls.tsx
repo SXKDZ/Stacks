@@ -101,6 +101,10 @@ export function ActionButton({
   type = "button",
   ...props
 }: ActionButtonProps) {
+  // No tooltip is derived from `aria-label`. A recognizable icon (a pencil, a sun, a
+  // hamburger) needs no caption, so deriving one turns every icon button into a
+  // hint that states the obvious. A `title` is written only where it adds something
+  // the icon does not already say; `aria-label` still names every one of them.
   return (
     <button type={type} className={actionClassName(variant, size, className)} {...props}>
       {icon ? (
@@ -190,6 +194,7 @@ export function StatusPill({
     <span
       className={cx(statusVariants({ status: visualStatus, compact, className }))}
       aria-label={label}
+      // Only when icon-only: the full pill already shows this label as text.
       title={compact ? label : undefined}
     >
       <Icon aria-hidden="true" />

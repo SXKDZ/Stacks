@@ -1,13 +1,9 @@
-import type { DiscoveryProvider } from "@/app/lib/types";
 import { ScholarlyProviderError, searchProvider } from "@/app/lib/scholarly";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { parseRequest } from "@/app/lib/schemas/parse";
+import { DiscoverRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
-
-interface DiscoverRequest {
-  query?: string;
-  provider?: DiscoveryProvider;
-}
 
 function errorResponse(message: string, status = 400): Response {
   return Response.json({ error: message }, { status });
@@ -16,12 +12,12 @@ function errorResponse(message: string, status = 400): Response {
 export async function POST(request: Request): Promise<Response> {
   try {
     const runtime = await resolveRuntimeValues();
-    const body = await request.json() as DiscoverRequest;
-    const query = body.query?.trim();
-    if (!query) {
+    const parsed = await parseRequest(DiscoverRequestSchema, request);
+    if (!parsed.ok) {
       return errorResponse("Enter a topic, title, DOI, or author to search.");
     }
-    const provider = body.provider ?? "semantic-scholar";
+    const query = parsed.data.query;
+    const provider = parsed.data.provider ?? "semantic-scholar";
     const results = await searchProvider(provider, query, {
       semanticScholarApiKey: runtimeValue(runtime, "SEMANTIC_SCHOLAR_API_KEY"),
       serpApiKey: runtimeValue(runtime, "SERPAPI_KEY"),
