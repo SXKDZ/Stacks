@@ -785,6 +785,34 @@ test("the GitHub sync survives a deleted issue, a repeated issue, and a long thr
   assert.match(client, /segment === "\." \|\| segment === "\.\."/);
 });
 
+test("tooltips are drawn by the app, not the browser", async () => {
+  const [layer, styles, layout] = await Promise.all([
+    readFile(new URL("../app/components/ui/TooltipLayer.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+  ]);
+  // Mounted once for the whole app, so every existing title="..." is covered
+  // without touching its call site.
+  assert.match(layout, /<TooltipLayer \/>/);
+  // It listens at the document level and portals a fixed-position element, which is
+  // what lets a tooltip escape a scroll container or modal clip.
+  assert.match(layer, /addEventListener\("pointerover"/);
+  assert.match(layer, /createPortal/);
+  // The native bubble is suppressed by moving the text aside during hover, and the
+  // attribute is always restored (including on unmount) so assistive tech keeps it.
+  assert.match(layer, /removeAttribute\("title"\)/);
+  assert.match(layer, /setAttribute\("title", text\)/);
+  assert.match(layer, /const restore = /);
+  // Keyboard focus shows it too, not just the pointer.
+  assert.match(layer, /addEventListener\("focusin"/);
+  assert.match(layer, /role="tooltip"/);
+  // Styled from the theme tokens, so it inverts with light/dark instead of looking
+  // like the operating system.
+  assert.match(styles, /\.app-tooltip \{/);
+  assert.match(styles, /background: var\(--ink\)/);
+  assert.match(styles, /max-width: 320px/);
+});
+
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
   // The stylesheets accumulated selectors defined three and four times across
   // files, where the later copy silently won: a value was set in one file and

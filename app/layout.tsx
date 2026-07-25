@@ -3,6 +3,7 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/jetbrains-mono";
 import "katex/dist/katex.min.css";
 import "./globals.css";
+import { TooltipLayer } from "@/app/components/ui/TooltipLayer";
 
 export const metadata: Metadata = {
   title: "Stacks",
@@ -40,7 +41,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('stacks-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}catch(e){document.documentElement.dataset.theme='dark'}" }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Draws `title` tooltips in the app's style; see TooltipLayer. */}
+        <TooltipLayer />
+      </body>
     </html>
   );
 }

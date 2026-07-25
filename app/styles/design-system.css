@@ -360,6 +360,41 @@
   background: rgba(22, 141, 236, 0.065);
 }
 
+/* The app's own tooltip, drawn by TooltipLayer in place of the browser's native
+   `title` bubble (which cannot be styled and looks like the OS, not Stacks). It is
+   positioned in viewport coordinates and portaled to the body, so it escapes every
+   scroll container and modal clip. */
+.app-tooltip {
+  background: var(--ink);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  color: var(--canvas);
+  font-size: var(--type-micro);
+  font-weight: 500;
+  line-height: 1.4;
+  /* Long titles (a full paper title, a file path) wrap instead of running off. */
+  max-width: 320px;
+  padding: 6px 9px;
+  pointer-events: none;
+  position: fixed;
+  /* Centred on the anchor; the shift is a variable so a future edge-clamp can
+     override it without touching the transform. */
+  transform: translateX(var(--tooltip-shift, -50%));
+  white-space: pre-wrap;
+  word-break: break-word;
+  z-index: 90;
+  animation: tooltip-in 120ms ease-out;
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateX(var(--tooltip-shift, -50%)) translateY(2px); }
+  to { opacity: 1; transform: translateX(var(--tooltip-shift, -50%)) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tooltip { animation: none; }
+}
+
 /* Prompt templates use one bordered Markdown editor with a synchronized syntax layer. */
 .prompt-code-editor {
   background: color-mix(in srgb, var(--panel) 90%, var(--canvas));
