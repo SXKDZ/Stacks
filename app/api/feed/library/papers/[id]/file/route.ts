@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { papers } from "@/db/schema";
@@ -35,15 +36,19 @@ export async function GET(
   if (!paper) {
     return Response.json({ error: "Paper not found." }, { status: 404 });
   }
+  // Prefer the PDF, but only if it is really on disk. resolveStoredFile validates
+  // the NAME, not its existence, so a stale local_path (the file was moved or the
+  // library restored without it) used to enter this branch and 404 without ever
+  // trying the HTML snapshot the paper actually still has.
   if (paper.localPath) {
     const resolved = resolveStoredFile("pdfs", paper.localPath);
-    if (resolved) {
+    if (resolved && existsSync(resolved.path)) {
       return servePdfFile(resolved.path, request.headers.get("range"));
     }
   }
   if (paper.htmlSnapshotPath) {
     const resolved = resolveStoredFile("html", paper.htmlSnapshotPath);
-    if (resolved) {
+    if (resolved && existsSync(resolved.path)) {
       return serveHtmlSnapshot(resolved.path);
     }
   }

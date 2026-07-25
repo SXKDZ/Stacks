@@ -109,3 +109,33 @@ test("publicHttpsUrl also refuses plaintext and embedded credentials", () => {
   // A non-standard port on a public host is fine (many mirrors use one).
   assert.ok(publicHttpsUrl(new URL("https://arxiv.org:8443/abs/1")));
 });
+
+test("htmlToText decodes entities once, so escaped markup stays inert", async () => {
+  // Replacing &amp; before &lt;/&gt; decoded a double-escaped sequence twice, so
+  // text the page had deliberately escaped came out as real angle brackets.
+  const { htmlToText } = await import("../../app/lib/webpage-snapshot.ts");
+  assert.equal(
+    htmlToText("<p>&amp;lt;img src=x onerror=alert(1)&amp;gt;</p>"),
+    "&lt;img src=x onerror=alert(1)&gt;",
+  );
+  // Single-escaped entities still decode normally.
+  assert.equal(htmlToText("<p>a &lt;b&gt; c &amp; d</p>"), "a <b> c & d");
+  assert.equal(htmlToText("<p>a&nbsp;b</p>"), "a b");
+});
+
+test("the bot-challenge heuristic does not reject legitimate security papers", async () => {
+  const { looksBlocked } = await import("../../app/lib/webpage-snapshot.ts");
+  // A bare "captcha" or "access denied" appears in real paper titles, and a false
+  // positive here refuses the import permanently.
+  assert.equal(
+    looksBlocked("<body>We study CAPTCHA recognition with deep nets.</body>", "Deep Learning for CAPTCHA Recognition"),
+    false,
+  );
+  assert.equal(looksBlocked("<body>Our access denied policy analysis…</body>", "On Access Denied Semantics"), false);
+
+  // Real interstitials are still caught, including one below a long <head>, which
+  // the old 4000-character window missed entirely.
+  assert.ok(looksBlocked("<body>Please complete the captcha to continue</body>", "Just a moment..."));
+  assert.ok(looksBlocked(`<head>${"x".repeat(6000)}</head><body>Checking your browser before accessing</body>`, "Loading"));
+  assert.ok(looksBlocked("<body>Verifying your browser, please wait</body>", ""));
+});

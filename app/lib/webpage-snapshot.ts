@@ -36,16 +36,22 @@ const BLOCKED_MARKERS = [
   /enable javascript and cookies to continue/i,
   /challenge[- ]?(?:required|verification|platform)/i,
   /cf-challenge|cf_chl_|__cf_chl/i,
-  /captcha/i,
-  /access denied/i,
+  // A bare "captcha" or "access denied" appears in legitimate security papers, so
+  // both require the surrounding phrasing of an actual interstitial.
+  /(?:complete|solve|verify)[^.\n]{0,30}captcha/i,
+  /captcha[^.\n]{0,30}(?:required|verification|challenge)/i,
+  /access denied[^.\n]{0,40}(?:you do not have permission|reference #|error)/i,
   /attention required/i,
   /are you a robot/i,
 ];
 
 /** True when rendered HTML/title looks like a challenge, captcha, or block page. */
 export function looksBlocked(html: string, title: string): boolean {
-  const head = `${title}\n${html.slice(0, 4000)}`;
-  return BLOCKED_MARKERS.some((marker) => marker.test(head));
+  // A challenge marker can sit past the first few kilobytes (below a long <head>),
+  // and a page whose interstitial was missed is stored as if it were the paper.
+  // Scanning the whole document is cheap next to rendering it.
+  const haystack = `${title}\n${html}`;
+  return BLOCKED_MARKERS.some((marker) => marker.test(haystack));
 }
 
 /** Strip scripts/styles and collapse to readable text (cap at MAX_PAPER-ish length). */
@@ -54,10 +60,19 @@ export function htmlToText(html: string, maxChars = 20_000): string {
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, "\n")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
+    // One pass, so a double-escaped sequence is not decoded twice. Replacing
+    // `&amp;` first turned `&amp;lt;script&amp;gt;` into real angle brackets, i.e.
+    // manufactured markup out of text the page had deliberately escaped.
+    .replace(/&(nbsp|amp|lt|gt|quot|#39|apos);/gi, (_match, entity: string) => {
+      switch (entity.toLowerCase()) {
+        case "nbsp": return " ";
+        case "amp": return "&";
+        case "lt": return "<";
+        case "gt": return ">";
+        case "quot": return '"';
+        default: return "'";
+      }
+    })
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
