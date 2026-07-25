@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { isTooltipRedundant, measureElement } from "../../lib/tooltip-visibility";
+
 /**
  * Renders `title` tooltips in the app's own style instead of the browser's.
  *
@@ -20,8 +22,12 @@ import { createPortal } from "react-dom";
 
 /** How long the pointer must rest before the tooltip appears. */
 const HOVER_DELAY_MS = 350;
-/** Gap between the anchor and the tooltip. */
-const OFFSET = 8;
+/**
+ * Gap below the cursor. Large enough to clear the pointer graphic itself (a
+ * typical arrow is ~20px tall), so the bubble sits under the cursor rather than
+ * beneath its tip where the pointer overlaps the first line of text.
+ */
+const OFFSET = 20;
 
 interface TooltipState {
   text: string;
@@ -124,7 +130,9 @@ export function TooltipLayer() {
 
     const show = (element: HTMLElement, immediate: boolean, pointer?: { x: number; y: number }) => {
       const text = element.getAttribute("title")?.trim();
-      if (!text) return;
+      // A tooltip repeating text the reader can already see is suppressed; see
+      // tooltip-visibility for the rule.
+      if (!text || isTooltipRedundant(measureElement(element), text)) return;
       const reveal = () => {
         const rect = element.getBoundingClientRect();
         // Sit just below the POINTER, the way a native tooltip does, so on a wide

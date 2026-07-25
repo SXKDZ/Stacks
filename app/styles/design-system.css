@@ -622,11 +622,15 @@
 
 /* One tokenized focus ring for every bare field and textarea (replaces the
    hardcoded #8ac4ef / rgba(22,141,236,.08) literals and gives the notes
-   textarea a ring it lacked). 72% matches the ring recipe used elsewhere. */
+   textarea a ring it lacked). 72% matches the ring recipe used elsewhere.
+
+   A field inside a search wrapper is excluded: the wrapper draws the ring around
+   the icon and clear button too, so a second ring on the input alone appeared as a
+   stray inset box that stopped short of the wrapper's edge. */
 .settings-form-grid input:focus,
 .settings-form-grid textarea:focus:not(:where(.prompt-code-editor *)),
 .integration-row input:focus,
-.entity-form input:focus,
+.entity-form input:focus:not(:where(.inline-search, .feed-search, .large-field, .discover-search-box) *),
 .entity-form textarea:focus:not(:where(.prompt-code-editor *)),
 .detail-section textarea:focus:not(:where(.prompt-code-editor *)) {
   border-color: color-mix(in srgb, var(--brand-blue) 72%, var(--line-strong));

@@ -78,7 +78,7 @@ import type {
   Venue,
   ViewId,
 } from "@/app/lib/types";
-import { matchesSearch, paperMetaLine } from "@/app/lib/paper-meta";
+import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
 import { gapForPointer, moveItem, moveItemToGap } from "@/app/lib/reorder";
 import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
 
@@ -1962,7 +1962,7 @@ function AuthorsView({
                 </td>
                 <td className="entity-number-cell">{author.paperCount}</td>
                 <td className="entity-number-cell">{author.latestYear ?? "—"}</td>
-                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(author)} icon={<Pencil />} aria-label={`Edit ${author.displayName}`} title="Edit" /></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(author)} icon={<Pencil />} aria-label={`Edit ${author.displayName}`} /></td>
               </tr>
             ))}
           </tbody>
@@ -2099,7 +2099,7 @@ function VenuesView({
                 <td className="entity-meta-cell">{venue.publisher || "—"}</td>
                 <td className="entity-number-cell">{venue.paperCount}</td>
                 <td className="entity-number-cell">{venue.latestYear ?? "—"}</td>
-                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(venue)} icon={<Pencil />} aria-label={`Edit ${venue.name}`} title="Edit" /></td>
+                <td className="actions-cell"><ActionButton variant="ghost" size="icon-small" onClick={() => onEdit(venue)} icon={<Pencil />} aria-label={`Edit ${venue.name}`} /></td>
               </tr>
             ))}
           </tbody>
@@ -2233,14 +2233,17 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
           </span>
         </button>
         <div className="collection-actions">
-          <ActionButton variant="secondary" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} title="Edit" />
-          <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} title="Delete" />
+          {/* The tooltip names the collection, like the aria-label: a bare "Edit"
+              adds nothing that the pencil icon does not already say. */}
+          <ActionButton variant="secondary" size="icon-small" onClick={onEdit} icon={<Pencil />} aria-label={`Edit ${collection.name}`} />
+          <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} />
         </div>
       </header>
       {/* Always present, so every card has the same structure and therefore the
           same height, and so "nothing read yet" is stated rather than implied by
           an absent row. */}
-      <div className="collection-progress" title={`${readCount} of ${papers.length} read`}>
+      {/* The exact counts, which the percentage beside it does not give. */}
+      <div className="collection-progress" title={`${readCount} of ${papers.length} papers read`}>
         <span className="collection-progress-track">
           <span className="collection-progress-fill" style={{ width: `${readPercent}%` }} />
         </span>
@@ -2349,7 +2352,9 @@ function EntityToolbar({ query, setQuery, placeholder, selected, onClear, onBulk
 }
 
 function ToolbarCreateButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <ActionButton variant="primary" className="toolbar-add-action ml-auto" onClick={onClick} aria-label={label} title={label} icon={<Plus />}>{label}</ActionButton>;
+  // No `title`: the label is already the button's visible text, so a tooltip
+  // repeating it says nothing.
+  return <ActionButton variant="primary" className="toolbar-add-action ml-auto" onClick={onClick} aria-label={label} icon={<Plus />}>{label}</ActionButton>;
 }
 
 function PageSearch({ value, onChange, placeholder }: {
@@ -2713,7 +2718,7 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
                   <MarkdownContent content={result.abstract || "No abstract is available for this result."} className="result-abstract markdown-compact" />
                   <div className="result-tags"><span>{result.venueName || "Venue unknown"}</span>{result.doi ? <span>DOI {result.doi}</span> : null}{result.pdfUrl ? <span>Open PDF</span> : null}</div>
                 </div>
-                <ActionButton variant={isAdded ? "success" : "primary"} size="small" className="self-start" disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} title={isAdded ? "Added to library" : "Add to library"} icon={isAdded ? <Check /> : <Plus />}>
+                <ActionButton variant={isAdded ? "success" : "primary"} size="small" className="self-start" disabled={isAdded} onClick={() => void addResult(result)} aria-label={isAdded ? `${result.title} added` : `Add ${result.title}`} icon={isAdded ? <Check /> : <Plus />}>
                   {isAdded ? "Added" : "Add"}
                 </ActionButton>
               </article>
@@ -3128,7 +3133,7 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
       <span>{label}</span>
       <div className="local-file-control">
         <input ref={pathInput} name={name} defaultValue={defaultValue} placeholder={kind === "pdf" ? "paper.pdf" : "paper.html"} />
-        <ActionButton type="button" variant="secondary" size="icon" className="h-auto w-[42px] self-stretch" onClick={() => fileInput.current?.click()} disabled={uploading} aria-label={`Choose local ${kind === "pdf" ? "PDF" : "HTML"} file`} title="Choose from local files" icon={uploading ? <LoaderCircle className="spin" /> : <FolderOpen />} />
+        <ActionButton type="button" variant="secondary" size="icon" className="h-auto w-[42px] self-stretch" onClick={() => fileInput.current?.click()} disabled={uploading} aria-label={`Choose local ${kind === "pdf" ? "PDF" : "HTML"} file`} icon={uploading ? <LoaderCircle className="spin" /> : <FolderOpen />} />
         <input
           ref={fileInput}
           className="local-file-picker"
@@ -4280,10 +4285,10 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
   const collection = entity === "collection" ? (record as Collection | undefined) : undefined;
   const papersInCollection = entity === "collection" ? papers
     .filter((paper) => collectionPaperIds.includes(paper.id))
-    .filter((paper) => matchesSearch([paper.title, authorLine(paper), venueLine(paper)], collectionPaperQuery)) : [];
+    .filter((paper) => matchesSearch(paperSearchValues(paper), collectionPaperQuery)) : [];
   const papersOutsideCollection = entity === "collection" ? papers
     .filter((paper) => !collectionPaperIds.includes(paper.id))
-    .filter((paper) => matchesSearch([paper.title, authorLine(paper), venueLine(paper)], availablePaperQuery)) : [];
+    .filter((paper) => matchesSearch(paperSearchValues(paper), availablePaperQuery)) : [];
   const transferPageSize = 10;
   const collectionPageCount = Math.max(1, Math.ceil(papersInCollection.length / transferPageSize));
   const availablePageCount = Math.max(1, Math.ceil(papersOutsideCollection.length / transferPageSize));
@@ -4354,8 +4359,8 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
                 <TransferPagination page={currentCollectionPage} total={papersInCollection.length} pageSize={transferPageSize} onPageChange={setCollectionPaperPage} label="collection papers" />
               </div>
               <div className="transfer-actions" aria-label="Move papers">
-                <ActionButton variant="secondary" size="icon" onClick={addSelectedPaperToCollection} disabled={!selectedAvailablePaperId} aria-label="Add selected paper to collection" title="Add to collection" icon={<ChevronLeft />} />
-                <ActionButton variant="secondary" size="icon" onClick={removeSelectedPaperFromCollection} disabled={!selectedCollectionPaperId} aria-label="Remove selected paper from collection" title="Remove from collection" icon={<ChevronRight />} />
+                <ActionButton variant="secondary" size="icon" onClick={addSelectedPaperToCollection} disabled={!selectedAvailablePaperId} aria-label="Add selected paper to collection" icon={<ChevronLeft />} />
+                <ActionButton variant="secondary" size="icon" onClick={removeSelectedPaperFromCollection} disabled={!selectedCollectionPaperId} aria-label="Remove selected paper from collection" icon={<ChevronRight />} />
               </div>
               <div className="transfer-column">
                 <header><strong>All remaining papers</strong><small>{papers.length - collectionPaperIds.length}</small></header>
@@ -4368,7 +4373,9 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
               </div>
             </div>
             <div className="transfer-paper-details">
-              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small>{fullAuthorLine(selectedTransferPaper) || "Authors unavailable"} · {venueLine(selectedTransferPaper) || "Venue unavailable"} · {selectedTransferPaper.year ?? "Year unavailable"}</small></span> : <small>Select a paper to inspect it before moving.</small>}
+              {/* The same expandable author line as the paper detail panel, so the
+                  hidden names are reachable here instead of being a dead "+5". */}
+              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><ExpandableAuthorNames paper={selectedTransferPaper} limit={3} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to inspect it before moving.</small>}
             </div>
           </section>
         </>}
