@@ -1,5 +1,7 @@
 import { readFeedSkills, writeFeedSkills } from "@/app/lib/local-settings";
 import { DEFAULT_FEED_SKILLS, normalizeFeedSkills } from "@/app/lib/feed-skills";
+import { parseWith } from "@/app/lib/schemas/parse";
+import { FeedSkillsRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,8 +15,8 @@ export async function GET(): Promise<Response> {
 
 /** Replace the saved skills with the posted set (validated + normalized). */
 export async function POST(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { skills?: unknown };
-  const skills = normalizeFeedSkills(body.skills);
+  const parsed = parseWith(FeedSkillsRequestSchema, await request.json().catch(() => ({})));
+  const skills = normalizeFeedSkills(parsed.ok ? parsed.data.skills : undefined);
   writeFeedSkills(skills);
   return Response.json({ skills });
 }

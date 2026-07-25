@@ -20,6 +20,8 @@ import {
 } from "@/app/lib/github-sync";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
 import { flushGithubOutbox } from "@/app/lib/feed-github-outbox";
+import { parseJsonWith } from "@/app/lib/schemas/parse";
+import { SnippetAttachmentListSchema } from "@/app/lib/schemas/attachments";
 import { buildFollowUpPrompt, buildForkPrompt, buildSnippetPrompt } from "@/app/lib/feed-prompt";
 
 export const dynamic = "force-dynamic";
@@ -63,13 +65,6 @@ function proposalCommentBody(operation: string, status: string): string {
   return `**Proposed library change** · ${STATUS_LABEL[status] ?? status}\n\n${summary}\n\n_Approve or reject in Stacks; this reflects the current status._`;
 }
 
-interface StoredAttachment {
-  kind?: "upload" | "paper" | "paper-pdf" | "paper-html";
-  relativePath?: string;
-  paperId?: string;
-  label: string;
-}
-
 /**
  * Build the "Attachments:" Markdown block for a mirrored comment. Uploaded files
  * (and legacy staged paper copies) are uploaded into the repo so a phone can
@@ -84,14 +79,12 @@ async function mirrorAttachments(
   counts: { attachmentsUploaded: number },
 ): Promise<string> {
   if (!attachmentsJson) return "";
-  let parsed: StoredAttachment[];
-  try {
-    parsed = JSON.parse(attachmentsJson) as StoredAttachment[];
-  } catch {
-    return "";
-  }
+  // Validated against the shared attachment schema: a row written by an older
+  // version (or a truncated write) yields no links instead of a crash mid-mirror.
+  const parsed = parseJsonWith(SnippetAttachmentListSchema, attachmentsJson);
+  if (!parsed.ok) return "";
   const links: string[] = [];
-  for (const attachment of parsed) {
+  for (const attachment of parsed.data) {
     // A referenced library paper: mention it, don't upload (no local copy).
     if (attachment.kind === "paper" || !attachment.relativePath) {
       links.push(`- ${attachment.label} (library paper)`);

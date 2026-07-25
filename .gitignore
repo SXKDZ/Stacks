@@ -51,3 +51,10 @@ next-env.d.ts
 /data/settings.json.tmp
 /data/legacy-import.sql
 /public/color-audit.html
+
+# Scratch files from agent-driven verification runs (never part of the suite).
+tests/**/*probe*
+tests/**/__scratch*
+tests/_p*.test.ts
+tests/_rev/
+tmp-probe/

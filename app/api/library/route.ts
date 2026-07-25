@@ -4,6 +4,8 @@ import type { LibraryQuerier } from "@/db/client";
 import { removeStoredFile } from "@/app/lib/local-files";
 import { normalizeAbstract, normalizeAuthorNames, normalizePages, normalizeTitle } from "@/app/lib/metadata-normalize";
 import { scheduleAutoSync } from "@/app/lib/local-settings";
+import { idList, LibraryMutationSchema } from "@/app/lib/schemas/library";
+import { parseRequest } from "@/app/lib/schemas/parse";
 import { normalizeCollectionColor } from "@/app/lib/types";
 import {
   authors,
@@ -16,14 +18,6 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-interface MutationRequest {
-  entity?: "paper" | "author" | "venue" | "collection";
-  action?: "create" | "bulk-create" | "update" | "delete" | "bulk-update" | "bulk-delete";
-  id?: string;
-  ids?: string[];
-  data?: Record<string, unknown>;
-}
 
 function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -767,14 +761,19 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = (await request.json()) as MutationRequest;
-    if (!body.entity || !body.action) {
-      return jsonError("Both entity and action are required.");
+    // One parse against the action-discriminated union replaces the old
+    // entity/action presence checks and the per-action shape guards below: a
+    // bad request is a 400 naming the offending field, and every branch here
+    // reads only fields its own action is typed to carry.
+    const parsed = await parseRequest(LibraryMutationSchema, request);
+    if (!parsed.ok) {
+      return jsonError(parsed.error);
     }
-    const data = body.data ?? {};
-    const ids = body.ids ?? (body.id ? [body.id] : []);
+    const body = parsed.data;
+    const ids = idList(body);
 
     if (body.action === "create") {
+      const data = body.data ?? {};
       if (body.entity === "paper") {
         try {
           await createPaper(data);
@@ -788,17 +787,13 @@ export async function POST(request: Request): Promise<Response> {
         await createEntity(body.entity, data);
       }
     } else if (body.action === "bulk-create") {
-      if (body.entity !== "paper" || !Array.isArray(data.papers)) {
-        return jsonError("Bulk create requires a paper list.");
-      }
-      if (data.papers.length > 500) {
-        return jsonError("Import no more than 500 papers at a time.");
-      }
+      // The schema pins this branch to entity "paper" with a `papers` array of
+      // at most 500, so the presence, type, and cap checks are gone from here.
       const database = await ensureDatabase();
       let added = 0;
       let skipped = 0;
       const failed: Array<{ title: string; reason: string }> = [];
-      for (const paper of data.papers) {
+      for (const paper of body.data.papers) {
         if (!paper || typeof paper !== "object" || Array.isArray(paper)) {
           continue;
         }
@@ -829,6 +824,7 @@ export async function POST(request: Request): Promise<Response> {
       if (added) scheduleAutoSync();
       return Response.json({ ...(await readSnapshot()), importSummary: { added, skipped, failed } });
     } else if (body.action === "update" || body.action === "bulk-update") {
+      const data = body.data ?? {};
       if (body.entity === "paper") {
         if (!ids[0]) {
           return jsonError("A paper id is required for updates.");

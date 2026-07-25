@@ -6,6 +6,14 @@ import {
   DEFAULT_EXTRACTION_SYSTEM_PROMPT,
   DEFAULT_SUMMARY_SYSTEM_PROMPT,
 } from "@/app/lib/ai-prompts";
+import { parseJsonWith } from "@/app/lib/schemas/parse";
+import {
+  StructuredSettingsFileSchema,
+  SyncResultSchema,
+  type SettingsPayload,
+  type StructuredSettingsFile,
+  type SyncResult,
+} from "@/app/lib/schemas/settings";
 import { databasePath, ensureLibraryDirectories, libraryRoot, settingsPath } from "@/db/library-paths";
 
 /**
@@ -15,69 +23,13 @@ import { databasePath, ensureLibraryDirectories, libraryRoot, settingsPath } fro
  * the live `library.db` (resolved through `databasePath()`).
  */
 
-export interface SettingsPayload {
-  libraryName?: string;
-  modelId?: string;
-  region?: string;
-  maxTokens?: string | number;
-  temperature?: string | number;
-  extractionSystemPrompt?: string;
-  summarySystemPrompt?: string;
-  remotePath?: string;
-  autoSync?: boolean;
-  autoSyncInterval?: string | number;
-  githubRepo?: string;
-  secrets?: Record<string, string>;
-}
+// Both shapes are defined once as Zod schemas (app/lib/schemas/settings.ts) and
+// their types derived, so the runtime validation and these types cannot drift.
+export type { SettingsPayload };
 
-interface StructuredSettingsFile {
-  version: 1;
-  updatedAt: string;
-  /** The user-facing library name shown in the sidebar status. */
-  libraryName?: string;
-  ai: {
-    modelId: string;
-    region: string;
-    maxTokens: string;
-    temperature: string;
-  };
-  prompts: {
-    extractionSystem: string;
-    summarySystem: string;
-  };
-  sync: {
-    remotePath: string;
-    autoSync: string;
-    autoSyncInterval: string;
-  };
-  github?: {
-    repo: string;
-    /** ISO timestamp of the last successful inbox sync, for incremental pulls. */
-    lastSyncedAt?: string;
-    /** The repo the local issue/comment links belong to. When it differs from
-     *  `repo` (the user switched repos), sync unlinks every feed first so stale
-     *  issue numbers can't touch the wrong repo's issues. */
-    linkedRepo?: string;
-  };
-  feedSkills?: Array<{ id: string; label: string; icon: string; prompt: string }>;
-  // Saved Claude Code workflow scripts (the `export const meta` + body form),
-  // run against the library through the approval-gated feed. name/description
-  // are parsed from the script's meta for the list; script is the source.
-  feedWorkflows?: Array<{ id: string; name: string; description: string; script: string }>;
-  secrets: Record<string, string>;
-}
-
-export interface SyncResult {
-  ok: boolean;
-  summary: string;
-  changes: Record<string, number>;
-  details: Record<string, string[]>;
-  conflicts: number;
-  errors: string[];
-  cancelled: boolean;
-  progress: Array<{ message: string }>;
-  logs: Array<{ action: string; details: string }>;
-}
+// Defined once as a schema (the bridge is a separate process whose output can
+// drift independently), with the type derived from it.
+export type { SyncResult };
 
 const environmentKeys = new Set([
   "STACKS_LIBRARY_NAME",
@@ -111,17 +63,33 @@ let syncRunning = false;
 let lastSyncAt: string | null = null;
 let lastSyncResult: SyncResult | null = null;
 
+/**
+ * Read settings.json, validating it against the schema.
+ *
+ * The file is ours, but it is still untrusted input: users hand-edit it, a crash
+ * can truncate it, and a restored backup can be from an older shape. Casting the
+ * parse result meant a malformed value reached whatever eventually read it (a
+ * missing `ai` block, or `maxTokens: "abc"` arriving as a Bedrock parameter).
+ * A file that fails validation is treated as absent, which is the same path as
+ * a first run: callers fall back to defaults and the environment.
+ */
 function readStructuredSettings(): StructuredSettingsFile | null {
   const path = settingsPath();
   if (!existsSync(path)) {
     return null;
   }
+  let text: string;
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as StructuredSettingsFile;
-    return parsed.version === 1 ? parsed : null;
+    text = readFileSync(path, "utf8");
   } catch {
     return null;
   }
+  const parsed = parseJsonWith(StructuredSettingsFileSchema, text);
+  if (!parsed.ok) {
+    console.warn(`Ignoring unreadable settings file at ${path}: ${parsed.error}`);
+    return null;
+  }
+  return parsed.data;
 }
 
 function structuredValue(settings: StructuredSettingsFile | null, key: string): string | undefined {
@@ -575,16 +543,13 @@ export async function runSync(auto = false): Promise<SyncResult> {
           rejectResult(new Error("Stacks sync timed out after 5 minutes."));
           return;
         }
-        try {
-          const lines = output.trim().split(/\r?\n/).filter(Boolean);
-          const parsed = JSON.parse(lines.at(-1) ?? "{}") as SyncResult;
-          if (!parsed.summary) {
-            throw new Error(errorOutput.trim() || "Stacks sync returned no result.");
-          }
-          resolveResult(parsed);
-        } catch (error) {
-          rejectResult(error);
+        const lines = output.trim().split(/\r?\n/).filter(Boolean);
+        const parsed = parseJsonWith(SyncResultSchema, lines.at(-1) ?? "{}");
+        if (!parsed.ok) {
+          rejectResult(new Error(errorOutput.trim() || `Stacks sync returned an unusable result: ${parsed.error}`));
+          return;
         }
+        resolveResult(parsed.data);
       });
     });
     lastSyncAt = new Date().toISOString();

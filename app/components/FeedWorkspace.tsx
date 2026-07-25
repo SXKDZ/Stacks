@@ -8,16 +8,12 @@ import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper }
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { readError } from "@/app/lib/http";
+import { parseJsonWith } from "@/app/lib/schemas/parse";
+import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
+import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment } from "@/app/lib/schemas/attachments";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-
-interface FeedAttachment {
-  kind: "upload" | "paper" | "paper-pdf" | "paper-html";
-  label: string;
-  relativePath?: string;
-  paperId?: string;
-}
 
 interface FeedMessage {
   id: string;
@@ -48,25 +44,24 @@ interface ProposalTag {
 /** Parse a proposal's operation JSON into the chips shown on its card: the
  *  action + entity ("Create paper"), and for papers the type and venue. */
 function proposalTags(operation: string): ProposalTag[] {
-  try {
-    const op = JSON.parse(operation) as { entity?: string; action?: string; data?: Record<string, unknown> };
-    const tags: ProposalTag[] = [];
-    if (op.action && op.entity) {
-      const action = op.action.charAt(0).toUpperCase() + op.action.slice(1);
-      tags.push({ label: `${action} ${op.entity}`, kind: "action" });
-    }
-    if (op.entity === "paper") {
-      const type = typeof op.data?.paperType === "string" ? op.data.paperType : "";
-      if (type) tags.push({ label: type, kind: "meta" });
-      const venue = typeof op.data?.venueAcronym === "string" && op.data.venueAcronym
-        ? op.data.venueAcronym
-        : typeof op.data?.venueName === "string" ? op.data.venueName : "";
-      if (venue) tags.push({ label: venue, kind: "meta" });
-    }
-    return tags;
-  } catch {
+  const parsed = parseJsonWith(ProposalOperationSchema, operation);
+  if (!parsed.ok) {
     return [];
   }
+  const op = parsed.data;
+  const tags: ProposalTag[] = [
+    { label: `${op.action.charAt(0).toUpperCase()}${op.action.slice(1)} ${op.entity}`, kind: "action" },
+  ];
+  const data = "data" in op ? op.data : {};
+  if (op.entity === "paper") {
+    const type = typeof data.paperType === "string" ? data.paperType : "";
+    if (type) tags.push({ label: type, kind: "meta" });
+    const venue = typeof data.venueAcronym === "string" && data.venueAcronym
+      ? data.venueAcronym
+      : typeof data.venueName === "string" ? data.venueName : "";
+    if (venue) tags.push({ label: venue, kind: "meta" });
+  }
+  return tags;
 }
 
 /** "venueAcronym" → "Venue acronym" for the structured proposal fields. */
@@ -87,23 +82,22 @@ function fieldValue(value: unknown): string {
  *  with the raw JSON tucked in a collapsible block underneath (this replaces the
  *  separate "Proposed changes (raw)" dump that used to sit next to the cards). */
 function ProposalDetails({ operation }: { operation: string }) {
-  interface ProposalOperation { entity?: string; action?: string; id?: string; data?: Record<string, unknown> }
-  let op: ProposalOperation | null = null;
+  // Validated against the shared proposal schema rather than a local interface
+  // plus a cast, so this renders only shapes the approval path would accept.
+  const parsed = parseJsonWith(ProposalOperationSchema, operation);
+  const op = parsed.ok ? parsed.data : null;
   let pretty = operation;
-  try {
-    const parsed = JSON.parse(operation) as ProposalOperation;
-    op = parsed;
-    pretty = JSON.stringify(parsed, null, 2);
-  } catch {
-    // Unparseable operation: fall through to the raw block alone.
+  if (op) {
+    pretty = JSON.stringify(op, null, 2);
   }
-  const fields = Object.entries(op?.data ?? {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
+  const data = op && "data" in op ? op.data : {};
+  const fields = Object.entries(data ?? {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
   return (
     <div className="feed-proposal-detail">
       {op ? (
         <div className="feed-proposal-fields">
           <div className="feed-proposal-field"><span>Action</span><strong>{[op.action, op.entity].filter(Boolean).join(" ") || "unknown"}</strong></div>
-          {op.id ? <div className="feed-proposal-field"><span>Target</span><strong>{op.id}</strong></div> : null}
+          {"id" in op ? <div className="feed-proposal-field"><span>Target</span><strong>{op.id}</strong></div> : null}
           {fields.map(([key, value]) => (
             <div key={key} className="feed-proposal-field"><span>{fieldLabel(key)}</span><strong>{fieldValue(value)}</strong></div>
           ))}
@@ -138,12 +132,8 @@ interface FeedSnippet {
 /** Parse the stored attachments JSON (tolerant of nulls / malformed rows). */
 function parseAttachments(raw: string | null | undefined): FeedAttachment[] {
   if (!raw) return [];
-  try {
-    const value = JSON.parse(raw);
-    return Array.isArray(value) ? (value as FeedAttachment[]) : [];
-  } catch {
-    return [];
-  }
+  const parsed = parseJsonWith(SnippetAttachmentListSchema, raw);
+  return parsed.ok ? parsed.data : [];
 }
 
 /** Render clickable chips for a turn's attachments (download via the feed route). */

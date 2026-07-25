@@ -6,13 +6,12 @@
  * user approves or rejects. Approved proposals are applied through the library route.
  */
 
-export interface ProposalOperation {
-  entity: "paper" | "author" | "venue" | "collection";
-  action: "create" | "update" | "delete";
-  id?: string;
-  data?: Record<string, unknown>;
-  summary?: string;
-}
+import { parseProposalBatch, type ProposalOperation } from "@/app/lib/schemas/proposals";
+import type { SnippetAttachment } from "@/app/lib/schemas/attachments";
+
+// The operation shape is defined once as a Zod schema and the type is derived
+// from it, so the runtime contract and the compile-time type cannot drift.
+export type { ProposalOperation };
 
 const PROPOSAL_INSTRUCTIONS = `
 You can query and edit the user's Stacks library through a local HTTP
@@ -56,13 +55,6 @@ RULES:
 - If curl is unavailable for any reason, fall back to emitting one fenced
   stacks-proposals block (a JSON array of the operations above) at the end of
   your reply, and Stacks will pick it up.`;
-
-interface SnippetAttachment {
-  kind: "upload" | "paper" | "paper-pdf" | "paper-html";
-  label: string;
-  relativePath?: string;
-  paperId?: string;
-}
 
 function describeAttachments(attachments: SnippetAttachment[]): string {
   // Uploads live in the working directory (read by relative path). Library
@@ -174,16 +166,14 @@ export function buildForkPrompt(input: {
 }
 
 /**
- * Extract proposals from an assistant result. Reads the last ```stacks-proposals
- * block (accepting the legacy ```pa-proposals label too); tolerates a plain
- * ```json block that is an array of ops as a fallback. Returns validated
- * operations only.
+ * Locate the proposal JSON in an assistant result: the last ```stacks-proposals
+ * block (accepting the legacy ```pa-proposals label too), falling back to a
+ * plain ```json block that holds an array.
  */
-export function parseProposals(text: string): ProposalOperation[] {
+function proposalBlock(text: string): string {
   const blocks = [...text.matchAll(/```(?:stacks|pa)-proposals\s*([\s\S]*?)```/gi)].map((match) => match[1]);
   let raw = blocks.length ? blocks[blocks.length - 1] : "";
   if (!raw) {
-    // Fallback: a fenced json block whose content parses to an array of ops.
     for (const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)) {
       const candidate = match[1].trim();
       if (candidate.startsWith("[")) {
@@ -191,36 +181,30 @@ export function parseProposals(text: string): ProposalOperation[] {
       }
     }
   }
-  if (!raw.trim()) {
-    return [];
+  return raw.trim();
+}
+
+/**
+ * Extract proposals from an assistant result, reporting what failed.
+ *
+ * Validation is the shared Zod contract (app/lib/schemas/proposals.ts), so the
+ * rules for what an operation may contain live in one place instead of being
+ * re-implemented here. Malformed entries are returned as `errors` rather than
+ * dropped silently, which is what the previous hand-written loop did: an agent
+ * that emitted a proposal with a typo'd action or a stray field saw it vanish
+ * with no explanation anywhere.
+ */
+export function parseProposalsResult(text: string): { operations: ProposalOperation[]; errors: string[] } {
+  const raw = proposalBlock(text);
+  if (!raw) {
+    return { operations: [], errors: [] };
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw.trim());
-  } catch {
-    return [];
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return { operations: [], errors: [error instanceof Error ? error.message : "The proposal block is not valid JSON."] };
   }
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-  const entities = new Set(["paper", "author", "venue", "collection"]);
-  const actions = new Set(["create", "update", "delete"]);
-  const operations: ProposalOperation[] = [];
-  for (const item of parsed) {
-    if (!item || typeof item !== "object") continue;
-    const candidate = item as Record<string, unknown>;
-    const entity = candidate.entity;
-    const action = candidate.action;
-    if (typeof entity !== "string" || !entities.has(entity)) continue;
-    if (typeof action !== "string" || !actions.has(action)) continue;
-    if ((action === "update" || action === "delete") && typeof candidate.id !== "string") continue;
-    operations.push({
-      entity: entity as ProposalOperation["entity"],
-      action: action as ProposalOperation["action"],
-      id: typeof candidate.id === "string" ? candidate.id : undefined,
-      data: candidate.data && typeof candidate.data === "object" ? (candidate.data as Record<string, unknown>) : undefined,
-      summary: typeof candidate.summary === "string" ? candidate.summary : `${action} ${entity}`,
-    });
-  }
-  return operations;
+  return parseProposalBatch(parsed);
 }
+

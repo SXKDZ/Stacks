@@ -3,20 +3,12 @@ import {
   invokeBedrockMessages,
 } from "@/app/lib/bedrock";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { parseJsonWith, parseRequest } from "@/app/lib/schemas/parse";
+import { ModelSelectionRequestSchema } from "@/app/lib/schemas/requests";
+import { InferenceProfilesResponseSchema, MantleModelListSchema, UpstreamErrorSchema } from "@/app/lib/schemas/bedrock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-interface InferenceProfileSummary {
-  inferenceProfileId?: string;
-  inferenceProfileName?: string;
-  status?: string;
-}
-
-interface InferenceProfilesResponse {
-  inferenceProfileSummaries?: InferenceProfileSummary[];
-  message?: string;
-}
 
 function profileScope(id: string): "US" | "Global" | "Other" {
   if (id.startsWith("us.")) {
@@ -38,12 +30,8 @@ function profileLabel(name: string, id: string): string {
 }
 
 function upstreamMessage(raw: string): string {
-  try {
-    const parsed = JSON.parse(raw) as { message?: string };
-    return parsed.message ?? raw.slice(0, 500);
-  } catch {
-    return raw.slice(0, 500);
-  }
+  const parsed = parseJsonWith(UpstreamErrorSchema, raw);
+  return (parsed.ok ? parsed.data.message : undefined) ?? raw.slice(0, 500);
 }
 
 export async function GET(): Promise<Response> {
@@ -68,7 +56,10 @@ export async function GET(): Promise<Response> {
   if (!profilesResponse.ok && !mantleResponse.ok) {
     return Response.json({ error: upstreamMessage(profilesRaw || mantleRaw) }, { status: 502 });
   }
-  const payload = profilesResponse.ok ? JSON.parse(profilesRaw) as InferenceProfilesResponse : {};
+  // A catalogue we can't parse yields no models from that endpoint rather than
+  // throwing: the other endpoint's list is still usable.
+  const profiles = profilesResponse.ok ? parseJsonWith(InferenceProfilesResponseSchema, profilesRaw) : null;
+  const payload = profiles?.ok ? profiles.data : {};
   const profileModels = (payload.inferenceProfileSummaries ?? [])
     .filter((profile) => profile.status === "ACTIVE" && profile.inferenceProfileId?.includes(".anthropic."))
     .map((profile) => {
@@ -82,7 +73,8 @@ export async function GET(): Promise<Response> {
         endpoint: "runtime" as const,
       };
     });
-  const mantlePayload = mantleResponse.ok ? JSON.parse(mantleRaw) as { data?: Array<{ id?: string }> } : {};
+  const mantleParsed = mantleResponse.ok ? parseJsonWith(MantleModelListSchema, mantleRaw) : null;
+  const mantlePayload = mantleParsed?.ok ? mantleParsed.data : {};
   const runtimeProfileIds = new Set(profileModels.map((model) => model.id));
   const mantleModels = (mantlePayload.data ?? [])
     .filter((model) => model.id?.startsWith("anthropic."))
@@ -120,8 +112,8 @@ export async function POST(request: Request): Promise<Response> {
   if (!token) {
     return Response.json({ error: "AWS_BEARER_TOKEN_BEDROCK is not configured." }, { status: 500 });
   }
-  const body = await request.json() as { modelId?: string };
-  const modelId = body.modelId?.trim();
+  const parsed = await parseRequest(ModelSelectionRequestSchema, request);
+  const modelId = parsed.ok ? parsed.data.modelId?.trim() : "";
   if (!modelId) {
     return Response.json({ error: "Choose a model before testing access." }, { status: 400 });
   }

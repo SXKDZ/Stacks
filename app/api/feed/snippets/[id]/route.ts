@@ -4,6 +4,8 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { enqueueCloseIssue, flushGithubOutbox } from "@/app/lib/feed-github-outbox";
+import { parseWith } from "@/app/lib/schemas/parse";
+import { FeedSnippetPatchSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,7 +40,8 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as { title?: string; collapsed?: boolean };
+  const parsedBody = parseWith(FeedSnippetPatchSchema, await request.json().catch(() => ({})));
+  const body = parsedBody.ok ? parsedBody.data : {};
   const database = await ensureDatabase();
   const snippet = database.select().from(feedSnippets).where(eq(feedSnippets.id, id)).get();
   if (!snippet) {

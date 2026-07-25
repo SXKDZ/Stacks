@@ -14,6 +14,12 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Isolated verification builds (NEXT_DIST_DIR=.next-verify).
     ".next-verify/**",
+    // Throwaway probe scripts from agent-driven verification runs. They are
+    // scratch, never part of the suite, and are gitignored.
+    "tests/**/*probe*",
+    "tests/**/__scratch*",
+    "tests/_*",
+    "tmp-probe/**",
   ]),
   {
     // set-state-in-effect fires on the mount-time reads of client-only values

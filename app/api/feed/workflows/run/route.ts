@@ -2,6 +2,8 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { feedSnippets } from "@/db/schema";
 import { feedWorkingDir } from "@/app/lib/feed-agent";
 import { readWorkflowMeta, runWorkflow } from "@/app/lib/workflow-runtime";
+import { parseWith } from "@/app/lib/schemas/parse";
+import { FeedWorkflowRunRequestSchema } from "@/app/lib/schemas/requests";
 import { mkdirSync } from "node:fs";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +16,9 @@ export const runtime = "nodejs";
  */
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as { script?: string; args?: unknown };
-    const script = typeof body.script === "string" ? body.script : "";
+    const parsed = parseWith(FeedWorkflowRunRequestSchema, await request.json().catch(() => ({})));
+    const body = parsed.ok ? parsed.data : {};
+    const script = body.script ?? "";
     if (!script.trim()) {
       return Response.json({ error: "Provide a workflow script to run." }, { status: 400 });
     }

@@ -1,5 +1,5 @@
 import { POST as libraryPost } from "@/app/api/library/route";
-import type { ProposalOperation } from "@/app/lib/feed-prompt";
+import { proposalSummary, type ProposalOperation } from "@/app/lib/schemas/proposals";
 
 /**
  * Apply an approved feed proposal through the exact same code path the library
@@ -10,12 +10,14 @@ import type { ProposalOperation } from "@/app/lib/feed-prompt";
  * human-readable summary; throws with the API's error message on failure.
  */
 export async function applyLibraryMutation(operation: ProposalOperation): Promise<string> {
-  const body = {
-    entity: operation.entity,
-    action: operation.action,
-    ...(operation.id ? { id: operation.id } : {}),
-    ...(operation.data ? { data: operation.data } : {}),
-  };
+  // Each branch carries exactly the fields its action allows (the proposal
+  // schema is a discriminated union on `action`), so this reads them per-branch
+  // instead of spreading whatever happens to be present.
+  const body = operation.action === "delete"
+    ? { entity: operation.entity, action: operation.action, id: operation.id }
+    : operation.action === "update"
+      ? { entity: operation.entity, action: operation.action, id: operation.id, data: operation.data }
+      : { entity: operation.entity, action: operation.action, data: operation.data };
   const request = new Request("http://127.0.0.1/api/library", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -26,5 +28,5 @@ export async function applyLibraryMutation(operation: ProposalOperation): Promis
     const payload = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new Error(payload?.error ?? `The library change failed (${response.status}).`);
   }
-  return operation.summary ?? `${operation.action} ${operation.entity}`;
+  return proposalSummary(operation);
 }

@@ -7,6 +7,8 @@ import { getRawConnection } from "@/db/client";
 import { databasePath, ensureLibraryDirectories, libraryRoot, setLibraryRoot, settingsPath } from "@/db/library-paths";
 import { papers } from "@/db/schema";
 import { inspectStorage } from "@/app/lib/local-files";
+import { parseRequest } from "@/app/lib/schemas/parse";
+import { StorageManagementRequestSchema } from "@/app/lib/schemas/requests";
 
 const PLATFORM_LABELS: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
 
@@ -40,12 +42,6 @@ function systemInfo() {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-interface StorageManagementRequest {
-  operation?: "inspect" | "clean" | "repair" | "clean-orphans" | "move";
-  confirmed?: boolean;
-  targetDirectory?: string;
-}
 
 // The actual orphaned entity records (id + label), so the Doctor can list them
 // before the user removes them — not just a count.
@@ -230,7 +226,11 @@ async function databaseDiagnostic(clean: boolean) {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = await request.json() as StorageManagementRequest;
+    const parsed = await parseRequest(StorageManagementRequestSchema, request);
+    if (!parsed.ok) {
+      return Response.json({ error: parsed.error }, { status: 400 });
+    }
+    const body = parsed.data;
     if (body.operation === "move") {
       if (!body.confirmed) {
         return Response.json({ error: "Moving the library requires explicit confirmation." }, { status: 400 });

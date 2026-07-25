@@ -4,6 +4,8 @@ import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, runFeedAgent, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { buildFollowUpPrompt, buildForkPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
+import { parseWith } from "@/app/lib/schemas/parse";
+import { FeedReplyRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,7 +37,8 @@ export async function POST(
     paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
     files = form.getAll("files").filter((value): value is File => value instanceof File);
   } else {
-    const body = (await request.json().catch(() => ({}))) as { reply?: string; model?: string };
+    const parsed = parseWith(FeedReplyRequestSchema, await request.json().catch(() => ({})));
+    const body = parsed.ok ? parsed.data : {};
     reply = body.reply?.trim() ?? "";
     if (typeof body.model === "string") model = body.model.trim();
   }

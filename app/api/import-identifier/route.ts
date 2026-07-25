@@ -1,21 +1,16 @@
-import type { IdentifierSource } from "@/app/lib/types";
 import { importIdentifier } from "@/app/lib/scholarly";
+import { parseRequest } from "@/app/lib/schemas/parse";
+import { ImportIdentifierRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 
-interface ImportRequest {
-  source?: IdentifierSource;
-  identifier?: string;
-}
-
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = await request.json() as ImportRequest;
-    const identifier = body.identifier?.trim();
-    if (!identifier) {
-      return Response.json({ error: "Enter an identifier or record URL." }, { status: 400 });
+    const parsed = await parseRequest(ImportIdentifierRequestSchema, request);
+    if (!parsed.ok) {
+      return Response.json({ error: parsed.error }, { status: 400 });
     }
-    const source = body.source ?? "arxiv";
+    const { identifier, source } = parsed.data;
     const paper = await importIdentifier(source, identifier);
     return Response.json({ source, paper });
   } catch (error) {

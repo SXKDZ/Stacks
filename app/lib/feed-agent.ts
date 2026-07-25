@@ -6,8 +6,9 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { libraryRoot } from "@/db/library-paths";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
-import { buildForkPrompt, parseProposals, type ProposalOperation } from "@/app/lib/feed-prompt";
+import { buildForkPrompt, parseProposalsResult, type ProposalOperation } from "@/app/lib/feed-prompt";
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
+import { proposalSummary } from "@/app/lib/schemas/proposals";
 
 /**
  * Drives a headless `claude -p` agent for one feed snippet. The agent runs with
@@ -160,7 +161,7 @@ async function persistProposal(
     .insert(feedProposals)
     .values({ id, snippetId, messageId, operation: serialized, status: "pending", createdAt })
     .run();
-  return { type: "proposal", id, messageId, operation: serialized, status: "pending", summary: operation.summary ?? "Proposed change", createdAt };
+  return { type: "proposal", id, messageId, operation: serialized, status: "pending", summary: proposalSummary(operation), createdAt };
 }
 
 async function setStatus(snippetId: string, status: string, error?: string): Promise<void> {
@@ -444,8 +445,23 @@ export async function runFeedAgent(options: {
         emit(snippetId, await persistMessage(snippetId, "system", "error", text || "The agent reported an error."));
       } else if (text) {
         // Parse any proposed library changes and enqueue them for approval.
-        for (const operation of parseProposals(text)) {
+        const { operations, errors } = parseProposalsResult(text);
+        for (const operation of operations) {
           emit(snippetId, await persistProposal(snippetId, resultMessageId, operation));
+        }
+        // A proposal that failed validation used to disappear without a trace,
+        // leaving the user with an agent that claimed to have proposed a change
+        // and no card to approve. Record it in the thread instead.
+        if (errors.length) {
+          emit(
+            snippetId,
+            await persistMessage(
+              snippetId,
+              "system",
+              "error",
+              `Ignored ${errors.length} malformed proposal${errors.length === 1 ? "" : "s"}: ${errors.join(" | ")}`,
+            ),
+          );
         }
       }
     }

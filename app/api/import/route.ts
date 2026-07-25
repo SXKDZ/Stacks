@@ -1,11 +1,9 @@
 import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
+import { parseRequest } from "@/app/lib/schemas/parse";
+import { ImportUrlRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-interface ImportRequest {
-  url?: string;
-}
 
 function validPublicUrl(value: string): URL | null {
   try {
@@ -22,10 +20,10 @@ function validPublicUrl(value: string): URL | null {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = (await request.json()) as ImportRequest;
-    const sourceUrl = body.url?.trim();
+    const requested = await parseRequest(ImportUrlRequestSchema, request);
+    const sourceUrl = requested.ok ? requested.data.url : "";
     const parsed = sourceUrl ? validPublicUrl(sourceUrl) : null;
-    if (!sourceUrl || !parsed) {
+    if (!parsed) {
       return Response.json({ error: "Enter a valid public https:// URL." }, { status: 400 });
     }
     // Render the page locally (headless WebKit). Throws on a challenge/error

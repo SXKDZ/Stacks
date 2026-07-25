@@ -4,6 +4,8 @@ import { feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, runFeedAgent } from "@/app/lib/feed-agent";
 import { buildSnippetPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
+import { parseRequest } from "@/app/lib/schemas/parse";
+import { FeedSnippetCreateSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -55,14 +57,16 @@ export async function POST(request: Request): Promise<Response> {
       const files = form.getAll("files").filter((value): value is File => value instanceof File);
       attachments = await collectSnippetAttachments(workingDir, files, paperIds);
     } else {
-      const body = (await request.json()) as {
-        instruction?: string; body?: string; title?: string; model?: string; paperIds?: string[];
-      };
+      const parsed = await parseRequest(FeedSnippetCreateSchema, request);
+      if (!parsed.ok) {
+        return Response.json({ error: parsed.error }, { status: 400 });
+      }
+      const body = parsed.data;
       instruction = body.instruction?.trim() ?? "";
       freeText = body.body?.trim() ?? "";
       title = body.title?.trim() ?? "";
       model = body.model?.trim() ?? "";
-      paperIds = Array.isArray(body.paperIds) ? body.paperIds.filter(Boolean) : [];
+      paperIds = (body.paperIds ?? []).filter(Boolean);
       attachments = await collectSnippetAttachments(workingDir, [], paperIds);
     }
 

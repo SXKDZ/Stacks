@@ -2,7 +2,8 @@ import { GET as libraryGet } from "@/app/api/library/route";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals } from "@/db/schema";
 import { snippetForToken } from "@/app/lib/feed-token";
-import { parseProposals, type ProposalOperation } from "@/app/lib/feed-prompt";
+import { parseProposalBatch, ProposalEnvelopeSchema, proposalSummary } from "@/app/lib/schemas/proposals";
+import { parseWith } from "@/app/lib/schemas/parse";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,20 +33,34 @@ export async function POST(request: Request): Promise<Response> {
   if (!snippetId) {
     return Response.json({ error: "Unauthorized: a valid feed token is required." }, { status: 401 });
   }
-  const body = (await request.json().catch(() => null)) as { proposals?: unknown; operation?: unknown } | null;
-  if (!body) {
+  const raw: unknown = await request.json().catch(() => null);
+  if (!raw || typeof raw !== "object") {
     return Response.json({ error: "Send a JSON body with a proposal." }, { status: 400 });
   }
-  // Accept either a single {entity,action,...} operation or a { proposals: [...] }
-  // array, or a raw proposals array; normalize through the parser.
-  const source = Array.isArray(body.proposals)
-    ? JSON.stringify(body.proposals)
-    : body.operation
-      ? JSON.stringify([body.operation])
-      : JSON.stringify([body]);
-  const operations = parseProposals(`\`\`\`stacks-proposals\n${source}\n\`\`\``);
+  // Accept a single {entity,action,...} operation, a { proposals: [...] } wrapper,
+  // or a bare array. Unwrap to the candidate list, then validate each against the
+  // shared proposal schema.
+  const envelope = parseWith(ProposalEnvelopeSchema, raw);
+  const candidates = Array.isArray(raw)
+    ? raw
+    : envelope.ok && Array.isArray(envelope.data.proposals)
+      ? envelope.data.proposals
+      : envelope.ok && envelope.data.operation !== undefined
+        ? [envelope.data.operation]
+        : [raw];
+  const { operations, errors } = parseProposalBatch(candidates);
   if (!operations.length) {
-    return Response.json({ error: "No valid proposals found. Each needs entity, action, and (for update/delete) id." }, { status: 400 });
+    // Report exactly why each candidate was refused. The agent reads this
+    // response, so a specific message ("action: invalid option", "unrecognized
+    // key: confidence") lets it correct the call instead of retrying blind.
+    return Response.json(
+      {
+        error: errors.length
+          ? `No valid proposals found. ${errors.join(" | ")}`
+          : "No valid proposals found. Each needs entity, action, and (for update/delete) id.",
+      },
+      { status: 400 },
+    );
   }
 
   const database = await ensureDatabase();
@@ -66,13 +81,13 @@ export async function POST(request: Request): Promise<Response> {
     })
     .run();
   const created: Array<{ id: string; summary: string }> = [];
-  for (const operation of operations as ProposalOperation[]) {
+  for (const operation of operations) {
     const id = `prop-${crypto.randomUUID()}`;
     database
       .insert(feedProposals)
       .values({ id, snippetId, messageId, operation: JSON.stringify(operation), status: "pending", createdAt: now })
       .run();
-    created.push({ id, summary: operation.summary ?? `${operation.action} ${operation.entity}` });
+    created.push({ id, summary: proposalSummary(operation) });
   }
   return Response.json({
     status: "pending_approval",

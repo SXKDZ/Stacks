@@ -2,22 +2,27 @@ import { and, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedProposals } from "@/db/schema";
 import { applyLibraryMutation } from "@/app/lib/library-mutations";
-import type { ProposalOperation } from "@/app/lib/feed-prompt";
+import { parseJsonWith, parseWith } from "@/app/lib/schemas/parse";
+import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-interface ResolveRequest {
-  decision?: "approve" | "reject";
-}
+/** Approve or reject; anything else (including an absent body) means approve,
+ *  matching the UI's default action. */
+const ResolveRequestSchema = z.object({
+  decision: z.enum(["approve", "reject"]).optional(),
+});
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as ResolveRequest;
-  const decision = body.decision === "reject" ? "reject" : "approve";
+  const raw = await request.json().catch(() => ({}));
+  const parsedBody = parseWith(ResolveRequestSchema, raw);
+  const decision = parsedBody.ok && parsedBody.data.decision === "reject" ? "reject" : "approve";
 
   const database = await ensureDatabase();
   const proposal = database.select().from(feedProposals).where(eq(feedProposals.id, id)).get();
@@ -49,17 +54,23 @@ export async function POST(
 
   // Approve: apply the proposed mutation through the shared library mutation
   // path (the same code the library API uses), then record the outcome.
-  let operation: ProposalOperation;
-  try {
-    operation = JSON.parse(proposal.operation) as ProposalOperation;
-  } catch {
+  // Re-validate the stored operation before applying it. It was checked when the
+  // agent proposed it, but it has been JSON in a database column since then: a
+  // schema change, a manual edit, or a row written by an older version could all
+  // put a shape here that no longer matches what the applier expects. Parsing
+  // (rather than casting) means such a row fails visibly as this proposal, not
+  // as a confusing error from inside the library write.
+  const parsed = parseJsonWith(ProposalOperationSchema, proposal.operation);
+  if (!parsed.ok) {
+    const reason = `The proposal could not be parsed: ${parsed.error}`;
     database
       .update(feedProposals)
-      .set({ status: "failed", resultSummary: "The proposal could not be parsed.", resolvedAt: new Date().toISOString() })
+      .set({ status: "failed", resultSummary: reason, resolvedAt: new Date().toISOString() })
       .where(eq(feedProposals.id, id))
       .run();
-    return Response.json({ error: "The proposal could not be parsed." }, { status: 400 });
+    return Response.json({ error: reason }, { status: 400 });
   }
+  const operation = parsed.data;
 
   try {
     const summary = await applyLibraryMutation(operation);

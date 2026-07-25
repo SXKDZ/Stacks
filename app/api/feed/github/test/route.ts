@@ -1,5 +1,7 @@
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { verifyRepo, GitHubError } from "@/app/lib/github-sync";
+import { parseWith } from "@/app/lib/schemas/parse";
+import { GithubTestRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,7 +13,8 @@ export const runtime = "nodejs";
  */
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = (await request.json().catch(() => ({}))) as { repo?: string; token?: string };
+    const parsed = parseWith(GithubTestRequestSchema, await request.json().catch(() => ({})));
+    const body = parsed.ok ? parsed.data : {};
     const runtime = await resolveRuntimeValues();
     const repo = (body.repo ?? runtimeValue(runtime, "STACKS_GITHUB_REPO")).trim();
     const token = (body.token ?? runtimeValue(runtime, "GITHUB_TOKEN")).trim();
