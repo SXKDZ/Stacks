@@ -898,21 +898,44 @@
   margin-top: 7px;
 }
 
+/* The row height is the card height: cards hold a fixed number of paper rows, so
+   they are uniform, and the two values have to stay in step. */
 .collection-grid {
-  grid-auto-rows: 244px;
+  grid-auto-rows: 322px;
 }
 
+/* Taller than a one-line-per-paper list needs: each row now carries the reading
+   status, the title, and an author/venue/year line, plus a summary of the whole
+   collection above them. */
 .collection-card {
-  height: 244px;
+  height: 336px;
+}
+
+/* What the collection contains, derived from its papers. */
+.collection-card-stats {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-micro);
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.collection-stat-divider {
+  background: var(--line-strong);
+  border-radius: 50%;
+  height: 3px;
+  width: 3px;
 }
 
 .collection-card .collection-papers {
   display: grid;
   gap: 1px;
-  grid-auto-rows: 25px;
-  margin-top: 7px;
+  grid-auto-rows: 44px;
+  margin-top: 6px;
   overflow: hidden;
-  padding: 7px 1px 2px;
+  padding: 5px 1px 2px;
 }
 
 .collection-card .collection-papers > button,
@@ -920,13 +943,33 @@
   align-items: center;
   background: transparent;
   color: var(--muted);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   font-size: var(--type-caption);
-  gap: 6px;
-  grid-template-columns: 14px minmax(0, 1fr);
-  min-height: 25px;
+  gap: 1px;
+  justify-content: center;
+  min-height: 44px;
   padding: 0 2px;
   text-align: left;
+}
+
+/* Status pill beside the title, on the row's first line. */
+.collection-card .collection-paper-line {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Author, venue, and year: the details that make a paper recognizable. */
+.collection-card .collection-paper-meta {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
 }
 
 .collection-card .collection-papers > button {

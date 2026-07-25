@@ -2205,13 +2205,27 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
   onOpen: () => void;
   onOpenPaper: (paper: Paper) => void;
 }) {
-  const pageSize = 5;
+  // Four rows per page: each row is now two lines (title + author/venue/year), so
+  // five no longer fit the card without clipping the last one.
+  const pageSize = 4;
   const [page, setPage] = useState(1);
   const pageCount = Math.max(1, Math.ceil(papers.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const visiblePapers = papers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const start = papers.length ? (currentPage - 1) * pageSize + 1 : 0;
   const end = Math.min(currentPage * pageSize, papers.length);
+  const readCount = papers.filter((paper) => paper.readingStatus === "complete").length;
+  const years = papers.map((paper) => paper.year).filter((year): year is number => typeof year === "number");
+  const yearSpan = years.length
+    ? (Math.min(...years) === Math.max(...years) ? String(Math.min(...years)) : `${Math.min(...years)}–${Math.max(...years)}`)
+    : "";
+  // The venue that appears most often, as a one-word characterization of the set.
+  const venueCounts = new Map<string, number>();
+  for (const paper of papers) {
+    const label = paper.venueAcronym || paper.venueName;
+    if (label) venueCounts.set(label, (venueCounts.get(label) ?? 0) + 1);
+  }
+  const topVenue = [...venueCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
   return (
     <article className="collection-card">
       <header className="collection-card-top">
@@ -2224,8 +2238,39 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
           <ActionButton variant="danger" size="icon-small" onClick={onDelete} icon={<Trash2 />} aria-label={`Delete ${collection.name}`} title="Delete" />
         </div>
       </header>
+      {/* A summary of what is actually in the collection: how the reading is
+          progressing, and the span of years it covers. Both are derived, so they
+          cost nothing to keep accurate. */}
+      {papers.length ? (
+        <div className="collection-card-stats">
+          <StatusPill status="complete" compact />
+          <span>{readCount} of {papers.length} read</span>
+          {yearSpan ? <><span className="collection-stat-divider" aria-hidden="true" />
+            <span>{yearSpan}</span></> : null}
+          {topVenue ? <><span className="collection-stat-divider" aria-hidden="true" />
+            <span title={`Most common venue in ${collection.name}`}>{topVenue}</span></> : null}
+        </div>
+      ) : null}
       <div className="collection-papers" aria-label={`Papers in ${collection.name}`}>
-        {visiblePapers.map((paper) => <button type="button" onClick={() => onOpenPaper(paper)} key={paper.id}><FileText size={14} /><b>{paper.title}</b></button>)}
+        {visiblePapers.map((paper) => (
+          <button type="button" onClick={() => onOpenPaper(paper)} key={paper.id} title={paper.title}>
+            <span className="collection-paper-line">
+              <StatusPill status={paper.readingStatus} compact />
+              <b>{paper.title}</b>
+            </span>
+            {/* The details that make a paper recognizable at a glance: who wrote
+                it, where, and when. */}
+            <small className="collection-paper-meta">
+              {[
+                paper.authors.length
+                  ? `${paper.authors[0].displayName}${paper.authors.length > 1 ? ` +${paper.authors.length - 1}` : ""}`
+                  : "",
+                paper.venueAcronym || paper.venueName || "",
+                paper.year ? String(paper.year) : "",
+              ].filter(Boolean).join(" · ")}
+            </small>
+          </button>
+        ))}
         {!papers.length ? <span className="row-muted"><FileText size={14} /><b>No papers in this collection</b></span> : null}
       </div>
       {papers.length > pageSize ? (

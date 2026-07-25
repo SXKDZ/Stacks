@@ -1048,12 +1048,6 @@
   white-space: nowrap;
 }
 
-.collection-grid {
-  align-items: stretch;
-  gap: 12px;
-  grid-auto-rows: 184px;
-}
-
 .collection-card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1575,12 +1569,6 @@
 }
 
 /* Collection cards prioritize their paper contents and use one neutral identity. */
-.collection-grid {
-  align-items: stretch;
-  gap: 12px;
-  grid-auto-rows: 238px;
-}
-
 .collection-card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -2079,7 +2067,9 @@
   align-items: stretch;
   display: grid;
   gap: 14px;
-  grid-auto-rows: 250px;
+  /* Must match .collection-card's height below: the cards are uniform, and the
+     grid row is what actually clips them. */
+  grid-auto-rows: 336px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
 }
@@ -2091,7 +2081,8 @@
   box-shadow: 0 5px 16px rgba(12, 15, 28, 0.045);
   display: flex;
   flex-direction: column;
-  height: 250px;
+  /* Room for the collection summary plus four two-line paper rows. */
+  height: 336px;
   min-width: 0;
   overflow: hidden;
   padding: 12px;
