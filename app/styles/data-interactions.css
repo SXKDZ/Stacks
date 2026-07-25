@@ -837,97 +837,129 @@
   padding-bottom: 3px;
   padding-top: 3px;
   vertical-align: middle;
-}/* The row height is the card height: cards hold a fixed number of paper rows, so
-   they are uniform, and the two values have to stay in step. */
+}/* The grid row height is the card height: the cards hold a fixed number of paper
+   rows, so they are uniform, and the two values have to stay in step. */
 .collection-grid {
-  grid-auto-rows: 322px;
+  grid-auto-rows: 336px;
 }
 
-/* What the collection contains, derived from its papers. */
-.collection-card-stats {
+/* Reading progress, shown only once something has been read (a "0 of 21 read"
+   line told the user nothing in the common case). */
+.collection-progress {
   align-items: center;
-  color: var(--muted);
   display: flex;
-  flex-wrap: wrap;
-  font-size: var(--type-micro);
-  gap: 6px;
-  margin-top: 9px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.collection-stat-divider {
-  background: var(--line-strong);
-  border-radius: 50%;
-  height: 3px;
-  width: 3px;
+.collection-progress-track {
+  background: var(--line);
+  border-radius: var(--radius-pill);
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.collection-progress-fill {
+  background: var(--green);
+  border-radius: var(--radius-pill);
+  display: block;
+  height: 100%;
+}
+
+.collection-progress > small {
+  color: var(--soft);
+  flex: 0 0 auto;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
 }
 
 .collection-card .collection-papers {
-  display: grid;
-  gap: 1px;
-  grid-auto-rows: 44px;
-  margin-top: 6px;
-  overflow: hidden;
-  padding: 5px 1px 2px;
-}
-
-.collection-card .collection-papers > button,
-.collection-card .collection-papers > span {
-  align-items: center;
-  background: transparent;
-  color: var(--muted);
   display: flex;
   flex-direction: column;
-  font-size: var(--type-caption);
-  gap: 1px;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0 2px;
-  text-align: left;
+  flex: 1 1 auto;
+  gap: 2px;
+  list-style: none;
+  margin: 10px 0 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
-/* Status pill beside the title, on the row's first line. */
-.collection-card .collection-paper-line {
-  align-items: center;
-  display: flex;
-  gap: 6px;
+/* Keeps the rows top-aligned when a collection has fewer than a full page, so a
+   short card's rows line up with a full one's instead of centring. */
+.collection-card .collection-papers > li:last-child {
+  margin-bottom: auto;
+}
+
+/* Every row is the same height whether its title wraps to one line or two. Rows
+   that sized to their content needed up to 256px for four of them while the list
+   had 207px, so the last row was always partly cut off. */
+.collection-card .collection-papers > li {
+  height: 48px;
   min-width: 0;
+}
+
+.collection-card .collection-papers > li > button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  height: 100%;
+  justify-content: center;
+  overflow: hidden;
+  padding: 4px 8px;
+  text-align: left;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
   width: 100%;
 }
 
-/* Author, venue, and year: the details that make a paper recognizable. */
+.collection-card .collection-papers > li > button:hover {
+  background: var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 20%, transparent);
+}
+
+.collection-card .collection-papers > li > button:focus-visible {
+  background: var(--brand-blue-soft);
+  border-color: var(--brand-blue);
+  outline: none;
+}
+
+/* Wraps to a second line rather than being cut mid-word, which is what made the
+   previous card unreadable: every title ended in a hard clip. */
+/* Ellipsized at the end of the line, not cut mid-word: the row height is fixed,
+   so a wrapping title would push the next row out of view. The full title is on
+   the button's tooltip. */
+.collection-card .collection-paper-title {
+  color: var(--ink);
+  font-size: var(--type-caption);
+  font-weight: 550;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+/* Author, venue, and year: what makes a paper recognizable at a glance. */
 .collection-card .collection-paper-meta {
   color: var(--soft);
   font-size: var(--type-micro);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  width: 100%;
 }
 
-.collection-card .collection-papers > button {
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  padding-inline: 7px;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
-}
-
-.collection-card .collection-papers > button:hover {
-  background: var(--brand-blue-soft);
-  border-color: color-mix(in srgb, var(--brand-blue) 22%, transparent);
-  color: var(--ink);
-}
-
-.collection-card .collection-papers > button:focus-visible {
-  background: var(--brand-blue-soft);
-  border-color: var(--brand-blue);
-  outline: none;
-}
-
-.collection-card .collection-papers b {
-  font-weight: 520;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.collection-papers-empty {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  font-size: var(--type-caption);
+  gap: 6px;
+  padding: 6px 8px;
 }
 
 .collection-card-pagination {
