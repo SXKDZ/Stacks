@@ -760,3 +760,19 @@ test("auto-back up runs a debounced backup after live library changes", async ()
   assert.match(library, /import \{ scheduleAutoSync \} from "@\/app\/lib\/local-settings"/);
   assert.match(library, /scheduleAutoSync\(\);\s*\n\s*return Response\.json\(await readSnapshot\(\)\)/);
 });
+
+test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
+  // The stylesheets accumulated selectors defined three and four times across
+  // files, where the later copy silently won: a value was set in one file and
+  // overridden in another, so editing the obvious one did nothing. Whenever a
+  // block's every property is re-declared by a later block with the identical
+  // selector, that block is dead weight and hides where the real value lives.
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = promisify(execFile);
+  const { stdout } = await run("python3", ["scripts/find-dead-css.py"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+  });
+  const count = Number(/superseded by a later same-selector block: (\d+)/.exec(stdout)?.[1] ?? "-1");
+  assert.equal(count, 0, `dead CSS blocks found (run scripts/find-dead-css.py):\n${stdout}`);
+});

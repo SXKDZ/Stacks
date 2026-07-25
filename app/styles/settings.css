@@ -454,14 +454,7 @@
   padding: 8px;
   text-align: left;
   width: 100%;
-}
-
-.command-results > button:hover,
-.command-results > button.is-active {
-  background: #edf2f7;
-}
-
-.command-empty {
+}.command-empty {
   color: var(--muted);
   font-size: var(--type-label);
   padding: 14px 8px;

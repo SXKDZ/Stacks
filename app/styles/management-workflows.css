@@ -319,13 +319,7 @@
   left: 0;
   right: 0;
   top: calc(100% + 4px);
-}
-
-.paper-collection-field {
-  position: relative;
-}
-
-.collection-tag-editor {
+}.collection-tag-editor {
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line-strong);
@@ -753,15 +747,7 @@
 
 .markdown-content li {
   display: list-item;
-}
-
-.summary-copy.markdown-content,
-.abstract-copy.markdown-content {
-  max-height: 280px;
-  overflow-y: auto;
-}
-
-.publication-detail-list > span {
+}.publication-detail-list > span {
   align-items: flex-start;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -907,13 +893,7 @@
 
 .venue-grid {
   min-width: 940px;
-}
-
-.entity-column-actions {
-  width: 52px !important;
-}
-
-.entity-research-grid tbody tr {
+}.entity-research-grid tbody tr {
   cursor: default;
 }
 
@@ -921,16 +901,7 @@
   height: 56px;
   padding-bottom: 6px;
   padding-top: 6px;
-}
-
-.entity-research-grid .actions-cell {
-  padding-left: 7px;
-  padding-right: 7px;
-  text-align: center;
-  width: 52px;
-}
-
-.entity-primary-button {
+}.entity-primary-button {
   align-items: center;
   background: transparent;
   color: var(--ink);
@@ -1016,13 +987,7 @@
   height: 64px;
   padding-bottom: 5px;
   padding-top: 5px;
-}
-
-.research-grid .paper-secondary-line {
-  margin-top: 2px;
-}
-
-.research-grid .paper-collection-line {
+}.research-grid .paper-collection-line {
   align-items: center;
   display: flex;
   gap: 4px;
@@ -1058,17 +1023,7 @@
   height: 184px;
   overflow: hidden;
   padding: 11px 12px;
-}
-
-.collection-card::before {
-  content: none;
-}
-
-.collection-card-top {
-  min-height: 32px;
-}
-
-.collection-icon {
+}.collection-icon {
   align-items: center;
   background: color-mix(in srgb, var(--brand-blue-soft) 58%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--brand-blue) 18%, transparent) !important;
@@ -1100,13 +1055,7 @@
   background: color-mix(in srgb, var(--swatch) 16%, transparent) !important;
   border-color: color-mix(in srgb, var(--swatch) 30%, transparent) !important;
   color: var(--swatch) !important;
-}
-
-.collection-actions {
-  gap: 3px;
-}
-
-.collection-papers {
+}.collection-papers {
   border-top: 1px solid var(--line);
   gap: 3px;
   min-height: 0;
@@ -1131,23 +1080,7 @@
 .discover-search {
   isolation: isolate;
   position: relative;
-}
-
-.discover-search-box {
-  position: relative;
-  z-index: 1;
-}
-
-.discover-search .provider-switch {
-  background: var(--canvas);
-  border-radius: var(--radius-md);
-  margin: 6px 0 0;
-  padding: 7px 4px 1px;
-  position: relative;
-  z-index: 2;
-}
-
-@media (max-width: 760px) {
+}@media (max-width: 760px) {
   .entity-research-grid,
   .venue-grid {
     min-width: 760px;
@@ -1881,15 +1814,7 @@
   gap: 12px;
   min-height: 106px;
   padding: 18px;
-}
-
-.bibliography-dropzone:hover,
-.bibliography-dropzone.has-file {
-  background: color-mix(in srgb, var(--brand-blue-soft) 86%, transparent);
-  border-color: var(--brand-blue);
-}
-
-/* Active drag target: solid brand border + stronger tint so the drop is obvious. */
+}/* Active drag target: solid brand border + stronger tint so the drop is obvious. */
 .bibliography-dropzone.is-dragging {
   background: color-mix(in srgb, var(--brand-blue-soft) 100%, transparent);
   border-color: var(--brand-blue-strong);
@@ -2234,15 +2159,7 @@
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
-}
-
-.paper-table.research-grid tbody tr:has(.expandable-author-list.is-expanded) td {
-  height: auto;
-  padding-bottom: 9px;
-  padding-top: 9px;
-}
-
-.collections-view > .table-pagination {
+}.collections-view > .table-pagination {
   background: color-mix(in srgb, var(--panel) 92%, var(--canvas));
   border: 1px solid var(--line);
   border-radius: var(--radius-control);

@@ -286,13 +286,7 @@
   padding: 0;
   text-align: right;
   width: 74px;
-}
-
-.edit-paper-form-actions {
-  width: auto;
-}
-
-.edit-paper-form-actions .form-actions-spacer {
+}.edit-paper-form-actions .form-actions-spacer {
   flex: 1 1 auto;
 }
 

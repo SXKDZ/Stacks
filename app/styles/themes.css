@@ -655,14 +655,7 @@ textarea::placeholder {
   margin: 9px 0;
   max-height: 4.6em;
   overflow: hidden;
-}
-
-.summary-copy.markdown-content,
-.abstract-copy.markdown-content {
-  margin-top: var(--space-eyebrow-gap);
-}
-
-.reader-summary > .markdown-content {
+}.reader-summary > .markdown-content {
   color: #c3cad8;
 }
 
@@ -811,16 +804,7 @@ textarea::placeholder {
 .prompt-variable-list > button,
 .prompt-variable-reference code {
   font-size: var(--type-caption);
-}
-
-
-.collection-papers > span svg {
-  flex: 0 0 16px;
-  height: 16px;
-  width: 16px;
-}
-
-/* Compact, vertically aligned data-table density */
+}/* Compact, vertically aligned data-table density */
 
 .selection-actions {
   min-height: 38px;
