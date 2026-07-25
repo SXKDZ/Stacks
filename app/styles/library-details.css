@@ -497,10 +497,14 @@
   width: fit-content;
 }
 
-/* A colour shift on hover only. An underline on every venue turned the column into
-   a wall of links, which read louder than the paper titles beside it. */
-.venue-cell-open:hover b {
+/* Underlined on HOVER only. A permanent underline on every row turned the column
+   into a wall of links that read louder than the paper titles beside it; on hover
+   it is the affordance that says this name is clickable. */
+.venue-cell-open:hover b,
+.venue-cell-open:focus-visible b {
   color: var(--brand-blue-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .venue-cell b {

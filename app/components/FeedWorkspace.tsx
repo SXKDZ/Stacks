@@ -1397,7 +1397,7 @@ export default function FeedWorkspace() {
                 <strong>{libraryName}</strong>
                 <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
               </span>
-              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" title="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} kbd={`${modKey}S`}>
+              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} kbd={`${modKey}S`}>
                 {syncing ? "Syncing…" : "Sync"}
               </ActionButton>
             </div>

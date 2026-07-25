@@ -2361,7 +2361,7 @@ function PageSearch({ value, onChange, placeholder }: {
     <label className="inline-search page-search">
       <Search size={18} aria-hidden="true" />
       <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label={placeholder} />
-      {value ? <button type="button" onClick={() => onChange("")} aria-label="Clear search" title="Clear search"><X size={14} /></button> : null}
+      {value ? <button type="button" onClick={() => onChange("")} aria-label="Clear search"><X size={14} /></button> : null}
     </label>
   );
 }
@@ -2498,7 +2498,7 @@ function PaginationPageNav({ page, pageCount, onPageChange, label, className, wi
   const compact = iconSize <= 13;
   return (
     <nav className={cx("flex items-center gap-1", className)} aria-label={label}>
-      <PaginationButton compact={compact} onClick={() => onPageChange(1)} disabled={currentPage <= 1} aria-label="First page" title="First page"><ChevronsLeft size={iconSize} /></PaginationButton>
+      <PaginationButton compact={compact} onClick={() => onPageChange(1)} disabled={currentPage <= 1} aria-label="First page"><ChevronsLeft size={iconSize} /></PaginationButton>
       {visiblePages.map((visiblePage) => (
         <PaginationButton
           compact={compact}
@@ -2510,7 +2510,7 @@ function PaginationPageNav({ page, pageCount, onPageChange, label, className, wi
           {visiblePage}
         </PaginationButton>
       ))}
-      <PaginationButton compact={compact} onClick={() => onPageChange(normalizedCount)} disabled={currentPage >= normalizedCount} aria-label="Last page" title="Last page"><ChevronsRight size={iconSize} /></PaginationButton>
+      <PaginationButton compact={compact} onClick={() => onPageChange(normalizedCount)} disabled={currentPage >= normalizedCount} aria-label="Last page"><ChevronsRight size={iconSize} /></PaginationButton>
     </nav>
   );
 }
