@@ -503,6 +503,20 @@ function venueLine(paper: Paper): string {
   return paper.venueAcronym || paper.venueName || "Unassigned venue";
 }
 
+/**
+ * The venue's full name, for a cell that only has room for the acronym.
+ *
+ * Undefined when there is nothing to add: no full name recorded, or a name the
+ * cell is already showing because no acronym exists.
+ */
+function venueFullNameHint(paper: Paper): string | undefined {
+  const name = paper.venueName?.trim();
+  if (!name || !paper.venueAcronym?.trim() || name === paper.venueAcronym.trim()) {
+    return undefined;
+  }
+  return name;
+}
+
 function statusLabel(value: string): string {
   const labels: Record<string, string> = {
     inbox: "To read",
@@ -1774,17 +1788,21 @@ function LibraryView({
                       </span>
                     </div>
                   </td>
+                  {/* The cell shows the acronym, so the tooltip spells the venue out.
+                      Only when both are recorded and differ: otherwise it would just
+                      repeat the text already in the cell. */}
                   <td>
                     {paper.venueId ? (
                       <button
                         type="button"
                         className="venue-cell venue-cell-open"
+                        title={venueFullNameHint(paper)}
                         onClick={(event) => { event.stopPropagation(); onOpenVenue(paper.venueId!, venueLine(paper)); }}
                       >
                         <b>{paper.venueAcronym || paper.venueName}</b><small>{paper.paperType}</small>
                       </button>
                     ) : (
-                      <span className="venue-cell"><b>{paper.venueAcronym || paper.venueName || "—"}</b><small>{paper.paperType}</small></span>
+                      <span className="venue-cell" title={venueFullNameHint(paper)}><b>{paper.venueAcronym || paper.venueName || "—"}</b><small>{paper.paperType}</small></span>
                     )}
                   </td>
                   <td className="muted-cell year-cell">{paper.year ?? "—"}</td>
@@ -2860,7 +2878,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             <dl className="paper-facts">
               <div className="paper-fact">
                 <dt>Venue</dt>
-                <dd><TextButton link className="max-w-full truncate capitalize text-[var(--ink)]" onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></dd>
+                <dd><TextButton link className="max-w-full truncate capitalize text-[var(--ink)]" title={venueFullNameHint(paper)} onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></dd>
               </div>
               <div className="paper-fact">
                 <dt>Year</dt>
