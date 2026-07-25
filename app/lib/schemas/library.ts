@@ -40,8 +40,10 @@ const withEntity = { entity: LibraryEntitySchema };
  * collapses them, so handlers never re-derive it.
  */
 const idFields = {
-  id: z.string().min(1).optional(),
-  ids: z.array(z.string().min(1)).optional(),
+  // Trimmed before the length check: an id of only whitespace passes min(1) but
+  // matches no row, so the mutation would report success having changed nothing.
+  id: z.string().trim().min(1).optional(),
+  ids: z.array(z.string().trim().min(1)).optional(),
 };
 
 export const LibraryMutationSchema = z.discriminatedUnion("action", [

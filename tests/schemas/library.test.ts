@@ -75,6 +75,12 @@ test("refuses an empty or blank record id", () => {
   // An empty id previously reached the DB layer as a WHERE that matched nothing,
   // reporting success for an update that changed no rows.
   assert.match(firstIssue({ entity: "paper", action: "update", id: "" }), /id/);
+  // Whitespace is trimmed before the length check, so a blank id can't slip
+  // through to a WHERE clause that matches nothing.
+  for (const id of [" ", "   ", "\t"]) {
+    assert.match(firstIssue({ entity: "paper", action: "update", id }), /id/);
+  }
+  assert.deepEqual(idList(parse({ entity: "paper", action: "delete", id: "  paper-1  " })), ["paper-1"]);
   assert.match(firstIssue({ entity: "paper", action: "delete", ids: [""] }), /ids/);
   assert.match(firstIssue({ entity: "paper", action: "delete", ids: "paper-1" }), /ids/);
 });

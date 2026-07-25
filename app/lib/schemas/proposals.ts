@@ -36,13 +36,13 @@ export const ProposalOperationSchema = z.discriminatedUnion("action", [
   z.strictObject({
     ...proposalBase,
     action: z.literal("update"),
-    id: z.string().min(1),
+    id: z.string().trim().min(1),
     data: PaperDataSchema,
   }),
   z.strictObject({
     ...proposalBase,
     action: z.literal("delete"),
-    id: z.string().min(1),
+    id: z.string().trim().min(1),
   }),
 ]);
 export type ProposalOperation = z.infer<typeof ProposalOperationSchema>;
@@ -66,13 +66,13 @@ export const AgentProposalOperationSchema = z.discriminatedUnion("action", [
   z.strictObject({
     ...proposalBase,
     action: z.literal("update"),
-    id: z.string().min(1),
+    id: z.string().trim().min(1),
     data: PaperDataSchema.prefault({}),
   }),
   z.strictObject({
     ...proposalBase,
     action: z.literal("delete"),
-    id: z.string().min(1),
+    id: z.string().trim().min(1),
   }),
 ]);
 

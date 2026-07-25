@@ -397,6 +397,164 @@
 }
 
 
+/* Returns the library to its resting order (date added). Shown only while a
+   column sort is active, styled like the filters toggle beside it. */
+.sort-reset-button {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--type-control);
+  font-weight: 600;
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
+  transition: border-color var(--motion-control), color var(--motion-control);
+  white-space: nowrap;
+}
+
+.sort-reset-button:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
+  color: var(--ink);
+}
+
+/* Author names are chips in a shared editor with collections: author order is
+   stored data (author_order), so it is directly editable by dragging a chip. */
+.paper-author-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  position: relative;
+}
+
+.paper-author-label {
+  color: #69616f;
+  font-size: var(--type-caption);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.paper-author-field > small {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  line-height: 1.4;
+}
+
+.author-tag-editor {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 43px;
+  padding: 6px 8px;
+}
+
+.author-tag-editor:focus-within {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px var(--brand-blue-soft);
+}
+
+.author-tag-editor > input,
+.entity-form .author-tag-editor > input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  flex: 1 1 160px;
+  font-size: var(--type-control);
+  height: 28px;
+  min-width: 140px;
+  outline: 0;
+  padding: 0 3px;
+}
+
+.author-chip {
+  align-items: center;
+  background: var(--brand-blue-soft);
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 26%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--brand-blue-strong);
+  cursor: grab;
+  display: inline-flex;
+  font-size: var(--type-micro);
+  font-weight: 600;
+  gap: 3px;
+  padding: 3px 6px 3px 4px;
+  position: relative;
+  /* The chip is the drag handle, so its own text must not start a selection. */
+  user-select: none;
+}
+
+.author-chip.is-dragging {
+  opacity: 0.45;
+}
+
+/* A caret standing in the gap the chip would drop into. Drawn as a pseudo
+   element in the flex gap rather than as a border on the chip, so it reads as an
+   insertion point between two names instead of highlighting one of them. */
+.author-chip.is-drop-before::before,
+.author-chip.is-drop-after::after {
+  background: var(--brand-blue);
+  border-radius: 1px;
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 20px;
+  width: 2px;
+}
+
+.author-chip.is-drop-before::before {
+  left: -4px;
+}
+
+.author-chip.is-drop-after::after {
+  right: -4px;
+}
+
+.author-chip-grip {
+  color: color-mix(in srgb, var(--brand-blue-strong) 55%, transparent);
+  flex-shrink: 0;
+}
+
+.author-chip-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author-chip-move,
+.author-chip-remove {
+  align-items: center;
+  border-radius: 50%;
+  color: currentColor;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 16px;
+  justify-content: center;
+  opacity: 0.6;
+  transition: opacity var(--motion-control);
+  width: 16px;
+}
+
+.author-chip-move:hover:not(:disabled),
+.author-chip-remove:hover {
+  opacity: 1;
+}
+
+.author-chip-move:disabled {
+  cursor: default;
+  opacity: 0.2;
+}
+
 /* Paper collection membership mirrors PaperCLI's paper_collections relation. */
 .paper-collection-field {
   display: flex;

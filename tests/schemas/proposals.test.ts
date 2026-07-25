@@ -58,6 +58,25 @@ test("requires an id exactly on the actions that act on an existing record", () 
   assert.match(issues(ProposalOperationSchema, { entity: "paper", action: "create", id: "p1", data: {} }), /id/);
 });
 
+test("refuses a whitespace-only id and trims a real one", () => {
+  // A whitespace id satisfies min(1) but matches no row, so the mutation would
+  // run, change nothing, and still be recorded as applied: the user is told
+  // their library changed when it did not. The id must therefore be trimmed
+  // before the length check, not after.
+  for (const id of ["", " ", "   ", "\t", "\n"]) {
+    assert.ok(
+      !ProposalOperationSchema.safeParse({ entity: "paper", action: "delete", id }).success,
+      `should refuse id ${JSON.stringify(id)}`,
+    );
+    assert.ok(!AgentProposalOperationSchema.safeParse({ entity: "paper", action: "update", id, data: {} }).success);
+  }
+  // A real id surrounded by whitespace is usable, and is stored trimmed so it
+  // matches the row it names.
+  const padded = ProposalOperationSchema.safeParse({ entity: "paper", action: "delete", id: "  paper-1  " });
+  assert.ok(padded.success);
+  assert.equal(padded.data.action === "delete" ? padded.data.id : "", "paper-1");
+});
+
 test("refuses an action or entity outside the contract", () => {
   assert.match(issues(ProposalOperationSchema, { entity: "paper", action: "remove", id: "p1" }), /action/);
   assert.match(issues(ProposalOperationSchema, { entity: "paper", action: "CREATE", data: {} }), /action/);
