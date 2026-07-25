@@ -20,7 +20,7 @@ function validFile() {
     ai: { modelId: "us.anthropic.claude-sonnet-4-6", region: "us-east-1", maxTokens: "10000", temperature: "0.25" },
     prompts: { extractionSystem: "extract", summarySystem: "summarize" },
     sync: { remotePath: "", autoSync: "false", autoSyncInterval: "5" },
-    secrets: {},
+    secrets: { GITHUB_TOKEN: "saved-token" },
   };
 }
 
@@ -37,29 +37,58 @@ test("treats an unrecognized schema version as unreadable", () => {
   }
 });
 
-test("requires each nested config block", () => {
+test("recovers a missing config block without discarding the others", () => {
+  // Each block falls back independently. Failing the whole read instead would
+  // present every setting as unset, which for the secrets block looks to the
+  // user like their saved API tokens were thrown away.
   for (const key of ["ai", "prompts", "sync", "secrets"] as const) {
     const file = validFile();
     delete (file as Record<string, unknown>)[key];
-    assert.ok(!StructuredSettingsFileSchema.safeParse(file).success, `a file missing ${key} must be refused`);
+    const parsed = StructuredSettingsFileSchema.safeParse(file);
+    assert.ok(parsed.success, `a file missing ${key} should still load`);
+    // The blocks that were present survive intact.
+    if (key !== "secrets") {
+      assert.equal(parsed.data.secrets.GITHUB_TOKEN, "saved-token", "the saved token is kept");
+    }
+    if (key !== "ai") {
+      assert.equal(parsed.data.ai.modelId, "us.anthropic.claude-sonnet-4-6");
+    }
   }
 });
 
-test("refuses a wrong-typed value inside a block", () => {
-  // The concrete motivation: maxTokens is stored as a string and passed into the
-  // Bedrock request. A number (or anything else) here used to flow straight
-  // through the cast and fail at the API instead of at the read.
-  const numeric = validFile();
-  (numeric.ai as Record<string, unknown>).maxTokens = 10000;
-  assert.ok(!StructuredSettingsFileSchema.safeParse(numeric).success);
+test("catches a non-numeric maxTokens instead of passing it to Bedrock", () => {
+  // The motivating case for validating this file at all: maxTokens is stored as
+  // a string but it is a number, and "abc" used to travel all the way into the
+  // Bedrock request before anything noticed.
+  const wordy = validFile();
+  (wordy.ai as Record<string, unknown>).maxTokens = "abc";
+  const parsed = StructuredSettingsFileSchema.safeParse(wordy);
+  assert.ok(parsed.success, "the file still loads");
+  assert.equal(parsed.data.ai.maxTokens, "10000", "but that block falls back to its default");
+  assert.equal(parsed.data.secrets.GITHUB_TOKEN, "saved-token", "and unrelated settings survive");
 
-  const missingField = validFile();
-  delete (missingField.ai as Record<string, unknown>).region;
-  assert.ok(!StructuredSettingsFileSchema.safeParse(missingField).success);
+  // A blank or non-finite value is caught the same way.
+  for (const value of ["", "   ", "1e", "NaN"]) {
+    const file = validFile();
+    (file.ai as Record<string, unknown>).temperature = value;
+    const result = StructuredSettingsFileSchema.safeParse(file);
+    assert.ok(result.success);
+    assert.equal(result.data.ai.temperature, "0.25", `temperature ${JSON.stringify(value)} falls back`);
+  }
 
+  // A genuinely numeric string is kept as written.
+  const good = validFile();
+  (good.ai as Record<string, unknown>).maxTokens = "4096";
+  const keep = StructuredSettingsFileSchema.safeParse(good);
+  assert.ok(keep.success);
+  assert.equal(keep.data.ai.maxTokens, "4096");
+
+  // A non-string secret discards only the secrets block.
   const badSecret = validFile();
   (badSecret.secrets as Record<string, unknown>).GITHUB_TOKEN = 12345;
-  assert.ok(!StructuredSettingsFileSchema.safeParse(badSecret).success, "secrets must be strings");
+  const secretResult = StructuredSettingsFileSchema.safeParse(badSecret);
+  assert.ok(secretResult.success);
+  assert.deepEqual(secretResult.data.secrets, {}, "secrets must be strings");
 });
 
 test("github block is optional but needs a repo when present", () => {

@@ -132,6 +132,8 @@ interface PdfExtractionResponse {
   warning?: string;
 }
 
+// Default column widths as proportional shares of each table's resizable area
+// (only their ratio matters). Users drag from here and their choice persists.
 const defaultPaperColumnWidths: Record<PaperColumnKey, number> = {
   title: 56,
   venue: 18,
@@ -145,10 +147,12 @@ const defaultAuthorColumnWidths: Record<AuthorColumnKey, number> = {
   latest: 12,
 };
 
+// The venue name is the column people scan, so it gets the widest default; the
+// publisher is usually a short imprint and no longer takes more room than it.
 const defaultVenueColumnWidths: Record<VenueColumnKey, number> = {
-  venue: 32,
-  type: 13,
-  publisher: 22,
+  venue: 38,
+  type: 14,
+  publisher: 20,
   papers: 10,
   latest: 10,
 };
@@ -183,14 +187,28 @@ function cycleTableSort<Key extends string>(
   return fallback;
 }
 
+/**
+ * Per-column widths for a resizable table, kept as PROPORTIONAL SHARES of the
+ * table's resizable area and persisted per table in localStorage.
+ *
+ * Shares rather than pixels because the table always fits its pane: there is a
+ * fixed amount of width to divide, so widening one column necessarily narrows its
+ * neighbours, and the layout stays correct when the window resizes. `minimums`
+ * are still expressed in pixels (that is how readability is judged) and are
+ * converted into share space per drag.
+ *
+ * Two things this has to get right, both of which were wrong before:
+ *  - the dragged edge must follow the cursor 1:1, which means the shares of the
+ *    resizable columns must sum to a constant instead of being renormalized;
+ *  - a column's narrowest width must not depend on which of its two edges was
+ *    grabbed, which means every neighbour's pixel minimum is enforced during the
+ *    drag, and no column carries an extra ratio cap of its own.
+ */
 function useResizableColumns<Key extends string>(
   storageKey: string,
   defaults: Record<Key, number>,
   minimums: Record<Key, number>,
-  maxRatios?: Partial<Record<Key, number>>,
-  /** The columns whose widths are actually draggable. Their stored shares are
-   *  normalized against each other, so a resize redistributes only among these
-   *  and never fights the px-sized fixed columns. Defaults to every key. */
+  /** The columns that carry a drag handle. Others are sized by CSS. */
   resizableKeys: Key[] = Object.keys(defaults) as Key[],
 ) {
   const [widths, setWidths] = useState<Record<Key, number>>(defaults);
@@ -199,7 +217,7 @@ function useResizableColumns<Key extends string>(
     const frame = window.requestAnimationFrame(() => {
       try {
         const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as Partial<Record<Key, number>> | null;
-        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value))) {
+        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value) && value > 0)) {
           setWidths((current) => ({ ...current, ...saved }));
         }
       } catch {
@@ -219,40 +237,40 @@ function useResizableColumns<Key extends string>(
     }
     const startX = event.clientX;
     const startWidth = header.getBoundingClientRect().width;
-    // Stored widths are shares of the RESIZABLE area, not of the whole table:
-    // the fixed columns (checkbox, status, year) are sized in px by CSS, and the
-    // `<col>` percentages are normalized against the sum of the resizable ones.
-    // Measuring against the full table width instead made the column move a
-    // fraction of the cursor distance, which is what felt broken.
+    // The pixel span the resizable columns divide between them.
     const resizableWidth = [...table.querySelectorAll("th.is-resizable")]
       .reduce((total, cell) => total + cell.getBoundingClientRect().width, 0)
       || table.getBoundingClientRect().width;
-    // The cap must never sit below the column's own default share, or the first
-    // drag of a wide-by-default column snaps it narrower instead of following
-    // the cursor (the Authors table's name column defaults to ~73% of the
-    // resizable area, above the old flat 0.7 ceiling).
-    const defaultsTotal = resizableKeys.reduce((total, candidate) => total + defaults[candidate], 0) || 1;
-    const defaultRatio = defaults[key] / defaultsTotal;
-    const ratioCap = Math.max(maxRatios?.[key] ?? 0.7, Math.min(0.92, defaultRatio + 0.1));
-    const maximum = Math.max(minimums[key], resizableWidth * ratioCap);
+    const others = resizableKeys.filter((candidate) => candidate !== key);
+    const neighbourFloor = others.reduce((total, candidate) => total + minimums[candidate], 0);
+    // Grow until the neighbours are at their minimums, shrink to this column's own.
+    const ceiling = Math.max(minimums[key], resizableWidth - neighbourFloor);
+
     const onPointerMove = (moveEvent: PointerEvent) => {
-      const width = Math.min(maximum, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
+      const targetWidth = Math.min(ceiling, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
       setWidths((current) => {
-        // The `<col>` percentages are normalized against the sum of the
-        // resizable shares, so that sum has to stay fixed: whatever this column
-        // gains, its neighbours give up in proportion. Otherwise the
-        // normalization rescales everything and the edge drifts away from the
-        // cursor (a 120px drag moved the column ~30px).
-        const others = resizableKeys.filter((candidate) => candidate !== key);
-        const othersTotal = others.reduce((total, candidate) => total + current[candidate], 0);
-        const pool = current[key] + othersTotal;
-        const share = Math.min(pool, (width / resizableWidth) * pool);
-        const next = { ...current, [key]: Number(share.toFixed(2)) } as Record<Key, number>;
-        if (othersTotal > 0) {
-          const remaining = pool - share;
-          for (const candidate of others) {
-            next[candidate] = Number(((current[candidate] / othersTotal) * remaining).toFixed(2));
-          }
+        const pool = resizableKeys.reduce((total, candidate) => total + current[candidate], 0);
+        if (pool <= 0) {
+          return current;
+        }
+        // Pixel minimums in the same units as the stored shares.
+        const floorFor = (candidate: Key) => (minimums[candidate] / resizableWidth) * pool;
+        const othersFloor = others.reduce((total, candidate) => total + floorFor(candidate), 0);
+        const share = Math.min(
+          Math.max(floorFor(key), (targetWidth / resizableWidth) * pool),
+          Math.max(floorFor(key), pool - othersFloor),
+        );
+        const next = { ...current, [key]: Number(share.toFixed(3)) } as Record<Key, number>;
+        // Hand the remainder to the neighbours: each keeps its floor, and what is
+        // left over is split by how much slack each currently has. The shares
+        // therefore still sum to `pool`, which is what keeps the edge under the
+        // cursor and the table inside its pane.
+        const surplus = Math.max(0, pool - share - othersFloor);
+        const slackTotal = others.reduce((total, candidate) => total + Math.max(0, current[candidate] - floorFor(candidate)), 0);
+        for (const candidate of others) {
+          const slack = Math.max(0, current[candidate] - floorFor(candidate));
+          const extra = slackTotal > 0 ? (slack / slackTotal) * surplus : surplus / (others.length || 1);
+          next[candidate] = Number((floorFor(candidate) + extra).toFixed(3));
         }
         window.localStorage.setItem(storageKey, JSON.stringify(next));
         return next;
@@ -1452,12 +1470,13 @@ function LibraryView({
   const [filterBuilderOpen, setFilterBuilderOpen] = useState(false);
   const [sort, setSort] = useState<PaperSort>(DEFAULT_PAPER_SORT);
   const { widths: columnWidths, resizeColumn, resetColumnWidth } = useResizableColumns<PaperColumnKey>(
-    "stacks-paper-grid-widths-v3",
+    "stacks-paper-grid-widths-v4",
     defaultPaperColumnWidths,
-    { title: 280, venue: 140, year: 72, status: 72 },
-    { title: 0.82, venue: 0.62, year: 0.32, status: 0.32 },
-    // Only Paper and Venue are draggable; the checkbox, status, and year columns
-    // are fixed px widths in CSS.
+    // Minimum pixel widths. Venue holds a short acronym over a type label, so it
+    // shrinks well below the old 140px floor, which made the column feel stuck
+    // partway through a drag.
+    { title: 220, venue: 76, year: 72, status: 72 },
+    // Only Paper and Venue carry handles; checkbox, status, and year are fixed.
     ["title", "venue"],
   );
   const [page, setPage] = useState(1);
@@ -1553,13 +1572,9 @@ function LibraryView({
   // widths and caps, and it keeps the two shares summing to a constant; clamping
   // the venue share to a ceiling here as well used to silently discard part of a
   // drag, so the column stopped following the cursor partway through.
-  const effectivePaperColumnWidths = {
-    title: Math.max(20, columnWidths.title),
-    venue: Math.max(8, columnWidths.venue),
-    year: 88,
-    status: 88,
-  };
-  const resizablePaperColumnTotal = effectivePaperColumnWidths.title + effectivePaperColumnWidths.venue;
+  // The two resizable columns divide the space the fixed ones leave, so their
+  // `<col>` percentages are normalized against each other.
+  const paperResizableTotal = columnWidths.title + columnWidths.venue;
 
   /**
    * Cycle a column: ascending, descending, then back to the library's default
@@ -1687,8 +1702,8 @@ function LibraryView({
             <colgroup>
               <col className="paper-column-check" />
               <col className="paper-column-status" />
-              <col style={{ width: `${(effectivePaperColumnWidths.title / resizablePaperColumnTotal) * 100}%` }} />
-              <col style={{ width: `${(effectivePaperColumnWidths.venue / resizablePaperColumnTotal) * 100}%` }} />
+              <col style={{ width: `${(columnWidths.title / paperResizableTotal) * 100}%` }} />
+              <col style={{ width: `${(columnWidths.venue / paperResizableTotal) * 100}%` }} />
               <col className="paper-column-year" />
             </colgroup>
             <thead>
@@ -1870,10 +1885,13 @@ function AuthorsView({
   const [sort, setSort] = useState<TableSort<AuthorColumnKey>>(DEFAULT_AUTHOR_SORT);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<AuthorColumnKey>(
-    "stacks-author-grid-widths-v3",
+  // The authors table has no draggable column: the name takes whatever the two
+  // fixed-width count columns leave, so there is nothing to store or restore.
+  const { resizeColumn, resetColumnWidth } = useResizableColumns<AuthorColumnKey>(
+    "stacks-author-grid-widths-v4",
     defaultAuthorColumnWidths,
     { author: 260, papers: 80, latest: 80 },
+    [],
   );
   const filtered = useMemo(() => authors
     .filter((author) => matchesSearch([author.displayName, author.givenName, author.familyName, author.notes], query))
@@ -1887,7 +1905,6 @@ function AuthorsView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedAuthors = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const authorColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
   function toggleSort(key: typeof sort.key) {
     setSort((current) => cycleTableSort(current, key, DEFAULT_AUTHOR_SORT, (candidate) => candidate === "papers" || candidate === "latest"));
   }
@@ -1914,9 +1931,9 @@ function AuthorsView({
         <table className="paper-table research-grid entity-research-grid author-grid">
           <colgroup>
             <col className="paper-column-check" />
-            <col style={{ width: `${(widths.author / authorColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.papers / authorColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.latest / authorColumnTotal) * 90}%` }} />
+            <col style={{ width: "100%" }} />
+            <col style={{ width: "84px" }} />
+            <col style={{ width: "84px" }} />
             <col className="entity-column-actions" />
           </colgroup>
           <thead>
@@ -1926,9 +1943,9 @@ function AuthorsView({
                   <SelectionBox checked={Boolean(pagedAuthors.length) && pagedAuthors.every((author) => selected.includes(author.id))} />
                 </button>
               </th>
-              <SortableEntityHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
-              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <SortableEntityHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
+              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
               <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -1998,9 +2015,11 @@ function VenuesView({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const { widths, resizeColumn, resetColumnWidth } = useResizableColumns<VenueColumnKey>(
-    "stacks-venue-grid-widths-v2",
+    "stacks-venue-grid-widths-v4",
     defaultVenueColumnWidths,
     { venue: 220, type: 100, publisher: 150, papers: 80, latest: 80 },
+    // Only the name and publisher are draggable; type and the counts are fixed.
+    ["venue", "publisher"],
   );
   const filtered = useMemo(() => venues
     .filter((venue) => matchesSearch([venue.name, venue.acronym, venue.type, venue.publisher], query))
@@ -2016,7 +2035,7 @@ function VenuesView({
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pagedVenues = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const venueColumnTotal = Object.values(widths).reduce((total, width) => total + width, 0);
+  const venueResizableTotal = widths.venue + widths.publisher;
   function toggleSort(key: typeof sort.key) {
     setSort((current) => cycleTableSort(current, key, DEFAULT_VENUE_SORT, (candidate) => candidate === "papers" || candidate === "latest"));
   }
@@ -2043,11 +2062,11 @@ function VenuesView({
         <table className="paper-table research-grid entity-research-grid venue-grid">
           <colgroup>
             <col className="paper-column-check" />
-            <col style={{ width: `${(widths.venue / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.type / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.publisher / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.papers / venueColumnTotal) * 90}%` }} />
-            <col style={{ width: `${(widths.latest / venueColumnTotal) * 90}%` }} />
+            <col style={{ width: `${(widths.venue / venueResizableTotal) * 100}%` }} />
+            <col style={{ width: "112px" }} />
+            <col style={{ width: `${(widths.publisher / venueResizableTotal) * 100}%` }} />
+            <col style={{ width: "84px" }} />
+            <col style={{ width: "84px" }} />
             <col className="entity-column-actions" />
           </colgroup>
           <thead>
@@ -2058,10 +2077,10 @@ function VenuesView({
                 </button>
               </th>
               <SortableEntityHeader label="Venue" columnKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Type" columnKey="type" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableEntityHeader label="Type" columnKey="type" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
               <SortableEntityHeader label="Publisher" columnKey="publisher" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
-              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered />
+              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
               <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -2234,6 +2253,7 @@ function SortableEntityHeader<Key extends string>({
   onResize,
   onResetWidth,
   centered = false,
+  resizable = true,
 }: {
   label: string;
   columnKey: Key;
@@ -2242,25 +2262,27 @@ function SortableEntityHeader<Key extends string>({
   onResize: (event: ReactPointerEvent<HTMLButtonElement>, key: Key) => void;
   onResetWidth: (event: ReactMouseEvent<HTMLButtonElement>, key: Key) => void;
   centered?: boolean;
+  /** Narrow, fixed-content columns (a count, a short type label) carry no handle. */
+  resizable?: boolean;
 }) {
   const active = sort.key === columnKey;
   const ariaSort: AriaAttributes["aria-sort"] = active
     ? sort.direction === "asc" ? "ascending" : "descending"
     : "none";
   return (
-    <th aria-sort={ariaSort} className={`is-resizable ${centered ? "is-centered" : ""}`}>
+    <th aria-sort={ariaSort} className={`${resizable ? "is-resizable" : "is-fixed-width"} ${centered ? "is-centered" : ""}`}>
       <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(columnKey)}>
         <span>{label}</span>
         {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
       </button>
-      <button
+      {resizable ? <button
         type="button"
         className="column-resize-handle"
         aria-label={`Resize ${label} column`}
         title={`Drag to resize ${label}; double-click to reset`}
         onPointerDown={(event) => onResize(event, columnKey)}
         onDoubleClick={(event) => onResetWidth(event, columnKey)}
-      />
+      /> : null}
     </th>
   );
 }

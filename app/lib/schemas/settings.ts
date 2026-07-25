@@ -17,11 +17,21 @@ import { z } from "zod";
 /** Secret values are stored as plain strings, keyed by their env-var name. */
 const SecretsSchema = z.record(z.string(), z.string());
 
+/**
+ * Stored as strings (they come from text inputs) but they are numbers: the whole
+ * point of validating this file was to stop `maxTokens: "abc"` reaching Bedrock
+ * as a request parameter, so the numeric shape is enforced here.
+ */
+const numericText = (label: string) =>
+  z.string().refine((value) => value.trim() !== "" && Number.isFinite(Number(value)), {
+    message: `${label} must be a number.`,
+  });
+
 const AiSettingsSchema = z.object({
   modelId: z.string(),
   region: z.string(),
-  maxTokens: z.string(),
-  temperature: z.string(),
+  maxTokens: numericText("maxTokens"),
+  temperature: numericText("temperature"),
 });
 
 const PromptSettingsSchema = z.object({
@@ -69,16 +79,20 @@ export const StructuredSettingsFileSchema = z.object({
   updatedAt: z.string(),
   /** The user-facing library name shown in the sidebar status. */
   libraryName: z.string().optional(),
-  ai: AiSettingsSchema,
-  prompts: PromptSettingsSchema,
-  sync: SyncSettingsSchema,
+  // Each block is independently recoverable: a file whose `sync` block is
+  // corrupt still yields its saved model and secrets, rather than the whole read
+  // failing and every setting appearing unset (which, for the secrets block,
+  // looks to the user like their API tokens were silently discarded).
+  ai: AiSettingsSchema.catch(() => ({ modelId: "", region: "", maxTokens: "10000", temperature: "0.25" })),
+  prompts: PromptSettingsSchema.catch(() => ({ extractionSystem: "", summarySystem: "" })),
+  sync: SyncSettingsSchema.catch(() => ({ remotePath: "", autoSync: "false", autoSyncInterval: "5" })),
   github: GithubSettingsSchema.optional(),
   feedSkills: z.array(FeedSkillSchema).optional(),
   // Saved Claude Code workflow scripts (the `export const meta` + body form),
   // run against the library through the approval-gated feed. name/description
   // are parsed from the script's meta for the list; script is the source.
   feedWorkflows: z.array(FeedWorkflowSchema).optional(),
-  secrets: SecretsSchema,
+  secrets: SecretsSchema.catch(() => ({})),
 });
 export type StructuredSettingsFile = z.infer<typeof StructuredSettingsFileSchema>;
 

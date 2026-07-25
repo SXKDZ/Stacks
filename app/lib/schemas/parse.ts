@@ -31,13 +31,24 @@ export function parseWith<T>(schema: z.ZodType<T>, value: unknown): ParseOutcome
     : { ok: false, error: describeZodError(result.error) };
 }
 
-/** Parse JSON text and validate it, folding syntax and shape errors together. */
+/**
+ * Parse JSON text and validate it, folding syntax and shape errors together.
+ *
+ * A syntax error is reported by position only. V8's own SyntaxError message
+ * quotes the ~20 characters surrounding the fault, and callers log these
+ * messages: for `settings.json` (which holds API tokens) that would copy part of
+ * a secret into the log, so the raw message is deliberately not passed through.
+ */
 export function parseJsonWith<T>(schema: z.ZodType<T>, text: string): ParseOutcome<T> {
   let decoded: unknown;
   try {
     decoded = JSON.parse(text);
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Invalid JSON." };
+    const position = error instanceof Error ? /position (\d+)/.exec(error.message)?.[1] : undefined;
+    return {
+      ok: false,
+      error: position ? `Invalid JSON at position ${position}.` : "Invalid JSON.",
+    };
   }
   return parseWith(schema, decoded);
 }

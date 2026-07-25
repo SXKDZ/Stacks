@@ -264,6 +264,8 @@
   overflow: hidden;
 }
 
+/* The table always fits its pane, so column widths are proportional shares: there
+   is a fixed span to divide, and widening one column narrows its neighbours. */
 .paper-table {
   border-collapse: collapse;
   table-layout: fixed;
