@@ -35,7 +35,10 @@ export async function POST(request: Request): Promise<Response> {
     database.insert(feedSnippets).values({
       id,
       title: `Workflow: ${meta.name}`.slice(0, 120),
-      instruction: meta.description,
+      // Capped like the save route caps it: the description comes from the
+      // script's own meta, so a script could otherwise write a megabyte straight
+      // into the feed row it creates.
+      instruction: meta.description.slice(0, 2000),
       status: "queued",
       sessionId: "",
       createdAt: now,

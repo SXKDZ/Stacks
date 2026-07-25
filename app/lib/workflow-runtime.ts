@@ -34,6 +34,31 @@ export interface WorkflowMeta {
   phases?: Array<{ title: string; detail?: string }>;
 }
 
+/**
+ * Turn a script's `export const meta = ...` into an assignment the sandbox can
+ * read back, without being fooled by the same text appearing elsewhere.
+ *
+ * A plain `String.replace` with a non-global regex rewrites the FIRST textual
+ * occurrence, which for a script whose doc comment mentions
+ * `export const meta = { name, description }` was the comment: the real export
+ * kept its `export` keyword, failed to parse, and the workflow showed up with no
+ * name. Comments and string literals are blanked before the match is located, so
+ * only real code is rewritten.
+ */
+function rewriteMetaExport(script: string): string {
+  // A mask where every comment and string literal is replaced by spaces, so
+  // offsets still line up with the original text.
+  const mask = script
+    .replace(/\/\*[\s\S]*?\*\//g, (match) => " ".repeat(match.length))
+    .replace(/\/\/[^\n]*/g, (match) => " ".repeat(match.length))
+    .replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, (match) => " ".repeat(match.length));
+  const found = /export\s+const\s+meta\s*=/.exec(mask);
+  if (!found) {
+    return script;
+  }
+  return script.slice(0, found.index) + "globalThis.__meta =" + script.slice(found.index + found[0].length);
+}
+
 /** Pull the `meta` object out of a workflow script without running it, so the
  *  UI can list a saved workflow by name/description. Uses the sandbox with the
  *  primitives stubbed to no-ops, then reads the exported meta. Returns null if
@@ -47,9 +72,19 @@ export function readWorkflowMeta(script: string): WorkflowMeta | null {
     const { agent, parallel, pipeline, log, phase, ...inert } = sandbox;
     const context = vm.createContext(inert);
     installPrimitives(context, { agent, parallel, pipeline, log, phase });
-    // Wrap so a top-level `export const meta = {...}` parses as an assignment.
-    const wrapped = script.replace(/export\s+const\s+meta\s*=/, "globalThis.__meta =");
-    vm.runInContext(wrapped, context, { timeout: 1000 });
+    // Wrap so a top-level `export const meta = {...}` parses as an assignment, and
+    // wrap the body in an async IIFE so a script using top-level await (which the
+    // app's own starter template does) still yields its meta. The meta literal
+    // must be assigned BEFORE the first await, which is the documented rule.
+    const wrapped = `(async () => {\n${rewriteMetaExport(script)}\n})();`;
+    // An async body means runInContext returns at the first await, so the vm
+    // timeout stops applying and a rejection would surface later as an unhandled
+    // rejection that kills the process. Swallow both here: this is a metadata
+    // read, and anything the script does after its meta assignment is irrelevant.
+    const result = vm.runInContext(wrapped, context, { timeout: 1000 }) as unknown;
+    if (result && typeof (result as Promise<unknown>).catch === "function") {
+      void (result as Promise<unknown>).catch(() => {});
+    }
     // Read the meta back through the context (the sandbox object is no longer the
     // context's global, since the primitives are installed inside the realm), and
     // take it across as JSON so a getter cannot hand back a different value on a
@@ -166,9 +201,17 @@ function makeSandbox(
   };
   if (options.metaOnly) {
     // Inert primitives so a script's top-level calls don't throw during meta read.
-    base.agent = async () => "";
-    base.parallel = async () => [];
-    base.pipeline = async () => [];
+    //
+    // They must never return a HOST promise: a script can attach `.then(...)` to
+    // one, and that callback then runs on the host microtask queue, where a throw
+    // (or a `while(true)`) escapes both the try/catch and the vm timeout. Returning
+    // a never-settling promise means such a callback is never invoked at all, which
+    // is right for a metadata read: only the meta assignment matters, and the
+    // documented rule is that it precedes any await.
+    const pending = () => new Promise(() => {});
+    base.agent = pending;
+    base.parallel = pending;
+    base.pipeline = pending;
     base.log = () => {};
     base.phase = () => {};
     return base;

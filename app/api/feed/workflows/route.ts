@@ -12,10 +12,16 @@ interface StoredWorkflow { id: string; name: string; description: string; script
  *  script and derives name/description from the script's `meta` (falling back to
  *  the posted values), so the list always reflects what the script actually is.
  *  Entries without a script are skipped rather than failing the whole save. */
+/** Most workflows a person writes; also the cap on how much work one save can
+ *  cost, since reading each entry's meta runs its script under a 1s vm budget. */
+const MAX_SAVED_WORKFLOWS = 100;
+
 function normalize(input: unknown): StoredWorkflow[] {
   if (!Array.isArray(input)) return [];
   const out: StoredWorkflow[] = [];
-  for (const raw of input) {
+  // Bounded: readWorkflowMeta below executes each entry's script, so an unbounded
+  // list of hostile scripts would occupy the server one vm timeout at a time.
+  for (const raw of input.slice(0, MAX_SAVED_WORKFLOWS)) {
     const entry = parseWith(IncomingWorkflowSchema, raw);
     if (!entry.ok) continue;
     const script = entry.data.script;
