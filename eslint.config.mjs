@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     "tests/**/__scratch*",
     "tests/_*",
     "tmp-probe/**",
+    "tmpprobe/**",
+    "tests/**/rvw-*",
   ]),
   {
     // set-state-in-effect fires on the mount-time reads of client-only values

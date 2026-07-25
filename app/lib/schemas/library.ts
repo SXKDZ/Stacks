@@ -80,10 +80,19 @@ export const LibraryMutationSchema = z.discriminatedUnion("action", [
 ]);
 export type LibraryMutation = z.infer<typeof LibraryMutationSchema>;
 
-/** The ids a mutation targets, from either `ids` or the single `id`. */
+/**
+ * The ids a mutation targets, from either `ids` or the single `id`.
+ *
+ * Checks each key independently: an absent optional field is omitted from the
+ * parsed object entirely, so testing for one key says nothing about the other.
+ * (Branches with no id fields at all, create and bulk-create, yield an empty
+ * list.)
+ */
 export function idList(mutation: LibraryMutation): string[] {
-  if (!("ids" in mutation)) {
-    return [];
+  const ids = "ids" in mutation ? mutation.ids : undefined;
+  if (ids?.length) {
+    return ids;
   }
-  return mutation.ids ?? (mutation.id ? [mutation.id] : []);
+  const id = "id" in mutation ? mutation.id : undefined;
+  return id ? [id] : [];
 }
