@@ -54,7 +54,14 @@ function parseRepo(repo: string): { owner: string; name: string } {
   if (!match) {
     throw new GitHubError('Set the GitHub repo as "owner/name" (e.g. octocat/stacks-inbox).');
   }
-  return { owner: match[1], name: match[2] };
+  const [, owner, name] = match;
+  // `.` is a legal repo-name character, so ".." matched the pattern: the request
+  // path became /repos/../../issues, and URL resolution collapses the dot segments,
+  // aiming the call at a different API endpoint than the one this module pins.
+  if ([owner, name].some((segment) => segment === "." || segment === "..")) {
+    throw new GitHubError('Set the GitHub repo as "owner/name" (e.g. octocat/stacks-inbox).');
+  }
+  return { owner, name };
 }
 
 // A defensive ceiling on pages walked per list, so a runaway Link chain can't

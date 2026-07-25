@@ -318,7 +318,19 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       // Changing the repo drops the sync high-water mark (it belongs to the old
       // repo's timeline) but keeps linkedRepo: it names the repo the stored
       // issue links belong to, which is how sync detects the switch and unlinks.
-      case "STACKS_GITHUB_REPO": next.github = { repo: value, linkedRepo: next.github?.linkedRepo }; break;
+      case "STACKS_GITHUB_REPO": {
+        // Preserve linkedRepo (it names the repo the stored issue links belong to,
+        // which is how sync detects a switch) and, when the repo is unchanged, the
+        // high-water mark too: dropping it on an unrelated save forced a full
+        // re-sync of every issue and comment.
+        const sameRepo = next.github?.repo === value;
+        next.github = {
+          repo: value,
+          linkedRepo: next.github?.linkedRepo,
+          ...(sameRepo && next.github?.lastSyncedAt ? { lastSyncedAt: next.github.lastSyncedAt } : {}),
+        };
+        break;
+      }
       case "STACKS_LIBRARY_NAME": next.libraryName = value; break;
       default:
         if (secretKeys.includes(key as typeof secretKeys[number])) {
