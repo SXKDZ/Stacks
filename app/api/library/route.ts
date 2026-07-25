@@ -419,9 +419,48 @@ function resolveCollectionIdsByName(querier: LibraryQuerier, collectionNames: un
  * identifier (DOI, arXiv id, or Semantic Scholar id), used to skip duplicates on
  * import. Title is intentionally not matched here — it is too noisy for dedup.
  */
+/**
+ * Canonical form of an arXiv id: the bare identifier, lowercased.
+ *
+ * The app's own producers disagree: the seed data writes "arXiv:2605.09104", the
+ * scholarly providers write the bare id, and a BibTeX import can carry either
+ * plus a full URL. Since dedup compares this column exactly, the same paper
+ * imported from two sources produced two rows (and the unique index never fired).
+ */
+function canonicalArxivId(value: unknown): string | null {
+  const raw = cleanString(value);
+  if (!raw) {
+    return null;
+  }
+  const stripped = raw
+    .replace(/^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\//i, "")
+    .replace(/^arxiv[:\s]*/i, "")
+    .replace(/v\d+$/i, "")
+    .replace(/\.pdf$/i, "")
+    .trim();
+  return stripped.toLowerCase() || null;
+}
+
+/**
+ * Canonical form of a DOI: lowercased, with any resolver prefix removed. DOIs are
+ * case-insensitive by spec, so comparing them raw let "10.1000/ABC" and
+ * "10.1000/abc" coexist as separate papers.
+ */
+function canonicalDoi(value: unknown): string | null {
+  const raw = cleanString(value);
+  if (!raw) {
+    return null;
+  }
+  const stripped = raw
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi[:\s]*/i, "")
+    .trim();
+  return stripped.toLowerCase() || null;
+}
+
 function findDuplicatePaper(querier: LibraryQuerier, data: Record<string, unknown>): string | null {
-  const doi = cleanString(data.doi);
-  const arxivId = cleanString(data.arxivId);
+  const doi = canonicalDoi(data.doi);
+  const arxivId = canonicalArxivId(data.arxivId);
   const semanticScholarId = cleanString(data.semanticScholarId);
   const checks: Array<ReturnType<typeof eq>> = [];
   if (doi) checks.push(eq(papers.doi, doi));
@@ -475,8 +514,8 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       issue: cleanString(data.issue),
       pages: normalizedPages,
       category: cleanString(data.category),
-      doi: cleanString(data.doi),
-      arxivId: cleanString(data.arxivId),
+      doi: canonicalDoi(data.doi),
+      arxivId: canonicalArxivId(data.arxivId),
       preprintId: cleanString(data.preprintId),
       semanticScholarId: cleanString(data.semanticScholarId),
       url: cleanString(data.url),
