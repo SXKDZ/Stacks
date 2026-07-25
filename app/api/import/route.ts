@@ -29,13 +29,26 @@ export async function POST(request: Request): Promise<Response> {
     // Render the page locally (headless WebKit). Throws on a challenge/error
     // page so we never import metadata scraped from a verification screen.
     const snapshot = await captureWebpageSnapshot(parsed);
-    const arxivMatch = sourceUrl.match(/arxiv\.org\/(?:abs|pdf)\/([^?#/]+)/i);
+    // Judge identity from the RESOLVED url's host and path, never from the raw
+    // request string: matching anywhere in the text let any host claim an arXiv id
+    // or PDF identity through its query string
+    // (https://evil.example/redir?to=arxiv.org/abs/1234).
+    const resolved = (() => {
+      try {
+        return new URL(snapshot.finalUrl || sourceUrl);
+      } catch {
+        return parsed;
+      }
+    })();
+    const isArxivHost = /(^|\.)arxiv\.org$/i.test(resolved.hostname);
+    const arxivMatch = isArxivHost ? resolved.pathname.match(/^\/(?:abs|pdf)\/([^/]+)$/i) : null;
+    const isPdfPath = /\.pdf$/i.test(resolved.pathname);
     return Response.json({
       source: "Web snapshot",
       title: snapshot.title || parsed.hostname,
       abstract: snapshot.text.slice(0, 1200),
       url: snapshot.finalUrl || sourceUrl,
-      pdfUrl: sourceUrl.toLowerCase().includes(".pdf") ? sourceUrl : null,
+      pdfUrl: isPdfPath ? resolved.toString() : null,
       arxivId: arxivMatch?.[1]?.replace(/\.pdf$/i, "") ?? null,
       readerContent: snapshot.text.slice(0, 14000),
     });
