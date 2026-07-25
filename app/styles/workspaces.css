@@ -1111,7 +1111,9 @@
 .feed-picker-item {
   align-items: center;
   background: transparent;
-  border: 0;
+  /* Transparent, not none: the hover state adds a border, and a 0-width border
+     would shift the row by a pixel on hover. */
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--muted);
   cursor: pointer;
@@ -1127,9 +1129,48 @@
   flex-shrink: 0;
 }
 
-.feed-picker-item:hover {
-  background: var(--panel);
+/* Two rows per paper, matching the collection cards: the title alone made a list
+   of similarly-named papers impossible to tell apart. */
+.feed-picker-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* A list entry, not a heading: without an explicit size it inherited the modal's
+   larger base text and, at weight 550, read as strongly as the dialog's own title.
+   Matches the control scale the rest of the picker uses. */
+.feed-picker-item-title {
   color: var(--ink);
+  font-size: var(--type-control);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-picker-item-meta {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --panel is a near-white translucent surface, which is invisible against the
+   modal's own white background, so the row appeared to have no hover at all. Uses
+   the same brand tint + border the collection card rows use. */
+.feed-picker-item:hover,
+.feed-picker-item:focus-visible {
+  background: var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 20%, transparent);
+  outline: none;
+}
+
+.feed-picker-item:hover .feed-picker-item-title,
+.feed-picker-item:focus-visible .feed-picker-item-title {
+  color: var(--brand-blue-strong);
 }
 
 .feed-picker-item.is-attached {
@@ -1140,7 +1181,10 @@
   color: var(--brand-blue-strong);
 }
 
-.feed-picker-item span {
+/* The truncation applies to the text lines, not the flex column that holds them
+   (which needs to lay out as a block). */
+.feed-picker-item-title,
+.feed-picker-item-meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -485,6 +485,8 @@
 /* The venue cell is a control when the paper has a venue record, mirroring the
    clickable author names: it filters the library to that venue. It keeps the
    cell's own layout so the row looks identical until hovered. */
+/* Sized to its text, not the cell: width:100% made the whole column clickable, so
+   clicking the empty space beside a venue name filtered the library. */
 .venue-cell-open {
   align-items: flex-start;
   background: none;
@@ -492,13 +494,13 @@
   cursor: pointer;
   padding: 0;
   text-align: left;
-  width: 100%;
+  width: fit-content;
 }
 
+/* A colour shift on hover only. An underline on every venue turned the column into
+   a wall of links, which read louder than the paper titles beside it. */
 .venue-cell-open:hover b {
   color: var(--brand-blue-strong);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .venue-cell b {

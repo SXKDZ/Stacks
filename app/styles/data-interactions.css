@@ -466,17 +466,21 @@
   color: var(--brand-blue);
 }/* Clickable authors in the paper-row secondary line: each name is a link to its
    author filter, so the byline reads as muted text with the names as accents. */
+/* Inline, not flex: the names and the show-more toggle are one run of text, so the
+   toggle wraps after the last name instead of being placed on its own flex line. */
 .paper-secondary-line .expandable-author-buttons {
-  align-items: baseline;
   color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
+  display: inline;
   font-size: var(--type-label);
-  gap: 4px;
   line-height: 1.35;
   min-width: 0;
 }
 
+.paper-secondary-line .expandable-author-buttons > span {
+  display: inline;
+}
+
+.paper-secondary-line .expandable-author-buttons > span > button,
 .paper-secondary-line .expandable-author-buttons > span > span > button {
   background: transparent;
   border: 0;
@@ -487,6 +491,7 @@
   text-align: left;
 }
 
+.paper-secondary-line .expandable-author-buttons > span > button:hover,
 .paper-secondary-line .expandable-author-buttons > span > span > button:hover {
   color: var(--brand-blue-strong);
   text-decoration: underline;
@@ -495,6 +500,8 @@
 
 .paper-secondary-line .expandable-author-buttons .author-toggle {
   background: transparent;
+  display: inline;
+  white-space: nowrap;
   color: var(--brand-blue-strong);
   cursor: pointer;
   font-size: var(--type-micro);

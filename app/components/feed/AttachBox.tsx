@@ -6,11 +6,19 @@ import { createPortal } from "react-dom";
 import { ActionButton, Select, type SelectOption } from "@/app/components/ui/controls";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
+import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
+
 export interface LibraryPaper {
   id: string;
   title: string;
   localPath?: string | null;
   htmlSnapshotPath?: string | null;
+  // Shown as the picker's second line, matching the collection cards. The feed
+  // already loads full papers from /api/library, so these need no extra request.
+  authors?: Array<{ displayName: string }>;
+  venueAcronym?: string | null;
+  venueName?: string | null;
+  year?: number | null;
 }
 
 export interface AttachSubmit {
@@ -358,18 +366,23 @@ export function AttachBox({
             </header>
             <div className="feed-picker-search">
               <Search size={14} />
-              <input ref={pickerSearchRef} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search your library…" />
+              <input ref={pickerSearchRef} value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search title, author, venue, year…" />
             </div>
             <div className="feed-picker-list">
               {library
-                .filter((paper) => paper.title.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
+                // Findable by author, venue, and year as well as title: remembering
+                // "the Kimi paper from NeurIPS" is as common as recalling the title.
+                .filter((paper) => matchesSearch(paperSearchValues(paper), pickerQuery))
                 .slice(0, 60)
                 .map((paper) => {
                   const attached = papers.some((item) => item.id === paper.id);
                   return (
-                    <button type="button" key={paper.id} className={`feed-picker-item ${attached ? "is-attached" : ""}`} onClick={() => togglePaper(paper)}>
+                    <button type="button" key={paper.id} className={`feed-picker-item ${attached ? "is-attached" : ""}`} onClick={() => togglePaper(paper)} title={paper.title}>
                       {attached ? <Check size={14} /> : <BookOpen size={14} />}
-                      <span>{paper.title}</span>
+                      <span className="feed-picker-item-text">
+                        <span className="feed-picker-item-title">{paper.title}</span>
+                        <small className="feed-picker-item-meta">{paperMetaLine(paper)}</small>
+                      </span>
                     </button>
                   );
                 })}

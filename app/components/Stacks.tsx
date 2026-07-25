@@ -78,6 +78,7 @@ import type {
   Venue,
   ViewId,
 } from "@/app/lib/types";
+import { matchesSearch, paperMetaLine } from "@/app/lib/paper-meta";
 import { gapForPointer, moveItem, moveItemToGap } from "@/app/lib/reorder";
 import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
 
@@ -485,14 +486,15 @@ function ExpandableAuthorButtons({ paper, onOpenAuthor, limit = 5 }: {
   if (!paper.authors.length) {
     return <span>Authors not recorded</span>;
   }
+  // One inline run of text, so the toggle follows the last name in the flow rather
+  // than being laid out as a separate flex item: with a long author list the names
+  // filled the row and pushed "Show less" onto a line of its own.
   return (
     <span className="expandable-author-buttons">
-      <span>
-        {visibleAuthors.map((author, index) => (
-          <span key={author.id}><button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>{index < visibleAuthors.length - 1 ? ", " : ""}</span>
-        ))}
-      </span>
-      {hiddenCount ? <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button> : null}
+      {visibleAuthors.map((author, index) => (
+        <span key={author.id}><button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>{index < visibleAuthors.length - 1 ? ", " : ""}</span>
+      ))}
+      {hiddenCount ? <> <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button></> : null}
     </span>
   );
 }
@@ -515,14 +517,6 @@ function StatusIcon({ status, size = 14 }: { status: string; size?: number }): R
   if (status === "complete") return <CheckCircle2 size={size} />;
   if (status === "reading") return <Clock3 size={size} />;
   return <Inbox size={size} />;
-}
-
-function matchesSearch(values: Array<string | number | null | undefined>, query: string): boolean {
-  if (!query.trim()) {
-    return true;
-  }
-  const normalized = query.trim().toLowerCase();
-  return values.some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
 
 function matchesLibraryClause(paper: Paper, clause: LibraryFilterClause): boolean {
@@ -1786,7 +1780,6 @@ function LibraryView({
                         type="button"
                         className="venue-cell venue-cell-open"
                         onClick={(event) => { event.stopPropagation(); onOpenVenue(paper.venueId!, venueLine(paper)); }}
-                        title={`Show papers from ${venueLine(paper)}`}
                       >
                         <b>{paper.venueAcronym || paper.venueName}</b><small>{paper.paperType}</small>
                       </button>
@@ -2218,19 +2211,13 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
   const readCount = papers.filter((paper) => paper.readingStatus === "complete").length;
   const readPercent = papers.length ? Math.round((readCount / papers.length) * 100) : 0;
 
-  // The years the collection spans, and its dominant venue: the two facts that
-  // characterize a set of papers at a glance.
+  // The years the collection spans. Deliberately NOT a "most common venue": on a
+  // collection of preprints that is always "arXiv", which says nothing about the
+  // collection and reads as though the whole set were published there.
   const years = papers.map((paper) => paper.year).filter((year): year is number => typeof year === "number");
   const yearSpan = years.length
     ? (Math.min(...years) === Math.max(...years) ? String(Math.min(...years)) : `${Math.min(...years)}–${Math.max(...years)}`)
     : "";
-  const venueCounts = new Map<string, number>();
-  for (const paper of papers) {
-    const label = paper.venueAcronym || paper.venueName;
-    if (label) venueCounts.set(label, (venueCounts.get(label) ?? 0) + 1);
-  }
-  const topVenue = [...venueCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
-  const facts = [yearSpan, topVenue].filter(Boolean);
 
   return (
     <article className="collection-card">
@@ -2241,7 +2228,7 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
             <strong>{collection.name}</strong>
             <small>
               {collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}
-              {facts.length ? ` · ${facts.join(" · ")}` : ""}
+              {yearSpan ? ` · ${yearSpan}` : ""}
             </small>
           </span>
         </button>
@@ -2266,15 +2253,8 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
               {/* The title wraps to a second line instead of being cut mid-word,
                   which is what made these cards unreadable. */}
               <span className="collection-paper-title">{paper.title}</span>
-              <small className="collection-paper-meta">
-                {[
-                  paper.authors[0]?.displayName
-                    ? `${paper.authors[0].displayName}${paper.authors.length > 1 ? ` +${paper.authors.length - 1}` : ""}`
-                    : "",
-                  paper.venueAcronym || paper.venueName || "",
-                  paper.year ? String(paper.year) : "",
-                ].filter(Boolean).join(" · ")}
-              </small>
+              {/* Up to three names, like the paper detail panel, then "+N". */}
+              <small className="collection-paper-meta">{paperMetaLine(paper)}</small>
             </button>
           </li>
         ))}
