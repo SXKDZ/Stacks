@@ -377,8 +377,13 @@
   font-size: var(--type-micro);
   font-weight: 500;
   line-height: 1.4;
-  /* Long titles (a full paper title, a file path) wrap instead of running off. */
+  /* Long titles (a full paper title, a file path) wrap instead of running off.
+     `width: max-content` with a cap keeps the box the SAME size wherever it is
+     placed: without it the browser shrank the bubble to whatever room was left to
+     the right of its position, so one title wrapped over six lines near the screen
+     edge and two lines elsewhere. */
   max-width: 320px;
+  width: max-content;
   padding: 6px 9px;
   pointer-events: none;
   position: fixed;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -33,42 +33,57 @@ interface TooltipState {
 }
 
 /**
- * The bubble itself. It measures its own box after mounting so it can be kept
- * fully on screen: a tooltip near the right edge or the bottom would otherwise be
- * cut off, and a clamp needs the real width and height, not an estimate.
+ * The bubble itself.
+ *
+ * Measured off-screen on the first pass, then placed on the second. Measuring in
+ * position doesn't work: the browser sizes a fixed element to the room left
+ * between its `left` and the viewport edge, so a bubble near the right edge was
+ * squeezed to ~127px and the same title wrapped over six lines there but two lines
+ * elsewhere. Rendering at the top-left first yields the true natural width, and the
+ * edge clamp then uses that.
  */
 function TooltipBubble({ text, x, y, anchorTop }: { text: string; x: number; y: number; anchorTop: number }) {
+  const nodeRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
-  const measure = (node: HTMLDivElement | null) => {
+
+  // A layout effect, not a ref callback: the callback does not re-run when only
+  // `text` changes (same element), which left the bubble stuck in its hidden
+  // measuring state. Reset-then-measure keyed on the text handles both.
+  useLayoutEffect(() => {
+    const node = nodeRef.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
-    if (!box || Math.abs(box.width - rect.width) > 1 || Math.abs(box.height - rect.height) > 1) {
-      setBox({ width: rect.width, height: rect.height });
-    }
-  };
+    setBox({ width: rect.width, height: rect.height });
+  }, [text]);
 
   const margin = 8;
-  const width = box?.width ?? 0;
-  const height = box?.height ?? 0;
-  // Below the pointer by default; above it when that would run off the bottom.
-  // Flipping uses the ANCHOR's top, not the pointer's, so the bubble never covers
-  // the thing it describes.
-  const fitsBelow = y + OFFSET + height + margin <= window.innerHeight;
-  const top = fitsBelow ? y + OFFSET : Math.max(margin, anchorTop - OFFSET - height);
-  // Centred on the pointer, then pulled back inside either edge.
-  const left = Math.min(
-    Math.max(margin, x - width / 2),
-    Math.max(margin, window.innerWidth - width - margin),
-  );
+  const measured = box !== null;
+  // Below the pointer by default; above the ANCHOR when there is no room below, so
+  // the bubble never covers the thing it describes.
+  const fitsBelow = measured && y + OFFSET + box.height + margin <= window.innerHeight;
+  const top = !measured ? 0 : fitsBelow ? y + OFFSET : Math.max(margin, anchorTop - OFFSET - box.height);
+  // Centred on the pointer, then pulled back inside either edge using the real width.
+  const left = !measured
+    ? 0
+    : Math.min(
+      Math.max(margin, x - box.width / 2),
+      Math.max(margin, window.innerWidth - box.width - margin),
+    );
 
   return (
     <div
-      ref={measure}
+      ref={nodeRef}
       className="app-tooltip"
       role="tooltip"
       aria-hidden="true"
-      // Hidden until measured, so the first paint is never at the wrong spot.
-      style={{ top, left, visibility: box ? "visible" : "hidden" }}
+      style={{
+        top,
+        left,
+        // Hidden for the measuring pass only, so the first paint is never at the
+        // wrong spot; pinned to the measured width once placed.
+        visibility: measured ? "visible" : "hidden",
+        ...(measured ? { width: box.width } : {}),
+      }}
     >
       {text}
     </div>
