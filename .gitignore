@@ -57,6 +57,8 @@ tests/**/*probe*
 tests/**/__scratch*
 tests/_p*.test.ts
 tests/_rev/
+tests/_wfrev/
+tests/zz-*
 tmp-probe/
 tmpprobe/
 tests/**/rvw-*

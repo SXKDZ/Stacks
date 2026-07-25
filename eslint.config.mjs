@@ -19,6 +19,7 @@ const eslintConfig = defineConfig([
     "tests/**/*probe*",
     "tests/**/__scratch*",
     "tests/_*",
+    "tests/zz-*",
     "tmp-probe/**",
     "tmpprobe/**",
     "tests/**/rvw-*",
