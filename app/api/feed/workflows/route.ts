@@ -40,7 +40,13 @@ export async function GET(): Promise<Response> {
  *  an unparseable meta so the UI can flag them. */
 export async function POST(request: Request): Promise<Response> {
   const parsed = parseWith(FeedWorkflowsRequestSchema, await request.json().catch(() => ({})));
-  const workflows = normalize(parsed.ok ? parsed.data.workflows : undefined);
+  // A body that carries no workflows array is a malformed request, not an
+  // instruction to save an empty list: answering 200 after replacing the saved
+  // set with [] silently deleted every workflow the user had written.
+  if (!parsed.ok || !Array.isArray(parsed.data.workflows)) {
+    return Response.json({ error: "Send a workflows array to save." }, { status: 400 });
+  }
+  const workflows = normalize(parsed.data.workflows);
   writeFeedWorkflows(workflows);
   return Response.json({ workflows });
 }

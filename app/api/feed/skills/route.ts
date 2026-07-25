@@ -16,7 +16,13 @@ export async function GET(): Promise<Response> {
 /** Replace the saved skills with the posted set (validated + normalized). */
 export async function POST(request: Request): Promise<Response> {
   const parsed = parseWith(FeedSkillsRequestSchema, await request.json().catch(() => ({})));
-  const skills = normalizeFeedSkills(parsed.ok ? parsed.data.skills : undefined);
+  // A malformed body must not overwrite what is saved. normalizeFeedSkills falls
+  // back to the seed defaults for a non-array, so without this check a bad request
+  // silently replaced the user's own skills with the built-in set.
+  if (!parsed.ok || !Array.isArray(parsed.data.skills)) {
+    return Response.json({ error: "Send a skills array to save." }, { status: 400 });
+  }
+  const skills = normalizeFeedSkills(parsed.data.skills);
   writeFeedSkills(skills);
   return Response.json({ skills });
 }
