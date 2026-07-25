@@ -57,7 +57,7 @@ function cleanString(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
-  const cleaned = value.trim();
+  const cleaned = stripControlCharacters(value).trim();
   return cleaned || null;
 }
 
@@ -70,6 +70,32 @@ function cleanNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+/**
+ * A publication year: a whole number in a range a paper can actually carry.
+ *
+ * The column is declared INTEGER but SQLite is dynamically typed, so a fractional
+ * value was stored as REAL (2026.7) and 1e21 was stored in exponent form, both of
+ * which then sort and display as nonsense. Out-of-range values are dropped rather
+ * than clamped: a wrong year is worse than none.
+ */
+function cleanYear(value: unknown): number | null {
+  const parsed = cleanNumber(value);
+  if (parsed === null || !Number.isInteger(parsed)) {
+    return parsed === null ? null : (Number.isFinite(parsed) ? Math.trunc(parsed) : null);
+  }
+  return parsed >= 1000 && parsed <= 2200 ? parsed : null;
+}
+
+/**
+ * Strip control characters a client should never send in a stored string.
+ *
+ * A NUL byte reached SQLite raw, where the value is stored but C-string-based
+ * tooling sees a truncated title, so "N\0ul" reads as "N".
+ */
+function stripControlCharacters(value: string): string {
+  return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
 }
 
 /**
@@ -91,7 +117,7 @@ function textValue(value: unknown): string | null {
     return null;
   }
   if (typeof value === "string") {
-    return value;
+    return stripControlCharacters(value);
   }
   if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
     return String(value);
@@ -443,7 +469,7 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       id,
       title,
       abstract: normalizedAbstract,
-      year: cleanNumber(data.year),
+      year: cleanYear(data.year),
       paperType: cleanString(data.paperType) ?? "article",
       volume: cleanString(data.volume),
       issue: cleanString(data.issue),
@@ -635,12 +661,22 @@ async function updateEntities(
   const fields = entityFields[entity];
   const table = entityTables[entity];
   const assignments: Record<string, unknown> = {};
+  // Own properties only: `in` walks the prototype chain, so `toString`,
+  // `constructor`, and `valueOf` all passed the guard and were written as columns.
   for (const [key, value] of Object.entries(data)) {
-    if (key in fields) {
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
       // A collection's color is constrained to the fixed palette (or null);
       // every other editable column on these entities is free TEXT, coerced so
       // a stray boolean/object from an API caller cannot crash the bind.
       assignments[key] = key === "color" ? normalizeCollectionColor(value) : textValue(value);
+    }
+  }
+  // The name is what identifies the record everywhere in the UI, so a rename to
+  // whitespace (or to nothing) is refused rather than producing an unnameable row.
+  // createEntity already enforces this; the update path did not.
+  for (const nameField of ["displayName", "name"]) {
+    if (nameField in assignments && !cleanString(assignments[nameField])) {
+      throw new Error(`A ${entity} name is required.`);
     }
   }
   const database = await ensureDatabase();
@@ -676,6 +712,13 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   if ("title" in data && !cleanString(data.title)) {
     throw new Error("A paper title is required.");
   }
+  // The paper has to exist. Without this the UPDATE matched no rows and still
+  // committed, so the route answered 200 for an edit that changed nothing, and any
+  // venue named in the payload was created anyway, leaving an orphan venue behind.
+  const existing = database.select({ id: papers.id }).from(papers).where(eq(papers.id, id)).get();
+  if (!existing) {
+    throw new Error("That paper is no longer in your library.");
+  }
   // Build a typed, coerced assignment set. Each column gets exactly the shape
   // SQLite expects (text/number/boolean-as-0/1), so no client value can crash
   // the bind the way the previous raw-passthrough did.
@@ -689,8 +732,8 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   if ("notes" in data) assignments.notes = typeof data.notes === "string" ? data.notes : "";
   if ("paperType" in data) assignments.paperType = cleanString(data.paperType) ?? "other";
   if ("readingStatus" in data) assignments.readingStatus = cleanString(data.readingStatus) ?? "inbox";
-  if ("year" in data) assignments.year = cleanNumber(data.year);
-  if ("favorite" in data) assignments.favorite = Boolean(data.favorite);
+  if ("year" in data) assignments.year = cleanYear(data.year);
+  if ("favorite" in data) assignments.favorite = booleanValue(data.favorite);
   for (const key of Object.keys(paperTextFields) as Array<keyof typeof paperTextFields>) {
     if (key in data) {
       const value = textValue(data[key]);
@@ -862,7 +905,15 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(await readSnapshot());
   } catch (error) {
     const raw = error instanceof Error ? error.message : "";
-    const status = /UNIQUE constraint failed/i.test(raw) ? 409 : 500;
+    // A rejected request is the caller's fault (400), a duplicate is a conflict
+    // (409), and anything else is ours (500). Validation failures raised as plain
+    // Errors used to all surface as 500, which reads to a client as "the server
+    // broke" rather than "fix your input".
+    const status = /UNIQUE constraint failed/i.test(raw)
+      ? 409
+      : /is required|no longer in your library|already in your library/i.test(raw)
+        ? 400
+        : 500;
     return jsonError(describeDbError(error) || "The library change failed.", status);
   }
 }

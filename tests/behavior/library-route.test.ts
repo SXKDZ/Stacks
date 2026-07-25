@@ -255,3 +255,110 @@ test("a string 'false' does not star a paper", async () => {
   assert.equal(snap.papers.find((p) => p.title === "Also Not Starred")?.favorite, false);
   assert.equal(snap.papers.find((p) => p.title === "Really Starred")?.favorite, true);
 });
+
+test("a year is stored as a plausible whole number or not at all", async () => {
+  // The column is INTEGER but SQLite is dynamically typed, so a fractional value
+  // was stored as REAL (2026.7) and 1e21 in exponent form, both of which then sort
+  // and display as nonsense.
+  const cases: Array<[string, unknown, number | null]> = [
+    ["year fractional", 2026.7, 2026],
+    ["year huge", 1e21, null],
+    ["year negative", -500, null],
+    ["year normal", 2024, 2024],
+    ["year as text", "2023", 2023],
+  ];
+  for (const [title, input] of cases) {
+    await mutate({ entity: "paper", action: "create", data: { title, paperType: "article", year: input } });
+  }
+  const snap = await snapshot();
+  for (const [title, , expected] of cases) {
+    const stored = snap.papers.find((paper) => paper.title.toLowerCase() === title.toLowerCase());
+    assert.equal(stored?.year ?? null, expected, `${title} should store ${expected}`);
+  }
+});
+
+test("non-name author entries never become author records", async () => {
+  // String(entry) turned an object into the author "[object Object]", a number into
+  // "42", and null into "null", each inserted as a permanent shared record.
+  await mutate({
+    entity: "paper",
+    action: "create",
+    data: {
+      title: "mixed author payload",
+      paperType: "article",
+      authors: [{ name: "Ada Lovelace" }, 42, null, "Real Person", ""],
+    },
+  });
+  const snap = await snapshot();
+  const names = snap.authors.map((author) => author.displayName);
+  assert.ok(names.includes("Ada Lovelace"), "a structured entry's name is read");
+  assert.ok(names.includes("Real Person"));
+  for (const junk of ["[object Object]", "42", "null", "undefined"]) {
+    assert.equal(names.includes(junk), false, `${junk} must never be an author`);
+  }
+});
+
+test("control characters are stripped from stored text", async () => {
+  // A NUL byte reached SQLite raw, where C-string tooling sees a truncated title.
+  const withNul = `Robust${String.fromCharCode(0)} Title`;
+  await mutate({ entity: "paper", action: "create", data: { title: withNul, paperType: "article" } });
+  const snap = await snapshot();
+  const stored = snap.papers.find((paper) => paper.title.startsWith("Robust"));
+  assert.ok(stored, "the paper is stored");
+  assert.equal([...stored.title].some((char) => char.charCodeAt(0) === 0), false, "no NUL survives");
+});
+
+test("updating a paper that does not exist is refused, and creates nothing", async () => {
+  // The UPDATE matched no rows and still committed, so the route answered 200 for an
+  // edit that changed nothing while creating the venue named in the payload.
+  const before = await snapshot();
+  const result = await mutate({
+    entity: "paper",
+    action: "update",
+    id: "paper-does-not-exist",
+    data: { title: "ghost", paperType: "article", venueName: "Phantom Venue" },
+  });
+  assert.equal(result.status, 400);
+  const after = await snapshot();
+  assert.equal(after.venues.some((venue) => venue.name === "Phantom Venue"), false, "no orphan venue");
+  assert.equal(after.papers.length, before.papers.length);
+});
+
+test("renaming a record to whitespace is refused", async () => {
+  // The name identifies the record everywhere in the UI; createEntity enforced
+  // this and the update path did not, so a record could be left unnameable.
+  const snap = await snapshot();
+  const author = snap.authors[0];
+  assert.ok(author);
+  const blank = await mutate({ entity: "author", action: "update", id: author.id, data: { displayName: "   " } });
+  assert.equal(blank.status, 400);
+  assert.equal(
+    (await snapshot()).authors.find((candidate) => candidate.id === author.id)?.displayName,
+    author.displayName,
+    "the existing name is untouched",
+  );
+  // A real rename still works.
+  const renamed = await mutate({ entity: "author", action: "update", id: author.id, data: { displayName: "Renamed Author" } });
+  assert.equal(renamed.status, 200);
+  assert.equal(
+    (await snapshot()).authors.find((candidate) => candidate.id === author.id)?.displayName,
+    "Renamed Author",
+  );
+});
+
+test("a payload of only prototype keys writes no column", async () => {
+  // `key in fields` walks the prototype chain, so toString/constructor/valueOf all
+  // passed the guard and were written as columns.
+  const snap = await snapshot();
+  const venue = snap.venues[0];
+  assert.ok(venue);
+  const result = await mutate({
+    entity: "venue",
+    action: "update",
+    id: venue.id,
+    data: { toString: "x", constructor: "y", valueOf: "z", hasOwnProperty: "w" },
+  });
+  assert.equal(result.status, 200, "the request is harmless, just empty");
+  const after = (await snapshot()).venues.find((candidate) => candidate.id === venue.id);
+  assert.equal(after?.name, venue.name, "nothing about the record changed");
+});
