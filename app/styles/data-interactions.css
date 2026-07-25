@@ -661,6 +661,63 @@
   font-size: var(--type-micro);
 }
 
+/* The per-task step trail: what the job actually did, in order. The row itself
+   truncates its single-line summary, so alignment here starts from the row's own
+   text column rather than the status icon. */
+.background-task-steps-toggle {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--brand-blue-strong);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  margin-top: 3px;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);
+  text-underline-offset: 2px;
+}
+
+.background-task-steps-toggle:hover {
+  color: var(--brand-blue);
+}
+
+.background-task-steps {
+  border-left: 2px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  list-style: none;
+  margin: 5px 0 2px;
+  padding: 0 0 0 8px;
+}
+
+.background-task-steps > li {
+  color: var(--muted);
+  display: grid;
+  font-size: var(--type-micro);
+  gap: 7px;
+  grid-template-columns: auto minmax(0, 1fr);
+  line-height: 1.45;
+}
+
+/* A step message wraps: truncating it would hide the detail it exists to give. */
+.background-task-steps > li > span {
+  overflow-wrap: anywhere;
+}
+
+.background-task-steps > li > time {
+  color: var(--soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.background-task-steps > li.is-warn > span {
+  color: var(--amber);
+}
+
+.background-task-steps > li.is-error > span {
+  color: var(--rose);
+}
+
 .background-task-row.is-running > svg {
   color: var(--brand-blue);
 }

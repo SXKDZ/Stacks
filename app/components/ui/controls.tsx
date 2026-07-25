@@ -186,9 +186,12 @@ export function StatusPill({
   className?: string;
 }) {
   const label = readingStatusLabel(status);
-  const normalizedStatus = status === "read" ? "complete" : status === "to-read" ? "inbox" : status;
+  // The legacy spellings map onto the three states the pill actually renders.
+  const aliases: Record<string, string> = { read: "complete", "to-read": "inbox" };
+  const normalizedStatus = aliases[status] ?? status;
   const visualStatus = normalizedStatus === "complete" || normalizedStatus === "reading" ? normalizedStatus : "inbox";
-  const Icon = normalizedStatus === "complete" ? CheckCircle2 : normalizedStatus === "reading" ? Clock3 : Inbox;
+  const icons = { complete: CheckCircle2, reading: Clock3, inbox: Inbox };
+  const Icon = icons[visualStatus];
 
   return (
     <span

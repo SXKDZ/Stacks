@@ -5,6 +5,13 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 type TaskStatus = "running" | "complete" | "error";
 
+/** One recorded moment inside a task: what happened, and when. */
+export interface TaskStep {
+  at: number;
+  message: string;
+  tone?: "info" | "warn" | "error";
+}
+
 interface BackgroundTask {
   id: string;
   label: string;
@@ -12,10 +19,23 @@ interface BackgroundTask {
   startedAt: number;
   completedAt?: number;
   detail?: string;
+  /** The task's own progress trail, newest last. */
+  steps?: TaskStep[];
+}
+
+/**
+ * What a running operation can report about itself.
+ *
+ * Passed to every `runTask` callback so a multi-step job (resolve an identifier,
+ * fetch metadata, download a PDF, save the record) leaves a trail explaining where
+ * it got to, instead of collapsing to one line on failure.
+ */
+export interface TaskLogger {
+  step: (message: string, tone?: TaskStep["tone"]) => void;
 }
 
 interface BackgroundTaskContextValue {
-  runTask: <Result>(label: string, operation: () => Promise<Result>) => Promise<Result>;
+  runTask: <Result>(label: string, operation: (log: TaskLogger) => Promise<Result>) => Promise<Result>;
   tasks: BackgroundTask[];
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -56,17 +76,27 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
     window.sessionStorage.setItem(TASK_HISTORY_KEY, JSON.stringify(tasks));
   }, [tasks]);
 
-  const runTask = useCallback(async <Result,>(label: string, operation: () => Promise<Result>): Promise<Result> => {
+  const runTask = useCallback(async <Result,>(label: string, operation: (log: TaskLogger) => Promise<Result>): Promise<Result> => {
     const id = crypto.randomUUID();
-    const task: BackgroundTask = { id, label, status: "running", startedAt: Date.now() };
+    const task: BackgroundTask = { id, label, status: "running", startedAt: Date.now(), steps: [] };
     setTasks((current) => [task, ...current].slice(0, 40));
+    const append = (step: TaskStep) => {
+      setTasks((current) => current.map((entry) => entry.id === id
+        // Capped: a long import should not grow the log without bound.
+        ? { ...entry, steps: [...(entry.steps ?? []), step].slice(-30) }
+        : entry));
+    };
+    const log: TaskLogger = { step: (message, tone) => append({ at: Date.now(), message, tone }) };
     try {
-      const result = await operation();
-      setTasks((current) => current.map((task) => task.id === id ? { ...task, status: "complete", completedAt: Date.now() } : task));
+      const result = await operation(log);
+      setTasks((current) => current.map((entry) => entry.id === id ? { ...entry, status: "complete", completedAt: Date.now() } : entry));
       return result;
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The task failed.";
-      setTasks((current) => current.map((task) => task.id === id ? { ...task, status: "error", detail, completedAt: Date.now() } : task));
+      // The failure is recorded as a step too, so the trail reads in order right up
+      // to what went wrong.
+      append({ at: Date.now(), message: detail, tone: "error" });
+      setTasks((current) => current.map((entry) => entry.id === id ? { ...entry, status: "error", detail, completedAt: Date.now() } : entry));
       setOpen(true);
       throw error;
     }
@@ -87,9 +117,27 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** A task's recorded steps, shown under it once expanded. */
+function TaskStepList({ steps }: { steps: TaskStep[] }) {
+  return (
+    <ol className="background-task-steps">
+      {steps.map((step, index) => (
+        <li key={`${step.at}-${index}`} className={step.tone ? `is-${step.tone}` : undefined}>
+          <time>{new Date(step.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}</time>
+          <span>{step.message}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function BackgroundTaskDock() {
   const { tasks, open, setOpen, dismissTask, clearFinished } = useBackgroundTasks();
   const running = tasks.filter((task) => task.status === "running").length;
+  // Which tasks have their step trail open. Failures start expanded, because that is
+  // when the detail is the reason the user opened the log at all.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const isExpanded = (task: BackgroundTask) => expanded[task.id] ?? task.status === "error";
   return (
     <aside className={`background-task-dock ${open ? "is-open" : ""}`} aria-label="Activity log">
       {open ? (
@@ -102,7 +150,23 @@ export function BackgroundTaskDock() {
             {!tasks.length ? <p className="activity-log-empty">Imports, AI jobs, sync, and repairs will appear here.</p> : tasks.map((task) => (
               <div className={`background-task-row is-${task.status}`} key={task.id}>
                 {task.status === "running" ? <LoaderCircle className="spin" size={16} /> : task.status === "complete" ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
-                <span><strong>{task.label}</strong><small title={task.detail}>{task.detail || (task.status === "running" ? "Running" : task.status === "complete" ? "Completed" : "Needs attention")} · {new Date(task.completedAt ?? task.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small></span>
+                <span>
+                  <strong>{task.label}</strong>
+                  <small>{task.detail || (task.status === "running" ? "Running" : task.status === "complete" ? "Completed" : "Needs attention")} · {new Date(task.completedAt ?? task.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
+                  {task.steps?.length ? (
+                    <>
+                      <button
+                        type="button"
+                        className="background-task-steps-toggle"
+                        aria-expanded={isExpanded(task)}
+                        onClick={() => setExpanded((current) => ({ ...current, [task.id]: !isExpanded(task) }))}
+                      >
+                        {isExpanded(task) ? "Hide details" : `Show ${task.steps.length} step${task.steps.length === 1 ? "" : "s"}`}
+                      </button>
+                      {isExpanded(task) ? <TaskStepList steps={task.steps} /> : null}
+                    </>
+                  ) : null}
+                </span>
                 {task.status !== "running" ? <button type="button" onClick={() => dismissTask(task.id)} aria-label={`Dismiss ${task.label}`}><X size={13} /></button> : null}
             </div>
             ))}
