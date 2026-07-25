@@ -9,7 +9,7 @@ import {
   createIssue,
   editComment,
   getCommentBody,
-  listComments,
+  listCommentsPaged,
   listIssues,
   patchIssueState,
   patchIssueTitle,
@@ -178,87 +178,103 @@ export async function POST(): Promise<Response> {
     //    set), so a purely-local change is never missed.
     const feeds = database.select().from(feedSnippets).all();
     for (const feed of feeds) {
-      let issueNumber = feed.issueNumber;
-      if (!issueNumber) {
-        issueNumber = await createIssue(config, { title: feed.title, body: feed.instruction || feed.title });
-        database.update(feedSnippets).set({ issueNumber, issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
-        counts.issuesCreated += 1;
-      } else if (feed.issueTitleSynced === null) {
-        // A feed synced before rename tracking existed: adopt the current title
-        // as the base (no push) so future renames on either side are detected.
-        database.update(feedSnippets).set({ issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
-        feed.issueTitleSynced = feed.title;
-      } else if (feed.title !== feed.issueTitleSynced) {
-        // The feed was renamed locally since the last sync — push it (local wins).
-        await patchIssueTitle(config, issueNumber, feed.title);
-        database.update(feedSnippets).set({ issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
-        feed.issueTitleSynced = feed.title;
-        counts.titlesRenamed += 1;
-      }
+      // One feed whose issue was deleted on GitHub must not wedge the whole sync:
+      // every outbound call below 404s, and that error used to escape to the route
+      // and return 400, so no later feed was ever processed. Unlink the feed
+      // instead, and the next pass opens a fresh issue for it.
+      try {
+        let issueNumber = feed.issueNumber;
+        if (!issueNumber) {
+          issueNumber = await createIssue(config, { title: feed.title, body: feed.instruction || feed.title });
+          database.update(feedSnippets).set({ issueNumber, issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
+          counts.issuesCreated += 1;
+        } else if (feed.issueTitleSynced === null) {
+          // A feed synced before rename tracking existed: adopt the current title
+          // as the base (no push) so future renames on either side are detected.
+          database.update(feedSnippets).set({ issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
+          feed.issueTitleSynced = feed.title;
+        } else if (feed.title !== feed.issueTitleSynced) {
+          // The feed was renamed locally since the last sync — push it (local wins).
+          await patchIssueTitle(config, issueNumber, feed.title);
+          database.update(feedSnippets).set({ issueTitleSynced: feed.title }).where(eq(feedSnippets.id, feed.id)).run();
+          feed.issueTitleSynced = feed.title;
+          counts.titlesRenamed += 1;
+        }
 
-      // Mirror the collapsed flag to the issue's open/closed state, but only when
-      // it changed since the last sync (issueStateSynced is the 3-way base). A
-      // freshly created issue is already open, so it baselines without an API call.
-      const desiredState = feed.collapsed ? "closed" : "open";
-      const stateBase = feed.issueStateSynced ?? "open";
-      if (desiredState !== stateBase) {
-        await patchIssueState(config, issueNumber, desiredState);
-        counts[desiredState === "closed" ? "issuesClosed" : "issuesReopened"] += 1;
-      }
-      if (feed.issueStateSynced !== desiredState) {
-        database.update(feedSnippets).set({ issueStateSynced: desiredState }).where(eq(feedSnippets.id, feed.id)).run();
-        feed.issueStateSynced = desiredState;
-      }
-      const messages = database
-        .select()
-        .from(feedMessages)
-        .where(eq(feedMessages.snippetId, feed.id))
-        .orderBy(asc(feedMessages.createdAt))
-        .all();
-      for (const message of messages) {
-        if (!MIRRORED_KINDS.has(message.kind)) continue;
-        // Backfill: a message mirrored before attachment upload existed has a
-        // comment but no "Attachments:" section. Upload its files and edit the
-        // comment to add the links, once — attachmentsSynced records completion
-        // so the probe doesn't re-fetch every old comment on every sync.
-        if (message.githubCommentId) {
-          if (!message.attachments || message.attachmentsSynced) continue;
-          const existing = await getCommentBody(config, message.githubCommentId);
-          // Deleted upstream, already carrying links, or nothing uploadable:
-          // in every case there is nothing left to do on later syncs.
-          if (existing !== null && !existing.includes("Attachments:")) {
-            const links = await mirrorAttachments(config, feed.id, message.attachments, counts);
-            if (links) {
-              await editComment(config, message.githubCommentId, `${existing.replace(/\s+$/, "")}\n\n${links}`);
+        // Mirror the collapsed flag to the issue's open/closed state, but only when
+        // it changed since the last sync (issueStateSynced is the 3-way base). A
+        // freshly created issue is already open, so it baselines without an API call.
+        const desiredState = feed.collapsed ? "closed" : "open";
+        const stateBase = feed.issueStateSynced ?? "open";
+        if (desiredState !== stateBase) {
+          await patchIssueState(config, issueNumber, desiredState);
+          counts[desiredState === "closed" ? "issuesClosed" : "issuesReopened"] += 1;
+        }
+        if (feed.issueStateSynced !== desiredState) {
+          database.update(feedSnippets).set({ issueStateSynced: desiredState }).where(eq(feedSnippets.id, feed.id)).run();
+          feed.issueStateSynced = desiredState;
+        }
+        const messages = database
+          .select()
+          .from(feedMessages)
+          .where(eq(feedMessages.snippetId, feed.id))
+          .orderBy(asc(feedMessages.createdAt))
+          .all();
+        for (const message of messages) {
+          if (!MIRRORED_KINDS.has(message.kind)) continue;
+          // Backfill: a message mirrored before attachment upload existed has a
+          // comment but no "Attachments:" section. Upload its files and edit the
+          // comment to add the links, once — attachmentsSynced records completion
+          // so the probe doesn't re-fetch every old comment on every sync.
+          if (message.githubCommentId) {
+            if (!message.attachments || message.attachmentsSynced) continue;
+            const existing = await getCommentBody(config, message.githubCommentId);
+            // Deleted upstream, already carrying links, or nothing uploadable:
+            // in every case there is nothing left to do on later syncs.
+            if (existing !== null && !existing.includes("Attachments:")) {
+              const links = await mirrorAttachments(config, feed.id, message.attachments, counts);
+              if (links) {
+                await editComment(config, message.githubCommentId, `${existing.replace(/\s+$/, "")}\n\n${links}`);
+              }
             }
+            database.update(feedMessages).set({ attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
+            continue;
           }
-          database.update(feedMessages).set({ attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
+          const content = message.content.trim();
+          const attachmentLinks = await mirrorAttachments(config, feed.id, message.attachments, counts);
+          if (!content && !attachmentLinks) continue;
+          const body = [`${mirrorLabel(message.role)}\n\n${content}`, attachmentLinks].filter(Boolean).join("\n\n");
+          const commentId = await postComment(config, issueNumber, body);
+          database.update(feedMessages).set({ githubCommentId: commentId, attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
+          counts.commentsPosted += 1;
+        }
+
+        // Mirror proposed library changes + their status, so mobile sees what the
+        // agent proposed and whether it was applied/rejected. One comment per
+        // proposal, edited when the status changes.
+        const proposals = database.select().from(feedProposals).where(eq(feedProposals.snippetId, feed.id)).all();
+        for (const proposal of proposals) {
+          const body = proposalCommentBody(proposal.operation, proposal.status);
+          if (!proposal.githubCommentId) {
+            const commentId = await postComment(config, issueNumber, body);
+            database.update(feedProposals).set({ githubCommentId: commentId, githubStatusSynced: proposal.status }).where(eq(feedProposals.id, proposal.id)).run();
+            counts.proposalsPosted += 1;
+          } else if (proposal.githubStatusSynced !== proposal.status) {
+            await editComment(config, proposal.githubCommentId, body);
+            database.update(feedProposals).set({ githubStatusSynced: proposal.status }).where(eq(feedProposals.id, proposal.id)).run();
+            counts.proposalsUpdated += 1;
+          }
+        }
+      } catch (error) {
+        if (error instanceof GitHubError && (error.status === 404 || error.status === 410)) {
+          database.update(feedSnippets)
+            .set({ issueNumber: null, issueTitleSynced: null, issueStateSynced: null })
+            .where(eq(feedSnippets.id, feed.id))
+            .run();
+          counts.feedsUnlinked += 1;
           continue;
         }
-        const content = message.content.trim();
-        const attachmentLinks = await mirrorAttachments(config, feed.id, message.attachments, counts);
-        if (!content && !attachmentLinks) continue;
-        const body = [`${mirrorLabel(message.role)}\n\n${content}`, attachmentLinks].filter(Boolean).join("\n\n");
-        const commentId = await postComment(config, issueNumber, body);
-        database.update(feedMessages).set({ githubCommentId: commentId, attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
-        counts.commentsPosted += 1;
-      }
-
-      // Mirror proposed library changes + their status, so mobile sees what the
-      // agent proposed and whether it was applied/rejected. One comment per
-      // proposal, edited when the status changes.
-      const proposals = database.select().from(feedProposals).where(eq(feedProposals.snippetId, feed.id)).all();
-      for (const proposal of proposals) {
-        const body = proposalCommentBody(proposal.operation, proposal.status);
-        if (!proposal.githubCommentId) {
-          const commentId = await postComment(config, issueNumber, body);
-          database.update(feedProposals).set({ githubCommentId: commentId, githubStatusSynced: proposal.status }).where(eq(feedProposals.id, proposal.id)).run();
-          counts.proposalsPosted += 1;
-        } else if (proposal.githubStatusSynced !== proposal.status) {
-          await editComment(config, proposal.githubCommentId, body);
-          database.update(feedProposals).set({ githubStatusSynced: proposal.status }).where(eq(feedProposals.id, proposal.id)).run();
-          counts.proposalsUpdated += 1;
-        }
+        throw error;
       }
     }
 
@@ -268,8 +284,14 @@ export async function POST(): Promise<Response> {
       if (feed.issueNumber) linked.set(feed.issueNumber, feed);
     }
     const { issues, truncated } = await listIssues(config, since);
+    // GitHub's updated-sort pagination can legitimately return the same issue
+    // twice (it moves between pages as it is touched). Inserting it twice hit the
+    // unique index on issue_number and aborted the whole sync with a 400.
+    const handled = new Set<number>();
     for (const issue of issues) {
       if (issue.isPullRequest) continue;
+      if (handled.has(issue.number)) continue;
+      handled.add(issue.number);
       const feed = linked.get(issue.number);
 
       if (!feed) {
@@ -277,6 +299,10 @@ export async function POST(): Promise<Response> {
         // history — most importantly a deleted feed's issue (closed via the
         // outbox), which must not resurrect the feed it belonged to.
         if (issue.state !== "open") continue;
+        // A whitespace-only title is truthy, so the "Untitled" fallback never fired
+        // and the instruction collapsed to empty: the result was a junk feed that
+        // immediately launched an agent with no instruction at all.
+        if (!issue.title.trim() && !(issue.body ?? "").trim()) continue;
         // A brand-new issue (opened from a phone): start a feed for it.
         const id = `feed-${crypto.randomUUID()}`;
         const sessionId = crypto.randomUUID();
@@ -284,18 +310,22 @@ export async function POST(): Promise<Response> {
         // Combine title + body, but don't repeat the title when the body just
         // restates it (a phone issue often carries the same text in both, or the
         // title is a truncated prefix of the body), which showed the query twice.
+        // Store and baseline the SAME string. Baselining the untruncated remote
+        // title against a truncated local one made every later sync see a local
+        // rename and push the truncation back to GitHub.
+        const localTitle = issue.title.trim().slice(0, 120) || "Untitled";
         const issueTitle = issue.title.trim();
         const issueBody = (issue.body ?? "").trim();
         const bodyEchoesTitle = issueBody === issueTitle || issueBody.startsWith(issueTitle);
         const instruction = (bodyEchoesTitle ? issueBody || issueTitle : [issueTitle, issueBody].filter(Boolean).join("\n\n")).trim();
         database.insert(feedSnippets).values({
           id,
-          title: issue.title.slice(0, 120) || "Untitled",
+          title: localTitle,
           instruction,
           status: "queued",
           sessionId: "",
           issueNumber: issue.number,
-          issueTitleSynced: issue.title,
+          issueTitleSynced: localTitle,
           createdAt: now,
           updatedAt: now,
         }).run();
@@ -309,7 +339,8 @@ export async function POST(): Promise<Response> {
       // (local rename already pushed above, so the base now equals the local
       // title). If the title differs from the just-synced base, GitHub changed it.
       if (issue.title && issue.title !== feed.title && feed.issueTitleSynced === feed.title) {
-        database.update(feedSnippets).set({ title: issue.title.slice(0, 120), issueTitleSynced: issue.title }).where(eq(feedSnippets.id, feed.id)).run();
+        const adopted = issue.title.trim().slice(0, 120) || "Untitled";
+        database.update(feedSnippets).set({ title: adopted, issueTitleSynced: adopted }).where(eq(feedSnippets.id, feed.id)).run();
         counts.titlesRenamed += 1;
       }
 
@@ -333,7 +364,11 @@ export async function POST(): Promise<Response> {
           localByComment.set(message.githubCommentId, { id: message.id, content: message.content, role: message.role });
         }
       }
-      const comments = await listComments(config, issue.number);
+      const { comments, truncated: commentsTruncated } = await listCommentsPaged(config, issue.number);
+      if (commentsTruncated) {
+        // Some of this thread was never read, so the mark must not move past it.
+        deferredInbound = true;
+      }
 
       // Edits to already-synced HUMAN comments: keep the local copy in step.
       for (const comment of comments) {

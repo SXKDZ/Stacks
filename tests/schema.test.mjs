@@ -761,6 +761,30 @@ test("auto-back up runs a debounced backup after live library changes", async ()
   assert.match(library, /scheduleAutoSync\(\);\s*\n\s*return Response\.json\(await readSnapshot\(\)\)/);
 });
 
+test("the GitHub sync survives a deleted issue, a repeated issue, and a long thread", async () => {
+  const [sync, client] = await Promise.all([
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
+  ]);
+  // A feed whose issue was deleted upstream 404s on every outbound call. That used
+  // to escape to the route as a 400, so no later feed was processed at all.
+  assert.match(sync, /error\.status === 404 \|\| error\.status === 410/);
+  assert.match(sync, /feedsUnlinked \+= 1/);
+  // Updated-sort pagination can return one issue twice; inserting it twice hit the
+  // unique index on issue_number and aborted the sync.
+  assert.match(sync, /const handled = new Set<number>\(\)/);
+  // A thread longer than the page cap was read as complete, so the high-water mark
+  // advanced past comments that were never ingested.
+  assert.match(client, /export async function listCommentsPaged/);
+  assert.match(sync, /commentsTruncated/);
+  // The stored title and its 3-way base must be the same string, or every later
+  // sync sees a phantom local rename and pushes the truncation to GitHub.
+  assert.match(sync, /issueTitleSynced: localTitle/);
+  assert.doesNotMatch(sync, /issueTitleSynced: issue\.title\b/);
+  // A repo segment of ".." would collapse the pinned /repos/owner/name path.
+  assert.match(client, /segment === "\." \|\| segment === "\.\."/);
+});
+
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
   // The stylesheets accumulated selectors defined three and four times across
   // files, where the later copy silently won: a value was set in one file and
