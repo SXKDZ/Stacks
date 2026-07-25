@@ -361,14 +361,19 @@
 }
 
 /* The app's own tooltip, drawn by TooltipLayer in place of the browser's native
-   `title` bubble (which cannot be styled and looks like the OS, not Stacks). It is
-   positioned in viewport coordinates and portaled to the body, so it escapes every
-   scroll container and modal clip. */
+   `title` bubble (which cannot be styled and looks like the OS, not Stacks).
+   Positioned in viewport coordinates and portaled to the body, so it escapes every
+   scroll container and modal clip.
+
+   Uses the same raised-surface recipe as the feed's popovers (--surface-2 with
+   --ink text) rather than an inverted chip: an inverted tooltip read as dark in
+   light theme, which looked like a different app's control sitting on the page. */
 .app-tooltip {
-  background: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-2);
-  color: var(--canvas);
+  color: var(--ink);
   font-size: var(--type-micro);
   font-weight: 500;
   line-height: 1.4;
@@ -377,9 +382,6 @@
   padding: 6px 9px;
   pointer-events: none;
   position: fixed;
-  /* Centred on the anchor; the shift is a variable so a future edge-clamp can
-     override it without touching the transform. */
-  transform: translateX(var(--tooltip-shift, -50%));
   white-space: pre-wrap;
   word-break: break-word;
   z-index: 90;
@@ -387,8 +389,8 @@
 }
 
 @keyframes tooltip-in {
-  from { opacity: 0; transform: translateX(var(--tooltip-shift, -50%)) translateY(2px); }
-  to { opacity: 1; transform: translateX(var(--tooltip-shift, -50%)) translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

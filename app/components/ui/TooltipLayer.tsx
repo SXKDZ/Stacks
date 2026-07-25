@@ -25,8 +25,54 @@ const OFFSET = 8;
 
 interface TooltipState {
   text: string;
-  /** Anchor rect, in viewport coordinates. */
-  anchor: { top: number; bottom: number; left: number; right: number };
+  /** Where to put it, in viewport coordinates: just below the pointer. */
+  x: number;
+  y: number;
+  /** The anchor's bottom, used to flip above it when there is no room below. */
+  anchorTop: number;
+}
+
+/**
+ * The bubble itself. It measures its own box after mounting so it can be kept
+ * fully on screen: a tooltip near the right edge or the bottom would otherwise be
+ * cut off, and a clamp needs the real width and height, not an estimate.
+ */
+function TooltipBubble({ text, x, y, anchorTop }: { text: string; x: number; y: number; anchorTop: number }) {
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null);
+  const measure = (node: HTMLDivElement | null) => {
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    if (!box || Math.abs(box.width - rect.width) > 1 || Math.abs(box.height - rect.height) > 1) {
+      setBox({ width: rect.width, height: rect.height });
+    }
+  };
+
+  const margin = 8;
+  const width = box?.width ?? 0;
+  const height = box?.height ?? 0;
+  // Below the pointer by default; above it when that would run off the bottom.
+  // Flipping uses the ANCHOR's top, not the pointer's, so the bubble never covers
+  // the thing it describes.
+  const fitsBelow = y + OFFSET + height + margin <= window.innerHeight;
+  const top = fitsBelow ? y + OFFSET : Math.max(margin, anchorTop - OFFSET - height);
+  // Centred on the pointer, then pulled back inside either edge.
+  const left = Math.min(
+    Math.max(margin, x - width / 2),
+    Math.max(margin, window.innerWidth - width - margin),
+  );
+
+  return (
+    <div
+      ref={measure}
+      className="app-tooltip"
+      role="tooltip"
+      aria-hidden="true"
+      // Hidden until measured, so the first paint is never at the wrong spot.
+      style={{ top, left, visibility: box ? "visible" : "hidden" }}
+    >
+      {text}
+    </div>
+  );
 }
 
 export function TooltipLayer() {
@@ -61,20 +107,21 @@ export function TooltipLayer() {
       return element && element.getAttribute("title")?.trim() ? element : null;
     };
 
-    const show = (element: HTMLElement, immediate: boolean) => {
+    const show = (element: HTMLElement, immediate: boolean, pointer?: { x: number; y: number }) => {
       const text = element.getAttribute("title")?.trim();
       if (!text) return;
       const reveal = () => {
         const rect = element.getBoundingClientRect();
+        // Sit just below the POINTER, the way a native tooltip does, so on a wide
+        // row it appears where the user is looking instead of at the element's
+        // centre. Keyboard focus has no pointer, so it falls back to the anchor.
+        const origin = pointer ?? { x: rect.left + rect.width / 2, y: rect.bottom };
         // Suppress the native bubble only now, so the attribute is present for
         // assistive tech right up to the moment our own tooltip replaces it.
         element.dataset.tooltip = text;
         element.removeAttribute("title");
         stripped = element;
-        setTooltip({
-          text,
-          anchor: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right },
-        });
+        setTooltip({ text, x: origin.x, y: origin.y, anchorTop: rect.top });
       };
       window.clearTimeout(timer);
       if (immediate) {
@@ -93,7 +140,7 @@ export function TooltipLayer() {
       }
       if (element === stripped) return;
       hide();
-      show(element, false);
+      show(element, false, { x: event.clientX, y: event.clientY });
     };
 
     const onFocusIn = (event: FocusEvent) => {
@@ -132,24 +179,8 @@ export function TooltipLayer() {
     return null;
   }
 
-  // Prefer below the anchor; flip above when there isn't room, and clamp
-  // horizontally so a tooltip on a screen-edge control stays fully visible.
-  const below = tooltip.anchor.bottom + OFFSET;
-  const flip = below + 44 > window.innerHeight;
-  const style: React.CSSProperties = flip
-    ? { bottom: window.innerHeight - tooltip.anchor.top + OFFSET }
-    : { top: below };
-  const centre = (tooltip.anchor.left + tooltip.anchor.right) / 2;
-
   return createPortal(
-    <div
-      className="app-tooltip"
-      role="tooltip"
-      aria-hidden="true"
-      style={{ ...style, left: centre, ["--tooltip-shift" as string]: "-50%" }}
-    >
-      {tooltip.text}
-    </div>,
+    <TooltipBubble text={tooltip.text} x={tooltip.x} y={tooltip.y} anchorTop={tooltip.anchorTop} />,
     document.body,
   );
 }
