@@ -90,6 +90,10 @@ export async function POST(request: Request): Promise<Response> {
     created.push({ id, summary: proposalSummary(operation) });
   }
   return Response.json({
+    // Report entries that failed validation even when others succeeded: a mixed
+    // batch used to answer 200 listing only the good ones, so an agent believed
+    // every proposal was queued and the user never saw the discarded ones.
+    ...(errors.length ? { ignored: errors } : {}),
     status: "pending_approval",
     message: "Proposed changes are queued for the user to approve; they are NOT applied yet.",
     proposals: created,

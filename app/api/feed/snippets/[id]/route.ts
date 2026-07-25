@@ -97,6 +97,8 @@ export async function DELETE(
   // Remove the feed/<id> tree (uploaded files + copied library PDFs + session
   // transcripts). Best-effort: a failure here must not fail the delete.
   try {
+    // feedWorkingDir validates the id: without that, an id of "../../x" made this
+    // a recursive delete of an arbitrary directory outside the library.
     rmSync(feedWorkingDir(id), { recursive: true, force: true });
   } catch {
     // The DB rows are already gone; a leftover dir is harmless.

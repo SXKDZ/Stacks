@@ -72,6 +72,19 @@ function cleanNumber(value: unknown): number | null {
   return null;
 }
 
+/**
+ * Coerce a client value to a boolean the way a form or an API caller means it.
+ * `Boolean("false")` and `Boolean("0")` are both true (every non-empty string
+ * is), so the string forms have to be handled explicitly: an importer or an agent
+ * sending "false" meant false.
+ */
+function booleanValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return !["", "false", "0", "no", "off"].includes(value.trim().toLowerCase());
+  }
+  return Boolean(value);
+}
+
 /** Coerce an arbitrary client value into something SQLite can bind as text. */
 function textValue(value: unknown): string | null {
   if (value === "" || value === null || value === undefined) {
@@ -447,7 +460,7 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       summary: cleanString(data.summary) ?? "",
       notes: cleanString(data.notes) ?? "",
       readingStatus: cleanString(data.readingStatus) ?? "inbox",
-      favorite: Boolean(data.favorite),
+      favorite: booleanValue(data.favorite),
       venueId,
     }).run();
 
@@ -829,7 +842,13 @@ export async function POST(request: Request): Promise<Response> {
         if (!ids[0]) {
           return jsonError("A paper id is required for updates.");
         }
-        await updatePaper(ids[0], data);
+        // Every addressed paper, not just the first: a bulk-update of N ids used
+        // to write ids[0] alone and still answer 200, so the other N-1 rows were
+        // silently untouched. (The author/venue/collection branch below already
+        // applied to all of them.)
+        for (const paperId of ids) {
+          await updatePaper(paperId, data);
+        }
       } else {
         await updateEntities(body.entity, ids, data);
       }

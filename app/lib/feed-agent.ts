@@ -48,7 +48,20 @@ function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+/**
+ * The sandboxed working directory for one feed.
+ *
+ * The id is validated here rather than at each call site: it arrives from a URL
+ * segment, and a value like `../../x` would otherwise resolve OUTSIDE the library
+ * root. That mattered in two directions: the attachment route would serve any
+ * file on the machine, and the DELETE handler would `rmSync(..., recursive)` an
+ * arbitrary directory. Feed ids are generated as `feed-<uuid>`, so a plain
+ * segment of id characters is the whole legitimate alphabet.
+ */
 export function feedWorkingDir(snippetId: string): string {
+  if (!/^[A-Za-z0-9._-]+$/.test(snippetId) || snippetId === "." || snippetId === "..") {
+    throw new Error("Invalid feed id.");
+  }
   return join(libraryRoot(), "feed", snippetId);
 }
 

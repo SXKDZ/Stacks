@@ -219,3 +219,39 @@ test("a bulk delete removes every addressed record", async () => {
   assert.equal(findPaper(after, "Bulk Import Three"), undefined);
   assert.equal(findPaper(after, "A Second Transformer Paper"), undefined);
 });
+
+test("a bulk update writes every addressed paper, not just the first", async () => {
+  // A bulk-update of N ids used to call updatePaper(ids[0]) once and answer 200,
+  // so the other N-1 papers were silently left untouched.
+  await mutate({ entity: "paper", action: "create", data: { title: "bulk target one", paperType: "article" } });
+  await mutate({ entity: "paper", action: "create", data: { title: "bulk target two", paperType: "article" } });
+  const snap = await snapshot();
+  const targets = [findPaper(snap, "Bulk Target One"), findPaper(snap, "Bulk Target Two")];
+  assert.ok(targets[0] && targets[1]);
+
+  const result = await mutate({
+    entity: "paper",
+    action: "bulk-update",
+    ids: targets.map((paper) => paper!.id),
+    data: { readingStatus: "complete" },
+  });
+  assert.equal(result.status, 200);
+
+  const after = await snapshot();
+  for (const title of ["Bulk Target One", "Bulk Target Two"]) {
+    const paper = after.papers.find((candidate) => candidate.title === title) as { readingStatus?: string } | undefined;
+    assert.equal(paper?.readingStatus, "complete", `${title} should have been updated`);
+  }
+});
+
+test("a string 'false' does not star a paper", async () => {
+  // Boolean("false") is true, so an importer or agent sending the string form
+  // used to star the paper it meant to leave alone.
+  await mutate({ entity: "paper", action: "create", data: { title: "not starred", paperType: "article", favorite: "false" } });
+  await mutate({ entity: "paper", action: "create", data: { title: "also not starred", paperType: "article", favorite: "0" } });
+  await mutate({ entity: "paper", action: "create", data: { title: "really starred", paperType: "article", favorite: "true" } });
+  const snap = await snapshot() as unknown as { papers: Array<{ title: string; favorite: boolean }> };
+  assert.equal(snap.papers.find((p) => p.title === "Not Starred")?.favorite, false);
+  assert.equal(snap.papers.find((p) => p.title === "Also Not Starred")?.favorite, false);
+  assert.equal(snap.papers.find((p) => p.title === "Really Starred")?.favorite, true);
+});
