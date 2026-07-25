@@ -6,6 +6,18 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A paper's PDF and HTML snapshot are both always editable, whatever its type.
+  Saving a snapshot and then changing the type to a paper used to hide the
+  snapshot field, leaving a file that was still on disk and still listed under
+  publication details with no way to inspect, replace, or clear it.
+- Downloading a source no longer rewrites the paper type: storing an HTML
+  snapshot used to switch the record to "website" and discard the type just
+  chosen.
+- Pressing Escape closes one layer at a time, so leaving the edit window no
+  longer also closes the paper detail panel behind it.
+
 ## [0.3.0] - 2026-07-25
 
 ### Security

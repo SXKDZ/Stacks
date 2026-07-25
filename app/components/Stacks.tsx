@@ -78,6 +78,7 @@ import type {
   Venue,
   ViewId,
 } from "@/app/lib/types";
+import { editablePaperType, metadataVisibility, paperTypeOptions, type EditablePaperType } from "@/app/lib/paper-fields";
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
 import { gapForPointer, moveItem, moveItemToGap } from "@/app/lib/reorder";
 import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
@@ -106,7 +107,6 @@ const identifierSources: Array<{
   { id: "openreview", label: "OpenReview ID", placeholder: "bq1JEgioLr", hint: "Import a public submission and its PDF link." },
 ];
 
-type EditablePaperType = "conference" | "journal" | "workshop" | "preprint" | "website" | "other";
 type PaperColumnKey = "title" | "venue" | "year" | "status";
 type AuthorColumnKey = "author" | "papers" | "latest";
 type VenueColumnKey = "venue" | "type" | "publisher" | "papers" | "latest";
@@ -298,37 +298,6 @@ function useResizableColumns<Key extends string>(
   }
 
   return { widths, resizeColumn, resetColumnWidth };
-}
-
-const paperTypeOptions: Array<{ value: EditablePaperType; label: string }> = [
-  { value: "conference", label: "Conference paper" },
-  { value: "journal", label: "Journal article" },
-  { value: "workshop", label: "Workshop paper" },
-  { value: "preprint", label: "Preprint" },
-  { value: "website", label: "Website" },
-  { value: "other", label: "Other" },
-];
-
-function editablePaperType(value: string): EditablePaperType {
-  const match = paperTypeOptions.find((option) => option.value === value);
-  return match?.value ?? "other";
-}
-
-function metadataVisibility(type: EditablePaperType) {
-  const conferenceLike = type === "conference" || type === "workshop";
-  const other = type === "other";
-  return {
-    // A website/blog still has a "venue" (the site or publisher name), so show it.
-    venueName: conferenceLike || type === "journal" || type === "preprint" || type === "website" || other,
-    venueAcronym: conferenceLike || type === "journal" || other,
-    volumeIssue: type === "journal" || other,
-    pages: conferenceLike || type === "journal" || other,
-    doi: type !== "website",
-    preprint: type === "preprint" || other,
-    url: conferenceLike || type === "preprint" || type === "website" || other,
-    pdf: type !== "website",
-    html: type === "website",
-  };
 }
 
 function providerLabel(provider: DiscoveryProvider): string {
@@ -925,6 +894,13 @@ function StacksWorkspace() {
     return () => { cancelled = true; };
   }, []);
 
+  // What Escape should dismiss, read live: the keydown listener below is registered
+  // once, so it would otherwise close against the state as it was at mount.
+  const layers = useRef({ modal, commandOpen });
+  useEffect(() => {
+    layers.current = { modal, commandOpen };
+  }, [modal, commandOpen]);
+
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -935,9 +911,12 @@ function StacksWorkspace() {
         return;
       }
       if (event.key === "Escape") {
-        setModal(null);
-        setCommandOpen(false);
-        setSelectedPaper(null);
+        // Dismiss only the topmost layer. Closing all three at once meant pressing
+        // Escape in the edit modal opened from a paper's detail panel took the panel
+        // down with it, losing the place the user was working from.
+        if (layers.current.commandOpen) setCommandOpen(false);
+        else if (layers.current.modal) setModal(null);
+        else setSelectedPaper(null);
         return;
       }
       if (!inField && event.key.toLowerCase() === "n") {
@@ -3496,12 +3475,11 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
   );
 }
 
-function PaperMetadataFields({ paperType, paper, venues, notify, onPaperTypeChange }: {
+function PaperMetadataFields({ paperType, paper, venues, notify }: {
   paperType: EditablePaperType;
   paper?: Paper;
   venues: Venue[];
   notify: (message: string, tone?: ToastState["tone"]) => void;
-  onPaperTypeChange?: (type: EditablePaperType) => void;
 }) {
   const visible = metadataVisibility(paperType);
   const venueLabel = paperType === "preprint" ? "Website / archive" : paperType === "website" ? "Website / publisher" : "Full venue name";
@@ -3528,26 +3506,15 @@ function PaperMetadataFields({ paperType, paper, venues, notify, onPaperTypeChan
     setDownloading(true);
     try {
       const result = await runTask(`Acquire local source · ${paperValue(data, "title") || "paper"}`, () => acquirePaperSource(data));
-      // An HTML snapshot only has a visible field when the type is "website", so
-      // switch to it (a snapshotted source IS a website). The field then renders
-      // and we set it after the type flips it into view.
-      if (result.kind === "html" && paperType !== "website") {
-        onPaperTypeChange?.("website");
-      }
-      const fieldName = result.kind === "pdf" ? "localPath" : "htmlSnapshotPath";
-      const applyPath = () => {
-        const field = form.elements.namedItem(fieldName);
-        if (field instanceof HTMLInputElement) {
-          field.value = result.storedPath;
-          field.dispatchEvent(new Event("input", { bubbles: true }));
-          field.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-      };
-      // Defer a tick so a just-flipped paperType has rendered the target field.
-      if (result.kind === "html" && paperType !== "website") {
-        window.setTimeout(applyPath, 0);
-      } else {
-        applyPath();
+      // Both file fields are always rendered, so the path can be written straight
+      // in. The paper type is left alone: a paper that happens to have an HTML
+      // snapshot is still a paper, and silently rewriting the type discarded a
+      // choice the user had just made.
+      const field = form.elements.namedItem(result.kind === "pdf" ? "localPath" : "htmlSnapshotPath");
+      if (field instanceof HTMLInputElement) {
+        field.value = result.storedPath;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
       }
       notify(`${result.kind === "pdf" ? "PDF" : "HTML snapshot"} downloaded into Stacks storage.`, "success");
     } catch (error) {
@@ -3566,8 +3533,10 @@ function PaperMetadataFields({ paperType, paper, venues, notify, onPaperTypeChan
       {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? paper?.arxivId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
       {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div></label> : null}
-      {visible.pdf ? <LocalFileField name="localPath" label="Local PDF path" kind="pdf" defaultValue={paper?.localPath ?? ""} notify={notify} /> : null}
-      {visible.html ? <LocalFileField name="htmlSnapshotPath" label="Local HTML snapshot path" kind="html" defaultValue={paper?.htmlSnapshotPath ?? ""} notify={notify} /> : null}
+      {/* Always both: a record can hold a PDF and an HTML snapshot at once, and
+          either must stay manageable whatever the type says. */}
+      <LocalFileField name="localPath" label="Local PDF path" kind="pdf" defaultValue={paper?.localPath ?? ""} notify={notify} />
+      <LocalFileField name="htmlSnapshotPath" label="Local HTML snapshot path" kind="html" defaultValue={paper?.htmlSnapshotPath ?? ""} notify={notify} />
     </>
   );
 }
@@ -3828,8 +3797,8 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
       ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId") } : {}),
       ...(visible.doi ? { doi: form.get("doi") } : {}),
       ...(visible.url ? { url: form.get("url") } : {}),
-      ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
-      ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
+      localPath: form.get("localPath"),
+      htmlSnapshotPath: form.get("htmlSnapshotPath"),
       abstract: manualAbstract,
       summary: manualSummary,
       notes: manualNotes,
@@ -3970,7 +3939,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
           <AuthorNamesField authors={authors} />
           <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={new Date().getFullYear()} /></label>
           <label><span>Paper type</span><Select ariaLabel="Paper type" value={manualPaperType} onChange={(next) => setManualPaperType(next as EditablePaperType)} options={paperTypeOptions.map((option) => ({ value: option.value, label: option.label }))} /></label>
-          <PaperMetadataFields paperType={manualPaperType} venues={venues} notify={notify} onPaperTypeChange={setManualPaperType} />
+          <PaperMetadataFields paperType={manualPaperType} venues={venues} notify={notify} />
           <CollectionNamesField collections={collections} value={manualCollectionNames} onChange={setManualCollectionNames} />
           <label className="field-span-2"><span>Summary</span><MarkdownCodeEditor name="summary" ariaLabel="Summary" rows={4} value={manualSummary} onChange={setManualSummary} placeholder="A short summary for your library…" /></label>
           <label className="field-span-2"><span>Abstract</span><MarkdownCodeEditor name="abstract" ariaLabel="Abstract" rows={5} value={manualAbstract} onChange={setManualAbstract} placeholder="What this paper contributes…" /></label>
@@ -4110,6 +4079,9 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    // Same rule as the render, so the payload covers exactly the fields the user
+    // could see: reading a field the form never rendered would submit it as empty
+    // and wipe the stored value.
     const visible = metadataVisibility(paperType);
     const data: Record<string, unknown> = {
       title: form.get("title"),
@@ -4123,8 +4095,8 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
       ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId"), arxivId: paper.arxivId } : {}),
       ...(visible.doi ? { doi: form.get("doi") } : {}),
       ...(visible.url ? { url: form.get("url"), pdfUrl: paper.pdfUrl } : {}),
-      ...(visible.pdf ? { localPath: form.get("localPath") } : {}),
-      ...(visible.html ? { htmlSnapshotPath: form.get("htmlSnapshotPath") } : {}),
+      localPath: form.get("localPath"),
+      htmlSnapshotPath: form.get("htmlSnapshotPath"),
       abstract: form.get("abstract"),
       summary,
       notes: form.get("notes"),
@@ -4197,7 +4169,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
         <label><span>Paper type</span><Select ariaLabel="Paper type" value={paperType} onChange={(next) => setPaperType(next as EditablePaperType)} options={paperTypeOptions.map((option) => ({ value: option.value, label: option.label }))} /></label>
         <AuthorNamesField authors={authors} defaultValue={paper.authors.map((author) => author.displayName).join(", ")} />
-        <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} onPaperTypeChange={setPaperType} />
+        <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} />
         <CollectionNamesField collections={collections} value={collectionNames} onChange={setCollectionNames} />
         <label className="field-span-2 summary-field"><span className="field-label-action"><span>Summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><MarkdownCodeEditor name="summary" ariaLabel="Summary" rows={5} value={summary} onChange={setSummary} placeholder="A short summary for your library…" /></label>
         <label className="field-span-2"><span>Abstract</span><MarkdownCodeEditor name="abstract" ariaLabel="Abstract" rows={5} value={abstract} onChange={setAbstract} placeholder="What this paper contributes…" /></label>
