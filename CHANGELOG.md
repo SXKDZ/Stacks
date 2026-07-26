@@ -6,8 +6,38 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The AI model settings have a "Send a temperature value" switch. Newer models
+  reject the parameter outright, and which ones cannot be told from a model id,
+  so this is a setting rather than a built-in list that goes stale with every
+  release.
+- The AI feed shows animated dots as the pending turn for as long as the agent
+  is working, instead of only before its first message.
+- Imports report each stage in the activity log (resolving, downloading,
+  storing, saving), with the failure recorded in order at the end.
+
+### Changed
+
+- Importing a paper no longer blocks the dialog: it closes immediately and the
+  work continues in the activity log.
+- The feed's Stop button sits beside the send button, labelled and in the danger
+  colour, rather than reading as another attachment icon.
+- The feed re-reads settings when its tab regains focus, so changing the default
+  model no longer needs a page reload to take effect there.
+
 ### Fixed
 
+- arXiv imports survive arXiv throttling. Its API stalls without replying rather
+  than refusing, which used to hang the import forever; requests now time out and
+  retry, and fall back to the paper's DataCite DOI.
+- DOIs that Crossref does not know, such as every `10.48550/arXiv.*`
+  registration, now resolve through doi.org instead of reporting "no record".
+- Streaming output scrolls continuously instead of jumping a paragraph at a time,
+  and opening a long thread lands at the bottom.
+- The Continue Reading card caps its author list, like every other author line.
+- The URL import screen no longer claims the URL is sent to Jina Reader: pages
+  are captured locally, so nothing is sent to a third-party reader service.
 - A paper's PDF and HTML snapshot are both always editable, whatever its type.
   Saving a snapshot and then changing the type to a paper used to hide the
   snapshot field, leaving a file that was still on disk and still listed under
