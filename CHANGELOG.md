@@ -14,6 +14,8 @@ All notable changes to Stacks are documented here. The format follows
   could silently disagree. A key present in only some of them saved in the
   interface while changing nothing about the request it controlled; the lists are
   now derived from one declaration, and a key without a mapping is a build error.
+- The "Send a temperature value" switch lines up with the fields beside it instead
+  of sitting indented from them.
 
 ## [0.3.1] - 2026-07-26
 
