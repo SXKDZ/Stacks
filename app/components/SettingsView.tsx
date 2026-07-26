@@ -898,9 +898,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "workflows" ? (
           <section>
-            {/* Waypoints, not Workflow: connected steps read as a workflow, and its
-                ink fills 20 of its 24 units like the other heading glyphs, where
-                Workflow's 18 made it look smaller than its neighbours. */}
             <SettingsHeading icon={<Waypoints size={19} />} title="Feed workflows" detail="Save Claude Code workflow scripts and run them against your library. Every change a workflow proposes is approved in the feed, just like a normal agent." />
             <FeedWorkflowsEditor notify={notify} />
           </section>

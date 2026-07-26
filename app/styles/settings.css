@@ -83,6 +83,10 @@
   border-radius: var(--radius-md);
   color: var(--brand-blue);
   display: flex;
+  /* A flex item shrinks below its width by default, so the long two-line detail
+     on Feed workflows squeezed this square to 21px and squashed the icon inside
+     it. Every other heading's text was short enough to hide the bug. */
+  flex-shrink: 0;
   height: 38px;
   justify-content: center;
   width: 38px;
