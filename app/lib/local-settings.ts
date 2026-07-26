@@ -31,31 +31,47 @@ export type { SettingsPayload };
 // drift independently), with the type derived from it.
 export type { SyncResult };
 
-const environmentKeys = new Set([
-  "STACKS_LIBRARY_NAME",
-  "AWS_BEARER_TOKEN_BEDROCK",
-  "AWS_REGION",
-  "BEDROCK_MODEL_ID",
-  "STACKS_MAX_TOKENS",
-  "STACKS_EXTRACTION_SYSTEM_PROMPT",
-  "STACKS_SUMMARY_SYSTEM_PROMPT",
-  "STACKS_TEMPERATURE",
-  "STACKS_SEND_TEMPERATURE",
-  "STACKS_AUTO_SYNC",
-  "STACKS_AUTO_SYNC_INTERVAL",
-  "STACKS_ONEDRIVE_PATH",
-  "STACKS_GITHUB_REPO",
-  "SEMANTIC_SCHOLAR_API_KEY",
-  "SERPAPI_KEY",
-  "GITHUB_TOKEN",
-]);
+/**
+ * Every setting key, declared once, with what it is.
+ *
+ * This replaces three hand-maintained lists (writable keys, runtime keys, secrets)
+ * that all had to agree. They silently did not: adding a setting to only some of
+ * them produced a switch that saved in the UI while changing nothing about the
+ * request it was supposed to control, with nothing failing to say so.
+ *
+ * - `runtime`: the AI routes read it through runtimeValues(). Local-only keys
+ *   (library name, sync paths) are deliberately not runtime values.
+ * - `secret`: never echoed back to the client; only whether it is set.
+ */
+const SETTING_KEYS = {
+  STACKS_LIBRARY_NAME: {},
+  AWS_BEARER_TOKEN_BEDROCK: { runtime: true, secret: true },
+  AWS_REGION: { runtime: true },
+  BEDROCK_MODEL_ID: { runtime: true },
+  STACKS_MAX_TOKENS: { runtime: true },
+  STACKS_EXTRACTION_SYSTEM_PROMPT: { runtime: true },
+  STACKS_SUMMARY_SYSTEM_PROMPT: { runtime: true },
+  STACKS_TEMPERATURE: { runtime: true },
+  STACKS_SEND_TEMPERATURE: { runtime: true },
+  STACKS_AUTO_SYNC: {},
+  STACKS_AUTO_SYNC_INTERVAL: {},
+  STACKS_ONEDRIVE_PATH: {},
+  STACKS_GITHUB_REPO: { runtime: true },
+  SEMANTIC_SCHOLAR_API_KEY: { runtime: true, secret: true },
+  SERPAPI_KEY: { runtime: true, secret: true },
+  GITHUB_TOKEN: { runtime: true, secret: true },
+} as const satisfies Record<string, { runtime?: true; secret?: true }>;
 
-const secretKeys = [
-  "AWS_BEARER_TOKEN_BEDROCK",
-  "SEMANTIC_SCHOLAR_API_KEY",
-  "SERPAPI_KEY",
-  "GITHUB_TOKEN",
-] as const;
+export type SettingKey = keyof typeof SETTING_KEYS;
+
+/** Keys a settings write may touch. Anything else in a payload is ignored. */
+const environmentKeys: Set<string> = new Set(Object.keys(SETTING_KEYS));
+
+/** The secret keys, derived from the table so the type follows the data. */
+type SecretKey = { [K in SettingKey]: "secret" extends keyof typeof SETTING_KEYS[K] ? K : never }[SettingKey];
+
+const secretKeys = (Object.keys(SETTING_KEYS) as SettingKey[])
+  .filter((key): key is SecretKey => "secret" in SETTING_KEYS[key]);
 
 const bridgePath = join(process.cwd(), "scripts", "stacks_sync_bridge.py");
 const repositoryRoot = resolve(process.cwd(), "..");
@@ -97,7 +113,9 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
   if (!settings) {
     return undefined;
   }
-  const values: Record<string, string | undefined> = {
+  // Typed by SettingKey, so a key added to SETTING_KEYS without a mapping here is
+  // a compile error rather than a setting that silently always reads as unset.
+  const values: Record<SettingKey, string | undefined> = {
     STACKS_LIBRARY_NAME: settings.libraryName,
     AWS_BEARER_TOKEN_BEDROCK: settings.secrets.AWS_BEARER_TOKEN_BEDROCK,
     AWS_REGION: settings.ai.region,
@@ -115,7 +133,14 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     SERPAPI_KEY: settings.secrets.SERPAPI_KEY,
     GITHUB_TOKEN: settings.secrets.GITHUB_TOKEN,
   };
-  return values[key];
+  // Callers pass arbitrary strings (process.env names, request fields), so an
+  // unknown key reads as unset rather than throwing.
+  return isSettingKey(key) ? values[key] : undefined;
+}
+
+/** True for a key this app actually stores. */
+function isSettingKey(key: string): key is SettingKey {
+  return key in SETTING_KEYS;
 }
 
 function envValue(key: string, fallback = ""): string {
@@ -125,20 +150,8 @@ function envValue(key: string, fallback = ""): string {
 // The runtime keys the AI routes read (model, prompts, secrets, region, etc.).
 // This is the single source that resolveRuntimeValues layers over process.env,
 // resolved from settings.json — there is no separate app_settings store.
-const runtimeKeys = [
-  "AWS_BEARER_TOKEN_BEDROCK",
-  "AWS_REGION",
-  "BEDROCK_MODEL_ID",
-  "STACKS_MAX_TOKENS",
-  "STACKS_EXTRACTION_SYSTEM_PROMPT",
-  "STACKS_SUMMARY_SYSTEM_PROMPT",
-  "STACKS_TEMPERATURE",
-  "STACKS_SEND_TEMPERATURE",
-  "STACKS_GITHUB_REPO",
-  "SEMANTIC_SCHOLAR_API_KEY",
-  "SERPAPI_KEY",
-  "GITHUB_TOKEN",
-] as const;
+const runtimeKeys = (Object.keys(SETTING_KEYS) as SettingKey[])
+  .filter((key) => "runtime" in SETTING_KEYS[key]);
 
 /** The persisted runtime values (from settings.json) for the AI routes. */
 export function runtimeValues(): Record<string, string> {

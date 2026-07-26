@@ -6,6 +6,13 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Adding a setting no longer requires registering it in three separate lists that
+  could silently disagree. A key present in only some of them saved in the
+  interface while changing nothing about the request it controlled; the lists are
+  now derived from one declaration, and a key without a mapping is a build error.
+
 ## [0.3.1] - 2026-07-26
 
 ### Added
