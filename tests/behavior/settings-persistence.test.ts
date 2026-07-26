@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import { createTempLibrary } from "../support/harness.ts";
 
@@ -98,4 +99,49 @@ test("temperatureOption omits the parameter only when the switch is off", async 
   assert.equal(temperatureOption(true, -1), 0);
   // Zero is a legitimate temperature, not "unset".
   assert.equal(temperatureOption(true, 0), 0);
+});
+
+test("every runtime setting is writable and readable, with no key half-registered", () => {
+  // The bug this guards: writable keys, runtime keys, and secrets used to be three
+  // hand-maintained lists that all had to agree, and nothing checked that they did.
+  // A key present in only some of them saved in the UI while changing nothing about
+  // the request it controlled. They are now derived from one table; this asserts the
+  // derivation holds, so the lists cannot drift apart again.
+  const source = readFileSync(new URL("../../app/lib/local-settings.ts", import.meta.url), "utf8");
+  const table = /const SETTING_KEYS = \{([\s\S]*?)\n\} as const/.exec(source);
+  assert.ok(table, "SETTING_KEYS must remain the single declaration of setting keys");
+
+  const declared = [...table[1].matchAll(/^\s{2}([A-Z][A-Z0-9_]*):\s*\{([^}]*)\}/gm)]
+    .map(([, key, flags]) => ({ key, runtime: flags.includes("runtime") }));
+  assert.ok(declared.length >= 15, `expected the full key table, parsed ${declared.length}`);
+
+  // Each key must have a mapping onto the settings file. A missing one reads as
+  // permanently unset; the typed Record in structuredValue makes it a compile
+  // error, and this catches it if that annotation is ever loosened.
+  const mapping = /const values: Record<SettingKey, string \| undefined> = \{([\s\S]*?)\n  \};/.exec(source);
+  assert.ok(mapping, "structuredValue must map every key");
+  for (const { key } of declared) {
+    assert.match(mapping[1], new RegExp(`\\b${key}:`), `${key} has no structuredValue mapping`);
+  }
+
+  // The three lists are derived, not restated: no second literal list of keys.
+  assert.ok(!/const runtimeKeys = \[\s*"/.test(source), "runtimeKeys must be derived from SETTING_KEYS");
+  assert.ok(!/const environmentKeys = new Set\(\[\s*"/.test(source), "environmentKeys must be derived from SETTING_KEYS");
+});
+
+test("a runtime setting survives a save and is exposed to the AI routes", async () => {
+  const api = await settings;
+  // Every key flagged `runtime` must appear in runtimeValues() once it has a value,
+  // because that is the only channel the AI routes read.
+  api.persistSettings({ modelId: "us.anthropic.claude-opus-5", sendTemperature: false });
+  const values = api.runtimeValues();
+  for (const key of ["BEDROCK_MODEL_ID", "STACKS_SEND_TEMPERATURE"]) {
+    assert.ok(key in values, `${key} is a runtime key but never reached runtimeValues()`);
+  }
+  assert.equal(values.STACKS_SEND_TEMPERATURE, "false");
+  assert.equal(values.BEDROCK_MODEL_ID, "us.anthropic.claude-opus-5");
+  // A local-only key stays out: runtimeValues is what the AI routes read, and the
+  // OneDrive path is not theirs to see.
+  api.persistSettings({ remotePath: "/tmp/stacks-backup" });
+  assert.ok(!("STACKS_ONEDRIVE_PATH" in api.runtimeValues()), "a non-runtime key must not leak into runtimeValues()");
 });
