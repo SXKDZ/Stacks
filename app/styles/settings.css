@@ -220,7 +220,7 @@
   gap: 6px;
 }
 
-.settings-form-grid label > span {
+.settings-form-grid label:not(.settings-toggle) > span {
   color: #67606c;
   font-size: var(--type-caption);
   font-weight: 800;
@@ -234,7 +234,7 @@
 
 /* Field geometry only; the theme-aware background and the shared focus ring
    live in themes.css / design-system.css. */
-.settings-form-grid input,
+.settings-form-grid label:not(.settings-toggle) input,
 .integration-row input {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
@@ -279,11 +279,16 @@
   transform: translateY(-50%);
 }
 
-.settings-toggle {
+/* A switch beside its label. The selector is doubled so the row layout survives
+   inside `.settings-form-grid`, whose `label` rule is a two-class match that would
+   otherwise win and stack the switch above its text, centred. */
+.settings-toggle,
+.settings-form-grid .settings-toggle {
   align-items: center;
   border-top: 1px solid var(--line);
   cursor: pointer;
   display: grid;
+  flex-direction: initial;
   gap: 10px;
   grid-template-columns: auto 1fr;
   padding: 14px 17px;

@@ -129,7 +129,9 @@ export async function POST(request: Request): Promise<Response> {
       system: "This is a model-access health check.",
       messages: [{ role: "user", content: "Reply only with OK." }],
       maxTokens: 8,
-      temperature: 0,
+      // No temperature: this only asks "can this credential invoke this model", and
+      // a model that rejects the parameter would otherwise report itself as
+      // inaccessible when access was never the problem.
     });
     return Response.json({
       available: true,

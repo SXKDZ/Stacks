@@ -93,7 +93,7 @@ body {
 .large-field,
 .entity-form input,
 .entity-form textarea,
-.settings-form-grid input,
+.settings-form-grid label:not(.settings-toggle) input,
 .settings-form-grid textarea,
 .integration-row input,
 .detail-section textarea {
@@ -399,7 +399,7 @@ textarea::placeholder {
 }
 
 .entity-form label > span,
-.settings-form-grid label > span,
+.settings-form-grid label:not(.settings-toggle) > span,
 .settings-toggle strong {
   color: var(--muted);
   font-size: var(--type-caption);
@@ -767,7 +767,7 @@ textarea::placeholder {
 .large-field input,
 .entity-form input,
 .entity-form textarea,
-.settings-form-grid input,
+.settings-form-grid label:not(.settings-toggle) input,
 .settings-form-grid textarea,
 .integration-row input,
 .detail-section textarea {
@@ -793,7 +793,7 @@ textarea::placeholder {
 
 .paper-table th,
 .entity-form label > span,
-.settings-form-grid label > span,
+.settings-form-grid label:not(.settings-toggle) > span,
 .settings-toggle strong,
 .prompt-variable-list > span {
   font-size: var(--type-label);
@@ -1051,7 +1051,7 @@ textarea::placeholder {
 [data-theme="light"] .large-field,
 [data-theme="light"] .entity-form input,
 [data-theme="light"] .entity-form textarea,
-[data-theme="light"] .settings-form-grid input,
+[data-theme="light"] .settings-form-grid label:not(.settings-toggle) input,
 [data-theme="light"] .settings-form-grid textarea,
 [data-theme="light"] .integration-row input,
 [data-theme="light"] .detail-section textarea {
