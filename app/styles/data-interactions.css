@@ -456,19 +456,23 @@
    wraps with the prose, like the author line's expander after the last name. */
 .continue-abstract-toggle {
   background: transparent;
-  color: var(--brand-blue-strong);
+  /* Quieter than the abstract it interrupts: a step down in size, normal weight,
+     and the softer blue. Bold at body size read as the loudest thing in the card. */
+  color: var(--brand-blue);
   display: inline;
   font: inherit;
-  font-weight: 700;
+  font-size: var(--type-caption);
+  font-weight: 400;
   padding: 0;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--brand-blue) 34%, transparent);
   text-underline-offset: 2px;
   white-space: nowrap;
 }
 
 .continue-abstract-toggle:hover {
-  color: var(--brand-blue);
+  color: var(--brand-blue-strong);
+  text-decoration-color: currentColor;
 }
 
 .expandable-author-list > button {
