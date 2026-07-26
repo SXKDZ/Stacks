@@ -1,22 +1,21 @@
 /* --- chat-workspace.css --- */
 /* Feed thread indicators reused from the retired Ask Stacks workspace. */
-.chat-workspace-typing {
-  align-items: center;
-  align-self: center;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-sm);
-  display: inline-flex;
-  gap: 5px;
-  height: 32px;
-  margin: 0;
-  min-height: 32px;
-  padding: 0 12px;
-  width: auto;
+
+/* "A reply is coming": shown at the tail of the thread while the agent works, in
+   the same bare shape as the agent turn that will replace it, so nothing shifts
+   when the first token arrives. */
+.feed-turn-pending {
+  align-items: flex-start;
 }
 
-.chat-workspace-typing i {
+.feed-typing {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  min-height: 24px;
+}
+
+.feed-typing i {
   background: var(--brand-blue);
   height: 5px;
   opacity: 0.45;
@@ -821,8 +820,18 @@
 }
 
 .feed-dock-tools {
+  align-items: center;
   display: flex;
   gap: 4px;
+}
+
+/* A separator before the model picker: the attach icons and the model choice are
+   different kinds of control, and running them together at one gap made the picker
+   look like a third icon button that had grown a label. */
+.feed-dock-tools .feed-model-select {
+  border-left: 1px solid var(--line);
+  margin-left: 4px;
+  padding-left: 8px;
 }
 
 .feed-tool-btn {

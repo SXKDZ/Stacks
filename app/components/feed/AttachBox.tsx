@@ -88,7 +88,7 @@ export function AttachBox({
   initialText?: string;
   initialPapers?: LibraryPaper[];
   hint?: ReactNode;
-  /** Optional control shown in the tools row (e.g. a Stop button while running). */
+  /** Optional control shown beside the submit button (e.g. Stop while running). */
   leadingAction?: ReactNode;
   /** Selectable agent models; empty hides the picker. */
   models?: FeedModelOption[];
@@ -348,10 +348,10 @@ export function AttachBox({
                 leadingIcon={<Cpu size={13} aria-hidden="true" />}
               />
             ) : null}
-            {leadingAction}
           </div>
           <div className="feed-dock-send">
             {hint ? <span className="feed-dock-hint">{hint}</span> : null}
+            {leadingAction}
             <ActionButton type="submit" variant="primary" size={compact ? "small" : undefined} disabled={!canSubmit} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}><span className="feed-send-label">{submitLabel}</span><kbd className="feed-send-kbd">↵</kbd></ActionButton>
           </div>
         </div>

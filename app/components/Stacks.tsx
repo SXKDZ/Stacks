@@ -1382,7 +1382,9 @@ function Dashboard({
             <h2>{currentPaper.title}</h2>
             <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
             <div className="paper-byline">
-              <span>{fullAuthorLine(currentPaper)}</span>
+              {/* Capped with an expander, like every other author line: a paper with
+                  26 authors otherwise pushed the card's actions off the bottom. */}
+              <ExpandableAuthorNames paper={currentPaper} limit={3} />
               <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
             </div>
             <div className="continue-actions">
