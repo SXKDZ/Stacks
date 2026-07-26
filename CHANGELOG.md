@@ -6,6 +6,8 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-26
+
 ### Fixed
 
 - Adding a setting no longer requires registering it in three separate lists that
@@ -268,7 +270,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.2
 [0.3.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.1
 [0.3.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.0
 [0.2.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.2
