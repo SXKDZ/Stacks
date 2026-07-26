@@ -32,6 +32,12 @@ const AiSettingsSchema = z.object({
   region: z.string(),
   maxTokens: numericText("maxTokens"),
   temperature: numericText("temperature"),
+  // Whether to send `temperature` at all. Newer models reject the parameter
+  // outright ("`temperature` is deprecated for this model"), and there is no way to
+  // tell from a model id which ones do, so this is the user's call rather than a
+  // hardcoded list that goes stale with every release. Stored as text like the
+  // other fields in this block.
+  sendTemperature: z.string().catch("true"),
 });
 
 const PromptSettingsSchema = z.object({
@@ -83,7 +89,7 @@ export const StructuredSettingsFileSchema = z.object({
   // corrupt still yields its saved model and secrets, rather than the whole read
   // failing and every setting appearing unset (which, for the secrets block,
   // looks to the user like their API tokens were silently discarded).
-  ai: AiSettingsSchema.catch(() => ({ modelId: "", region: "", maxTokens: "10000", temperature: "0.25" })),
+  ai: AiSettingsSchema.catch(() => ({ modelId: "", region: "", maxTokens: "10000", temperature: "0.25", sendTemperature: "true" })),
   prompts: PromptSettingsSchema.catch(() => ({ extractionSystem: "", summarySystem: "" })),
   sync: SyncSettingsSchema.catch(() => ({ remotePath: "", autoSync: "false", autoSyncInterval: "5" })),
   github: GithubSettingsSchema.optional(),
@@ -107,6 +113,7 @@ export const SettingsPayloadSchema = z.object({
   region: z.string().optional(),
   maxTokens: z.union([z.string(), z.number()]).optional(),
   temperature: z.union([z.string(), z.number()]).optional(),
+  sendTemperature: z.boolean().optional(),
   extractionSystemPrompt: z.string().optional(),
   summarySystemPrompt: z.string().optional(),
   remotePath: z.string().optional(),

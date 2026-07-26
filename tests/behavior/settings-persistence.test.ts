@@ -59,3 +59,43 @@ test("storedFileExists only answers for a bare name inside the managed directory
   assert.equal(api.storedFileExists("pdf", null), false);
   assert.equal(api.storedFileExists("pdf", "not-there.pdf"), false);
 });
+
+test("the temperature switch survives a save and reaches the AI routes", async () => {
+  // This setting has to be listed in three separate places to work: the
+  // environmentKeys allowlist (or the write is silently dropped), the runtimeKeys
+  // list (or the AI routes read the default instead of the saved value), and the
+  // structuredValue map. Missing either of the first two produced a switch that
+  // looked saved in the UI but changed nothing about the request, which is exactly
+  // how it shipped broken twice while being developed.
+  const api = await settings;
+
+  api.persistSettings({ sendTemperature: false });
+  assert.equal(api.currentSettings().ai.sendTemperature, false, "the saved value must be read back");
+  assert.equal(
+    api.runtimeValues().STACKS_SEND_TEMPERATURE,
+    "false",
+    "the AI routes read runtimeValues(), so the switch must appear there too",
+  );
+
+  api.persistSettings({ sendTemperature: true });
+  assert.equal(api.currentSettings().ai.sendTemperature, true);
+  assert.equal(api.runtimeValues().STACKS_SEND_TEMPERATURE, "true");
+
+  // An unrelated save must not reset it: `false` is a real value, not "unset".
+  api.persistSettings({ sendTemperature: false });
+  api.persistSettings({ maxTokens: 4096 });
+  assert.equal(api.currentSettings().ai.sendTemperature, false, "an omitted field keeps its saved value");
+});
+
+test("temperatureOption omits the parameter only when the switch is off", async () => {
+  // Bedrock rejects an explicit null/undefined differently from an absent key, so
+  // the request builder keys off undefined to drop it entirely.
+  const { temperatureOption } = await import("../../app/lib/bedrock.ts");
+  assert.equal(temperatureOption(false, 0.5), undefined, "off means the key is not sent at all");
+  assert.equal(temperatureOption(true, 0.5), 0.5);
+  // Clamped into the range Bedrock accepts.
+  assert.equal(temperatureOption(true, 2), 1);
+  assert.equal(temperatureOption(true, -1), 0);
+  // Zero is a legitimate temperature, not "unset".
+  assert.equal(temperatureOption(true, 0), 0);
+});

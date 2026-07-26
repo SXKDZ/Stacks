@@ -6,6 +6,7 @@ import {
 import {
   BedrockInvocationError,
   invokeBedrockMessages,
+  temperatureOption,
 } from "@/app/lib/bedrock";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { readPdfPagesFromDocument } from "@/app/lib/pdf-text";
@@ -157,7 +158,9 @@ export async function POST(request: Request): Promise<Response> {
         system: prompt,
         messages: [{ role: "user", content: "Extract the paper metadata now and return only the requested JSON object." }],
         maxTokens: 1800,
-        temperature: 0,
+        // Extraction wants deterministic output, but a model that rejects the
+        // parameter must not fail the whole import over it.
+        temperature: temperatureOption(runtimeValue(runtime, "STACKS_SEND_TEMPERATURE", "true") !== "false", 0),
       });
       // The model's JSON: validated as an object before normalizeMetadata reads
       // fields off it, so a non-object reply (a bare string, an array, prose)

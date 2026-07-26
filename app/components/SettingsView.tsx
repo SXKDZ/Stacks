@@ -67,6 +67,7 @@ interface SettingsSnapshot {
     region: string;
     maxTokens: number;
     temperature: number;
+    sendTemperature: boolean;
   };
   integrations: Record<string, boolean>;
   prompts: {
@@ -210,6 +211,7 @@ const defaultSettings: SettingsSnapshot = {
     region: "us-east-1",
     maxTokens: 10000,
     temperature: 0.25,
+    sendTemperature: true,
   },
   integrations: {},
   prompts: {
@@ -527,6 +529,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       region: settings.ai.region,
       maxTokens: settings.ai.maxTokens,
       temperature: settings.ai.temperature,
+      sendTemperature: settings.ai.sendTemperature,
       extractionSystemPrompt: settings.prompts.extractionSystem,
       summarySystemPrompt: settings.prompts.summarySystem,
       remotePath: settings.sync.remotePath,
@@ -853,7 +856,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Seeing a model in the list doesn't mean your key can use it. Use Test access to check."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
-                <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
+                {/* A switch rather than a model list: newer models reject `temperature`
+                    outright, and which ones cannot be told from the model id. */}
+                <label className="settings-toggle span-2"><input type="checkbox" checked={settings.ai.sendTemperature} onChange={(event) => updateAi("sendTemperature", event.target.checked)} /><span /><div><strong>Send a temperature value</strong><small>Turn this off if the model reports that temperature is not supported.</small></div></label>
+                <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={!settings.ai.sendTemperature} /><small>Lower values keep research answers more consistent and restrained.</small></label>
               </div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />

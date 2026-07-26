@@ -40,6 +40,7 @@ const environmentKeys = new Set([
   "STACKS_EXTRACTION_SYSTEM_PROMPT",
   "STACKS_SUMMARY_SYSTEM_PROMPT",
   "STACKS_TEMPERATURE",
+  "STACKS_SEND_TEMPERATURE",
   "STACKS_AUTO_SYNC",
   "STACKS_AUTO_SYNC_INTERVAL",
   "STACKS_ONEDRIVE_PATH",
@@ -105,6 +106,7 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     STACKS_EXTRACTION_SYSTEM_PROMPT: settings.prompts.extractionSystem,
     STACKS_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
     STACKS_TEMPERATURE: settings.ai.temperature,
+    STACKS_SEND_TEMPERATURE: settings.ai.sendTemperature,
     STACKS_AUTO_SYNC: settings.sync.autoSync,
     STACKS_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
     STACKS_ONEDRIVE_PATH: settings.sync.remotePath,
@@ -131,6 +133,7 @@ const runtimeKeys = [
   "STACKS_EXTRACTION_SYSTEM_PROMPT",
   "STACKS_SUMMARY_SYSTEM_PROMPT",
   "STACKS_TEMPERATURE",
+  "STACKS_SEND_TEMPERATURE",
   "STACKS_GITHUB_REPO",
   "SEMANTIC_SCHOLAR_API_KEY",
   "SERPAPI_KEY",
@@ -222,6 +225,7 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
       region: envValue("AWS_REGION", "us-east-1"),
       maxTokens: envValue("STACKS_MAX_TOKENS", "10000"),
       temperature: envValue("STACKS_TEMPERATURE", "0.25"),
+      sendTemperature: envValue("STACKS_SEND_TEMPERATURE", "true"),
     },
     prompts: {
       extractionSystem: envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
@@ -310,6 +314,7 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "AWS_REGION": next.ai.region = value; break;
       case "STACKS_MAX_TOKENS": next.ai.maxTokens = value; break;
       case "STACKS_TEMPERATURE": next.ai.temperature = value; break;
+      case "STACKS_SEND_TEMPERATURE": next.ai.sendTemperature = value; break;
       case "STACKS_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
       case "STACKS_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
       case "STACKS_ONEDRIVE_PATH": next.sync.remotePath = value; break;
@@ -392,6 +397,9 @@ export function currentSettings() {
       region: envValue("AWS_REGION", "us-east-1"),
       maxTokens: Number(envValue("STACKS_MAX_TOKENS", "10000")) || 10000,
       temperature: Number(envValue("STACKS_TEMPERATURE", "0.25")) || 0,
+      // Default on: most models accept it, and a user hitting a model that does not
+      // gets a clear upstream error plus this switch to turn it off.
+      sendTemperature: envValue("STACKS_SEND_TEMPERATURE", "true") !== "false",
     },
     integrations: Object.fromEntries(
       secretKeys.map((key) => [key, Boolean(envValue(key))]),
@@ -442,6 +450,11 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
     STACKS_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
     STACKS_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
     STACKS_TEMPERATURE: clampFloat(data.temperature, envValue("STACKS_TEMPERATURE", "0.25"), 0, 1, 0.25),
+    // A real boolean in the payload, so an explicit false must not fall back to the
+    // saved value the way an omitted field does.
+    STACKS_SEND_TEMPERATURE: data.sendTemperature === undefined
+      ? envValue("STACKS_SEND_TEMPERATURE", "true")
+      : data.sendTemperature ? "true" : "false",
     STACKS_ONEDRIVE_PATH: String(data.remotePath ?? envValue("STACKS_ONEDRIVE_PATH")).trim(),
     // autoSync is a real boolean in the payload; only fall back to the saved
     // value when it's omitted entirely (undefined), not when it's an explicit false.

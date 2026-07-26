@@ -7,6 +7,7 @@ import {
 import {
   BedrockInvocationError,
   invokeBedrockMessages,
+  temperatureOption,
 } from "@/app/lib/bedrock";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { resolveStoredFile } from "@/app/lib/local-files";
@@ -102,7 +103,10 @@ export async function POST(request: Request): Promise<Response> {
         content: "Write the structured academic review defined by the system prompt. Cover every requested section, explicitly marking material that is not described or not applicable.",
       }],
       maxTokens: Math.max(128, Number(runtimeValue(runtime, "STACKS_MAX_TOKENS", "10000"))),
-      temperature: Math.min(1, Math.max(0, Number(runtimeValue(runtime, "STACKS_TEMPERATURE", "0.2")))),
+      temperature: temperatureOption(
+        runtimeValue(runtime, "STACKS_SEND_TEMPERATURE", "true") !== "false",
+        Number(runtimeValue(runtime, "STACKS_TEMPERATURE", "0.2")),
+      ),
     });
     const summary = result.content;
     if (!summary) {
