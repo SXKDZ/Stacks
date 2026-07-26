@@ -6,12 +6,16 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-26
+
 ### Fixed
 
 - Adding a setting no longer requires registering it in three separate lists that
   could silently disagree. A key present in only some of them saved in the
   interface while changing nothing about the request it controlled; the lists are
   now derived from one declaration, and a key without a mapping is a build error.
+- The "Send a temperature value" switch lines up with the fields beside it instead
+  of sitting indented from them.
 
 ## [0.3.1] - 2026-07-26
 
@@ -268,7 +272,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.2
 [0.3.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.1
 [0.3.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.0
 [0.2.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.2
