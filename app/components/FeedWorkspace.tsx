@@ -530,15 +530,63 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
     if (body) body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
   }, []);
 
-  // Auto-scroll to the newest content as it streams in while pinned. Content
-  // growth doesn't fire a scroll event, so re-measure the bottom state here too.
+  /**
+   * Follow the newest content while pinned to the bottom.
+   *
+   * A ResizeObserver rather than an effect on `messages`: streamed text grows the
+   * LAST bubble without adding a message, so a dependency-driven effect only fired
+   * once per message and the view lurched a paragraph at a time. Observing the
+   * thread's height reacts to every token.
+   *
+   * The catch-up is eased per frame instead of assigning scrollTop (a jump) or
+   * calling scrollTo({behavior:"smooth"}) (which restarts its animation on each
+   * mutation and stalls). Moving a fraction of the remaining distance each frame
+   * gives a continuous glide that naturally keeps pace with generation.
+   */
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
-    if (pinnedToBottomRef.current) {
-      body.scrollTop = body.scrollHeight;
-    }
-    setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
+    let frame = 0;
+    // Opening a thread lands at the bottom outright. Easing there would crawl down
+    // the whole history of a long feed, and any growth from images or late-loading
+    // content restarts the glide, so it never actually arrives.
+    let settled = false;
+    const follow = () => {
+      frame = 0;
+      if (!pinnedToBottomRef.current) return;
+      const remaining = body.scrollHeight - body.scrollTop - body.clientHeight;
+      if (remaining <= 1) return;
+      if (!settled) {
+        body.scrollTop = body.scrollHeight;
+        return;
+      }
+      // Ease in, but always advance at least a pixel so slow growth still tracks
+      // instead of creeping to a halt just short of the bottom.
+      body.scrollTop += Math.max(1, remaining * 0.22);
+      frame = requestAnimationFrame(follow);
+    };
+    const onGrow = () => {
+      setAtBottom(body.scrollHeight - body.scrollTop - body.clientHeight < 120);
+      if (pinnedToBottomRef.current && !frame) {
+        frame = requestAnimationFrame(follow);
+      }
+    };
+    const observer = new ResizeObserver(onGrow);
+    observer.observe(body);
+    // The scroll container's own height is fixed, so the growth to watch is the
+    // content's: observe the children that actually get taller.
+    for (const child of Array.from(body.children)) observer.observe(child);
+    onGrow();
+    // Anything after the initial layout is streaming, which is what the easing is
+    // for. Two frames: one for this paint, one for the height it settles at.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (pinnedToBottomRef.current) body.scrollTop = body.scrollHeight;
+      settled = true;
+    }));
+    return () => {
+      observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, [messages, proposals, running]);
 
   // Scroll events either come from our own pin (which lands at the bottom) or
@@ -781,7 +829,6 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
           );
         })()}
         <div className="feed-thread">
-          {messages.length === 0 && running ? <div className="typing chat-workspace-typing" role="status"><i /><i /><i /></div> : null}
           {(() => {
             const nodes: ReactNode[] = [];
             // Pair each tool_use with its result by tool_use id — the agent can
@@ -884,6 +931,14 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
             }
             return nodes;
           })()}
+          {running ? (
+            // Dots only: an agent turn is bare prose, so wrapping them in a bubble
+            // would make the pending turn look unlike the reply that replaces it.
+            <div className="feed-message feed-turn feed-turn-assistant feed-turn-pending">
+              <span className="feed-turn-label">Agent</span>
+              <span className="typing feed-typing" role="status" aria-label="The agent is working"><i /><i /><i /></span>
+            </div>
+          ) : null}
         </div>
 
         {renderProposals(unanchoredProposals, "props-unanchored")}
@@ -910,7 +965,9 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
           hint={<><kbd>⌥↵</kbd> newline</>}
           onSubmit={sendReply}
           leadingAction={running ? (
-            <button type="button" className="feed-tool-btn" onClick={() => void stop()} title="Stop the agent" aria-label="Stop the agent"><Square size={15} /></button>
+            // Labelled and in the danger colour: a bare grey square beside the
+            // attachment icons read as an empty checkbox rather than a stop control.
+            <ActionButton type="button" variant="danger" size="small" onClick={() => void stop()} icon={<Square size={13} />} aria-label="Stop the agent">Stop</ActionButton>
           ) : undefined}
         />
       </footer>
@@ -1021,18 +1078,33 @@ export default function FeedWorkspace() {
   // Read the authoritative settings: the library name, whether GitHub inbox
   // sync is configured (repo + token), and the configured default model id
   // (Settings → AI model) so the composer's picker can name the default.
+  //
+  // Re-read whenever this tab is shown again, not only on mount. Settings live on
+  // another page (often another tab), so a mount-once read left the composer
+  // naming the model that was configured when the feed was first opened: changing
+  // the default in Settings appeared not to take effect here until a full reload.
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/local-settings", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { libraryName?: string; ai?: { modelId?: string }; github?: { repo?: string; connected?: boolean } } | null) => {
-        if (cancelled || !data) return;
-        if (data.libraryName?.trim()) setLibraryName(data.libraryName.trim());
-        if (data.ai?.modelId?.trim()) setDefaultModelId(data.ai.modelId.trim());
-        setGithubReady(Boolean(data.github?.repo && data.github.connected));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    const load = () => {
+      void fetch("/api/local-settings", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { libraryName?: string; ai?: { modelId?: string }; github?: { repo?: string; connected?: boolean } } | null) => {
+          if (cancelled || !data) return;
+          if (data.libraryName?.trim()) setLibraryName(data.libraryName.trim());
+          if (data.ai?.modelId?.trim()) setDefaultModelId(data.ai.modelId.trim());
+          setGithubReady(Boolean(data.github?.repo && data.github.connected));
+        })
+        .catch(() => {});
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    load();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", load);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", load);
+    };
   }, []);
 
   const syncGithub = useCallback(async () => {

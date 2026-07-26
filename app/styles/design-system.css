@@ -149,7 +149,9 @@
 .recent-meta .expandable-author-list,
 .recent-meta .expandable-author-list.is-expanded,
 .transfer-paper-details .expandable-author-list,
-.transfer-paper-details .expandable-author-list.is-expanded {
+.transfer-paper-details .expandable-author-list.is-expanded,
+.paper-byline .expandable-author-list,
+.paper-byline .expandable-author-list.is-expanded {
   display: inline;
   height: auto;
   min-height: 0;
@@ -162,7 +164,9 @@
 .recent-meta .expandable-author-list > span,
 .recent-meta .expandable-author-list.is-expanded > span,
 .transfer-paper-details .expandable-author-list > span,
-.transfer-paper-details .expandable-author-list.is-expanded > span {
+.transfer-paper-details .expandable-author-list.is-expanded > span,
+.paper-byline .expandable-author-list > span,
+.paper-byline .expandable-author-list.is-expanded > span {
   display: inline;
   max-height: none;
   overflow: visible;

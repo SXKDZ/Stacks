@@ -56,7 +56,7 @@ import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
-import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks } from "@/app/components/BackgroundTasks";
+import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks, type TaskLogger } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, Select, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
@@ -304,6 +304,43 @@ function providerLabel(provider: DiscoveryProvider): string {
   return discoveryProviders.find((item) => item.id === provider)?.label ?? provider;
 }
 
+/** The transient status message. Its own component so the icon lookup has a home. */
+function Toast({ toast }: { toast: ToastState }) {
+  const Icon = TOAST_ICONS[toast.tone] ?? Sparkles;
+  return (
+    <div className={`toast toast-${toast.tone}`} role="status" key={toast.id}>
+      <Icon size={17} />
+      {toast.message}
+    </div>
+  );
+}
+
+/** Toast icon per tone. A table rather than a ternary ladder in the markup. */
+const TOAST_ICONS: Record<string, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  error: CircleDot,
+};
+
+/** What the entity pickers call the things they search. */
+const ENTITY_PLURALS: Record<string, string> = {
+  author: "authors",
+  venue: "venues",
+  collection: "collections",
+};
+
+/** The "venue" field means something different per paper type. */
+const VENUE_LABELS: Record<string, string> = {
+  preprint: "Website / archive",
+  website: "Website / publisher",
+};
+
+/** What editing each entity actually affects. */
+const ENTITY_SUBTITLES: Record<string, string> = {
+  author: "Changes apply to every paper by this author.",
+  venue: "Keep this venue's details consistent everywhere.",
+  collection: "Move papers between this collection and the rest of your library.",
+};
+
 const navigation: Array<{
   id: ViewId;
   label: string;
@@ -418,7 +455,8 @@ function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: num
         <button
           type="button"
           aria-expanded={expanded}
-          title={expanded ? "Hide additional authors" : `Show ${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
+          // No title: it only restated the button's own text ("Show 21 more
+          // authors" over a button reading "21 more authors").
           onClick={(event) => {
             event.stopPropagation();
             setExpanded((current) => !current);
@@ -1015,15 +1053,14 @@ function StacksWorkspace() {
           <p className="nav-label">Workspace</p>
           {navigation.map((item) => {
             const Icon = item.icon;
-            const count = item.id === "library"
-              ? snapshot.stats.papers
-              : item.id === "authors"
-                ? snapshot.stats.authors
-                : item.id === "venues"
-                  ? snapshot.stats.venues
-                  : item.id === "collections"
-                    ? snapshot.collections.length
-                    : null;
+            // A lookup, not a ternary ladder: adding a counted view is one entry.
+            const counts: Partial<Record<ViewId, number>> = {
+              library: snapshot.stats.papers,
+              authors: snapshot.stats.authors,
+              venues: snapshot.stats.venues,
+              collections: snapshot.collections.length,
+            };
+            const count = counts[item.id] ?? null;
             return (
               <button
                 key={item.id}
@@ -1286,12 +1323,7 @@ function StacksWorkspace() {
         />
       ) : null}
 
-      {toast ? (
-        <div className={`toast toast-${toast.tone}`} role="status" key={toast.id}>
-          {toast.tone === "success" ? <CheckCircle2 size={17} /> : toast.tone === "error" ? <CircleDot size={17} /> : <Sparkles size={17} />}
-          {toast.message}
-        </div>
-      ) : null}
+      {toast ? <Toast toast={toast} /> : null}
     </div>
   );
 }
@@ -1351,7 +1383,9 @@ function Dashboard({
             <h2>{currentPaper.title}</h2>
             <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
             <div className="paper-byline">
-              <span>{fullAuthorLine(currentPaper)}</span>
+              {/* Capped with an expander, like every other author line: a paper with
+                  26 authors otherwise pushed the card's actions off the bottom. */}
+              <ExpandableAuthorNames paper={currentPaper} limit={3} />
               <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
             </div>
             <div className="continue-actions">
@@ -2423,7 +2457,7 @@ function FilterValueCombobox({ kind, options, valueId, fallbackLabel = "", ariaL
         aria-expanded={open}
         aria-controls={listboxId}
         aria-activedescendant={open && matchingOptions[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined}
-        placeholder={`Search ${kind === "author" ? "authors" : kind === "venue" ? "venues" : kind === "collection" ? "collections" : "years"}…`}
+        placeholder={`Search ${ENTITY_PLURALS[kind] ?? "years"}…`}
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           const nextQuery = event.target.value;
@@ -3482,7 +3516,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
   notify: (message: string, tone?: ToastState["tone"]) => void;
 }) {
   const visible = metadataVisibility(paperType);
-  const venueLabel = paperType === "preprint" ? "Website / archive" : paperType === "website" ? "Website / publisher" : "Full venue name";
+  const venueLabel = VENUE_LABELS[paperType] ?? "Full venue name";
   const [downloading, setDownloading] = useState(false);
   const { runTask } = useBackgroundTasks();
 
@@ -3591,14 +3625,20 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
     setBibliographyFile(file);
   }
 
-  async function acquireImportSource(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async function acquireImportSource(data: Record<string, unknown>, log?: TaskLogger): Promise<Record<string, unknown>> {
     if (!hasAcquirableSource(data)) {
+      log?.step("No downloadable source on the record, keeping metadata only.");
       return data;
     }
+    log?.step("Downloading the source file…");
     try {
-      return withAcquiredSource(data, await acquirePaperSource(data));
+      const result = await acquirePaperSource(data);
+      log?.step(`Stored ${result.kind === "pdf" ? "PDF" : "HTML snapshot"}: ${result.storedPath}`);
+      return withAcquiredSource(data, result);
     } catch (error) {
-      notify(`The paper was imported, but its file couldn't be saved: ${error instanceof Error ? error.message : "download failed"}`, "info");
+      const reason = error instanceof Error ? error.message : "download failed";
+      log?.step(`The file could not be saved: ${reason}`, "warn");
+      notify(`The paper was imported, but its file couldn't be saved: ${reason}`, "info");
       return data;
     }
   }
@@ -3638,147 +3678,145 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
     }).catch(() => {});
   }
 
-  async function importUrl(event: FormEvent) {
+  function importUrl(event: FormEvent) {
     event.preventDefault();
-    setLoading(true);
-    try {
-      const succeeded = await runTask("Import web source and acquire content", async () => {
-        const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
-        if (!response.ok) {
-          throw new Error(await readError(response));
-        }
-        const result = (await response.json()) as Record<string, unknown>;
-        const paperData = await acquireImportSource({ ...result, authors: [] });
-        const imported = await mutateLibrary({ entity: "paper", action: "create", data: paperData }, "Page imported and stored locally.");
-        if (!imported) {
-          throw new Error("The imported source could not be saved.");
-        }
-        return imported;
-      });
-      if (succeeded) {
-        onClose();
+    // Fetching a page and snapshotting it is slow enough to outlive the modal, so
+    // it goes to the activity dock like the other imports.
+    const target = url.trim();
+    onClose();
+    void runTask("Import web source and acquire content", async (log) => {
+      log.step(`Fetching ${target}…`);
+      const response = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: target }) });
+      if (!response.ok) {
+        throw new Error(await readError(response));
       }
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "URL import failed.", "error");
-    } finally {
-      setLoading(false);
-    }
+      const result = (await response.json()) as Record<string, unknown>;
+      log.step(`Read metadata: ${paperValue(result, "title") || "untitled page"}`);
+      const paperData = await acquireImportSource({ ...result, authors: [] }, log);
+      log.step("Saving the record to the library…");
+      const imported = await mutateLibrary({ entity: "paper", action: "create", data: paperData }, "Page imported and stored locally.");
+      if (!imported) {
+        throw new Error("The imported source could not be saved.");
+      }
+      log.step("Saved.");
+      return imported;
+    }).catch(() => {});
   }
 
-  async function importByIdentifier(event: FormEvent) {
+  function importByIdentifier(event: FormEvent) {
     event.preventDefault();
     if (!identifier.trim()) {
       return;
     }
-    setLoading(true);
-    try {
-      const sourceLabel = identifierSources.find((source) => source.id === identifierSource)?.label ?? "Source";
-      const succeeded = await runTask(`Resolve and import ${sourceLabel}`, async () => {
-        const response = await fetch("/api/import-identifier", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source: identifierSource, identifier }),
-        });
-        if (!response.ok) {
-          throw new Error(await readError(response));
-        }
-        const payload = await response.json() as { paper: DiscoveryResult };
-        const paperData = await acquireImportSource({ ...payload.paper });
-        const imported = await mutateLibrary(
-          { entity: "paper", action: "create", data: paperData },
-          `${sourceLabel} paper imported.`,
-        );
-        if (!imported) {
-          throw new Error("The resolved paper could not be saved.");
-        }
-        return imported;
+    // Resolving an identifier hits an external service that can take tens of
+    // seconds when it throttles, so the modal closes now and the work continues in
+    // the activity dock, which reports every stage and any failure.
+    const sourceLabel = identifierSources.find((source) => source.id === identifierSource)?.label ?? "Source";
+    onClose();
+    void runTask(`Resolve and import ${sourceLabel}`, async (log) => {
+      log.step(`Resolving ${identifier.trim()} through ${sourceLabel}…`);
+      const response = await fetch("/api/import-identifier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: identifierSource, identifier }),
       });
-      if (succeeded) {
-        onClose();
+      if (!response.ok) {
+        throw new Error(await readError(response));
       }
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Identifier import failed.", "error");
-    } finally {
-      setLoading(false);
-    }
+      const payload = await response.json() as { paper: DiscoveryResult };
+      log.step(`Resolved: ${payload.paper.title}`);
+      const paperData = await acquireImportSource({ ...payload.paper }, log);
+      log.step("Saving the record to the library…");
+      const imported = await mutateLibrary(
+        { entity: "paper", action: "create", data: paperData },
+        `${sourceLabel} paper imported.`,
+      );
+      if (!imported) {
+        throw new Error("The resolved paper could not be saved.");
+      }
+      log.step("Saved.");
+      return imported;
+    // The dock shows the failure; this keeps it from also becoming an unhandled
+    // rejection now that nothing awaits the task.
+    }).catch(() => {});
   }
 
-  async function importBibliography(event: FormEvent) {
+  function importBibliography(event: FormEvent) {
     event.preventDefault();
     if (!bibliographyFile) {
       return;
     }
     const filename = bibliographyFile.name.toLowerCase();
     const format = filename.endsWith(".ris") || filename.endsWith(".txt") ? "ris" : "bibtex";
-    setLoading(true);
-    try {
-      const succeeded = await runTask(`Import ${bibliographyFile.name}`, async () => {
-        const response = await fetch("/api/import-bibliography", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ format, content: await bibliographyFile.text() }),
-        });
-        if (!response.ok) {
-          throw new Error(await readError(response));
-        }
-        const payload = await response.json() as { papers: Array<Record<string, unknown>> };
-        const papers = await Promise.all(payload.papers.map((paper) => acquireImportSource(paper)));
-        const imported = await mutateLibrary(
-          { entity: "paper", action: "bulk-create", data: { papers } },
-          `${payload.papers.length} ${format === "bibtex" ? "BibTeX" : "RIS"} ${payload.papers.length === 1 ? "record" : "records"} imported.`,
-        );
-        if (!imported) {
-          throw new Error("The bibliography records could not be saved.");
-        }
-        return imported;
+    // A bibliography can hold hundreds of records, each with its own file download,
+    // so this is the longest-running import of all: it belongs in the dock.
+    const file = bibliographyFile;
+    onClose();
+    void runTask(`Import ${file.name}`, async (log) => {
+      log.step(`Parsing ${file.name} as ${format === "bibtex" ? "BibTeX" : "RIS"}…`);
+      const response = await fetch("/api/import-bibliography", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format, content: await file.text() }),
       });
-      if (succeeded) {
-        onClose();
+      if (!response.ok) {
+        throw new Error(await readError(response));
       }
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Bibliography import failed.", "error");
-    } finally {
-      setLoading(false);
-    }
+      const payload = await response.json() as { papers: Array<Record<string, unknown>> };
+      log.step(`Parsed ${payload.papers.length} ${payload.papers.length === 1 ? "record" : "records"}.`);
+      const papers = await Promise.all(payload.papers.map((paper) => acquireImportSource(paper)));
+      log.step("Saving the records to the library…");
+      const imported = await mutateLibrary(
+        { entity: "paper", action: "bulk-create", data: { papers } },
+        `${payload.papers.length} ${format === "bibtex" ? "BibTeX" : "RIS"} ${payload.papers.length === 1 ? "record" : "records"} imported.`,
+      );
+      if (!imported) {
+        throw new Error("The bibliography records could not be saved.");
+      }
+      log.step("Saved.");
+      return imported;
+    }).catch(() => {});
   }
 
-  async function importLocalPdf(event: FormEvent) {
+  function importLocalPdf(event: FormEvent) {
     event.preventDefault();
     if (!pdfFile) {
       return;
     }
-    setLoading(true);
-    try {
-      const succeeded = await runTask(`Import and extract ${pdfFile.name}`, async () => {
-        const upload = await fetch("/api/local-file-import", {
-          method: "POST",
-          headers: { "Content-Type": "application/pdf", "X-Stacks-File-Kind": "pdf", "X-Stacks-File-Name": encodeURIComponent(pdfFile.name) },
-          body: pdfFile,
-        });
-        if (!upload.ok) {
-          throw new Error(await readError(upload));
-        }
-        const { storedPath } = await upload.json() as { storedPath: string };
-        const extraction = await extractPdfMetadata(pdfFile, pdfFile.name);
-        const imported = await mutateLibrary({
-          entity: "paper",
-          action: "create",
-          data: { ...extraction.metadata, localPath: storedPath, readingStatus: "inbox" },
-        }, "PDF imported and metadata extracted.");
-        if (!imported) {
-          throw new Error("The extracted PDF record could not be saved.");
-        }
-        return extraction;
+    // Uploading and running metadata extraction over a PDF takes long enough to
+    // outlive the modal.
+    const file = pdfFile;
+    onClose();
+    void runTask(`Import and extract ${file.name}`, async (log) => {
+      log.step(`Copying ${file.name} into Stacks storage…`);
+      const upload = await fetch("/api/local-file-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/pdf", "X-Stacks-File-Kind": "pdf", "X-Stacks-File-Name": encodeURIComponent(file.name) },
+        body: file,
       });
-      if (succeeded.warning) {
-        notify(succeeded.warning, "info");
+      if (!upload.ok) {
+        throw new Error(await readError(upload));
       }
-      onClose();
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "The PDF could not be imported.", "error");
-    } finally {
-      setLoading(false);
-    }
+      const { storedPath } = await upload.json() as { storedPath: string };
+      log.step(`Stored as ${storedPath}.`);
+      log.step("Extracting metadata from the PDF…");
+      const extraction = await extractPdfMetadata(file, file.name);
+      log.step(`Extracted: ${extraction.metadata.title || "no title found"}`);
+      const imported = await mutateLibrary({
+        entity: "paper",
+        action: "create",
+        data: { ...extraction.metadata, localPath: storedPath, readingStatus: "inbox" },
+      }, "PDF imported and metadata extracted.");
+      if (!imported) {
+        throw new Error("The extracted PDF record could not be saved.");
+      }
+      if (extraction.warning) {
+        log.step(extraction.warning, "warn");
+        notify(extraction.warning, "info");
+      }
+      log.step("Saved.");
+      return extraction;
+    }).catch(() => {});
   }
 
   async function addManual(event: FormEvent<HTMLFormElement>) {
@@ -3883,7 +3921,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
               autoFocus
             />
           </label>
-          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <ArrowRight size={16} />} disabled={loading || !identifier.trim()}>Import paper</ActionButton>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={<ArrowRight size={16} />} disabled={!identifier.trim()}>Import paper</ActionButton>
           <p className="identifier-footnote">This imports a single paper. Use BibTeX / RIS to import many at once.</p>
         </form>
       ) : tab === "bibliography" ? (
@@ -3906,7 +3944,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
             <div><strong>BibTeX</strong><small>Imports title, ordered authors, year, venue, DOI, URL, volume, issue, pages, and ePrint ID.</small></div>
             <div><strong>RIS</strong><small>Imports journal or conference metadata, ordered authors, DOI, URL, and page range.</small></div>
           </div>
-          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <Upload size={16} />} disabled={loading || !bibliographyFile}>Import bibliography</ActionButton>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={<Upload size={16} />} disabled={!bibliographyFile}>Import bibliography</ActionButton>
           
         </form>
       ) : tab === "pdf" ? (
@@ -3921,7 +3959,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
             <span><strong>{pdfFile?.name ?? "Choose or drop a local PDF"}</strong><small>{pdfFile ? `${Math.max(1, Math.round(pdfFile.size / 1024))} KB · ready to extract` : ""}</small></span>
             <input type="file" accept=".pdf,application/pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setPdfFile(event.target.files?.[0] ?? null)} />
           </label>
-          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <FileSearch size={16} />} disabled={loading || !pdfFile}>Import and extract PDF</ActionButton>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={<FileSearch size={16} />} disabled={!pdfFile}>Import and extract PDF</ActionButton>
           <p className="identifier-footnote">You can edit the details after import.</p>
         </form>
       ) : tab === "url" ? (
@@ -3930,8 +3968,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
           <h3>Import from the web</h3>
           <p>Paste a link to an article, arXiv or publisher page, or PDF.</p>
           <label className="large-field"><Link2 size={17} /><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://arxiv.org/abs/…" required autoFocus /></label>
-          <ActionButton type="submit" variant="primary" className="full-action" icon={loading ? <LoaderCircle size={16} className="spin" /> : <WandSparkles size={16} />} disabled={loading || !url.trim()}>Read and import</ActionButton>
-          <small className="privacy-note">Only the URL is sent to Jina Reader. Your local notes stay in Stacks.</small>
+          <ActionButton type="submit" variant="primary" className="full-action" icon={<WandSparkles size={16} />} disabled={!url.trim()}>Read and import</ActionButton>
         </form>
       ) : (
         <form className="modal-body entity-form" autoComplete="off" onSubmit={addManual}>
@@ -4304,7 +4341,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
     setSelectedCollectionPaperId(null);
   }
   return (
-    <ModalFrame title={title} subtitle={entity === "author" ? "Changes apply to every paper by this author." : entity === "venue" ? "Keep this venue's details consistent everywhere." : "Move papers between this collection and the rest of your library."} onClose={onClose} className={entity === "collection" ? "collection-manager-modal" : undefined}>
+    <ModalFrame title={title} subtitle={ENTITY_SUBTITLES[entity]} onClose={onClose} className={entity === "collection" ? "collection-manager-modal" : undefined}>
       <form className="modal-body entity-form" autoComplete="off" onSubmit={submit}>
         {entity === "author" ? <>
           <label className="field-span-2"><span>Display name *</span><input name="displayName" defaultValue={author?.displayName} required autoFocus /></label>

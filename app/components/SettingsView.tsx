@@ -31,7 +31,7 @@ import {
   Trash2,
   Upload,
   Users,
-  Workflow,
+  Waypoints,
   Wrench,
   X,
 } from "lucide-react";
@@ -67,6 +67,7 @@ interface SettingsSnapshot {
     region: string;
     maxTokens: number;
     temperature: number;
+    sendTemperature: boolean;
   };
   integrations: Record<string, boolean>;
   prompts: {
@@ -210,6 +211,7 @@ const defaultSettings: SettingsSnapshot = {
     region: "us-east-1",
     maxTokens: 10000,
     temperature: 0.25,
+    sendTemperature: true,
   },
   integrations: {},
   prompts: {
@@ -527,6 +529,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       region: settings.ai.region,
       maxTokens: settings.ai.maxTokens,
       temperature: settings.ai.temperature,
+      sendTemperature: settings.ai.sendTemperature,
       extractionSystemPrompt: settings.prompts.extractionSystem,
       summarySystemPrompt: settings.prompts.summarySystem,
       remotePath: settings.sync.remotePath,
@@ -814,17 +817,23 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   return (
     <div className="settings-layout">
       <aside className="settings-nav" aria-label="Settings sections">
-        <p>Configuration</p>
+        {/* Grouped so a section sits with what it depends on. Integrations was last,
+            three sections below the AI model it supplies the Bedrock key for, so
+            setting up generation meant jumping to the bottom of the list and back. */}
+        <p>Library</p>
         <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Ready-made feed prompts</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Workflow />}><span><strong>Feed workflows</strong><small>Claude Code scripts for the feed</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
+        <p>AI</p>
+        <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Connections</strong><small>API keys and GitHub inbox</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
+        <p>Feed</p>
+        <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Ready-made feed prompts</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Waypoints />}><span><strong>Feed workflows</strong><small>Claude Code scripts for the feed</small></span></TabButton>
+        <p>About</p>
         <TabButton variant="nav" active={tab === "about"} onClick={() => setTab("about")} icon={<Info />}><span><strong>About &amp; updates</strong><small>Version and release status</small></span></TabButton>
-        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>Stored locally</strong><small>Settings and secrets live in the library folder&rsquo;s settings.json; keys are never displayed after saving.</small></span></div>
+        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>Stored locally</strong><small>In your library folder.</small></span></div>
       </aside>
 
       <div className="settings-content">
@@ -853,7 +862,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Seeing a model in the list doesn't mean your key can use it. Use Test access to check."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
-                <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={settings.ai.modelId.includes("claude-opus-4-8")} /><small>{settings.ai.modelId.includes("claude-opus-4-8") ? "Opus 4.8 manages sampling automatically, so Bedrock does not accept a temperature value." : "Lower values keep research answers more consistent and restrained."}</small></label>
+                {/* A switch rather than a model list: newer models reject `temperature`
+                    outright, and which ones cannot be told from the model id. */}
+                <label className="settings-toggle span-2"><input type="checkbox" checked={settings.ai.sendTemperature} onChange={(event) => updateAi("sendTemperature", event.target.checked)} /><span /><div><strong>Send a temperature value</strong><small>Turn this off if the model reports that temperature is not supported.</small></div></label>
+                <label className="span-2"><span>Temperature <b>{settings.ai.temperature.toFixed(2)}</b></span><input className="range-input" type="range" min="0" max="1" step="0.05" value={settings.ai.temperature} onChange={(event) => updateAi("temperature", Number(event.target.value))} disabled={!settings.ai.sendTemperature} /><small>Lower values keep research answers more consistent and restrained.</small></label>
               </div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
@@ -886,7 +898,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "workflows" ? (
           <section>
-            <SettingsHeading icon={<Workflow size={19} />} title="Feed workflows" detail="Save Claude Code workflow scripts and run them against your library. Every change a workflow proposes is approved in the feed, just like a normal agent." />
+            <SettingsHeading icon={<Waypoints size={19} />} title="Feed workflows" detail="Save Claude Code workflow scripts and run them against your library. Every change a workflow proposes is approved in the feed, just like a normal agent." />
             <FeedWorkflowsEditor notify={notify} />
           </section>
         ) : null}
@@ -994,7 +1006,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "integrations" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<KeyRound size={19} />} title="Integrations" detail="See what is connected and replace a key without exposing its current value." />
+            <SettingsHeading icon={<KeyRound size={19} />} title="Connections" detail="See what is connected and replace a key without exposing its current value." />
             <div className="integration-list">
               {secretFields.map((field) => {
                 const configured = Boolean(settings.integrations[field.key]);
@@ -1419,7 +1431,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
             return (
               <div className={`feed-skill-item ${active ? "is-active" : ""}`} key={workflow.id}>
                 <button type="button" className="feed-skill-item-main" role="option" aria-selected={active} onClick={() => setSelectedId(workflow.id)}>
-                  <span className="feed-skill-item-icon"><Workflow size={15} /></span>
+                  <span className="feed-skill-item-icon"><Waypoints size={15} /></span>
                   <span className="feed-skill-item-label">{metaField(workflow.script, "name") || workflow.name || "Untitled workflow"}</span>
                 </button>
                 <div className="feed-skill-item-actions">
@@ -1456,7 +1468,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
               <MarkdownCodeEditor value={selected.script} onChange={(value) => update(selected.id, value)} language="javascript" ariaLabel={`${metaField(selected.script, "name") || "Workflow"} script`} rows={16} placeholder="A Claude Code workflow: export const meta = { name, description } then use agent()/parallel()/pipeline()/log()/phase()." />
             </>
           ) : (
-            <div className="feed-skill-empty"><Workflow size={22} /><p>No workflows yet. Add one or import a .js file.</p></div>
+            <div className="feed-skill-empty"><Waypoints size={22} /><p>No workflows yet. Add one or import a .js file.</p></div>
           )}
         </div>
       </div>

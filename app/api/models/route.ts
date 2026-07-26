@@ -99,7 +99,10 @@ export async function GET(): Promise<Response> {
   const models = [...mantleModels, ...profileModels]
     .sort((left, right) => {
       if (left.scope !== right.scope) {
-        return left.scope === "US" ? -1 : right.scope === "US" ? 1 : left.scope === "Global" ? -1 : right.scope === "Global" ? 1 : 0;
+        // Explicit precedence beats a five-branch ternary: US first, then Global,
+        // then everything else in whatever order they arrived.
+        const rank = (scope: string) => (scope === "US" ? 0 : scope === "Global" ? 1 : 2);
+        return rank(left.scope) - rank(right.scope);
       }
       return right.label.localeCompare(left.label, undefined, { numeric: true });
     });
@@ -126,7 +129,9 @@ export async function POST(request: Request): Promise<Response> {
       system: "This is a model-access health check.",
       messages: [{ role: "user", content: "Reply only with OK." }],
       maxTokens: 8,
-      temperature: 0,
+      // No temperature: this only asks "can this credential invoke this model", and
+      // a model that rejects the parameter would otherwise report itself as
+      // inaccessible when access was never the problem.
     });
     return Response.json({
       available: true,

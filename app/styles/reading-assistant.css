@@ -511,12 +511,6 @@
   width: 100%;
 }
 
-.privacy-note {
-  color: var(--soft);
-  font-size: var(--type-micro);
-  margin-top: 11px;
-}
-
 .entity-form {
   display: grid;
   gap: 13px;
