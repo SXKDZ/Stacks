@@ -6,6 +6,11 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The Continue Reading card's abstract has a "Show more" toggle, like its author
+  line. It appears only when the text is actually clipped.
+
 ## [0.3.2] - 2026-07-26
 
 ### Fixed

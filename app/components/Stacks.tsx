@@ -438,6 +438,49 @@ function fullAuthorLine(paper: Paper): string {
   return paper.authors.map((author) => author.displayName).join(", ");
 }
 
+/**
+ * The card's abstract, clamped to three lines with a toggle when there is more.
+ *
+ * The clamp is CSS (`-webkit-line-clamp`), so nothing in React knows whether the
+ * text was actually cut: the toggle is shown only when the element reports more
+ * scroll height than it displays. Without that check a short abstract would get a
+ * "Show more" button that expands nothing.
+ */
+function ExpandableAbstract({ abstract }: { abstract: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    // Measure while collapsed; once expanded the clamp is off and it never overflows.
+    const measure = () => setClipped(node.scrollHeight > node.clientHeight + 1);
+    if (!expanded) measure();
+    const observer = new ResizeObserver(() => { if (!expanded) measure(); });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [abstract, expanded]);
+
+  if (!abstract.trim()) {
+    return null;
+  }
+  return (
+    <div className="continue-abstract-block">
+      {/* The clamp lives on this wrapper rather than inside MarkdownContent, which
+          takes no ref: measuring needs the element that actually does the clipping. */}
+      <div ref={ref} className={`continue-abstract ${expanded ? "is-expanded" : ""}`}>
+        <MarkdownContent content={abstract} className="markdown-compact" />
+      </div>
+      {clipped || expanded ? (
+        <button type="button" className="continue-abstract-toggle" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: number }) {
   const [expanded, setExpanded] = useState(false);
   const authors = paper.authors.map((author) => author.displayName);
@@ -1381,7 +1424,7 @@ function Dashboard({
           <div className="continue-copy">
             <p className="card-kicker"><span /> {currentPaper.readingStatus === "reading" ? "Continue reading" : "Latest paper"}</p>
             <h2>{currentPaper.title}</h2>
-            <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
+            <ExpandableAbstract abstract={currentPaper.abstract} />
             <div className="paper-byline">
               {/* Capped with an expander, like every other author line: a paper with
                   26 authors otherwise pushed the card's actions off the bottom. */}

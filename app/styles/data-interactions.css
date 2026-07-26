@@ -450,6 +450,30 @@
   white-space: nowrap;
 }
 
+/* The abstract's "Show more", styled as the author line's toggle: the same kind of
+   control revealing the same kind of hidden text. */
+.continue-abstract-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.continue-abstract-toggle {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--brand-blue-strong);
+  font-size: var(--type-label);
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);
+  text-underline-offset: 2px;
+}
+
+.continue-abstract-toggle:hover {
+  color: var(--brand-blue);
+}
+
 .expandable-author-list > button {
   background: transparent;
   color: var(--brand-blue-strong);

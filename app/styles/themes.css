@@ -649,6 +649,14 @@ textarea::placeholder {
   -webkit-line-clamp: 3;
 }
 
+/* Expanded: drop the clamp so the whole abstract shows. `display: block` is needed
+   too, since -webkit-box keeps clipping regardless of the line count. */
+.continue-abstract.is-expanded {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
 .result-abstract {
   color: var(--muted);
   margin: 9px 0;
