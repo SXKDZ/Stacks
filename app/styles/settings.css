@@ -304,6 +304,13 @@
   padding: 14px 17px;
 }
 
+/* Inside a form grid the padding is the grid's own, so keep only the vertical part:
+   the horizontal 17px above indented the switch to 34px while every field beside it
+   started at 17px. */
+.settings-form-grid .settings-toggle {
+  padding-inline: 0;
+}
+
 .settings-toggle input {
   height: 0;
   opacity: 0;
