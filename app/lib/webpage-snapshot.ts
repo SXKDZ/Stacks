@@ -2,10 +2,10 @@ import { webkit, type Browser } from "playwright";
 import { publicHttpsUrl } from "@/app/lib/url-safety";
 
 /**
- * Jina-free webpage capture, ported from PaperCLI's WebpageSnapshotService.
+ * Local webpage capture, ported from PaperCLI's WebpageSnapshotService.
  * Renders a URL in headless WebKit, inlines stylesheets and images as data URLs,
- * and returns a fully self-contained HTML string plus the readable text. This
- * replaces the previous external Jina Reader dependency.
+ * and returns a fully self-contained HTML string plus the readable text. Nothing is
+ * sent to a third-party reader service: the page is fetched and rendered here.
  *
  * SECURITY NOTE: a real browser makes its own network requests, so it is NOT
  * covered by the SSRF guards in url-safety — the guards are applied to the

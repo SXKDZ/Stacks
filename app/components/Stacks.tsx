@@ -3966,7 +3966,6 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
           <p>Paste a link to an article, arXiv or publisher page, or PDF.</p>
           <label className="large-field"><Link2 size={17} /><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://arxiv.org/abs/…" required autoFocus /></label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={<WandSparkles size={16} />} disabled={!url.trim()}>Read and import</ActionButton>
-          <small className="privacy-note">Only the URL is sent to Jina Reader. Your local notes stay in Stacks.</small>
         </form>
       ) : (
         <form className="modal-body entity-form" autoComplete="off" onSubmit={addManual}>

@@ -407,8 +407,7 @@ textarea::placeholder {
 
 .entity-form label small,
 .settings-form-grid small,
-.settings-toggle small,
-.privacy-note {
+.settings-toggle small {
   font-size: var(--type-micro);
 }
 
@@ -788,7 +787,6 @@ textarea::placeholder {
 .settings-heading p,
 .settings-form-grid small,
 .settings-toggle small,
-.privacy-note,
 .identifier-footnote {
   font-size: var(--type-label);
 }
