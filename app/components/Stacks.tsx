@@ -448,37 +448,46 @@ function fullAuthorLine(paper: Paper): string {
  */
 function ExpandableAbstract({ abstract }: { abstract: string }) {
   const [expanded, setExpanded] = useState(false);
-  const [clipped, setClipped] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    // Measure while collapsed; once expanded the clamp is off and it never overflows.
-    const measure = () => setClipped(node.scrollHeight > node.clientHeight + 1);
-    if (!expanded) measure();
-    const observer = new ResizeObserver(() => { if (!expanded) measure(); });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [abstract, expanded]);
-
-  if (!abstract.trim()) {
+  const text = abstract.trim();
+  if (!text) {
     return null;
   }
+  // Truncated in JS rather than with -webkit-line-clamp: a CSS clamp can only clip
+  // a block, which forces the toggle onto its own row or into a gap beside the text.
+  // Cutting the string lets "Show more" sit in the flow right after the ellipsis,
+  // the way the author line's expander follows the last name.
+  const overflows = text.length > ABSTRACT_PREVIEW_LENGTH;
+  const preview = overflows ? `${cutAtWord(text, ABSTRACT_PREVIEW_LENGTH)}…` : text;
   return (
-    <div className="continue-abstract-block">
-      {/* The clamp lives on this wrapper rather than inside MarkdownContent, which
-          takes no ref: measuring needs the element that actually does the clipping. */}
-      <div ref={ref} className={`continue-abstract ${expanded ? "is-expanded" : ""}`}>
-        <MarkdownContent content={abstract} className="markdown-compact" />
-      </div>
-      {clipped || expanded ? (
-        <button type="button" className="continue-abstract-toggle" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
-          {expanded ? "Show less" : "Show more"}
-        </button>
+    <p className="continue-abstract">
+      {expanded ? text : preview}
+      {overflows ? (
+        <>
+          {" "}
+          <button type="button" className="continue-abstract-toggle" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        </>
       ) : null}
-    </div>
+    </p>
   );
+}
+
+/**
+ * How much abstract to show collapsed.
+ *
+ * Sized so the preview plus " Show more" fits three lines of the card's ~428px
+ * column: a longer cut filled the third line and wrapped the toggle onto a fourth
+ * by itself, which is the detached look this is meant to avoid.
+ */
+const ABSTRACT_PREVIEW_LENGTH = 150;
+
+/** Cut at the last word boundary before `limit`, so the preview never ends mid-word. */
+function cutAtWord(text: string, limit: number): string {
+  const slice = text.slice(0, limit).trimEnd();
+  const lastSpace = slice.lastIndexOf(" ");
+  // Keep the hard cut when there is no space to fall back to (one very long token).
+  return (lastSpace > limit * 0.6 ? slice.slice(0, lastSpace) : slice).replace(/[,;:.]$/, "");
 }
 
 function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: number }) {

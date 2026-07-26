@@ -161,7 +161,6 @@ textarea::placeholder {
   font-weight: 700;
 }
 
-.continue-copy > p:nth-of-type(2),
 .continue-abstract {
   font-size: var(--type-body);
 }
@@ -640,21 +639,9 @@ textarea::placeholder {
 
 .continue-abstract {
   color: #b9c1d1;
-  display: -webkit-box;
   line-height: 1.55;
   margin: 0;
   max-width: 560px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-/* Expanded: drop the clamp so the whole abstract shows. `display: block` is needed
-   too, since -webkit-box keeps clipping regardless of the line count. */
-.continue-abstract.is-expanded {
-  display: block;
-  overflow: visible;
-  -webkit-line-clamp: unset;
 }
 
 .result-abstract {

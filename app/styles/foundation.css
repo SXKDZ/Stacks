@@ -720,17 +720,17 @@ button.stat-card:hover {
   max-width: 650px;
 }
 
-.continue-copy > p:nth-of-type(2) {
+/* Targets the abstract by class, not by position. As `p:nth-of-type(2)` it also
+   clamped whatever else happened to be the card's second paragraph, and its
+   -webkit-box clipping fought the abstract's own expand/collapse. The truncation is
+   done in JS now (see ExpandableAbstract), so no clamp belongs here. */
+.continue-abstract {
   color: var(--muted);
-  display: -webkit-box;
   font-family: var(--font-display);
   font-size: var(--type-control);
   line-height: 1.55;
   margin: 0;
   max-width: 560px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .paper-byline {
