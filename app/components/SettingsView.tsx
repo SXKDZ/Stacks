@@ -31,7 +31,7 @@ import {
   Trash2,
   Upload,
   Users,
-  Workflow,
+  Waypoints,
   Wrench,
   X,
 } from "lucide-react";
@@ -830,10 +830,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
         <p>Feed</p>
         <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Ready-made feed prompts</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Workflow />}><span><strong>Feed workflows</strong><small>Claude Code scripts for the feed</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Waypoints />}><span><strong>Feed workflows</strong><small>Claude Code scripts for the feed</small></span></TabButton>
         <p>About</p>
         <TabButton variant="nav" active={tab === "about"} onClick={() => setTab("about")} icon={<Info />}><span><strong>About &amp; updates</strong><small>Version and release status</small></span></TabButton>
-        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>Stored locally</strong><small>Settings and secrets live in the library folder&rsquo;s settings.json; keys are never displayed after saving.</small></span></div>
+        <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>Stored locally</strong><small>In your library folder.</small></span></div>
       </aside>
 
       <div className="settings-content">
@@ -898,7 +898,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "workflows" ? (
           <section>
-            <SettingsHeading icon={<Workflow size={19} />} title="Feed workflows" detail="Save Claude Code workflow scripts and run them against your library. Every change a workflow proposes is approved in the feed, just like a normal agent." />
+            {/* Waypoints, not Workflow: connected steps read as a workflow, and its
+                ink fills 20 of its 24 units like the other heading glyphs, where
+                Workflow's 18 made it look smaller than its neighbours. */}
+            <SettingsHeading icon={<Waypoints size={19} />} title="Feed workflows" detail="Save Claude Code workflow scripts and run them against your library. Every change a workflow proposes is approved in the feed, just like a normal agent." />
             <FeedWorkflowsEditor notify={notify} />
           </section>
         ) : null}
@@ -1431,7 +1434,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
             return (
               <div className={`feed-skill-item ${active ? "is-active" : ""}`} key={workflow.id}>
                 <button type="button" className="feed-skill-item-main" role="option" aria-selected={active} onClick={() => setSelectedId(workflow.id)}>
-                  <span className="feed-skill-item-icon"><Workflow size={15} /></span>
+                  <span className="feed-skill-item-icon"><Waypoints size={15} /></span>
                   <span className="feed-skill-item-label">{metaField(workflow.script, "name") || workflow.name || "Untitled workflow"}</span>
                 </button>
                 <div className="feed-skill-item-actions">
@@ -1468,7 +1471,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
               <MarkdownCodeEditor value={selected.script} onChange={(value) => update(selected.id, value)} language="javascript" ariaLabel={`${metaField(selected.script, "name") || "Workflow"} script`} rows={16} placeholder="A Claude Code workflow: export const meta = { name, description } then use agent()/parallel()/pipeline()/log()/phase()." />
             </>
           ) : (
-            <div className="feed-skill-empty"><Workflow size={22} /><p>No workflows yet. Add one or import a .js file.</p></div>
+            <div className="feed-skill-empty"><Waypoints size={22} /><p>No workflows yet. Add one or import a .js file.</p></div>
           )}
         </div>
       </div>

@@ -587,7 +587,11 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: 292px;
+  /* Tall enough for the built-in set (six skills, ~40px each) to show without
+     scrolling. At the old 292px the last row was clipped mid-height, which read
+     as a rendering fault rather than "scroll for more"; a longer list still
+     scrolls. */
+  max-height: 368px;
   overflow-y: auto;
   padding: 8px;
 }
