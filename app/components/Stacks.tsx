@@ -455,7 +455,8 @@ function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: num
         <button
           type="button"
           aria-expanded={expanded}
-          title={expanded ? "Hide additional authors" : `Show ${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
+          // No title: it only restated the button's own text ("Show 21 more
+          // authors" over a button reading "21 more authors").
           onClick={(event) => {
             event.stopPropagation();
             setExpanded((current) => !current);

@@ -19,6 +19,10 @@ All notable changes to Stacks are documented here. The format follows
 
 ### Changed
 
+- The settings sections are grouped (Library, AI, Feed, About) and ordered so a
+  section sits with what it depends on. Integrations, renamed Connections, holds
+  the Bedrock API key and now sits directly above the AI model that uses it
+  rather than three sections below it.
 - Importing a paper no longer blocks the dialog: it closes immediately and the
   work continues in the activity log.
 - The feed's Stop button sits beside the send button, labelled and in the danger
@@ -36,6 +40,7 @@ All notable changes to Stacks are documented here. The format follows
 - Streaming output scrolls continuously instead of jumping a paragraph at a time,
   and opening a long thread lands at the bottom.
 - The Continue Reading card caps its author list, like every other author line.
+- The "N more authors" button no longer shows a tooltip repeating its own label.
 - The URL import screen no longer claims the URL is sent to Jina Reader: pages
   are captured locally, so nothing is sent to a third-party reader service.
 - A paper's PDF and HTML snapshot are both always editable, whatever its type.

@@ -817,15 +817,21 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   return (
     <div className="settings-layout">
       <aside className="settings-nav" aria-label="Settings sections">
-        <p>Configuration</p>
+        {/* Grouped so a section sits with what it depends on. Integrations was last,
+            three sections below the AI model it supplies the Bedrock key for, so
+            setting up generation meant jumping to the bottom of the list and back. */}
+        <p>Library</p>
         <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Ready-made feed prompts</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Workflow />}><span><strong>Feed workflows</strong><small>Claude Code scripts for the feed</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
-        <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Integrations</strong><small>Discovery and extraction</small></span></TabButton>
+        <p>AI</p>
+        <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Connections</strong><small>API keys and GitHub inbox</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
+        <p>Feed</p>
+        <TabButton variant="nav" active={tab === "skills"} onClick={() => setTab("skills")} icon={<Sparkles />}><span><strong>Feed skills</strong><small>Ready-made feed prompts</small></span></TabButton>
+        <TabButton variant="nav" active={tab === "workflows"} onClick={() => setTab("workflows")} icon={<Workflow />}><span><strong>Feed workflows</strong><small>Claude Code scripts for the feed</small></span></TabButton>
+        <p>About</p>
         <TabButton variant="nav" active={tab === "about"} onClick={() => setTab("about")} icon={<Info />}><span><strong>About &amp; updates</strong><small>Version and release status</small></span></TabButton>
         <div className="settings-local-note"><ShieldCheck size={16} /><span><strong>Stored locally</strong><small>Settings and secrets live in the library folder&rsquo;s settings.json; keys are never displayed after saving.</small></span></div>
       </aside>
@@ -1000,7 +1006,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "integrations" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<KeyRound size={19} />} title="Integrations" detail="See what is connected and replace a key without exposing its current value." />
+            <SettingsHeading icon={<KeyRound size={19} />} title="Connections" detail="See what is connected and replace a key without exposing its current value." />
             <div className="integration-list">
               {secretFields.map((field) => {
                 const configured = Boolean(settings.integrations[field.key]);

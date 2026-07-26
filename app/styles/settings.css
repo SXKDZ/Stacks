@@ -19,6 +19,12 @@
   margin: 8px 9px 7px;
 }
 
+/* Space above every group eyebrow except the first, so the groups read as
+   separated bands rather than one long list with stray headings in it. */
+.settings-nav > p ~ p {
+  margin-top: 14px;
+}
+
 .settings-local-note > span {
   display: flex;
   flex-direction: column;
