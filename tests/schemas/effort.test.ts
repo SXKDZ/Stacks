@@ -71,5 +71,6 @@ test("labels are readable, not mechanically capitalised", () => {
   assert.equal(effortLabel("xhigh"), "Extra high");
   assert.equal(effortLabel("max"), "Maximum");
   assert.equal(effortLabel("low"), "Low");
-  assert.equal(effortLabel(""), "Provider default");
+  // Names who decides when nothing is set, rather than the vague "Default".
+  assert.equal(effortLabel(""), "Let the model decide");
 });

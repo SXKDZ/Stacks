@@ -88,7 +88,7 @@ function upstreamMessage(raw: string): string {
   // permitted" is the provider saying this model has no reasoning control, which
   // reads as a bug rather than a setting the user can turn off.
   if (/output_config\.effort|thinking\.type/.test(message)) {
-    return `${message} This model does not support reasoning effort: set it to "Provider default" in Settings, or choose a newer model.`;
+    return `${message} This model does not support reasoning effort: turn it off in Settings, or choose a newer model.`;
   }
   return message;
 }

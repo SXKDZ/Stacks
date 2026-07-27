@@ -64,5 +64,7 @@ const EFFORT_LABELS: Record<EffortLevel, string> = {
 };
 
 export function effortLabel(effort: EffortSetting): string {
-  return effort ? EFFORT_LABELS[effort] : "Provider default";
+  // Not "Default": the behaviour is that no effort is sent at all and the model
+  // decides per request, which "Let the model decide" states outright.
+  return effort ? EFFORT_LABELS[effort] : "Let the model decide";
 }

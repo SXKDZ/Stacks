@@ -358,11 +358,13 @@ export function AttachBox({
                 leadingIcon={<Cpu size={13} aria-hidden="true" />}
               />
             ) : null}
-            {/* Per-feed reasoning effort. "" defers to the global Settings value, so
-                the label says Default rather than naming a level. */}
+            {/* Per-feed reasoning effort. "" defers upward, so the option names what
+                that actually resolves to: the level configured in Settings, or the
+                model's own default when Settings leaves it unset. Just "Default"
+                left the user unable to tell which. */}
             <Select
               value={effort}
-              options={[{ value: "", label: defaultEffortLabel ? `${effortLabel(defaultEffortLabel)} (default)` : "Default effort" },
+              options={[{ value: "", label: defaultEffortLabel ? `${effortLabel(defaultEffortLabel)} (from Settings)` : "Let the model decide" },
                         ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]}
               onChange={setEffort}
               ariaLabel="Reasoning effort"

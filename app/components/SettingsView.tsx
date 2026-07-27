@@ -821,15 +821,19 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   return (
     <div className="settings-layout">
       <aside className="settings-nav" aria-label="Settings sections">
-        {/* Grouped so a section sits with what it depends on. Integrations was last,
+        {/* Grouped so a section sits with what it depends on: Connections was last,
             three sections below the AI model it supplies the Bedrock key for, so
-            setting up generation meant jumping to the bottom of the list and back. */}
+            setting up generation meant jumping to the bottom of the list and back.
+            It sits on its own rather than under AI, because only one of its four
+            credentials is for AI: the others are paper discovery (Semantic Scholar,
+            SerpAPI) and the GitHub inbox. */}
         <p>Library</p>
         <TabButton variant="nav" active={tab === "appearance"} onClick={() => setTab("appearance")} icon={<Palette />}><span><strong>Appearance</strong><small>Library name and theme</small></span></TabButton>
         <TabButton variant="nav" active={tab === "storage"} onClick={() => setTab("storage")} icon={<HardDrive />}><span><strong>Storage &amp; Doctor</strong><small>Location, health, and cleanup</small></span></TabButton>
         <TabButton variant="nav" active={tab === "sync"} onClick={() => setTab("sync")} icon={<CloudCog />}><span><strong>OneDrive sync</strong><small>Remote library backup</small></span></TabButton>
+        <p>Connections</p>
+        <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Keys &amp; services</strong><small>AI, discovery, and GitHub inbox</small></span></TabButton>
         <p>AI</p>
-        <TabButton variant="nav" active={tab === "integrations"} onClick={() => setTab("integrations")} icon={<KeyRound />}><span><strong>Connections</strong><small>API keys and GitHub inbox</small></span></TabButton>
         <TabButton variant="nav" active={tab === "model"} onClick={() => setTab("model")} icon={<Bot />}><span><strong>AI model</strong><small>Bedrock and generation</small></span></TabButton>
         <TabButton variant="nav" active={tab === "prompts"} onClick={() => setTab("prompts")} icon={<MessageSquareText />}><span><strong>Prompt templates</strong><small>Summaries and extraction</small></span></TabButton>
         <p>Feed</p>
@@ -866,7 +870,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Seeing a model in the list doesn't mean your key can use it. Use Test access to check."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
                 <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
-                <label className="span-2"><span>Reasoning effort</span><Select value={settings.ai.effort} onChange={(next) => updateAi("effort", next)} ariaLabel="Reasoning effort" options={[{ value: "", label: "Provider default" }, ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]} /><small>How much the model thinks before answering. Newer models only; older ones reject the setting.</small></label>
+                <label className="span-2"><span>Reasoning effort</span><Select value={settings.ai.effort} onChange={(next) => updateAi("effort", next)} ariaLabel="Reasoning effort" options={[{ value: "", label: "Let the model decide" }, ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]} /><small>How much the model thinks before answering. Left unset, Stacks sends no effort and the model chooses per request. Applies to summaries, PDF extraction, and new feeds, which can each override it. Older models reject the setting.</small></label>
                 {/* A switch rather than a model list: newer models reject `temperature`
                     outright, and which ones cannot be told from the model id. */}
                 <label className="settings-toggle span-2"><input type="checkbox" checked={settings.ai.sendTemperature} onChange={(event) => updateAi("sendTemperature", event.target.checked)} /><span /><div><strong>Send a temperature value</strong><small>Turn this off if the model reports that temperature is not supported.</small></div></label>
@@ -1011,7 +1015,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "integrations" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<KeyRound size={19} />} title="Connections" detail="See what is connected and replace a key without exposing its current value." />
+            <SettingsHeading icon={<KeyRound size={19} />} title="Keys &amp; services" detail="See what is connected and replace a key without exposing its current value." />
             <div className="integration-list">
               {secretFields.map((field) => {
                 const configured = Boolean(settings.integrations[field.key]);
