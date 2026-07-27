@@ -438,6 +438,113 @@ function fullAuthorLine(paper: Paper): string {
   return paper.authors.map((author) => author.displayName).join(", ");
 }
 
+/**
+ * The card's abstract, clamped to three lines with a toggle when there is more.
+ *
+ * The clamp is CSS (`-webkit-line-clamp`), so nothing in React knows whether the
+ * text was actually cut: the toggle is shown only when the element reports more
+ * scroll height than it displays. Without that check a short abstract would get a
+ * "Show more" button that expands nothing.
+ */
+/** How many lines of the abstract to show before "Show more". */
+const ABSTRACT_PREVIEW_LINES = 5;
+
+/**
+ * The card's abstract, cut to a few lines with the toggle on the last one.
+ *
+ * The cut is measured, not a character count: how much text fits depends on the
+ * column width, so a fixed count either wastes a line on a wide card or overflows a
+ * narrow one and pushes "Show more" onto a line of its own. This renders the text
+ * off-screen at the real column width and binary-searches the longest prefix whose
+ * height, with the toggle appended, still fits the line budget.
+ *
+ * A CSS clamp can't do this: it clips a block, so the toggle could only ever sit
+ * outside the text rather than following the ellipsis inline.
+ */
+function ExpandableAbstract({ abstract }: { abstract: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [cut, setCut] = useState<number | null>(null);
+  const ref = useRef<HTMLParagraphElement | null>(null);
+  const text = abstract.trim();
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setCut(previewCut(node, text, ABSTRACT_PREVIEW_LINES));
+    measure();
+    // Re-fit when the column resizes: the same text needs a different cut.
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [text]);
+
+  if (!text) {
+    return null;
+  }
+  // Until measured, render the full text: it is the honest content, and the cut
+  // lands on the first layout pass.
+  const truncated = cut !== null && cut < text.length;
+  return (
+    <p className="continue-abstract" ref={ref}>
+      {expanded || !truncated ? text : `${text.slice(0, cut).trimEnd()}…`}
+      {truncated ? (
+        <>
+          {" "}
+          <button type="button" className="continue-abstract-toggle" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
+/**
+ * The longest prefix of `text` that fits `lines` lines of `sample`'s column,
+ * leaving room for the toggle after it. Returns text.length when it all fits.
+ *
+ * Measured in a clone positioned off-screen at the element's own width, so the
+ * visible paragraph never flickers through intermediate states.
+ */
+function previewCut(sample: HTMLElement, text: string, lines: number): number {
+  const styles = window.getComputedStyle(sample);
+  const lineHeight = Number.parseFloat(styles.lineHeight);
+  if (!Number.isFinite(lineHeight) || sample.clientWidth === 0) {
+    return text.length;
+  }
+  const budget = lineHeight * lines + 1;
+  const probe = document.createElement("p");
+  probe.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;width:${sample.clientWidth}px;font:${styles.font};line-height:${styles.lineHeight};letter-spacing:${styles.letterSpacing};white-space:normal;margin:0`;
+  document.body.append(probe);
+  try {
+    // " … Show less" is the longest trailing run, so budgeting for it keeps the
+    // toggle on the last line in both states.
+    const suffix = "… Show less";
+    probe.textContent = text;
+    if (probe.offsetHeight <= budget) {
+      return text.length;
+    }
+    let low = 0;
+    let high = text.length;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      probe.textContent = text.slice(0, middle) + suffix;
+      if (probe.offsetHeight <= budget) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    // Back up to a word boundary so the preview never ends mid-word.
+    const slice = text.slice(0, low);
+    const lastSpace = slice.lastIndexOf(" ");
+    const wordCut = lastSpace > low * 0.6 ? lastSpace : low;
+    return wordCut;
+  } finally {
+    probe.remove();
+  }
+}
+
 function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: number }) {
   const [expanded, setExpanded] = useState(false);
   const authors = paper.authors.map((author) => author.displayName);
@@ -1381,7 +1488,7 @@ function Dashboard({
           <div className="continue-copy">
             <p className="card-kicker"><span /> {currentPaper.readingStatus === "reading" ? "Continue reading" : "Latest paper"}</p>
             <h2>{currentPaper.title}</h2>
-            <MarkdownContent content={currentPaper.abstract} className="continue-abstract markdown-compact" />
+            <ExpandableAbstract abstract={currentPaper.abstract} />
             <div className="paper-byline">
               {/* Capped with an expander, like every other author line: a paper with
                   26 authors otherwise pushed the card's actions off the bottom. */}
