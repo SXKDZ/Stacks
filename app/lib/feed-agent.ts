@@ -6,6 +6,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { libraryRoot } from "@/db/library-paths";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { claudeEffortArgs, effortSetting } from "@/app/lib/effort";
 import { buildForkPrompt, parseProposalsResult, type ProposalOperation } from "@/app/lib/feed-prompt";
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 import { proposalSummary } from "@/app/lib/schemas/proposals";
@@ -32,6 +33,16 @@ const CLAUDE_BIN = process.env.STACKS_CLAUDE_BIN?.trim() || "claude";
 interface RunHandle {
   child: ChildProcess;
   subscribers: Set<(event: FeedEvent) => void>;
+  /**
+   * Set when Stacks asked this run to stop (a Stop press or interrupt-then-send).
+   *
+   * The exit code alone can't tell us: the CLI traps SIGTERM and exits 143 on its
+   * own, so Node reports `code: 143, signal: null` rather than the signal. Without
+   * this flag a user-initiated stop fell into the error branch and the thread showed
+   * "The agent reported an error" / "exited with code 143" for something the user
+   * did deliberately.
+   */
+  stopRequested?: boolean;
 }
 
 /** The outcome of a single agent turn, resolved when its process exits. */
@@ -107,6 +118,10 @@ function signalRun(snippetId: string, signal: NodeJS.Signals): void {
 }
 
 export async function stopFeed(snippetId: string): Promise<void> {
+  const handle = runs.get(snippetId);
+  if (handle) {
+    handle.stopRequested = true;
+  }
   signalRun(snippetId, "SIGTERM");
 }
 
@@ -310,11 +325,16 @@ export async function runFeedAgent(options: {
     // The per-feed model choice lives on the snippet row, so every turn (create,
     // reply, fork retry, GitHub sync) runs with the same model automatically.
     const database = await ensureDatabase();
-    const snippetModel = database
-      .select({ model: feedSnippets.model })
+    const row = database
+      .select({ model: feedSnippets.model, effort: feedSnippets.effort })
       .from(feedSnippets)
       .where(eq(feedSnippets.id, snippetId))
-      .get()?.model?.trim();
+      .get();
+    const snippetModel = row?.model?.trim();
+    // Per-feed effort wins; otherwise the global Settings value. Either can be
+    // unset, in which case no --effort is passed and the CLI picks its own.
+    const runtime = await resolveRuntimeValues();
+    const effort = effortSetting(row?.effort) || effortSetting(runtimeValue(runtime, "STACKS_EFFORT"));
 
     // Resolve the environment (secrets, config dir) before spawn so no await
     // sits between spawn() and the listener attachment below.
@@ -337,6 +357,7 @@ export async function runFeedAgent(options: {
       "--add-dir",
       "/tmp",
       ...(snippetModel ? ["--model", snippetModel] : []),
+      ...claudeEffortArgs(effort),
       // Headless: with no user to answer prompts, the default mode auto-denies
       // every Bash/network/temp-file call, so the agent can't even read the
       // library. "auto" keeps the background safety classifier as a guardrail
@@ -531,7 +552,13 @@ export async function runFeedAgent(options: {
       return;
     }
 
-    const stopped = signal === "SIGTERM" || signal === "SIGKILL";
+    // 143 = 128 + SIGTERM, which is what the CLI exits with when it traps the
+    // signal instead of dying from it; 137 is the SIGKILL equivalent.
+    // Read the flag off THIS handle, not the map: releaseRun() above has already
+    // removed the entry by the time we get here.
+    const stopped = handle.stopRequested === true
+      || signal === "SIGTERM" || signal === "SIGKILL"
+      || code === 143 || code === 137;
     const status = stopped ? "stopped" : code === 0 ? "done" : "error";
     if (status === "error") {
       const detail = stderr.trim().slice(-500) || `The agent exited with code ${code}.`;

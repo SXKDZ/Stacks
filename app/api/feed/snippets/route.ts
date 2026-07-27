@@ -5,6 +5,7 @@ import { feedWorkingDir, runFeedAgent } from "@/app/lib/feed-agent";
 import { buildSnippetPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 import { parseRequest } from "@/app/lib/schemas/parse";
+import { effortSetting } from "@/app/lib/effort";
 import { FeedSnippetCreateSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export async function POST(request: Request): Promise<Response> {
     let freeText = "";
     let title = "";
     let model = "";
+    let effort = "";
     let paperIds: string[] = [];
     let attachments: SnippetAttachment[] = [];
 
@@ -53,6 +55,7 @@ export async function POST(request: Request): Promise<Response> {
       freeText = String(form.get("body") ?? "").trim();
       title = String(form.get("title") ?? "").trim();
       model = String(form.get("model") ?? "").trim();
+      effort = String(form.get("effort") ?? "").trim();
       paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
       const files = form.getAll("files").filter((value): value is File => value instanceof File);
       attachments = await collectSnippetAttachments(workingDir, files, paperIds);
@@ -66,6 +69,7 @@ export async function POST(request: Request): Promise<Response> {
       freeText = body.body?.trim() ?? "";
       title = body.title?.trim() ?? "";
       model = body.model?.trim() ?? "";
+      effort = body.effort?.trim() ?? "";
       paperIds = (body.paperIds ?? []).filter(Boolean);
       attachments = await collectSnippetAttachments(workingDir, [], paperIds);
     }
@@ -86,6 +90,8 @@ export async function POST(request: Request): Promise<Response> {
         status: "queued",
         sessionId: "",
         model: model.slice(0, 200) || null,
+        // Normalised, so an unrecognised level can never reach the CLI.
+        effort: effortSetting(effort) || null,
         attachments: attachments.length ? JSON.stringify(attachments) : null,
         createdAt: now,
         updatedAt: now,

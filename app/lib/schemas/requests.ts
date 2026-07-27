@@ -93,6 +93,7 @@ export const FeedSnippetPatchSchema = z.object({
 export const FeedReplyRequestSchema = z.object({
   reply: z.string().optional(),
   model: z.string().optional(),
+  effort: z.string().optional(),
 });
 
 /** The composer's JSON form (the multipart form is handled separately). */
@@ -101,6 +102,7 @@ export const FeedSnippetCreateSchema = z.object({
   body: z.string().optional(),
   title: z.string().optional(),
   model: z.string().optional(),
+  effort: z.string().optional(),
   paperIds: z.array(z.string()).optional(),
 });
 

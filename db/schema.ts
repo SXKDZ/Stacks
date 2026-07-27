@@ -155,6 +155,8 @@ export const feedSnippets = sqliteTable(
     sessionId: text("session_id"),
     // The Bedrock model id this feed's agent runs with (null = the CLI default).
     model: text("model"),
+    // Reasoning effort for this feed (null/"" = the global Settings value).
+    effort: text("effort"),
     error: text("error"),
     // The GitHub issue this feed is mirrored to (for remote/mobile access), if
     // GitHub inbox sync is configured. Null until the feed is first synced.

@@ -37,9 +37,20 @@ export const UpstreamErrorSchema = z.object({
   error: z.object({ message: z.string().optional() }).loose().optional(),
 }).loose();
 
-/** Join a content array's text blocks into one string. */
+/**
+ * Join a content array's text blocks into one string.
+ *
+ * Non-text blocks are dropped rather than joined as empty strings: with reasoning
+ * enabled the reply arrives as `[reasoningContent, text]`, and mapping every block
+ * put a blank line at the top of every summary. The thinking itself is deliberately
+ * not surfaced; only the answer is.
+ */
 export function joinTextBlocks(blocks: Array<{ text?: string }> | undefined): string {
-  return (blocks ?? []).map((block) => block.text ?? "").join("\n").trim();
+  return (blocks ?? [])
+    .map((block) => block.text ?? "")
+    .filter((text) => text !== "")
+    .join("\n")
+    .trim();
 }
 
 /** One entry from the Bedrock inference-profiles listing. */

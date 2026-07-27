@@ -13,6 +13,7 @@ import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
 import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment } from "@/app/lib/schemas/attachments";
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
+import { effortSetting, type EffortSetting } from "@/app/lib/effort";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 
 interface FeedMessage {
@@ -117,6 +118,7 @@ interface FeedSnippet {
   instruction: string;
   status: string;
   model?: string | null;
+  effort?: string | null;
   error: string | null;
   inputTokens?: number;
   outputTokens?: number;
@@ -497,11 +499,12 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onChanged }: {
+function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, onBack, onChanged }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   models: FeedModelOption[];
   defaultModelLabel: string;
+  defaultEffort: EffortSetting;
   onBack: () => void;
   onChanged: () => void;
 }) {
@@ -635,6 +638,8 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
         const form = new FormData();
         form.set("reply", payload.text);
         form.set("model", payload.model);
+        form.set("effort", payload.effort);
+        form.set("effort", payload.effort);
         for (const file of payload.files) form.append("files", file);
         for (const paperId of payload.paperIds) form.append("paperIds", paperId);
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, { method: "POST", body: form });
@@ -642,7 +647,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reply: payload.text, model: payload.model }),
+          body: JSON.stringify({ reply: payload.text, model: payload.model, effort: payload.effort }),
         });
       }
       if (response.ok) {
@@ -957,7 +962,9 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, onBack, onCha
           library={library}
           models={models}
           initialModel={snippet.model ?? ""}
+          initialEffort={snippet.effort ?? ""}
           defaultModelLabel={defaultModelLabel}
+          defaultEffortLabel={defaultEffort}
           placeholder={running ? "Message the agent…" : "Reply to continue this thread."}
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
@@ -1015,6 +1022,7 @@ export default function FeedWorkspace() {
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
   const [models, setModels] = useState<FeedModelOption[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
+  const [defaultEffort, setDefaultEffort] = useState<EffortSetting>("");
   // A new feed starts on the model the user last picked (persisted per browser).
   const [lastUsedModel, setLastUsedModel] = useState("");
   useEffect(() => {
@@ -1088,10 +1096,11 @@ export default function FeedWorkspace() {
     const load = () => {
       void fetch("/api/local-settings", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : null))
-        .then((data: { libraryName?: string; ai?: { modelId?: string }; github?: { repo?: string; connected?: boolean } } | null) => {
+        .then((data: { libraryName?: string; ai?: { modelId?: string; effort?: string }; github?: { repo?: string; connected?: boolean } } | null) => {
           if (cancelled || !data) return;
           if (data.libraryName?.trim()) setLibraryName(data.libraryName.trim());
           if (data.ai?.modelId?.trim()) setDefaultModelId(data.ai.modelId.trim());
+          setDefaultEffort(effortSetting(data.ai?.effort));
           setGithubReady(Boolean(data.github?.repo && data.github.connected));
         })
         .catch(() => {});
@@ -1322,7 +1331,7 @@ export default function FeedWorkspace() {
         response = await fetch("/api/feed/snippets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instruction: payload.text, model: payload.model }),
+          body: JSON.stringify({ instruction: payload.text, model: payload.model, effort: payload.effort }),
         });
       }
       if (response.ok) {
@@ -1494,6 +1503,7 @@ export default function FeedWorkspace() {
             library={library}
             models={models}
             defaultModelLabel={defaultModelLabel}
+            defaultEffort={defaultEffort}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
           />
@@ -1526,6 +1536,7 @@ export default function FeedWorkspace() {
               models={models}
               initialModel={lastUsedModel}
               defaultModelLabel={defaultModelLabel}
+              defaultEffortLabel={defaultEffort}
               placeholder="Capture anything. A link or a note, and what to do with it."
               submitLabel="Add to feed"
               submitting={submitting}

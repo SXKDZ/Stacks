@@ -5,6 +5,7 @@ import { feedWorkingDir, isFeedRunning, runFeedAgent, stopFeedAndWait } from "@/
 import { buildFollowUpPrompt, buildForkPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 import { parseWith } from "@/app/lib/schemas/parse";
+import { effortSetting } from "@/app/lib/effort";
 import { FeedReplyRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export async function POST(
   // The reply box sends multipart when files/papers are attached, JSON otherwise.
   let reply = "";
   let model: string | null = null;
+  let effort: string | null = null;
   let files: File[] = [];
   let paperIds: string[] = [];
   const contentType = request.headers.get("content-type") ?? "";
@@ -34,6 +36,7 @@ export async function POST(
     const form = await request.formData();
     reply = String(form.get("reply") ?? "").trim();
     if (form.has("model")) model = String(form.get("model") ?? "").trim();
+    if (form.has("effort")) effort = String(form.get("effort") ?? "").trim();
     paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
     files = form.getAll("files").filter((value): value is File => value instanceof File);
   } else {
@@ -41,6 +44,7 @@ export async function POST(
     const body = parsed.ok ? parsed.data : {};
     reply = body.reply?.trim() ?? "";
     if (typeof body.model === "string") model = body.model.trim();
+    if (typeof body.effort === "string") effort = body.effort.trim();
   }
 
   const database = await ensureDatabase();
@@ -83,6 +87,26 @@ export async function POST(
         createdAt: new Date().toISOString(),
       })
       .run();
+  }
+
+  // The reply can also change this feed's reasoning effort, and like the model it
+  // persists for every later turn.
+  if (effort !== null) {
+    const next = effortSetting(effort);
+    if (next !== effortSetting(snippet.effort)) {
+      database.update(feedSnippets).set({ effort: next || null }).where(eq(feedSnippets.id, id)).run();
+      database
+        .insert(feedMessages)
+        .values({
+          id: `msg-${crypto.randomUUID()}`,
+          snippetId: id,
+          role: "system",
+          kind: "text",
+          content: next ? `Switched to ${next} reasoning effort.` : "Switched back to the default reasoning effort.",
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    }
   }
 
   // Report the outcomes of proposals the user resolved since the last turn so

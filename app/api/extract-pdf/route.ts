@@ -12,6 +12,7 @@ import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { readPdfPagesFromDocument } from "@/app/lib/pdf-text";
 import { getDocumentProxy, getMeta } from "unpdf";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
+import { effortSetting } from "@/app/lib/effort";
 import { ExtractedMetadataSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
@@ -160,6 +161,7 @@ export async function POST(request: Request): Promise<Response> {
         maxTokens: 1800,
         // Extraction wants deterministic output, but a model that rejects the
         // parameter must not fail the whole import over it.
+        effort: effortSetting(runtimeValue(runtime, "STACKS_EFFORT")),
         temperature: temperatureOption(runtimeValue(runtime, "STACKS_SEND_TEMPERATURE", "true") !== "false", 0),
       });
       // The model's JSON: validated as an object before normalizeMetadata reads
