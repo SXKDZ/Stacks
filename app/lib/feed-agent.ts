@@ -7,6 +7,7 @@ import { libraryRoot } from "@/db/library-paths";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { claudeEffortArgs, effortSetting } from "@/app/lib/effort";
+import { isStoppedExit } from "@/app/lib/agent-exit";
 import { buildForkPrompt, parseProposalsResult, type ProposalOperation } from "@/app/lib/feed-prompt";
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 import { proposalSummary } from "@/app/lib/schemas/proposals";
@@ -117,10 +118,33 @@ function signalRun(snippetId: string, signal: NodeJS.Signals): void {
   }
 }
 
+/**
+ * Ask a running agent to stop.
+ *
+ * A control request first, which is a graceful interrupt: the agent abandons the
+ * current turn but writes its partial output and shuts the session down cleanly,
+ * so the transcript stays resumable and the next turn keeps full context. Only
+ * honoured with stream-json input, hence the prompt going in over stdin.
+ *
+ * stdin is closed just after, because the process otherwise waits for more input
+ * instead of exiting. SIGTERM stays as the fallback for a process that ignores the
+ * request (or was started before this path existed).
+ */
 export async function stopFeed(snippetId: string): Promise<void> {
   const handle = runs.get(snippetId);
-  if (handle) {
-    handle.stopRequested = true;
+  if (!handle) {
+    return;
+  }
+  handle.stopRequested = true;
+  const stdin = handle.child.stdin;
+  if (stdin && stdin.writable) {
+    try {
+      stdin.write(`${JSON.stringify({ type: "control_request", request_id: `stop-${snippetId}`, request: { subtype: "interrupt" } })}\n`);
+      stdin.end();
+      return;
+    } catch {
+      // Fall through to the signal: a broken pipe means it can't hear us.
+    }
   }
   signalRun(snippetId, "SIGTERM");
 }
@@ -342,7 +366,12 @@ export async function runFeedAgent(options: {
 
     const args = [
       "-p",
-      prompt,
+      // The prompt goes in over stdin rather than argv. That is what buys graceful
+      // interruption: a control request is only honoured with stream-json input, and
+      // with a text prompt the CLI ignores it and runs the turn to completion
+      // (verified). One process per turn is unchanged.
+      "--input-format",
+      "stream-json",
       "--output-format",
       "stream-json",
       "--verbose",
@@ -374,9 +403,13 @@ export async function runFeedAgent(options: {
     child = spawn(CLAUDE_BIN, args, {
       cwd: workingDir,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       detached: true,
     });
+    // Deliver the prompt, then leave stdin OPEN: closing it here would end the
+    // session before an interrupt could be sent. stopFeed() closes it after the
+    // control request, which is what lets the process exit.
+    child.stdin?.write(`${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }] } })}\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The agent could not be started.";
     revokeFeedToken(snippetId);
@@ -447,6 +480,12 @@ export async function runFeedAgent(options: {
       return;
     }
     if (event.type === "result") {
+      // The turn is over, so no interrupt can arrive any more: close stdin and the
+      // process exits. Keeping it open is what stream-json input costs us — the CLI
+      // waits for further messages and never exits on its own.
+      if (child.stdin?.writable) {
+        child.stdin.end();
+      }
       const isError = Boolean(event.is_error);
       const text = typeof event.result === "string" ? event.result : "";
       if (!isError && text.trim()) finalText = text;
@@ -476,7 +515,13 @@ export async function runFeedAgent(options: {
           resumeFallback = true;
           return;
         }
-        emit(snippetId, await persistMessage(snippetId, "system", "error", text || "The agent reported an error."));
+        // An interrupt we asked for is not a failure. The CLI reports the abandoned
+        // turn as `is_error` with subtype error_during_execution, which would
+        // otherwise leave a red "The agent reported an error." row in the thread for
+        // something the user did on purpose.
+        if (!handle.stopRequested) {
+          emit(snippetId, await persistMessage(snippetId, "system", "error", text || "The agent reported an error."));
+        }
       } else if (text) {
         // Parse any proposed library changes and enqueue them for approval.
         const { operations, errors } = parseProposalsResult(text);
@@ -554,11 +599,9 @@ export async function runFeedAgent(options: {
 
     // 143 = 128 + SIGTERM, which is what the CLI exits with when it traps the
     // signal instead of dying from it; 137 is the SIGKILL equivalent.
-    // Read the flag off THIS handle, not the map: releaseRun() above has already
+    // The flag comes off THIS handle, not the map: releaseRun() above has already
     // removed the entry by the time we get here.
-    const stopped = handle.stopRequested === true
-      || signal === "SIGTERM" || signal === "SIGKILL"
-      || code === 143 || code === 137;
+    const stopped = isStoppedExit({ code, signal, stopRequested: handle.stopRequested });
     const status = stopped ? "stopped" : code === 0 ? "done" : "error";
     if (status === "error") {
       const detail = stderr.trim().slice(-500) || `The agent exited with code ${code}.`;
