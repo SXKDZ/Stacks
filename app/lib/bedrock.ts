@@ -1,5 +1,6 @@
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { joinTextBlocks, MantleResponseSchema, RuntimeResponseSchema, UpstreamErrorSchema } from "@/app/lib/schemas/bedrock";
+import { bedrockEffortFields, type EffortSetting } from "@/app/lib/effort";
 
 export interface BedrockMessage {
   role: "user" | "assistant";
@@ -22,6 +23,15 @@ interface BedrockInvocationOptions {
    * goes stale with every release.
    */
   temperature?: number;
+  /**
+   * Reasoning effort ("" or absent = don't ask for any).
+   *
+   * Only the converse endpoint carries it: verified that Opus 5 and Sonnet 5 accept
+   * `thinking.type: adaptive` + `output_config.effort`, while Sonnet 4.5 and Haiku
+   * 4.5 answer 400 "Extra inputs are not permitted". Left unset it is omitted
+   * entirely, so those models are unaffected.
+   */
+  effort?: EffortSetting;
   signal?: AbortSignal;
 }
 
@@ -71,10 +81,16 @@ function canTryAnotherRegion(status: number, message: string): boolean {
 
 function upstreamMessage(raw: string): string {
   const parsed = parseJsonWith(UpstreamErrorSchema, raw);
-  if (!parsed.ok) {
-    return raw.slice(0, 500);
+  const message = parsed.ok
+    ? parsed.data.error?.message ?? parsed.data.message ?? raw.slice(0, 500)
+    : raw.slice(0, 500);
+  // Name the setting to change. "output_config.effort: Extra inputs are not
+  // permitted" is the provider saying this model has no reasoning control, which
+  // reads as a bug rather than a setting the user can turn off.
+  if (/output_config\.effort|thinking\.type/.test(message)) {
+    return `${message} This model does not support reasoning effort: turn it off in Settings, or choose a newer model.`;
   }
-  return parsed.data.error?.message ?? parsed.data.message ?? raw.slice(0, 500);
+  return message;
 }
 
 export async function invokeBedrockMessages(options: BedrockInvocationOptions): Promise<{
@@ -122,6 +138,8 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
       maxTokens: options.maxTokens,
       ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
     };
+    const fields = bedrockEffortFields(options.effort ?? "");
+    const effortFields = Object.keys(fields).length ? fields : null;
     const response = await fetch(
       `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(model)}/converse`,
       {
@@ -140,6 +158,7 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
         inferenceConfig: {
           ...inferenceConfig,
         },
+        ...(effortFields ? { additionalModelRequestFields: effortFields } : {}),
       }),
       },
     );

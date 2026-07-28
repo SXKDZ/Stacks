@@ -145,3 +145,25 @@ test("a runtime setting survives a save and is exposed to the AI routes", async 
   api.persistSettings({ remotePath: "/tmp/stacks-backup" });
   assert.ok(!("STACKS_ONEDRIVE_PATH" in api.runtimeValues()), "a non-runtime key must not leak into runtimeValues()");
 });
+
+test("the global reasoning effort persists and reaches the AI routes", async () => {
+  const api = await settings;
+  api.persistSettings({ effort: "high" });
+  assert.equal(api.currentSettings().ai.effort, "high");
+  assert.equal(api.runtimeValues().STACKS_EFFORT, "high", "the AI routes read runtimeValues()");
+
+  // An unrecognised level is stored as unset rather than persisted: Bedrock 400s on
+  // a variant it does not know, so a bad value must not survive a write.
+  api.persistSettings({ effort: "turbo" });
+  assert.equal(api.currentSettings().ai.effort, "");
+
+  // Explicitly clearing it is a legitimate save, not an omitted field.
+  api.persistSettings({ effort: "max" });
+  api.persistSettings({ effort: "" });
+  assert.equal(api.currentSettings().ai.effort, "");
+
+  // An unrelated save keeps it.
+  api.persistSettings({ effort: "medium" });
+  api.persistSettings({ maxTokens: 4096 });
+  assert.equal(api.currentSettings().ai.effort, "medium");
+});

@@ -15,6 +15,7 @@ import {
   type SyncResult,
 } from "@/app/lib/schemas/settings";
 import { databasePath, ensureLibraryDirectories, libraryRoot, settingsPath } from "@/db/library-paths";
+import { effortSetting } from "@/app/lib/effort";
 
 /**
  * Local settings companion. The structured `settings.json` (AI config, prompts,
@@ -53,6 +54,7 @@ const SETTING_KEYS = {
   STACKS_SUMMARY_SYSTEM_PROMPT: { runtime: true },
   STACKS_TEMPERATURE: { runtime: true },
   STACKS_SEND_TEMPERATURE: { runtime: true },
+  STACKS_EFFORT: { runtime: true },
   STACKS_AUTO_SYNC: {},
   STACKS_AUTO_SYNC_INTERVAL: {},
   STACKS_ONEDRIVE_PATH: {},
@@ -125,6 +127,7 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     STACKS_SUMMARY_SYSTEM_PROMPT: settings.prompts.summarySystem,
     STACKS_TEMPERATURE: settings.ai.temperature,
     STACKS_SEND_TEMPERATURE: settings.ai.sendTemperature,
+    STACKS_EFFORT: settings.ai.effort,
     STACKS_AUTO_SYNC: settings.sync.autoSync,
     STACKS_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
     STACKS_ONEDRIVE_PATH: settings.sync.remotePath,
@@ -239,6 +242,7 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
       maxTokens: envValue("STACKS_MAX_TOKENS", "10000"),
       temperature: envValue("STACKS_TEMPERATURE", "0.25"),
       sendTemperature: envValue("STACKS_SEND_TEMPERATURE", "true"),
+      effort: envValue("STACKS_EFFORT"),
     },
     prompts: {
       extractionSystem: envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
@@ -328,6 +332,7 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "STACKS_MAX_TOKENS": next.ai.maxTokens = value; break;
       case "STACKS_TEMPERATURE": next.ai.temperature = value; break;
       case "STACKS_SEND_TEMPERATURE": next.ai.sendTemperature = value; break;
+      case "STACKS_EFFORT": next.ai.effort = value; break;
       case "STACKS_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
       case "STACKS_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
       case "STACKS_ONEDRIVE_PATH": next.sync.remotePath = value; break;
@@ -413,6 +418,7 @@ export function currentSettings() {
       // Default on: most models accept it, and a user hitting a model that does not
       // gets a clear upstream error plus this switch to turn it off.
       sendTemperature: envValue("STACKS_SEND_TEMPERATURE", "true") !== "false",
+      effort: effortSetting(envValue("STACKS_EFFORT")),
     },
     integrations: Object.fromEntries(
       secretKeys.map((key) => [key, Boolean(envValue(key))]),
@@ -465,6 +471,11 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
     STACKS_TEMPERATURE: clampFloat(data.temperature, envValue("STACKS_TEMPERATURE", "0.25"), 0, 1, 0.25),
     // A real boolean in the payload, so an explicit false must not fall back to the
     // saved value the way an omitted field does.
+    // Normalised on write: an unknown level is stored as "" (provider default)
+    // rather than reaching Bedrock, which 400s on an unrecognised variant.
+    STACKS_EFFORT: data.effort === undefined
+      ? envValue("STACKS_EFFORT")
+      : effortSetting(String(data.effort)),
     STACKS_SEND_TEMPERATURE: data.sendTemperature === undefined
       ? envValue("STACKS_SEND_TEMPERATURE", "true")
       : data.sendTemperature ? "true" : "false",

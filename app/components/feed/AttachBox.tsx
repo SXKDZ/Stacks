@@ -1,12 +1,13 @@
 "use client";
 
-import { BookOpen, Check, Cpu, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { BookOpen, Check, Cpu, FileText, Gauge, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ActionButton, Select, type SelectOption } from "@/app/components/ui/controls";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
+import { EFFORT_LEVELS, effortLabel, type EffortSetting } from "@/app/lib/effort";
 
 export interface LibraryPaper {
   id: string;
@@ -27,6 +28,8 @@ export interface AttachSubmit {
   paperIds: string[];
   /** The Bedrock model to run this feed with ("" = the default). */
   model: string;
+  /** Reasoning effort for this feed ("" = the global Settings value). */
+  effort: string;
 }
 
 /** A pickable agent model (from the Bedrock catalog, as in Settings). */
@@ -76,6 +79,8 @@ export function AttachBox({
   leadingAction,
   models = [],
   initialModel = "",
+  initialEffort = "",
+  defaultEffortLabel = "",
   defaultModelLabel = "",
   onSubmit,
 }: {
@@ -94,12 +99,17 @@ export function AttachBox({
   models?: FeedModelOption[];
   /** The feed's current model id ("" = the default). */
   initialModel?: string;
+  /** The feed's current reasoning effort ("" = the global default). */
+  initialEffort?: string;
+  /** The global effort from Settings, named in the "default" option. */
+  defaultEffortLabel?: EffortSetting;
   /** The configured default model's label (Settings → AI model). */
   defaultModelLabel?: string;
   onSubmit: (payload: AttachSubmit) => Promise<boolean>;
 }) {
   const [text, setText] = useState(initialText);
   const [model, setModel] = useState(initialModel);
+  const [effort, setEffort] = useState<string>(initialEffort);
   // The composer's initialModel arrives after mount (the last-used model is read
   // from localStorage), so adopt a changed initialModel — but only while the user
   // hasn't picked one yet, so a late default can't clobber an active choice. The
@@ -222,7 +232,7 @@ export function AttachBox({
     const textFiles = texts.map((entry, index) =>
       new File([entry.content], `pasted-${index + 1}.txt`, { type: "text/plain" }),
     );
-    const cleared = await onSubmit({ text: text.trim(), files: [...files, ...textFiles], paperIds: papers.map((p) => p.id), model });
+    const cleared = await onSubmit({ text: text.trim(), files: [...files, ...textFiles], paperIds: papers.map((p) => p.id), model, effort });
     if (cleared) {
       setText("");
       setFiles([]);
@@ -348,6 +358,20 @@ export function AttachBox({
                 leadingIcon={<Cpu size={13} aria-hidden="true" />}
               />
             ) : null}
+            {/* Per-feed reasoning effort. "" defers upward, so the option names what
+                that actually resolves to: the level configured in Settings, or the
+                model's own default when Settings leaves it unset. Just "Default"
+                left the user unable to tell which. */}
+            <Select
+              value={effort}
+              options={[{ value: "", label: defaultEffortLabel ? `${effortLabel(defaultEffortLabel)} (from Settings)` : "Let the model decide" },
+                        ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]}
+              onChange={setEffort}
+              ariaLabel="Reasoning effort"
+              size="small"
+              className="feed-effort-select"
+              leadingIcon={<Gauge size={13} aria-hidden="true" />}
+            />
           </div>
           <div className="feed-dock-send">
             {hint ? <span className="feed-dock-hint">{hint}</span> : null}

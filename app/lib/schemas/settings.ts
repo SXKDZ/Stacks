@@ -38,6 +38,11 @@ const AiSettingsSchema = z.object({
   // hardcoded list that goes stale with every release. Stored as text like the
   // other fields in this block.
   sendTemperature: z.string().catch("true"),
+  /**
+   * Reasoning effort for summaries, extraction, and new feeds ("" = provider
+   * default). Text like the rest of this block; validated on read.
+   */
+  effort: z.string().catch(""),
 });
 
 const PromptSettingsSchema = z.object({
@@ -89,7 +94,7 @@ export const StructuredSettingsFileSchema = z.object({
   // corrupt still yields its saved model and secrets, rather than the whole read
   // failing and every setting appearing unset (which, for the secrets block,
   // looks to the user like their API tokens were silently discarded).
-  ai: AiSettingsSchema.catch(() => ({ modelId: "", region: "", maxTokens: "10000", temperature: "0.25", sendTemperature: "true" })),
+  ai: AiSettingsSchema.catch(() => ({ modelId: "", region: "", maxTokens: "10000", temperature: "0.25", sendTemperature: "true", effort: "" })),
   prompts: PromptSettingsSchema.catch(() => ({ extractionSystem: "", summarySystem: "" })),
   sync: SyncSettingsSchema.catch(() => ({ remotePath: "", autoSync: "false", autoSyncInterval: "5" })),
   github: GithubSettingsSchema.optional(),
@@ -114,6 +119,7 @@ export const SettingsPayloadSchema = z.object({
   maxTokens: z.union([z.string(), z.number()]).optional(),
   temperature: z.union([z.string(), z.number()]).optional(),
   sendTemperature: z.boolean().optional(),
+  effort: z.string().optional(),
   extractionSystemPrompt: z.string().optional(),
   summarySystemPrompt: z.string().optional(),
   remotePath: z.string().optional(),

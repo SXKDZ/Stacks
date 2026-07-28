@@ -1977,13 +1977,16 @@
 /* The composer/reply model picker is the shared Select (.app-select); cap its
    trigger width so a long model label doesn't stretch the tool row, and show the
    Cpu leading icon in the muted tool-row ink. */
-.feed-model-select .app-select-trigger {
+.feed-model-select .app-select-trigger,
+.feed-effort-select .app-select-trigger {
   color: var(--muted);
   max-width: 240px;
 }
 
 .feed-model-select .app-select-trigger:hover,
-.feed-model-select .app-select-trigger[aria-expanded="true"] {
+.feed-model-select .app-select-trigger[aria-expanded="true"],
+.feed-effort-select .app-select-trigger:hover,
+.feed-effort-select .app-select-trigger[aria-expanded="true"] {
   color: var(--ink);
 }
 

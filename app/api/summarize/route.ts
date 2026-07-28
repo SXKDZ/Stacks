@@ -14,6 +14,7 @@ import { resolveStoredFile } from "@/app/lib/local-files";
 import { readPdfPages } from "@/app/lib/pdf-text";
 import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
 import { parseRequest } from "@/app/lib/schemas/parse";
+import { effortSetting } from "@/app/lib/effort";
 import { SummarizeRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +104,7 @@ export async function POST(request: Request): Promise<Response> {
         content: "Write the structured academic review defined by the system prompt. Cover every requested section, explicitly marking material that is not described or not applicable.",
       }],
       maxTokens: Math.max(128, Number(runtimeValue(runtime, "STACKS_MAX_TOKENS", "10000"))),
+      effort: effortSetting(runtimeValue(runtime, "STACKS_EFFORT")),
       temperature: temperatureOption(
         runtimeValue(runtime, "STACKS_SEND_TEMPERATURE", "true") !== "false",
         Number(runtimeValue(runtime, "STACKS_TEMPERATURE", "0.2")),
