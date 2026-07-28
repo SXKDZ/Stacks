@@ -8,8 +8,29 @@ All notable changes to Stacks are documented here. The format follows
 
 ### Added
 
+- Reasoning effort is settable: once globally, for summaries, PDF extraction and
+  new feeds, and per feed in both the new-feed and reply composers. A feed's own
+  choice wins, and leaving it unset defers to the global one. Left unset there
+  too, Stacks sends no effort at all and the model chooses per request, which is
+  also what keeps models that reject the setting working.
 - The Continue Reading card's abstract has a "Show more" toggle, like its author
   line. It appears only when the text is actually clipped.
+
+### Changed
+
+- Stopping a feed agent asks it to interrupt rather than killing the process, so
+  the partial answer and the session survive and the next question continues the
+  same thread instead of starting over.
+- Connections, renamed "Keys & services", is its own settings group again: only
+  one of its four credentials is for AI, the rest being paper discovery and the
+  GitHub inbox.
+
+### Fixed
+
+- Stopping a feed agent no longer reports the interrupt as a failure. The CLI
+  traps the signal and exits 143 itself, so a deliberate stop showed "The agent
+  reported an error".
+- Replies no longer start with a blank line when reasoning is on.
 
 ## [0.3.2] - 2026-07-26
 
