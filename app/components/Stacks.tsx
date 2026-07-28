@@ -438,14 +438,6 @@ function fullAuthorLine(paper: Paper): string {
   return paper.authors.map((author) => author.displayName).join(", ");
 }
 
-/**
- * The card's abstract, clamped to three lines with a toggle when there is more.
- *
- * The clamp is CSS (`-webkit-line-clamp`), so nothing in React knows whether the
- * text was actually cut: the toggle is shown only when the element reports more
- * scroll height than it displays. Without that check a short abstract would get a
- * "Show more" button that expands nothing.
- */
 /** How many lines of the abstract to show before "Show more". */
 const ABSTRACT_PREVIEW_LINES = 5;
 
