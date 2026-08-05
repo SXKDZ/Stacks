@@ -104,6 +104,8 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   // override produced a blue banner with dark error text and poor hierarchy.
   assert.doesNotMatch(designSystem, /\.toast,/);
   assert.match(settingsStyles, /\.toast-error\s*\{[\s\S]*?var\(--rose\)/);
+  assert.match(settingsStyles, /\.toast\s*\{[\s\S]*?align-items: center/);
+  assert.match(settingsStyles, /\.toast-message\s*\{[\s\S]*?align-items: flex-start/);
   // Full-width selects must not inherit the global 96% button press scale.
   assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?transform: none/);
   // The summary and extraction prompts survive chat removal; the discussion

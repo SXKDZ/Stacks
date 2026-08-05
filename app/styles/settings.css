@@ -522,7 +522,7 @@
 }
 
 .toast {
-  align-items: flex-start;
+  align-items: center;
   animation: toast-in 220ms ease-out;
   background: var(--ink);
   border: 1px solid rgba(255,255,255,0.13);
@@ -542,15 +542,22 @@
   z-index: 120;
 }
 
-.toast > span {
+.toast-message {
+  align-items: flex-start;
+  display: flex;
   flex: 1;
+  gap: 10px;
+  min-width: 0;
+}
+
+.toast-message > span {
   line-height: 1.4;
   text-wrap: pretty;
 }
 
-.toast > svg {
+.toast-message > svg {
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-block-start: 1px;
 }
 
 .toast-dismiss {

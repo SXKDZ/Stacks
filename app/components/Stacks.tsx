@@ -309,9 +309,11 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   const Icon = TOAST_ICONS[toast.tone] ?? Sparkles;
   const isError = toast.tone === "error";
   return (
-    <div className={`toast toast-${toast.tone}`} role={isError ? "alert" : "status"} key={toast.id}>
-      <Icon size={17} aria-hidden="true" />
-      <span>{toast.message}</span>
+    <div className={`toast toast-${toast.tone}`} key={toast.id}>
+      <span className="toast-message" role={isError ? "alert" : "status"}>
+        <Icon size={17} aria-hidden="true" />
+        <span>{toast.message}</span>
+      </span>
       <button type="button" className="toast-dismiss" onClick={onDismiss} aria-label="Dismiss notification">
         <X size={14} aria-hidden="true" />
       </button>
