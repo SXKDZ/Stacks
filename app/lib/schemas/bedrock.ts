@@ -21,6 +21,21 @@ export const MantleResponseSchema = z.object({
   usage: z.record(z.string(), z.unknown()).optional(),
 }).loose();
 
+/** The OpenAI-compatible Responses API response from bedrock-mantle. */
+export const OpenAIResponsesResponseSchema = z.object({
+  // `output_text` is exposed by compatible clients and accepted here as a
+  // defensive fallback; the raw HTTP response normally carries message content
+  // inside `output`.
+  output_text: z.string().optional(),
+  output: z.array(z.object({
+    content: z.array(z.object({
+      type: z.string().optional(),
+      text: z.string().optional(),
+    }).loose()).optional(),
+  }).loose()).optional(),
+  usage: z.record(z.string(), z.unknown()).optional(),
+}).loose();
+
 /** The Bedrock Runtime converse response. */
 export const RuntimeResponseSchema = z.object({
   output: z.object({
@@ -49,6 +64,20 @@ export function joinTextBlocks(blocks: Array<{ text?: string }> | undefined): st
   return (blocks ?? [])
     .map((block) => block.text ?? "")
     .filter((text) => text !== "")
+    .join("\n")
+    .trim();
+}
+
+/** Read the answer text while ignoring reasoning and tool-call output items. */
+export function openAIResponseText(response: z.infer<typeof OpenAIResponsesResponseSchema>): string {
+  if (response.output_text?.trim()) {
+    return response.output_text.trim();
+  }
+  return (response.output ?? [])
+    .flatMap((item) => item.content ?? [])
+    .filter((part) => !part.type || part.type === "output_text")
+    .map((part) => part.text ?? "")
+    .filter(Boolean)
     .join("\n")
     .trim();
 }

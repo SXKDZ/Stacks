@@ -4,6 +4,8 @@ import {
   ArrowRightLeft,
   Bot,
   Check,
+  CircleAlert,
+  CircleCheck,
   Cloud,
   Cpu,
   CloudCog,
@@ -242,6 +244,9 @@ const secretFields = [
 ] as const;
 
 const fallbackBedrockModels: BedrockModelOption[] = [
+  { id: "openai.gpt-5.6-sol", label: "GPT-5.6 Sol · OpenAI", endpoint: "mantle", scope: "OpenAI" },
+  { id: "openai.gpt-5.6-terra", label: "GPT-5.6 Terra · OpenAI", endpoint: "mantle", scope: "OpenAI" },
+  { id: "openai.gpt-5.6-luna", label: "GPT-5.6 Luna · OpenAI", endpoint: "mantle", scope: "OpenAI" },
   { id: "us.anthropic.claude-opus-4-8", label: "Claude Opus 4.8 · US", endpoint: "runtime", scope: "US" },
   { id: "us.anthropic.claude-sonnet-5", label: "Claude Sonnet 5 · US", endpoint: "runtime", scope: "US" },
   { id: "us.anthropic.claude-sonnet-4-6", label: "Claude Sonnet 4.6 · US", endpoint: "runtime", scope: "US" },
@@ -456,6 +461,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelId: settings.ai.modelId }),
+        signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) {
         throw new Error(await readError(response));
@@ -465,9 +471,15 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       if (result.available && result.region && result.region !== settings.ai.region) {
         updateAi("region", result.region);
       }
-      notify(result.message, result.available ? "success" : "error");
+      // Access failures stay beside the model controls where the user can act on
+      // them. Repeating a long provider message in a transient toast obscures the
+      // form and leaves no durable context.
+      if (result.available) notify(result.message, "success");
     } catch (error) {
-      notify(error instanceof Error ? error.message : "Model access could not be tested.", "error");
+      const message = error instanceof DOMException && error.name === "TimeoutError"
+        ? "Bedrock did not respond within 30 seconds. Try again, then check this model’s access in AWS."
+        : error instanceof Error ? error.message : "Model access could not be tested.";
+      setModelAccess({ available: false, modelId: settings.ai.modelId, message });
     } finally {
       setTestingModel(false);
     }
@@ -861,13 +873,20 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "model" ? (
           <form onSubmit={save}>
-            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose the model and sampling for summaries and the feed." />
+            <SettingsHeading icon={<Bot size={19} />} title="AI model" detail="Choose a Bedrock model for summaries and PDF extraction." />
             <div className="settings-card">
               <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>Connected with an API key</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
               <div className="settings-form-grid">
-                <label className="span-2"><span>Model</span><Select value={knownModel ? settings.ai.modelId : "custom"} onChange={(next) => updateAi("modelId", next === "custom" ? "" : next)} ariaLabel="Model" options={[...modelOptions.map((model) => ({ value: model.id, label: model.label })), { value: "custom", label: "Custom Bedrock model ID…" }]} /><small>{models.length ? `${models.length} active Anthropic inference profiles loaded from Bedrock.` : "Using the built-in model fallback while the Bedrock catalog loads."}</small></label>
-                {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="anthropic.model or us.provider.model-id" required /></label> : null}
-                <div className="model-access-row span-2"><span className={visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}>{visibleModelAccess ? visibleModelAccess.message : "Seeing a model in the list doesn't mean your key can use it. Use Test access to check."}</span><ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton><ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton></div>
+                <label className="span-2"><span>Model</span><Select value={knownModel ? settings.ai.modelId : "custom"} onChange={(next) => updateAi("modelId", next === "custom" ? "" : next)} ariaLabel="Model" options={[...modelOptions.map((model) => ({ value: model.id, label: model.label })), { value: "custom", label: "Custom Bedrock model ID…" }]} /><small>{models.length ? `${models.length} Bedrock models loaded from Runtime and Mantle.` : "Using the built-in model list while the Bedrock catalogs load."} GPT-5.6 uses the Responses API. The agent feed remains Claude-only because Claude Code powers it.</small></label>
+                {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="openai.gpt-5.6-terra or us.provider.model-id" required /></label> : null}
+                <div className={`model-access-row span-2 ${visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}`}>
+                  <span role={visibleModelAccess ? visibleModelAccess.available ? "status" : "alert" : undefined}>
+                    {visibleModelAccess ? visibleModelAccess.available ? <CircleCheck size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" /> : null}
+                    {visibleModelAccess ? visibleModelAccess.message : "A model can appear here before your key can use it. Select Test access to verify."}
+                  </span>
+                  <ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton>
+                  <ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton>
+                </div>
                 <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
                 <label className="span-2"><span>Reasoning effort</span><Select value={settings.ai.effort} onChange={(next) => updateAi("effort", next)} ariaLabel="Reasoning effort" options={[{ value: "", label: "Let the model decide" }, ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]} /><small>How much the model thinks before answering. Left unset, Stacks sends no effort and the model chooses per request. Applies to summaries, PDF extraction, and new feeds, which can each override it. Older models reject the setting.</small></label>

@@ -16,6 +16,12 @@ import { ActionButton } from "@/app/components/ui/controls";
 import { effortSetting, type EffortSetting } from "@/app/lib/effort";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 
+/** The feed is a Claude Code agent. Direct OpenAI Bedrock models are available
+ * for summaries/PDF extraction, but cannot be passed to the Claude CLI. */
+function isClaudeAgentModel(modelId: string): boolean {
+  return modelId.startsWith("anthropic.") || modelId.includes(".anthropic.");
+}
+
 interface FeedMessage {
   id: string;
   role: string;
@@ -1026,7 +1032,8 @@ export default function FeedWorkspace() {
   // A new feed starts on the model the user last picked (persisted per browser).
   const [lastUsedModel, setLastUsedModel] = useState("");
   useEffect(() => {
-    setLastUsedModel(window.localStorage.getItem("stacks-feed-model") ?? "");
+    const saved = window.localStorage.getItem("stacks-feed-model") ?? "";
+    setLastUsedModel(isClaudeAgentModel(saved) ? saved : "");
   }, []);
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
@@ -1099,7 +1106,8 @@ export default function FeedWorkspace() {
         .then((data: { libraryName?: string; ai?: { modelId?: string; effort?: string }; github?: { repo?: string; connected?: boolean } } | null) => {
           if (cancelled || !data) return;
           if (data.libraryName?.trim()) setLibraryName(data.libraryName.trim());
-          if (data.ai?.modelId?.trim()) setDefaultModelId(data.ai.modelId.trim());
+          const configuredModel = data.ai?.modelId?.trim() ?? "";
+          setDefaultModelId(isClaudeAgentModel(configuredModel) ? configuredModel : "");
           setDefaultEffort(effortSetting(data.ai?.effort));
           setGithubReady(Boolean(data.github?.repo && data.github.connected));
         })
@@ -1219,7 +1227,9 @@ export default function FeedWorkspace() {
     void fetch("/api/models", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { models?: Array<{ id: string; label: string }> } | null) => {
-        if (!cancelled && data?.models) setModels(data.models.map(({ id, label }) => ({ id, label })));
+        if (!cancelled && data?.models) {
+          setModels(data.models.filter(({ id }) => isClaudeAgentModel(id)).map(({ id, label }) => ({ id, label })));
+        }
       })
       .catch(() => {});
     return () => { cancelled = true; };

@@ -16,7 +16,7 @@ import {
   ChevronUp,
   ChevronsLeft,
   ChevronsRight,
-  CircleDot,
+  CircleAlert,
   Clock3,
   Command,
   Compass,
@@ -309,9 +309,9 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   const Icon = TOAST_ICONS[toast.tone] ?? Sparkles;
   const isError = toast.tone === "error";
   return (
-    <div className={`toast toast-${toast.tone}`} role={isError ? "alert" : undefined} key={toast.id}>
+    <div className={`toast toast-${toast.tone}`} role={isError ? "alert" : "status"} key={toast.id}>
       <Icon size={17} aria-hidden="true" />
-      <span aria-hidden={isError ? undefined : "true"}>{toast.message}</span>
+      <span>{toast.message}</span>
       <button type="button" className="toast-dismiss" onClick={onDismiss} aria-label="Dismiss notification">
         <X size={14} aria-hidden="true" />
       </button>
@@ -322,7 +322,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 /** Toast icon per tone. A table rather than a ternary ladder in the markup. */
 const TOAST_ICONS: Record<string, typeof CheckCircle2> = {
   success: CheckCircle2,
-  error: CircleDot,
+  error: CircleAlert,
 };
 
 /** What the entity pickers call the things they search. */
