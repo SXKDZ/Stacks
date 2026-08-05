@@ -973,11 +973,12 @@
 /* The preview is portaled to the body and fixed-positioned (anchored to the
    hovered chip from JS) so it escapes the attachment tray's overflow clip. */
 .feed-chip-hover-preview {
-  border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-2);
   max-height: 220px;
   max-width: 280px;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
   pointer-events: none;
   position: fixed;
   z-index: 50;
@@ -1010,6 +1011,8 @@
   max-height: 88vh;
   max-width: 88vw;
   object-fit: contain;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 
 /* Higher specificity than .feed-picker (defined later) so the wider/taller

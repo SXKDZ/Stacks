@@ -526,7 +526,7 @@
   animation: toast-in 220ms ease-out;
   background: var(--ink);
   border: 1px solid rgba(255,255,255,0.13);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   bottom: 22px;
   box-shadow: 0 15px 35px rgba(15, 31, 42, 0.24);
   color: white;
@@ -536,14 +536,43 @@
   gap: 7px;
   left: 50%;
   max-width: min(430px, 88vw);
-  padding: 10px 13px;
+  padding: 8px 8px 8px 12px;
   position: fixed;
   transform: translateX(-50%);
   z-index: 120;
 }
 
-.toast-success svg { color: #70d6aa; }
-.toast-error svg { color: #f28ba0; }
+.toast > span {
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.toast-dismiss {
+  align-items: center;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  margin-inline-start: 3px;
+  min-width: 28px;
+}
+
+.toast-dismiss:hover {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.toast-error {
+  background: var(--surface-2);
+  background-image: none;
+  border-color: color-mix(in srgb, var(--rose) 44%, var(--line-strong));
+  box-shadow: var(--shadow-2);
+  color: var(--ink);
+}
+
+.toast-success > svg { color: var(--green); }
+.toast-error > svg { color: var(--rose); }
 .toast-info svg { color: var(--brand-blue); }
 
 .loading-grid {

@@ -305,12 +305,16 @@ function providerLabel(provider: DiscoveryProvider): string {
 }
 
 /** The transient status message. Its own component so the icon lookup has a home. */
-function Toast({ toast }: { toast: ToastState }) {
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   const Icon = TOAST_ICONS[toast.tone] ?? Sparkles;
+  const isError = toast.tone === "error";
   return (
-    <div className={`toast toast-${toast.tone}`} role="status" key={toast.id}>
-      <Icon size={17} />
-      {toast.message}
+    <div className={`toast toast-${toast.tone}`} role={isError ? "alert" : undefined} key={toast.id}>
+      <Icon size={17} aria-hidden="true" />
+      <span aria-hidden={isError ? undefined : "true"}>{toast.message}</span>
+      <button type="button" className="toast-dismiss" onClick={onDismiss} aria-label="Dismiss notification">
+        <X size={14} aria-hidden="true" />
+      </button>
     </div>
   );
 }
@@ -483,7 +487,7 @@ function ExpandableAbstract({ abstract }: { abstract: string }) {
         <>
           {" "}
           <button type="button" className="continue-abstract-toggle" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
-            {expanded ? "Show less" : "Show more"}
+            {expanded ? "Collapse abstract" : "Expand abstract"}
           </button>
         </>
       ) : null}
@@ -561,7 +565,7 @@ function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: num
             setExpanded((current) => !current);
           }}
         >
-          {expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
+          {expanded ? "Show fewer authors" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
         </button>
       ) : null}
     </span>
@@ -600,7 +604,7 @@ function ExpandableAuthorButtons({ paper, onOpenAuthor, limit = 5 }: {
       {visibleAuthors.map((author, index) => (
         <span key={author.id}><button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>{index < visibleAuthors.length - 1 ? ", " : ""}</span>
       ))}
-      {hiddenCount ? <> <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show less" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button></> : null}
+      {hiddenCount ? <> <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show fewer authors" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button></> : null}
     </span>
   );
 }
@@ -868,12 +872,13 @@ function SelectionBox({ checked }: { checked: boolean }) {
   );
 }
 
-function EmptyState({ icon, title, detail }: { icon: ReactNode; title: string; detail: string }) {
+function EmptyState({ icon, title, detail, action }: { icon: ReactNode; title: string; detail: string; action?: ReactNode }) {
   return (
     <div className="empty-state">
-      <div className="empty-icon">{icon}</div>
+      <div className="empty-icon" aria-hidden="true">{icon}</div>
       <h3>{title}</h3>
       <p>{detail}</p>
+      {action ? <div className="empty-state-action">{action}</div> : null}
     </div>
   );
 }
@@ -900,6 +905,7 @@ function StacksWorkspace() {
   const [libraryName, setLibraryName] = useState("My Paper Library");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilterClause[]>([]);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousView = useRef<ViewId>(view);
 
   const notify = useCallback((message: string, tone: ToastState["tone"] = "success") => {
     if (toastTimer.current) {
@@ -907,9 +913,11 @@ function StacksWorkspace() {
     }
     const next = { id: Date.now(), message, tone };
     setToast(next);
-    toastTimer.current = setTimeout(() => {
-      setToast(null);
-    }, 3200);
+    if (tone !== "error") {
+      toastTimer.current = setTimeout(() => {
+        setToast(null);
+      }, 5000);
+    }
   }, []);
 
   // Fetches the latest library snapshot. Runs on mount and whenever the tab
@@ -960,7 +968,7 @@ function StacksWorkspace() {
       notify(successMessage);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "That change could not be saved.";
+      const message = error instanceof Error ? error.message : "Unable to save the change. Check your connection and try again.";
       notify(message, "error");
       return false;
     }
@@ -1033,10 +1041,10 @@ function StacksWorkspace() {
 
   // What Escape should dismiss, read live: the keydown listener below is registered
   // once, so it would otherwise close against the state as it was at mount.
-  const layers = useRef({ modal, commandOpen });
+  const layers = useRef({ modal, commandOpen, mobileNav });
   useEffect(() => {
-    layers.current = { modal, commandOpen };
-  }, [modal, commandOpen]);
+    layers.current = { modal, commandOpen, mobileNav };
+  }, [modal, commandOpen, mobileNav]);
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
@@ -1053,6 +1061,7 @@ function StacksWorkspace() {
         // down with it, losing the place the user was working from.
         if (layers.current.commandOpen) setCommandOpen(false);
         else if (layers.current.modal) setModal(null);
+        else if (layers.current.mobileNav) closeMobileNavigation();
         else setSelectedPaper(null);
         return;
       }
@@ -1064,6 +1073,29 @@ function StacksWorkspace() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (previousView.current === view) return;
+    previousView.current = view;
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLHeadingElement>(".view-heading")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [view]);
+
+  function openMobileNavigation() {
+    setMobileNav(true);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(".mobile-close")?.focus();
+    });
+  }
+
+  function closeMobileNavigation() {
+    setMobileNav(false);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(".mobile-menu")?.focus();
+    });
+  }
 
   function changeView(nextView: ViewId) {
     setView((current) => {
@@ -1131,15 +1163,17 @@ function StacksWorkspace() {
     });
     return byRecentActivity.find((paper) => paper.readingStatus === "reading") ?? byRecentActivity[0];
   }, [snapshot.papers]);
+  const currentViewLabel = navigation.find((item) => item.id === view)?.label ?? "Overview";
 
   return (
     <div className="stacks-shell">
-      <aside className={`sidebar ${mobileNav ? "is-open" : ""}`}>
+      <a className="skip-link" href="#main-content" tabIndex={mobileNav ? -1 : 0}>Skip to content</a>
+      <aside className={`sidebar ${mobileNav ? "is-open" : ""}`} aria-label="Primary navigation">
         <div className="brand-row">
           <button className="brand" onClick={() => changeView("home")} aria-label="Stacks home">
             <Brand subtitle="Read deeper. Connect further." />
           </button>
-          <ActionButton variant="ghost" size="icon" className="mobile-close" onClick={() => setMobileNav(false)} aria-label="Close navigation" icon={<X />} />
+          <ActionButton variant="ghost" size="icon" className="mobile-close" onClick={closeMobileNavigation} aria-label="Close navigation" icon={<X />} />
         </div>
 
         <button className="new-paper-button" onClick={() => setModal({ kind: "add-paper" })}>
@@ -1165,6 +1199,7 @@ function StacksWorkspace() {
                 key={item.id}
                 className={`nav-item ${view === item.id ? "is-active" : ""}`}
                 onClick={() => changeView(item.id)}
+                aria-current={view === item.id ? "page" : undefined}
               >
                 <Icon size={17} strokeWidth={2} />
                 <span>{item.label}</span>
@@ -1198,11 +1233,11 @@ function StacksWorkspace() {
         </div>
       </aside>
 
-      {mobileNav ? <Scrim fixed onClick={() => setMobileNav(false)} label="Close navigation" className="z-[70] md:hidden" /> : null}
+      {mobileNav ? <Scrim fixed onClick={closeMobileNavigation} label="Close navigation" className="z-[70] md:hidden" /> : null}
 
-      <main className="app-main">
+      <main className="app-main" id="main-content" inert={mobileNav ? true : undefined}>
         <header className="topbar">
-          <ActionButton variant="ghost" size="icon" className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Open navigation" icon={<Menu />} />
+          <ActionButton variant="ghost" size="icon" className="mobile-menu" onClick={openMobileNavigation} aria-label="Open navigation" icon={<Menu />} />
 
           <button className="global-search" onClick={() => setCommandOpen(true)}>
             <Search size={17} />
@@ -1215,6 +1250,7 @@ function StacksWorkspace() {
         </header>
 
         <section className="workspace">
+          <h1 className="view-heading sr-only" tabIndex={-1}>{currentViewLabel}</h1>
           {loading ? (
             <LoadingWorkspace />
           ) : view === "home" ? (
@@ -1422,7 +1458,8 @@ function StacksWorkspace() {
         />
       ) : null}
 
-      {toast ? <Toast toast={toast} /> : null}
+      <div className="sr-only" role="status">{toast && toast.tone !== "error" ? toast.message : ""}</div>
+      {toast ? <Toast toast={toast} onDismiss={() => setToast(null)} /> : null}
     </div>
   );
 }
@@ -1531,7 +1568,7 @@ function Dashboard({
             <p className="eyebrow">Recently added</p>
             <h3>Fresh in your library</h3>
           </div>
-          <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>View all</TextButton>
+          <TextButton onClick={() => setView("library")} trailingIcon={<ArrowRight />}>View all papers</TextButton>
         </div>
         <div className="recent-list">
           {recentPapers.map((paper) => (
@@ -1932,7 +1969,12 @@ function LibraryView({
           />
         </div>
       ) : (
-        <EmptyState icon={<Search size={24} />} title="No papers found" detail="Try another search or clear the current filters." />
+        <EmptyState
+          icon={<Search size={24} />}
+          title={papers.length ? "No papers found" : "No papers yet"}
+          detail={papers.length ? "Try another search or clear the current filters." : "Add a paper to start building your research library."}
+          action={query || filters.length ? <ActionButton size="small" onClick={() => { setQuery(""); setFilters([]); }}>Clear search and filters</ActionButton> : undefined}
+        />
       )}
     </div>
   );
@@ -2106,7 +2148,14 @@ function AuthorsView({
           onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       </div>
-      {!filtered.length ? <EmptyState icon={<UsersRound size={24} />} title="No authors found" detail="Try another author name." /> : null}
+      {!filtered.length ? (
+        <EmptyState
+          icon={<UsersRound size={24} />}
+          title={authors.length ? "No authors found" : "No authors yet"}
+          detail={authors.length ? "Try another author name." : "Add an author to keep names consistent across papers."}
+          action={<ActionButton size="small" onClick={query ? () => setQuery("") : onCreate}>{query ? "Clear author search" : "Add author"}</ActionButton>}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2243,7 +2292,14 @@ function VenuesView({
           onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       </div>
-      {!filtered.length ? <EmptyState icon={<Building2 size={24} />} title="No venues found" detail="Try a different conference, journal, or publisher." /> : null}
+      {!filtered.length ? (
+        <EmptyState
+          icon={<Building2 size={24} />}
+          title={venues.length ? "No venues found" : "No venues yet"}
+          detail={venues.length ? "Try a different conference, journal, or publisher." : "Add a venue to keep publication details consistent."}
+          action={<ActionButton size="small" onClick={query ? () => setQuery("") : onCreate}>{query ? "Clear venue search" : "Add venue"}</ActionButton>}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2315,7 +2371,14 @@ function CollectionsView({
           onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       ) : null}
-      {!filtered.length ? <EmptyState icon={<FolderOpen size={24} />} title="No collections found" detail="Create a collection to group related papers." /> : null}
+      {!filtered.length ? (
+        <EmptyState
+          icon={<FolderOpen size={24} />}
+          title={collections.length ? "No collections found" : "No collections yet"}
+          detail="Collections keep related papers together."
+          action={<ActionButton size="small" onClick={query ? () => setQuery("") : onCreate}>{query ? "Clear collection search" : "Add collection"}</ActionButton>}
+        />
+      ) : null}
     </div>
   );
 }

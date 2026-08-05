@@ -5,8 +5,11 @@
      counts, and inactive tabs read clearly rather than dim gray. */
   --muted: #a2acbf;
   --soft: #808ca3;
+  --placeholder: #808ca3;
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.14);
+  --focus-ring: #2d9cff;
+  --image-outline: rgba(255, 255, 255, 0.1);
   --canvas: #060811;
   --panel: rgba(255, 255, 255, 0.035);
   /* Opaque layered surface ladder. On a near-black canvas, elevation reads as a
@@ -112,6 +115,7 @@
   --type-heading-small: 18px;
   --type-heading: 22px;
   --type-heading-large: 28px;
+  --type-input-mobile: 16px;
   /* Radius scale, nudged up a step for a softer, more modern feel.
      --radius-control (11px) is the button/input default. */
   --radius-sm: 7px;
@@ -150,9 +154,29 @@ body {
   font-family: var(--font-ui);
   font-size: var(--type-body-large);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.006em;
   min-width: 320px;
   text-rendering: optimizeLegibility;
+}
+
+@media (max-width: 760px) {
+  input,
+  textarea,
+  select {
+    /* Prevent iOS from zooming the entire workspace when a field receives focus. */
+    font-size: var(--type-input-mobile) !important;
+  }
+}
+
+@media (forced-colors: active) {
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 /* Keep browser normalization in Tailwind's base layer. Shared controls live in
@@ -187,7 +211,7 @@ body {
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible {
-    outline: 3px solid rgba(45, 156, 255, 0.24);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 
@@ -199,6 +223,32 @@ body {
 
 ::selection {
   background: rgba(45, 156, 255, 0.24);
+}
+
+.skip-link {
+  background: var(--surface-2);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-size: var(--type-control);
+  font-weight: 700;
+  inset-inline-start: 16px;
+  padding: 10px 14px;
+  position: fixed;
+  top: 12px;
+  transform: translateY(calc(-100% - 24px));
+  transition: transform var(--motion-fast);
+  z-index: 200;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+h1,
+h2,
+h3 {
+  overflow-wrap: break-word;
+  text-wrap: balance;
 }
 
 ::-webkit-scrollbar {
@@ -255,6 +305,8 @@ body {
   display: block;
   flex-shrink: 0;
   height: 34px;
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
   width: 34px;
 }
 
@@ -318,7 +370,7 @@ body {
 }
 
 .new-paper-button:active {
-  transform: translateY(0) scale(0.985);
+  transform: translateY(0) scale(0.96);
 }
 
 .new-paper-button kbd {
@@ -383,6 +435,7 @@ body {
 .nav-count {
   color: #9b94a2;
   font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
   margin-left: auto;
 }
 
@@ -399,7 +452,7 @@ body {
     radial-gradient(120% 140% at 100% 0%, var(--brand-blue-soft), transparent 60%),
     var(--surface-1);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   color: var(--ink);
   display: grid;
@@ -435,7 +488,7 @@ body {
 }
 
 .assistant-card:active {
-  transform: translateY(0) scale(0.99);
+  transform: translateY(0) scale(0.96);
 }
 
 .assistant-card:hover .assistant-orb,
@@ -615,7 +668,7 @@ body {
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   display: flex;
   gap: 11px;
@@ -652,8 +705,15 @@ button.stat-card:hover {
 .stat-card strong {
   font-family: var(--font-display);
   font-size: var(--type-heading);
+  font-variant-numeric: tabular-nums;
   font-weight: 500;
   line-height: 1;
+}
+
+.metric-ring span,
+.reading-bars strong,
+.sync-card small {
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-card small {
@@ -731,6 +791,7 @@ button.stat-card:hover {
   line-height: 1.55;
   margin: 0;
   max-width: 560px;
+  text-wrap: pretty;
 }
 
 .paper-byline {
