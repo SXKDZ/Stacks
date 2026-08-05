@@ -112,11 +112,11 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.doesNotMatch(designSystem, /\.toast,/);
   assert.match(settingsStyles, /\.toast-error\s*\{[\s\S]*?var\(--rose\)/);
   assert.match(settingsStyles, /\.toast-warning\s*\{[\s\S]*?var\(--amber\)/);
-  assert.match(settingsStyles, /\.toast-warning \.toast-message\s*\{[\s\S]*?align-items: center;[\s\S]*?min-height: 28px;/);
-  assert.match(settingsStyles, /\.toast-warning \.toast-message > svg\s*\{[\s\S]*?color: var\(--amber\);[\s\S]*?margin-block-start: 0;/);
+  assert.match(settingsStyles, /\.toast-message\s*\{[\s\S]*?align-items: center;[\s\S]*?min-height: 28px;/);
+  assert.match(settingsStyles, /\.toast-message > span\s*\{[\s\S]*?transform: translateY\(3px\);/);
+  assert.match(settingsStyles, /\.toast-message > svg\s*\{[\s\S]*?margin-block-start: 0;/);
   assert.match(settings, /MODEL_ACCESS_WARNING_TOAST,[\s\S]*?result\.available \? "success" : "warning"/);
   assert.match(settingsStyles, /\.toast\s*\{[\s\S]*?align-items: center/);
-  assert.match(settingsStyles, /\.toast-message\s*\{[\s\S]*?align-items: flex-start/);
   // Full-width selects must not inherit the global 96% button press scale.
   assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?transform: none/);
   // The summary and extraction prompts survive chat removal; the discussion
