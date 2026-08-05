@@ -100,7 +100,7 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(bedrock, /store: false/);
   assert.match(bedrock, /\/converse/);
   assert.match(settings, /AbortSignal\.timeout\(30_000\)/);
-  assert.match(settings, /Model access unavailable\. See the details below\./);
+  assert.match(settings, /Model access unavailable\. Check the message by Test access\./);
   assert.equal(
     [...settings.matchAll(/MODEL_ACCESS_WARNING_TOAST/g)].length,
     3,
@@ -112,7 +112,8 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.doesNotMatch(designSystem, /\.toast,/);
   assert.match(settingsStyles, /\.toast-error\s*\{[\s\S]*?var\(--rose\)/);
   assert.match(settingsStyles, /\.toast-warning\s*\{[\s\S]*?var\(--amber\)/);
-  assert.match(settingsStyles, /\.toast-warning \.toast-message > svg\s*\{ color: var\(--amber\); \}/);
+  assert.match(settingsStyles, /\.toast-warning \.toast-message\s*\{[\s\S]*?align-items: center;[\s\S]*?min-height: 28px;/);
+  assert.match(settingsStyles, /\.toast-warning \.toast-message > svg\s*\{[\s\S]*?color: var\(--amber\);[\s\S]*?margin-block-start: 0;/);
   assert.match(settings, /MODEL_ACCESS_WARNING_TOAST,[\s\S]*?result\.available \? "success" : "warning"/);
   assert.match(settingsStyles, /\.toast\s*\{[\s\S]*?align-items: center/);
   assert.match(settingsStyles, /\.toast-message\s*\{[\s\S]*?align-items: flex-start/);

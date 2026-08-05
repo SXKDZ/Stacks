@@ -254,7 +254,7 @@ const fallbackBedrockModels: BedrockModelOption[] = [
   { id: "us.anthropic.claude-haiku-4-5-20251001-v1:0", label: "Claude Haiku 4.5 · US", endpoint: "runtime", scope: "US" },
 ];
 
-const MODEL_ACCESS_WARNING_TOAST = "Model access unavailable. See the details below.";
+const MODEL_ACCESS_WARNING_TOAST = "Model access unavailable. Check the message by Test access.";
 
 function normalizedModelId(modelId: string): string {
   if (modelId === "anthropic.claude-opus-4-8") {

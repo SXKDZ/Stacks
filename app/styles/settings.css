@@ -597,9 +597,17 @@
   color: var(--ink);
 }
 
+.toast-warning .toast-message {
+  align-items: center;
+  min-height: 28px;
+}
+
 .toast-success .toast-message > svg { color: var(--green); }
 .toast-error .toast-message > svg { color: var(--rose); }
-.toast-warning .toast-message > svg { color: var(--amber); }
+.toast-warning .toast-message > svg {
+  color: var(--amber);
+  margin-block-start: 0;
+}
 .toast-info .toast-message > svg { color: var(--brand-blue); }
 
 .loading-grid {
