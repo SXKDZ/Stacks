@@ -686,23 +686,47 @@ textarea::placeholder {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   padding: 9px;
 }
 
 .model-access-row > span {
+  align-items: flex-start;
   color: var(--muted);
-  flex: 1;
-  font-size: var(--type-micro);
-  line-height: 1.4;
+  display: flex;
+  flex: 1 1 300px;
+  font-size: var(--type-caption);
+  gap: 7px;
+  line-height: 1.45;
+  min-width: min(100%, 240px);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
-.model-access-row > span.is-available {
+.model-access-row.is-available > span {
   color: var(--green);
 }
 
-.model-access-row > span.is-unavailable {
-  color: #ff9f9f;
+.model-access-row.is-unavailable > span {
+  color: var(--rose);
+}
+
+.model-access-row > span > svg {
+  flex: 0 0 auto;
+  margin-block-start: 1px;
+}
+
+.model-access-row.is-available {
+  background: color-mix(in srgb, var(--green) 7%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--green) 32%, var(--line));
+  color: var(--green);
+}
+
+.model-access-row.is-unavailable {
+  background: color-mix(in srgb, var(--rose) 7%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--rose) 32%, var(--line));
+  color: var(--rose);
 }
 
 .prompt-variable-list {
@@ -1040,6 +1064,24 @@ textarea::placeholder {
 
 [data-theme="light"] .model-access-row {
   background: rgba(255, 255, 255, 0.72);
+}
+
+[data-theme="light"] .model-access-row.is-available {
+  background: color-mix(in srgb, var(--green) 7%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--green) 32%, var(--line));
+}
+
+[data-theme="light"] .model-access-row.is-available > span {
+  color: color-mix(in srgb, var(--green) 90%, var(--ink));
+}
+
+[data-theme="light"] .model-access-row.is-unavailable {
+  background: color-mix(in srgb, var(--rose) 7%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--rose) 32%, var(--line));
+}
+
+[data-theme="light"] .model-access-row.is-unavailable > span {
+  color: color-mix(in srgb, var(--rose) 90%, var(--ink));
 }
 
 [data-theme="light"] .global-search,

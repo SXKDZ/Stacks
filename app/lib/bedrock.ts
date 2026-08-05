@@ -1,5 +1,5 @@
 import { parseJsonWith } from "@/app/lib/schemas/parse";
-import { joinTextBlocks, MantleResponseSchema, RuntimeResponseSchema, UpstreamErrorSchema } from "@/app/lib/schemas/bedrock";
+import { joinTextBlocks, MantleResponseSchema, OpenAIResponsesResponseSchema, openAIResponseText, RuntimeResponseSchema, UpstreamErrorSchema } from "@/app/lib/schemas/bedrock";
 import { bedrockEffortFields, type EffortSetting } from "@/app/lib/effort";
 
 export interface BedrockMessage {
@@ -26,10 +26,9 @@ interface BedrockInvocationOptions {
   /**
    * Reasoning effort ("" or absent = don't ask for any).
    *
-   * Only the converse endpoint carries it: verified that Opus 5 and Sonnet 5 accept
-   * `thinking.type: adaptive` + `output_config.effort`, while Sonnet 4.5 and Haiku
-   * 4.5 answer 400 "Extra inputs are not permitted". Left unset it is omitted
-   * entirely, so those models are unaffected.
+   * Runtime models receive Bedrock's `thinking`/`output_config` fields. OpenAI
+   * Responses models receive `reasoning.effort`. Left unset it is omitted
+   * entirely, so models that do not support the setting are unaffected.
    */
   effort?: EffortSetting;
   signal?: AbortSignal;
@@ -60,6 +59,15 @@ export function isMantleModel(model: string): boolean {
   return model.startsWith("anthropic.");
 }
 
+/**
+ * Mantle Responses model IDs do not carry Bedrock Runtime's version suffix
+ * (`:0`). This keeps the older OpenAI open-weight Runtime IDs on Converse while
+ * routing current frontier models through their OpenAI-compatible endpoint.
+ */
+export function isOpenAIResponsesModel(model: string): boolean {
+  return model.startsWith("openai.") && !model.includes(":");
+}
+
 function invocationModel(model: string): string {
   if (model === "anthropic.claude-opus-4-8") {
     return "us.anthropic.claude-opus-4-8";
@@ -68,6 +76,14 @@ function invocationModel(model: string): string {
 }
 
 function candidateRegions(region: string, model: string): string[] {
+  if (isOpenAIResponsesModel(model)) {
+    const supported = model === "openai.gpt-5.6-sol"
+      ? ["us-east-1", "us-east-2"]
+      : ["us-east-1", "us-east-2", "us-west-2"];
+    return supported.includes(region)
+      ? [region, ...supported.filter((candidate) => candidate !== region)]
+      : supported;
+  }
   if (!model.startsWith("us.") && !model.startsWith("global.")) {
     return [region];
   }
@@ -99,6 +115,50 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
   region: string;
 }> {
   const model = invocationModel(options.model);
+  if (isOpenAIResponsesModel(model)) {
+    let lastError: BedrockInvocationError | null = null;
+    for (const region of candidateRegions(options.region, model)) {
+      const response = await fetch(
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${options.token}`,
+            "Content-Type": "application/json",
+          },
+          signal: options.signal,
+          body: JSON.stringify({
+            model,
+            instructions: options.system,
+            input: options.messages,
+            max_output_tokens: options.maxTokens,
+            store: false,
+            ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+            ...(options.effort ? { reasoning: { effort: options.effort } } : {}),
+          }),
+        },
+      );
+      const raw = await response.text();
+      if (!response.ok) {
+        const message = upstreamMessage(raw);
+        lastError = new BedrockInvocationError(message, response.status);
+        if (canTryAnotherRegion(response.status, message)) {
+          continue;
+        }
+        throw lastError;
+      }
+      const payload = parseJsonWith(OpenAIResponsesResponseSchema, raw);
+      if (!payload.ok) {
+        throw new BedrockInvocationError(`Unexpected Bedrock response: ${payload.error}`, 502);
+      }
+      const content = openAIResponseText(payload.data);
+      if (!content) {
+        throw new BedrockInvocationError("The OpenAI Responses API returned no answer text.", 502);
+      }
+      return { content, endpoint: "mantle", region };
+    }
+    throw lastError ?? new BedrockInvocationError("No compatible Bedrock region was available.", 503);
+  }
   if (isMantleModel(model)) {
     const response = await fetch(
       `https://bedrock-mantle.${options.region}.api.aws/anthropic/v1/messages`,
