@@ -19,8 +19,8 @@ const actionVariants = cva(
     "inline-flex shrink-0 select-none items-center justify-center gap-2",
     "rounded-[var(--radius-lg)] border font-semibold leading-[1.25] no-underline",
     "transition-[background-color,border-color,color,box-shadow,filter,transform] duration-200 ease-out",
-    "hover:-translate-y-px active:translate-y-0 active:scale-[0.97]",
-    "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[color-mix(in_srgb,var(--brand-blue)_22%,transparent)]",
+    "hover:-translate-y-px active:translate-y-0 active:scale-[0.96]",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50 disabled:transform-none",
   ],
   {
@@ -213,7 +213,7 @@ const tabVariants = cva(
   [
     "inline-flex shrink-0 select-none items-center gap-1.5 border font-semibold leading-[1.25]",
     "transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out",
-    "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--brand-blue-soft)]",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50",
     "[&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:stroke-2",
   ],
@@ -378,7 +378,7 @@ const textButtonVariants = cva(
   [
     "inline-flex items-center gap-1 border-0 bg-transparent p-0 font-bold leading-[1.25]",
     "transition-colors duration-150 ease-out",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue-soft)] focus-visible:ring-offset-2",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50",
     "[&_svg]:size-[14px] [&_svg]:shrink-0 [&_svg]:stroke-2",
   ],
@@ -420,7 +420,7 @@ const selectCardVariants = cva(
   [
     "grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[var(--radius-control)] border p-3 text-left",
     "transition-[background-color,border-color,box-shadow] duration-150 ease-out",
-    "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[var(--brand-blue-soft)]",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50",
   ],
   {
@@ -486,7 +486,7 @@ const paginationVariants = cva(
   [
     "inline-flex shrink-0 select-none items-center justify-center border font-semibold leading-[1.25]",
     "transition-[background-color,border-color,color] duration-150 ease-out",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue-soft)]",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-40",
     "[&_svg]:stroke-2",
   ],

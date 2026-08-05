@@ -773,9 +773,21 @@
   .topbar-actions { display: flex; right: 12px; }
   .global-search { margin-right: 44px; }
   .global-search { flex: 1; width: auto; }
-  .stat-strip { gap: 8px; }
-  .stat-card { min-height: 62px; padding: 10px; }
+  .stat-strip {
+    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .stat-card {
+    flex-direction: column;
+    gap: 5px;
+    justify-content: center;
+    min-height: 72px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+  .stat-card > .stat-icon,
   .stat-card > svg { display: none; }
+  .stat-card > span:nth-child(2) { align-items: center; }
   .continue-copy { padding: 24px 20px; }
   .continue-copy h2 { font-size: var(--type-heading-large); }
   .continue-actions { align-items: stretch; flex-direction: column; }

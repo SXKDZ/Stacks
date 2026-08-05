@@ -104,7 +104,7 @@ body {
 
 input::placeholder,
 textarea::placeholder {
-  color: #5c6678;
+  color: var(--placeholder);
 }
 
 .global-search {
@@ -972,9 +972,12 @@ textarea::placeholder {
 :root[data-theme="light"] {
   --ink: #171a25;
   --muted: #626b7d;
-  --soft: #7a8395;
+  --soft: #657084;
+  --placeholder: #657084;
   --line: rgba(36, 42, 59, 0.1);
   --line-strong: rgba(36, 42, 59, 0.17);
+  --focus-ring: #086dc4;
+  --image-outline: rgba(0, 0, 0, 0.1);
   --canvas: #f4f5f9;
   --panel: rgba(255, 255, 255, 0.82);
   --panel-strong: #ffffff;
@@ -1066,7 +1069,24 @@ textarea::placeholder {
 
 [data-theme="light"] input::placeholder,
 [data-theme="light"] textarea::placeholder {
-  color: #939bad;
+  color: var(--placeholder);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --muted: #c7cfdd;
+    --soft: #aeb9cc;
+    --line: rgba(255, 255, 255, 0.2);
+    --line-strong: rgba(255, 255, 255, 0.34);
+  }
+
+  :root[data-theme="light"] {
+    --muted: #465064;
+    --soft: #4f5a70;
+    --placeholder: #4f5a70;
+    --line: rgba(36, 42, 59, 0.22);
+    --line-strong: rgba(36, 42, 59, 0.38);
+  }
 }
 
 [data-theme="light"] .continue-card {
@@ -1197,10 +1217,15 @@ textarea::placeholder {
   .sidebar {
     box-shadow: 20px 0 50px rgba(15, 31, 42, 0.18);
     transform: translateX(-102%);
-    transition: transform 200ms ease;
+    transition: transform 200ms ease-out, visibility 0s linear 200ms;
+    visibility: hidden;
     z-index: 75;
   }
-  .sidebar.is-open { transform: translateX(0); }
+  .sidebar.is-open {
+    transform: translateX(0);
+    transition-delay: 0s;
+    visibility: visible;
+  }
   .mobile-close,
   .mobile-menu { display: inline-flex; }
   .app-main { margin-left: 0; }

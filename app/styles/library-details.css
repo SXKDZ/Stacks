@@ -672,6 +672,12 @@ td.number-cell {
   color: var(--soft);
   font-size: var(--type-micro);
   margin: 0;
+  max-width: 52ch;
+  text-wrap: pretty;
+}
+
+.empty-state-action {
+  margin-top: 16px;
 }
 
 .discover-view {
