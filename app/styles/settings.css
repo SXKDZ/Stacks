@@ -554,7 +554,6 @@
 .toast-message > span {
   line-height: 1.4;
   text-wrap: pretty;
-  transform: translateY(3px);
 }
 
 .toast-message > svg {
