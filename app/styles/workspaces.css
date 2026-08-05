@@ -816,6 +816,11 @@
 .feed-dock-actions {
   align-items: center;
   display: flex;
+  /* Backstop for a very narrow composer: wrap onto a second line rather than let
+     the buttons hang outside the box's border, as they did while the agent ran
+     (the row gains Stop and the submit label grows to "Interrupt & send"). */
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: space-between;
 }
 
@@ -823,12 +828,32 @@
   align-items: center;
   display: flex;
   gap: 4px;
+  /* The tool row is what yields when the send group grows. A flex item won't shrink
+     below its content by default, so without this nothing gave way and the overflow
+     went outside the border instead. */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-/* A separator before the model picker: the attach icons and the model choice are
-   different kinds of control, and running them together at one gap made the picker
-   look like a third icon button that had grown a label. */
-.feed-dock-tools .feed-model-select {
+/* The primary action keeps its full width: truncating "Interrupt & send" or the Stop
+   button is never the right trade. `margin-left: auto` also holds it to the right on
+   a wrapped second line, where space-between has nothing left to space out. */
+.feed-dock-send {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* The trigger and its inline-flex wrapper both have to be shrinkable, or the row's
+   min-width stops at the wrapper and the label's ellipsis never engages. */
+.feed-dock-tools .run-settings,
+.feed-dock-tools .run-settings-trigger {
+  min-width: 0;
+}
+
+/* A separator before the run settings: the attach icons and the model/effort choice
+   are different kinds of control, and running them together at one gap made the
+   picker look like a third icon button that had grown a label. */
+.feed-dock-tools .run-settings {
   border-left: 1px solid var(--line);
   margin-left: 4px;
   padding-left: 8px;
@@ -1977,20 +2002,79 @@
   border-radius: var(--radius-lg);
 }
 
-/* The composer/reply model picker is the shared Select (.app-select); cap its
-   trigger width so a long model label doesn't stretch the tool row, and show the
-   Cpu leading icon in the muted tool-row ink. */
-.feed-model-select .app-select-trigger,
-.feed-effort-select .app-select-trigger {
-  color: var(--muted);
-  max-width: 240px;
+/* The composer's run settings: one trigger (model + effort) reusing the shared
+   Select's trigger chrome, capped so a long model label can't stretch the row. */
+.run-settings {
+  display: inline-flex;
+  min-width: 0;
 }
 
-.feed-model-select .app-select-trigger:hover,
-.feed-model-select .app-select-trigger[aria-expanded="true"],
-.feed-effort-select .app-select-trigger:hover,
-.feed-effort-select .app-select-trigger[aria-expanded="true"] {
+.run-settings-trigger {
+  color: var(--muted);
+  max-width: 260px;
+}
+
+.run-settings-trigger:hover,
+.run-settings-trigger[aria-expanded="true"] {
   color: var(--ink);
+}
+
+/* Secondary values after the first, muted and non-italic: the trigger reads as
+   "Opus 5 · High" without a row label for each. */
+.run-settings-trigger .app-select-label i {
+  color: var(--soft);
+  font-style: normal;
+}
+
+.run-settings-trigger .app-select-label i::before {
+  content: " · ";
+}
+
+/* A settings row: name, current value, and a chevron into its submenu. */
+.run-settings-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--type-control);
+  gap: 10px;
+  padding: 7px 9px;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.run-settings-row > svg {
+  color: var(--soft);
+  flex-shrink: 0;
+}
+
+.run-settings-row-label {
+  font-weight: 500;
+}
+
+/* Pushed right, so the values line up in a column whatever the label lengths. */
+.run-settings-row-value {
+  color: var(--soft);
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.run-settings-row:hover,
+.run-settings-row.is-open {
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue-strong);
+}
+
+.run-settings-row:hover > svg,
+.run-settings-row.is-open > svg,
+.run-settings-row:hover .run-settings-row-value,
+.run-settings-row.is-open .run-settings-row-value {
+  color: var(--brand-blue-strong);
 }
 
 /* System notices in the thread (e.g. "Switched to model X."): a quiet centered line. */

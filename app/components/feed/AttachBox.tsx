@@ -1,13 +1,14 @@
 "use client";
 
-import { BookOpen, Check, Cpu, FileText, Gauge, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { BookOpen, Check, Cpu, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ActionButton, Select, type SelectOption } from "@/app/components/ui/controls";
+import { ActionButton, type SelectOption } from "@/app/components/ui/controls";
+import { RunSettingsMenu } from "@/app/components/feed/RunSettingsMenu";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
-import { EFFORT_LEVELS, effortLabel, type EffortSetting } from "@/app/lib/effort";
+import { EFFORT_LEVELS, effortLabel, effortSetting, type EffortSetting } from "@/app/lib/effort";
 
 export interface LibraryPaper {
   id: string;
@@ -46,6 +47,12 @@ function modelSelectOptions(models: FeedModelOption[], defaultModelLabel: string
     { value: "", label: defaultLabel, text: defaultLabel },
     ...models.map((option) => ({ value: option.id, label: option.label, text: option.label })),
   ];
+}
+
+/** The model's name for the collapsed trigger, without the "(default)" suffix:
+ *  the trigger has no room for it and the open menu already says which is default. */
+function modelTriggerText(model: string, models: FeedModelOption[], defaultModelLabel: string): string {
+  return models.find((option) => option.id === model)?.label || defaultModelLabel || "Default model";
 }
 
 /** Pull files out of a paste or a drag-drop (Finder), including clipboard images. */
@@ -347,30 +354,41 @@ export function AttachBox({
             <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
             <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file"><Paperclip size={16} /></button>
             <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library"><BookOpen size={16} /></button>
-            {models.length ? (
-              <Select
-                value={model}
-                options={modelSelectOptions(models, defaultModelLabel)}
-                onChange={setModel}
-                ariaLabel="Agent model"
-                size="small"
-                className="feed-model-select"
-                leadingIcon={<Cpu size={13} aria-hidden="true" />}
-              />
-            ) : null}
-            {/* Per-feed reasoning effort. "" defers upward, so the option names what
-                that actually resolves to: the level configured in Settings, or the
-                model's own default when Settings leaves it unset. Just "Default"
-                left the user unable to tell which. */}
-            <Select
-              value={effort}
-              options={[{ value: "", label: defaultEffortLabel ? `${effortLabel(defaultEffortLabel)} (from Settings)` : "Let the model decide" },
-                        ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]}
-              onChange={setEffort}
-              ariaLabel="Reasoning effort"
-              size="small"
-              className="feed-effort-select"
-              leadingIcon={<Gauge size={13} aria-hidden="true" />}
+            {/* Model and effort share one trigger with a submenu each. Side by side
+                they were wide enough to push the send group outside the composer
+                while the agent ran, when the row also gains Stop and the submit
+                label grows to "Interrupt & send". */}
+            <RunSettingsMenu
+              leadingIcon={<Cpu size={13} aria-hidden="true" />}
+              groups={[
+                ...(models.length
+                  ? [{
+                      key: "model",
+                      label: "Model",
+                      value: model,
+                      options: modelSelectOptions(models, defaultModelLabel),
+                      onChange: setModel,
+                      triggerText: modelTriggerText(model, models, defaultModelLabel),
+                    }]
+                  : []),
+                {
+                  key: "effort",
+                  label: "Effort",
+                  value: effort,
+                  // "" defers upward, so the option names what that resolves to: the
+                  // level configured in Settings, or the model's own default when
+                  // Settings leaves it unset. Just "Default" left that ambiguous.
+                  options: [{ value: "", label: defaultEffortLabel ? `${effortLabel(defaultEffortLabel)} (from Settings)` : "Let the model decide" },
+                            ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))],
+                  onChange: setEffort,
+                  // Named only once it says something: deferring to a Settings value
+                  // that is itself unset would spend trigger width on "Let the model
+                  // decide", which is what the absence of a level already means.
+                  triggerText: effortSetting(effort || defaultEffortLabel)
+                    ? effortLabel(effortSetting(effort || defaultEffortLabel))
+                    : undefined,
+                },
+              ]}
             />
           </div>
           <div className="feed-dock-send">
