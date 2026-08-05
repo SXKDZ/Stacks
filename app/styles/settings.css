@@ -590,9 +590,17 @@
   color: var(--ink);
 }
 
-.toast-success > svg { color: var(--green); }
-.toast-error > svg { color: var(--rose); }
-.toast-info svg { color: var(--brand-blue); }
+.toast-warning {
+  background: color-mix(in srgb, var(--amber) 5%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--amber) 34%, var(--line-strong));
+  box-shadow: var(--shadow-2);
+  color: var(--ink);
+}
+
+.toast-success .toast-message > svg { color: var(--green); }
+.toast-error .toast-message > svg { color: var(--rose); }
+.toast-warning .toast-message > svg { color: var(--amber); }
+.toast-info .toast-message > svg { color: var(--brand-blue); }
 
 .loading-grid {
   display: grid;

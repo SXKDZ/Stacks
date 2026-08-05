@@ -100,10 +100,20 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(bedrock, /store: false/);
   assert.match(bedrock, /\/converse/);
   assert.match(settings, /AbortSignal\.timeout\(30_000\)/);
+  assert.match(settings, /Model access unavailable\. See the details below\./);
+  assert.equal(
+    [...settings.matchAll(/MODEL_ACCESS_WARNING_TOAST/g)].length,
+    3,
+    "the short access warning should cover provider and request failures",
+  );
+  assert.match(settings, /aria-describedby=\{visibleModelAccess \? "model-access-detail"/);
   // Semantic toast surfaces must win in light mode. The former brand-gradient
   // override produced a blue banner with dark error text and poor hierarchy.
   assert.doesNotMatch(designSystem, /\.toast,/);
   assert.match(settingsStyles, /\.toast-error\s*\{[\s\S]*?var\(--rose\)/);
+  assert.match(settingsStyles, /\.toast-warning\s*\{[\s\S]*?var\(--amber\)/);
+  assert.match(settingsStyles, /\.toast-warning \.toast-message > svg\s*\{ color: var\(--amber\); \}/);
+  assert.match(settings, /MODEL_ACCESS_WARNING_TOAST,[\s\S]*?result\.available \? "success" : "warning"/);
   assert.match(settingsStyles, /\.toast\s*\{[\s\S]*?align-items: center/);
   assert.match(settingsStyles, /\.toast-message\s*\{[\s\S]*?align-items: flex-start/);
   // Full-width selects must not inherit the global 96% button press scale.
