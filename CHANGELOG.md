@@ -6,6 +6,27 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-08-04
+
+### Changed
+
+- The library workspace and shared controls have more consistent focus and press
+  states, stronger secondary-text contrast, clearer empty-state actions, and
+  balanced mobile statistics in both themes.
+- The feed composer's model and reasoning-effort selectors now live behind one
+  run-settings menu. The action row stays inside the composer at narrower widths,
+  and long menus scroll within the viewport instead of extending beyond it.
+
+### Fixed
+
+- The closed mobile navigation is no longer exposed to assistive technology.
+  Opening it moves focus to the close control, and Escape closes it and returns
+  focus to the menu button.
+- Workspace changes announce their new heading, notifications use the appropriate
+  status behavior, and errors remain available until they are dismissed.
+- Mobile form fields keep a readable 16px text size so focusing them does not
+  trigger iOS page zoom.
+
 ## [0.3.3] - 2026-07-28
 
 ### Added
@@ -300,7 +321,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.4
 [0.3.3]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.3
 [0.3.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.2
 [0.3.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.1
