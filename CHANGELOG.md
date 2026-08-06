@@ -6,6 +6,45 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-08-06
+
+### Added
+
+- OpenAI GPT-5.6 Sol, Terra, and Luna can be discovered and invoked through
+  Amazon Bedrock's OpenAI-compatible Responses API, with regional availability,
+  reasoning-effort, output-limit, privacy, and response validation support.
+- PDF metadata conflicts now open an accessible field-by-field review dialog
+  that shows current and extracted values before any selected changes are
+  applied.
+- Library Doctor now lists every paper without a readable PDF or HTML snapshot,
+  shows its complete bibliographic and source information, and links directly to
+  its source editor.
+
+### Changed
+
+- Model access feedback uses restrained semantic success and warning banners,
+  while complete provider messages remain beside the model controls for
+  diagnosis.
+- One-paper reading and analysis requests keep the agent scoped to the named or
+  attached paper. Paper-create proposals require verified ordered authors and
+  complete identifiers, while preprints use their canonical repository name
+  without a redundant venue-acronym field.
+- Press feedback uses one shared motion token with a restrained 99% scale across
+  controls, menus, cards, and the reading workspace.
+
+### Fixed
+
+- Manual GitHub inbox sync reconciles the full comment history of linked issues,
+  recovering comments missed after the incremental cursor advanced, and refreshes
+  the selected feed stream so recovered user and agent turns appear immediately.
+- PDF extraction performs a focused recovery pass when authors are missing,
+  applies controlled author edits correctly, compares metadata consistently
+  across locales, and disables conflicts that the selected paper type cannot
+  store.
+- Metadata review focus rings are no longer clipped, missing-author text uses the
+  normal author scale, and model-access banners keep their icon, message, and
+  dismiss control vertically aligned in both themes.
+
 ## [0.3.4] - 2026-08-04
 
 ### Changed
@@ -321,7 +360,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.5
 [0.3.4]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.4
 [0.3.3]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.3
 [0.3.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.2
