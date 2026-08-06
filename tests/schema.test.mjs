@@ -804,6 +804,21 @@ test("the GitHub sync survives a deleted issue, a repeated issue, and a long thr
   assert.match(client, /segment === "\." \|\| segment === "\.\."/);
 });
 
+test("the GitHub sync recovers linked comments that fell behind its cursor", async () => {
+  const sync = await readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8");
+  // The issue-level `since` query is only a change-discovery optimization. Every
+  // linked issue omitted by that result still gets a complete comment-id sweep,
+  // so an unseen comment older than the cursor cannot remain hidden forever.
+  assert.match(sync, /const reconcileComments = async[\s\S]*?listCommentsPaged\(config, issueNumber\)/);
+  assert.match(sync, /for \(const \[issueNumber, feed\] of linked\) \{\s*if \(handled\.has\(issueNumber\)\) continue;\s*await reconcileLinkedComments\(issueNumber, feed\);/);
+  // Issues present in the incremental response use the same reconciliation path,
+  // keeping deduplication, edit adoption, and agent launch behavior identical.
+  assert.match(sync, /await reconcileLinkedComments\(issue\.number, feed\);/);
+  assert.match(sync, /!localByComment\.has\(comment\.id\)/);
+  // The anti-entropy sweep must finish before the high-water mark advances.
+  assert.ok(sync.indexOf("for (const [issueNumber, feed] of linked)") < sync.indexOf("writeGithubLastSyncedAt(startedAt)"));
+});
+
 test("tooltips are drawn by the app, not the browser", async () => {
   const [layer, styles, layout] = await Promise.all([
     readFile(new URL("../app/components/ui/TooltipLayer.tsx", import.meta.url), "utf8"),

@@ -114,13 +114,16 @@ async function mirrorAttachments(
  *              New comments trigger a reply turn; edits just update the local
  *              copy (no re-run).
  * Incremental: the inbound issue list is filtered by `since` the last successful
- * sync (sorted by updated_at, stamped with a clock-skew margin), so each pass
- * pulls only what changed; the first sync does a full paginated sweep. The mark
- * only advances when nothing was truncated or deferred, so unprocessed changes
- * are re-pulled. Loop-safe: Stacks-authored comments carry a marker and every
- * mirrored/ingested message stores its comment id. Repo-safe: issue/comment ids
- * are scoped to the repo they were created in (github.linkedRepo); switching
- * repos unlinks everything first so no stale id touches the new repo's issues.
+ * sync (sorted by updated_at, stamped with a clock-skew margin), so new issues and
+ * issue metadata only pull what changed. Comments on every already-linked issue
+ * are always reconciled by their stable ids: this anti-entropy pass recovers a
+ * comment even if GitHub's issue-level change gate or an older Stacks build let
+ * the high-water mark advance past it. The mark only advances when nothing was
+ * truncated or deferred, so unprocessed changes are re-pulled. Loop-safe:
+ * Stacks-authored comments carry a marker and every mirrored/ingested message
+ * stores its comment id. Repo-safe: issue/comment ids are scoped to the repo they
+ * were created in (github.linkedRepo); switching repos unlinks everything first
+ * so no stale id touches the new repo's issues.
  */
 export async function POST(): Promise<Response> {
   const runtime = await resolveRuntimeValues();
@@ -284,6 +287,107 @@ export async function POST(): Promise<Response> {
       if (feed.issueNumber) linked.set(feed.issueNumber, feed);
     }
     const { issues, truncated } = await listIssues(config, since);
+
+    /**
+     * Reconcile one linked issue's complete comment history against the stable
+     * GitHub comment ids stored locally. This deliberately does not depend on
+     * the issue-level `since` gate: once a missed comment falls behind that
+     * cursor, comparing ids is the only way a later manual sync can recover it.
+     */
+    const reconcileComments = async (issueNumber: number, feed: typeof feeds[number]): Promise<void> => {
+      const localByComment = new Map<number, { id: string; content: string; role: string }>();
+      for (const message of database.select().from(feedMessages).where(eq(feedMessages.snippetId, feed.id)).all()) {
+        if (typeof message.githubCommentId === "number") {
+          localByComment.set(message.githubCommentId, { id: message.id, content: message.content, role: message.role });
+        }
+      }
+      const { comments, truncated: commentsTruncated } = await listCommentsPaged(config, issueNumber);
+      if (commentsTruncated) {
+        // Some of this thread was never read, so the mark must not move past it.
+        deferredInbound = true;
+      }
+
+      // Edits to already-synced HUMAN comments: keep the local copy in step.
+      for (const comment of comments) {
+        if (comment.fromStacks) continue;
+        const local = localByComment.get(comment.id);
+        const body = comment.body.trim();
+        if (local && local.role === "user" && body && body !== local.content.trim()) {
+          database.update(feedMessages).set({ content: body }).where(eq(feedMessages.id, local.id)).run();
+          counts.commentsUpdated += 1;
+        }
+      }
+
+      const fresh = comments.filter((comment) => !comment.fromStacks && !localByComment.has(comment.id) && comment.body.trim());
+      if (!fresh.length) return;
+      // Leave new comments unrecorded if the agent is mid-run, so the next sync
+      // (when it's free) ingests and acts on them rather than dropping them.
+      // Flag the deferral so the high-water mark stays put. The all-linked sweep
+      // below also makes this recoverable even if the cursor has already moved.
+      if (isFeedRunning(feed.id)) {
+        deferredInbound = true;
+        return;
+      }
+
+      const now = Date.now();
+      // Offset each comment by 1ms so the batch keeps its GitHub order when the
+      // transcript is read back sorted by createdAt.
+      fresh.forEach((comment, index) => {
+        database.insert(feedMessages).values({
+          id: `msg-${crypto.randomUUID()}`,
+          snippetId: feed.id,
+          role: "user",
+          kind: "text",
+          content: comment.body.trim(),
+          githubCommentId: comment.id,
+          createdAt: new Date(now + index).toISOString(),
+        }).run();
+        counts.commentsIngested += 1;
+      });
+
+      // Kick off one reply turn covering the new comments.
+      const reply = fresh.map((comment) => comment.body.trim()).join("\n\n");
+      if (feed.sessionId) {
+        const prompt = buildFollowUpPrompt({ reply, appliedSummaries: [], rejectedSummaries: [], attachments: [] });
+        void runFeedAgent({ snippetId: feed.id, sessionId: feed.sessionId, prompt, resume: true }).catch(() => {});
+      } else {
+        const history = database
+          .select()
+          .from(feedMessages)
+          .where(eq(feedMessages.snippetId, feed.id))
+          .orderBy(asc(feedMessages.createdAt))
+          .all()
+          .filter((message) => MIRRORED_KINDS.has(message.kind))
+          .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
+          .join("\n\n");
+        const prompt = buildForkPrompt({ reply, transcript: history, attachments: [] });
+        void runFeedAgent({ snippetId: feed.id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
+      }
+      // The working dir must exist for any attachments the agent stages.
+      feedWorkingDir(feed.id);
+      counts.repliesQueued += 1;
+    };
+
+    // A remotely deleted issue can disappear from the incremental issue list.
+    // Treat a 404/410 during the all-linked sweep exactly like the outbound pass:
+    // unlink it so the next sync opens a replacement instead of wedging all syncs.
+    const reconcileLinkedComments = async (issueNumber: number, feed: typeof feeds[number]): Promise<void> => {
+      try {
+        await reconcileComments(issueNumber, feed);
+      } catch (error) {
+        if (error instanceof GitHubError && (error.status === 404 || error.status === 410)) {
+          database.update(feedSnippets)
+            .set({ issueNumber: null, issueTitleSynced: null, issueStateSynced: null })
+            .where(eq(feedSnippets.id, feed.id))
+            .run();
+          linked.delete(issueNumber);
+          counts.feedsUnlinked += 1;
+          return;
+        }
+        throw error;
+      }
+    };
+
     // GitHub's updated-sort pagination can legitimately return the same issue
     // twice (it moves between pages as it is touched). Inserting it twice hit the
     // unique index on issue_number and aborted the whole sync with a 400.
@@ -356,80 +460,16 @@ export async function POST(): Promise<Response> {
         counts[collapsed ? "issuesClosed" : "issuesReopened"] += 1;
       }
 
-      // Reconcile comments: ingest new human comments and adopt edits to ones
-      // already synced (by comparing the remote body to the stored content).
-      const localByComment = new Map<number, { id: string; content: string; role: string }>();
-      for (const message of database.select().from(feedMessages).where(eq(feedMessages.snippetId, feed.id)).all()) {
-        if (typeof message.githubCommentId === "number") {
-          localByComment.set(message.githubCommentId, { id: message.id, content: message.content, role: message.role });
-        }
-      }
-      const { comments, truncated: commentsTruncated } = await listCommentsPaged(config, issue.number);
-      if (commentsTruncated) {
-        // Some of this thread was never read, so the mark must not move past it.
-        deferredInbound = true;
-      }
+      await reconcileLinkedComments(issue.number, feed);
+    }
 
-      // Edits to already-synced HUMAN comments: keep the local copy in step.
-      for (const comment of comments) {
-        if (comment.fromStacks) continue;
-        const local = localByComment.get(comment.id);
-        const body = comment.body.trim();
-        if (local && local.role === "user" && body && body !== local.content.trim()) {
-          database.update(feedMessages).set({ content: body }).where(eq(feedMessages.id, local.id)).run();
-          counts.commentsUpdated += 1;
-        }
-      }
-
-      const fresh = comments.filter((comment) => !comment.fromStacks && !localByComment.has(comment.id) && comment.body.trim());
-      if (!fresh.length) continue;
-      // Leave new comments unrecorded if the agent is mid-run, so the next sync
-      // (when it's free) ingests and acts on them rather than dropping them.
-      // Flag the deferral so the high-water mark stays put: these comments
-      // predate `startedAt`, and advancing past them would hide them from the
-      // next incremental pull if nothing else bumps the issue.
-      if (isFeedRunning(feed.id)) {
-        deferredInbound = true;
-        continue;
-      }
-
-      const now = Date.now();
-      // Offset each comment by 1ms so the batch keeps its GitHub order when the
-      // transcript is read back sorted by createdAt.
-      fresh.forEach((comment, index) => {
-        database.insert(feedMessages).values({
-          id: `msg-${crypto.randomUUID()}`,
-          snippetId: feed.id,
-          role: "user",
-          kind: "text",
-          content: comment.body.trim(),
-          githubCommentId: comment.id,
-          createdAt: new Date(now + index).toISOString(),
-        }).run();
-        counts.commentsIngested += 1;
-      });
-
-      // Kick off one reply turn covering the new comments.
-      const reply = fresh.map((comment) => comment.body.trim()).join("\n\n");
-      if (feed.sessionId) {
-        const prompt = buildFollowUpPrompt({ reply, appliedSummaries: [], rejectedSummaries: [], attachments: [] });
-        void runFeedAgent({ snippetId: feed.id, sessionId: feed.sessionId, prompt, resume: true }).catch(() => {});
-      } else {
-        const history = database
-          .select()
-          .from(feedMessages)
-          .where(eq(feedMessages.snippetId, feed.id))
-          .orderBy(asc(feedMessages.createdAt))
-          .all()
-          .filter((message) => MIRRORED_KINDS.has(message.kind))
-          .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
-          .join("\n\n");
-        const prompt = buildForkPrompt({ reply, transcript: history, attachments: [] });
-        void runFeedAgent({ snippetId: feed.id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
-      }
-      // The working dir must exist for any attachments the agent stages.
-      feedWorkingDir(feed.id);
-      counts.repliesQueued += 1;
+    // Anti-entropy pass: GitHub's issue-level `since` response is an optimization,
+    // not proof that the linked threads are identical. Reconcile every linked
+    // issue that the incremental set omitted so older missed comments recover by
+    // their stable ids instead of remaining permanently behind the cursor.
+    for (const [issueNumber, feed] of linked) {
+      if (handled.has(issueNumber)) continue;
+      await reconcileLinkedComments(issueNumber, feed);
     }
 
     // Advance the high-water mark only when the full changed set was seen AND
