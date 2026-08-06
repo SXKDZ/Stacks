@@ -356,10 +356,10 @@ function providerLabel(provider: DiscoveryProvider): string {
 /** The transient status message. Its own component so the icon lookup has a home. */
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   const Icon = TOAST_ICONS[toast.tone] ?? Sparkles;
-  const isError = toast.tone === "error";
+  const isAssertive = toast.tone === "error" || toast.tone === "warning";
   return (
     <div className={`toast toast-${toast.tone}`} key={toast.id}>
-      <span className="toast-message" role={isError ? "alert" : "status"}>
+      <span className="toast-message" role={isAssertive ? "alert" : "status"}>
         <Icon size={17} aria-hidden="true" />
         <span>{toast.message}</span>
       </span>
@@ -374,6 +374,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 const TOAST_ICONS: Record<string, typeof CheckCircle2> = {
   success: CheckCircle2,
   error: CircleAlert,
+  warning: CircleAlert,
 };
 
 /** What the entity pickers call the things they search. */
@@ -421,7 +422,7 @@ type ModalState =
 interface ToastState {
   id: number;
   message: string;
-  tone: "success" | "error" | "info";
+  tone: "success" | "error" | "warning" | "info";
 }
 
 type LibraryFilterKind = "author" | "venue" | "collection" | "year";
@@ -964,7 +965,7 @@ function StacksWorkspace() {
     }
     const next = { id: Date.now(), message, tone };
     setToast(next);
-    if (tone !== "error") {
+    if (tone !== "error" && tone !== "warning") {
       toastTimer.current = setTimeout(() => {
         setToast(null);
       }, 5000);
@@ -1509,7 +1510,7 @@ function StacksWorkspace() {
         />
       ) : null}
 
-      <div className="sr-only" role="status">{toast && toast.tone !== "error" ? toast.message : ""}</div>
+      <div className="sr-only" role="status">{toast && toast.tone !== "error" && toast.tone !== "warning" ? toast.message : ""}</div>
       {toast ? <Toast toast={toast} onDismiss={() => setToast(null)} /> : null}
     </div>
   );
