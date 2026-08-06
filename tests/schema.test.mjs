@@ -163,10 +163,21 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   assert.match(application, />\s*Apply selected\s*<\/ActionButton>/);
   assert.match(styles, /\.metadata-review-values\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.metadata-review-values\s*\{[\s\S]*?grid-template-columns: 1fr/);
+  assert.match(styles, /\.metadata-review-list\s*\{[\s\S]*?padding: 6px 20px 18px/);
+  assert.match(styles, /\.metadata-review-row:has\(> input:focus-visible\)/);
 
   // The no-author line now enters the same type scale as ordinary author names.
   assert.match(application, /className="expandable-author-buttons is-empty">No authors recorded/);
   assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+});
+
+test("agent scopes one-paper reads and proposes complete paper metadata", async () => {
+  const prompt = await readFile(new URL("../app/lib/feed-prompt.ts", import.meta.url), "utf8");
+  assert.match(prompt, /If the user asks to read, summarize,[\s\S]*?one identified paper[\s\S]*?Do NOT call the full-library endpoint/);
+  assert.match(prompt, /For an attached library paper,[\s\S]*?paper-specific metadata and file URLs/);
+  assert.match(prompt, /complete ordered author list[\s\S]*?do not[\s\S]*?incomplete create proposal/i);
+  assert.match(prompt, /For an arXiv preprint, set both venueName and venueAcronym to "arXiv"/);
+  assert.doesNotMatch(prompt, /Always READ first/);
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {

@@ -3790,7 +3790,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
   }
   return (
     <>
-      {visible.venueName ? <VenueFields venues={venues} label={venueLabel} defaultName={paper?.venueName ?? ""} defaultAcronym={paper?.venueAcronym ?? ""} placeholder={paperType === "preprint" ? "arXiv" : "Neural Information Processing Systems"} showAcronym={visible.venueAcronym} span={paperType !== "preprint"} /> : null}
+      {visible.venueName ? <VenueFields venues={venues} label={venueLabel} defaultName={paper?.venueName ?? ""} defaultAcronym={paper?.venueAcronym ?? ""} placeholder={paperType === "preprint" ? "arXiv" : "Neural Information Processing Systems"} showAcronym={visible.venueAcronym} /> : null}
       {visible.volumeIssue ? <label><span>Volume</span><input name="volume" defaultValue={paper?.volume ?? ""} placeholder="42" /></label> : null}
       {visible.volumeIssue ? <label><span>Issue</span><input name="issue" defaultValue={paper?.issue ?? ""} placeholder="3" /></label> : null}
       {visible.pages ? <label><span>Pages</span><input name="pages" defaultValue={paper?.pages ?? ""} placeholder="101-118" /></label> : null}

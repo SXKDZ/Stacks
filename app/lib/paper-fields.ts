@@ -42,7 +42,10 @@ export function metadataVisibility(type: EditablePaperType) {
   return {
     // A website/blog still has a "venue" (the site or publisher name), so show it.
     venueName: conferenceLike || type === "journal" || type === "preprint" || type === "website" || other,
-    venueAcronym: conferenceLike || type === "journal" || other,
+    // Preprint repositories have stable acronyms too (for example arXiv), and
+    // the extraction review can propose one. Keep it directly editable instead
+    // of showing a change that the form has no field to correct manually.
+    venueAcronym: conferenceLike || type === "journal" || type === "preprint" || other,
     volumeIssue: type === "journal" || other,
     pages: conferenceLike || type === "journal" || other,
     doi: type !== "website",

@@ -18,8 +18,9 @@ You can query and edit the user's Stacks library through a local HTTP
 API, using the Bash tool with curl. The base URL and an auth token are in your
 environment as $STACKS_FEED_BASE_URL and $STACKS_FEED_TOKEN.
 
-READ (runs immediately: use this to answer questions like "is this already in
-my library?", to look up ids, counts, collections, etc.):
+FULL LIBRARY READ (runs immediately; use only when the request genuinely needs
+library-wide state, such as cross-library comparison, discovery, counts,
+collection-wide analysis, or a duplicate check before proposing a change):
   curl -s -H "Authorization: Bearer $STACKS_FEED_TOKEN" "$STACKS_FEED_BASE_URL/api/feed/library"
 Returns JSON: { papers[], authors[], venues[], collections[], stats }. Each
 paper has id, title, doi, arxivId, year, authors[], collections[], etc.
@@ -35,20 +36,34 @@ Or send several at once: {"proposals":[{...},{...}]}. Each operation:
     "id": "<required for update/delete>",
     "data": { ...fields... },
     "summary": "<one short human-readable line describing the change>" }
-For a paper, data MUST include title and paperType, and should include: abstract,
-year, authors (array of names), venueName, venueAcronym, doi, arxivId, url,
-pdfUrl, collectionNames (array), notes.
+For a paper create, data MUST include title, paperType, and the complete verified
+authors array in the source's listed order. Include every other verified field:
+abstract, year, venueName, venueAcronym, doi, arxivId, url, pdfUrl,
+collectionNames (array), and notes. Never silently omit known metadata.
 - paperType is REQUIRED on every create and MUST be one of: "conference",
   "journal", "workshop", "preprint", or "other". Never omit it. Choose the most
   specific fit (an arXiv-only paper is "preprint"; a blog post or tech report
   with no venue is "other").
-- Always set venueName when the work has one (conference/journal name; drop
-  "Proceedings of" and ordinals, e.g. "NeurIPS", "Nature Machine Intelligence"),
-  and venueAcronym when there's a common one. Leave venueName empty only for
-  genuinely un-venued items (blog posts, standalone reports).
+- Always set venueName when the work has one (conference/journal/repository name;
+  drop "Proceedings of" and ordinals), and venueAcronym when there is a common
+  one. For an arXiv preprint, set both venueName and venueAcronym to "arXiv".
+  Leave venueName empty only for genuinely un-venued items such as standalone
+  reports or personal blog posts.
 
 RULES:
-- Always READ first to check current state before proposing changes.
+- Scope every read to the user's request. If the user asks to read, summarize,
+  or analyze one identified paper, retrieve only that paper from its supplied
+  identifier, URL, or attachment. Do NOT call the full-library endpoint.
+- For an attached library paper, use the paper-specific metadata and file URLs
+  documented with the attachment; never load the whole library to read it.
+- Call the full-library endpoint only when library-wide state is necessary for
+  the requested task. A one-paper reading task is never a reason to inspect the
+  rest of the collection.
+- Before proposing a library change, check only the state needed to make that
+  proposal safe. A create may use the full-library read for duplicate detection.
+- Verify the complete ordered author list from a reliable source before proposing
+  a paper create. If it cannot be verified, explain what is missing and do not
+  queue an incomplete create proposal. Never invent an author.
 - Never claim a change was applied: writes only queue a proposal for approval.
 - Only propose changes the user actually asked for.
 - Fill paperType and venue for every paper you add; don't leave them blank/"other" out of laziness.
@@ -207,4 +222,3 @@ export function parseProposalsResult(text: string): { operations: ProposalOperat
   }
   return parseProposalBatch(parsed);
 }
-
