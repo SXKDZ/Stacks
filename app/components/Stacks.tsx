@@ -79,6 +79,11 @@ import type {
   ViewId,
 } from "@/app/lib/types";
 import { editablePaperType, metadataVisibility, paperTypeOptions, type EditablePaperType } from "@/app/lib/paper-fields";
+import {
+  comparableMetadataValue,
+  isExtractedMetadataFieldApplicable,
+  type ExtractedMetadataField,
+} from "@/app/lib/metadata-review";
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
 import { gapForPointer, moveItem, moveItemToGap } from "@/app/lib/reorder";
 import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
@@ -131,6 +136,38 @@ interface PdfExtractionResponse {
   totalPages: number;
   usedFallback: boolean;
   warning?: string;
+}
+
+interface ExtractedMetadataChange {
+  field: ExtractedMetadataField;
+  label: string;
+  current: string;
+  extracted: string;
+}
+
+interface PendingMetadataReview {
+  extraction: PdfExtractionResponse;
+  changes: ExtractedMetadataChange[];
+}
+
+const extractedMetadataFields: Array<{ field: ExtractedMetadataField; label: string }> = [
+  { field: "title", label: "Title" },
+  { field: "authors", label: "Authors" },
+  { field: "year", label: "Year" },
+  { field: "paperType", label: "Paper type" },
+  { field: "venueName", label: "Venue" },
+  { field: "venueAcronym", label: "Venue acronym" },
+  { field: "category", label: "Category" },
+  { field: "preprintId", label: "Preprint ID" },
+  { field: "doi", label: "DOI" },
+  { field: "url", label: "Source URL" },
+  { field: "abstract", label: "Abstract" },
+];
+
+function extractedMetadataValue(metadata: ExtractedPdfMetadata, field: ExtractedMetadataField): string {
+  if (field === "authors") return metadata.authors.join(", ");
+  const value = metadata[field];
+  return value === null || value === undefined ? "" : String(value);
 }
 
 // Default column widths as proportional shares of each table's resizable area
@@ -597,7 +634,7 @@ function ExpandableAuthorButtons({ paper, onOpenAuthor, limit = 5 }: {
   const visibleAuthors = expanded ? paper.authors : paper.authors.slice(0, limit);
   const hiddenCount = Math.max(0, paper.authors.length - limit);
   if (!paper.authors.length) {
-    return <span>Authors not recorded</span>;
+    return <span className="expandable-author-buttons is-empty">No authors recorded</span>;
   }
   // One inline run of text, so the toggle follows the last name in the flow rather
   // than being laid out as a separate flex item: with a long author list the names
@@ -1348,7 +1385,7 @@ function StacksWorkspace() {
               onSearchLibrary={() => setCommandOpen(true)}
             />
           ) : (
-            <SettingsView notify={notify} theme={theme} onThemeChange={setTheme} libraryName={libraryName} onLibraryNameChange={setLibraryName} papers={snapshot.papers} />
+            <SettingsView notify={notify} theme={theme} onThemeChange={setTheme} libraryName={libraryName} onLibraryNameChange={setLibraryName} papers={snapshot.papers} onEditPaper={(paper) => setModal({ kind: "edit-paper", paper })} />
           )}
         </section>
       </main>
@@ -3394,12 +3431,33 @@ function AnchoredOptions({ anchorRef, open, className, id, children }: {
  * submitted. A hidden input carries the comma-joined value, so the surrounding
  * form contract is unchanged.
  */
-function AuthorNamesField({ authors, defaultValue = "" }: { authors: Author[]; defaultValue?: string }) {
+type AuthorNamesFieldProps = { authors: Author[] } & (
+  | { defaultValue?: string; value?: never; onChange?: never }
+  | { defaultValue?: never; value: string[]; onChange: (names: string[]) => void }
+);
+
+function AuthorNamesField({
+  authors,
+  defaultValue = "",
+  value,
+  onChange,
+}: AuthorNamesFieldProps) {
   const listboxId = useId();
   const editorRef = useRef<HTMLDivElement>(null);
-  const [names, setNames] = useState<string[]>(() =>
+  const [uncontrolledNames, setUncontrolledNames] = useState<string[]>(() =>
     defaultValue.split(",").map((name) => name.trim()).filter(Boolean),
   );
+  const names = value ?? uncontrolledNames;
+  function setNames(update: SetStateAction<string[]>) {
+    if (value === undefined) {
+      // Pass the updater through to React so batched edits each receive the most
+      // recent state instead of the names captured by this render.
+      setUncontrolledNames(update);
+      return;
+    }
+    const next = typeof update === "function" ? update(value) : update;
+    onChange(next);
+  }
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -4170,9 +4228,38 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingSave, setPendingSave] = useState<Record<string, unknown> | null>(null);
+  const [pendingMetadataReview, setPendingMetadataReview] = useState<PendingMetadataReview | null>(null);
+  const [selectedExtractedFields, setSelectedExtractedFields] = useState<Set<ExtractedMetadataField>>(new Set());
+  const [authorNames, setAuthorNames] = useState<string[]>(() => paper.authors.map((author) => author.displayName));
   const [collectionNames, setCollectionNames] = useState<string[]>(() => paper.collections.map((collection) => collection.name));
   const formRef = useRef<HTMLFormElement | null>(null);
+  const extractionReturnFocusRef = useRef<HTMLElement | null>(null);
   const { runTask } = useBackgroundTasks();
+  const metadataReviewPaperType = pendingMetadataReview && selectedExtractedFields.has("paperType")
+    ? editablePaperType(pendingMetadataReview.extraction.metadata.paperType)
+    : paperType;
+  const applicableMetadataReviewFields = new Set(
+    pendingMetadataReview?.changes
+      .filter((change) => isExtractedMetadataFieldApplicable(change.field, metadataReviewPaperType))
+      .map((change) => change.field) ?? [],
+  );
+  const selectedApplicableMetadataCount = [...selectedExtractedFields]
+    .filter((field) => applicableMetadataReviewFields.has(field)).length;
+  const firstApplicableMetadataField = pendingMetadataReview?.changes
+    .find((change) => applicableMetadataReviewFields.has(change.field))?.field;
+
+  // Restore focus only after React has removed `inert` from the editor form.
+  // Trying to focus synchronously while closing the review leaves focus on the
+  // document body because the extraction button is still inside an inert tree.
+  useEffect(() => {
+    if (pendingMetadataReview || !extractionReturnFocusRef.current) return;
+    const target = extractionReturnFocusRef.current;
+    const frame = window.requestAnimationFrame(() => {
+      target.focus();
+      if (document.activeElement === target) extractionReturnFocusRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pendingMetadataReview]);
 
   async function generateSummary() {
     setSummarizing(true);
@@ -4211,42 +4298,95 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
     }
   }
 
-  function applyExtractedMetadata(metadata: ExtractedPdfMetadata) {
-    const form = formRef.current;
-    if (!form) {
+  function applyExtractedMetadata(metadata: ExtractedPdfMetadata, selected: Set<ExtractedMetadataField>) {
+    if (selected.has("paperType")) {
+      setPaperType(editablePaperType(metadata.paperType));
+    }
+    if (selected.has("authors")) {
+      // AuthorNamesField is a chip editor backed by React state. Updating its
+      // hidden form input directly changed neither the visible chips nor the
+      // submitted author list, which is why extraction appeared to lose authors.
+      setAuthorNames(metadata.authors);
+    }
+    if (selected.has("abstract")) {
+      setAbstract(metadata.abstract);
+    }
+
+    // A selected paper type can reveal a different set of fields. Wait for that
+    // render before filling those inputs so venue/preprint values are not lost.
+    window.setTimeout(() => {
+      const form = formRef.current;
+      if (!form) return;
+      const setField = (name: string, value: string | number | null | undefined) => {
+        const field = form.elements.namedItem(name);
+        if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+          const next = value === null || value === undefined ? "" : String(value);
+          // These inputs are React-controlled. Use the native setter so React's
+          // change tracker sees the dispatched input event as a real update.
+          const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const nativeSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+          if (nativeSetter) nativeSetter.call(field, next);
+          else field.value = next;
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      };
+      const values: Partial<Record<ExtractedMetadataField, string | number | null>> = {
+        title: metadata.title,
+        year: metadata.year,
+        venueName: metadata.venueName,
+        venueAcronym: metadata.venueAcronym,
+        category: metadata.category,
+        preprintId: metadata.preprintId,
+        doi: metadata.doi,
+        url: metadata.url,
+      };
+      for (const [field, value] of Object.entries(values)) {
+        if (selected.has(field as ExtractedMetadataField)) setField(field, value);
+      }
+    }, 0);
+  }
+
+  function closeMetadataReview() {
+    setPendingMetadataReview(null);
+  }
+
+  function reviewKeyboard(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMetadataReview();
       return;
     }
-    const setField = (name: string, value: string | number | null | undefined) => {
-      const field = form.elements.namedItem(name);
-      if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
-        const next = value === null || value === undefined ? "" : String(value);
-        // These inputs are React-controlled. Assigning field.value directly
-        // also updates React's internal value tracker, so the dispatched event
-        // looks like a no-op and onChange never fires — leaving component state
-        // empty, which then wipes the field on the next render (e.g. on focus).
-        // Set through the NATIVE prototype setter to bypass React's tracker, so
-        // the input event is seen as a real change and state updates.
-        const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-        const nativeSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-        if (nativeSetter) {
-          nativeSetter.call(field, next);
-        } else {
-          field.value = next;
-        }
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-        field.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    };
-    setField("title", metadata.title);
-    setField("authors", metadata.authors.join(", "));
-    setField("year", metadata.year);
-    setField("venueName", metadata.venueName);
-    setField("venueAcronym", metadata.venueAcronym);
-    setField("category", metadata.category);
-    setField("preprintId", metadata.preprintId);
-    setField("doi", metadata.doi);
-    setField("url", metadata.url);
-    setField("abstract", metadata.abstract);
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function applySelectedMetadata() {
+    if (!pendingMetadataReview) return;
+    const applicableSelectedFields = new Set(
+      [...selectedExtractedFields].filter((field) => applicableMetadataReviewFields.has(field)),
+    );
+    applyExtractedMetadata(pendingMetadataReview.extraction.metadata, applicableSelectedFields);
+    const selectedCount = applicableSelectedFields.size;
+    const total = applicableMetadataReviewFields.size;
+    const warning = pendingMetadataReview.extraction.warning;
+    setPendingMetadataReview(null);
+    notify(
+      warning ?? `${selectedCount} of ${total} extracted ${total === 1 ? "change" : "changes"} applied. Review the form, then save the paper.`,
+      warning ? "info" : "success",
+    );
   }
 
   async function extractFromStoredPdf() {
@@ -4259,6 +4399,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
       notify("Choose or enter a local PDF path before extracting metadata.", "error");
       return;
     }
+    extractionReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setExtracting(true);
     try {
       const payload = await runTask(`Extract PDF metadata · ${paper.title}`, async () => {
@@ -4268,9 +4409,44 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         }
         return extractPdfMetadata(await fileResponse.blob(), path);
       });
-      setPaperType(editablePaperType(payload.metadata.paperType));
-      window.setTimeout(() => applyExtractedMetadata(payload.metadata), 0);
-      notify(payload.warning ?? `Metadata extracted from ${payload.analyzedPages} PDF ${payload.analyzedPages === 1 ? "page" : "pages"}.`, payload.warning ? "info" : "success");
+      const currentForm = new FormData(form);
+      const currentValues: Record<ExtractedMetadataField, string> = {
+        title: String(currentForm.get("title") ?? ""),
+        authors: authorNames.join(", "),
+        year: String(currentForm.get("year") ?? ""),
+        paperType,
+        venueName: String(currentForm.get("venueName") ?? ""),
+        venueAcronym: String(currentForm.get("venueAcronym") ?? ""),
+        category: String(currentForm.get("category") ?? ""),
+        preprintId: String(currentForm.get("preprintId") ?? ""),
+        doi: String(currentForm.get("doi") ?? ""),
+        url: String(currentForm.get("url") ?? ""),
+        abstract,
+      };
+      const changes = extractedMetadataFields.flatMap(({ field, label }) => {
+        const current = currentValues[field];
+        const extracted = extractedMetadataValue(payload.metadata, field);
+        return comparableMetadataValue(current) === comparableMetadataValue(extracted)
+          ? []
+          : [{ field, label, current, extracted }];
+      });
+      if (!changes.length) {
+        notify(payload.warning ?? `The extracted metadata matches the current paper details.`, payload.warning ? "info" : "success");
+        return;
+      }
+      const selectsExtractedPaperType = changes.some(
+        (change) => change.field === "paperType" && change.extracted.trim(),
+      );
+      const initialReviewPaperType = selectsExtractedPaperType
+        ? editablePaperType(payload.metadata.paperType)
+        : paperType;
+      setSelectedExtractedFields(new Set(
+        changes
+          .filter((change) => change.extracted.trim())
+          .filter((change) => isExtractedMetadataFieldApplicable(change.field, initialReviewPaperType))
+          .map((change) => change.field),
+      ));
+      setPendingMetadataReview({ extraction: payload, changes });
     } catch (error) {
       notify(error instanceof Error ? error.message : "PDF metadata extraction failed.", "error");
     } finally {
@@ -4365,12 +4541,12 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
 
   return (
     <ModalFrame title="Edit paper" onClose={onClose} className="add-modal edit-paper-modal">
-      <form ref={formRef} className="edit-paper-modal-form" autoComplete="off" onSubmit={submit}>
+      <form ref={formRef} className="edit-paper-modal-form" autoComplete="off" onSubmit={submit} inert={pendingMetadataReview ? true : undefined}>
         <div className="modal-body entity-form edit-paper-fields">
         <label className="field-span-2"><span>Paper title *</span><input name="title" required defaultValue={paper.title} autoFocus /></label>
         <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={paper.year ?? ""} /></label>
         <label><span>Paper type</span><Select ariaLabel="Paper type" value={paperType} onChange={(next) => setPaperType(next as EditablePaperType)} options={paperTypeOptions.map((option) => ({ value: option.value, label: option.label }))} /></label>
-        <AuthorNamesField authors={authors} defaultValue={paper.authors.map((author) => author.displayName).join(", ")} />
+        <AuthorNamesField authors={authors} value={authorNames} onChange={setAuthorNames} />
         <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} />
         <CollectionNamesField collections={collections} value={collectionNames} onChange={setCollectionNames} />
         <label className="field-span-2 summary-field"><span className="field-label-action"><span>Summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><MarkdownCodeEditor name="summary" ariaLabel="Summary" rows={5} value={summary} onChange={setSummary} placeholder="A short summary for your library…" /></label>
@@ -4395,6 +4571,69 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
           </ActionButton>
         </div>
       </form>
+      {pendingMetadataReview ? (
+        <div className="asset-acquisition-layer metadata-review-layer" role="presentation">
+          <section
+            className="metadata-review-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="metadata-review-title"
+            aria-describedby="metadata-review-description"
+            onKeyDown={reviewKeyboard}
+          >
+            <header className="metadata-review-heading">
+              <span className="asset-acquisition-icon"><FileSearch size={22} /></span>
+              <span>
+                <h3 id="metadata-review-title">Review extracted metadata</h3>
+                <p id="metadata-review-description">
+                  Choose which PDF values should replace the current paper details. Nothing changes until you apply your selection.
+                </p>
+              </span>
+            </header>
+            {pendingMetadataReview.extraction.warning ? (
+              <p className="metadata-review-warning"><CircleAlert size={16} />{pendingMetadataReview.extraction.warning}</p>
+            ) : null}
+            <div className="metadata-review-list" role="group" aria-label="Extracted metadata changes">
+              {pendingMetadataReview.changes.map((change) => {
+                const applicable = applicableMetadataReviewFields.has(change.field);
+                const selected = applicable && selectedExtractedFields.has(change.field);
+                return (
+                  <label className={`metadata-review-row ${selected ? "is-selected" : ""} ${applicable ? "" : "is-unavailable"}`} key={change.field}>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      disabled={!applicable}
+                      autoFocus={change.field === firstApplicableMetadataField}
+                      onChange={(event) => {
+                        setSelectedExtractedFields((current) => {
+                          const next = new Set(current);
+                          if (event.target.checked) next.add(change.field);
+                          else next.delete(change.field);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="metadata-review-field">
+                      {change.label}
+                      {!applicable ? <small>Not used by the selected paper type</small> : null}
+                    </span>
+                    <span className="metadata-review-values">
+                      <span><small>Current</small><b>{change.current || "Not recorded"}</b></span>
+                      <span><small>Extracted</small><b>{change.extracted || "Not found"}</b></span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="metadata-review-actions">
+              <ActionButton variant="secondary" onClick={closeMetadataReview} autoFocus={!firstApplicableMetadataField} icon={<X />}>Keep current values</ActionButton>
+              <ActionButton variant="primary" onClick={applySelectedMetadata} disabled={selectedApplicableMetadataCount === 0} icon={<Check />}>
+                Apply selected
+              </ActionButton>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {pendingSave ? (
         <div className="asset-acquisition-layer" role="presentation">
           <section className="asset-acquisition-dialog" role="alertdialog" aria-modal="true" aria-labelledby="asset-acquisition-title" aria-describedby="asset-acquisition-description">

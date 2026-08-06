@@ -337,14 +337,31 @@ function byteLabel(bytes: number): string {
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
 
+function recordedValue(value: string | number | null | undefined): string {
+  return value === null || value === undefined || String(value).trim() === "" ? "Not recorded" : String(value);
+}
 
-export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibraryNameChange, papers }: {
+function paperVenueLabel(paper: Paper): string {
+  if (paper.venueName && paper.venueAcronym && paper.venueName !== paper.venueAcronym) {
+    return `${paper.venueName} (${paper.venueAcronym})`;
+  }
+  return recordedValue(paper.venueName ?? paper.venueAcronym);
+}
+
+function paperTypeLabel(value: string): string {
+  const normalized = value.trim().replace(/[-_]+/g, " ");
+  return normalized ? normalized.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Not recorded";
+}
+
+
+export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibraryNameChange, papers, onEditPaper }: {
   notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   libraryName: string;
   onLibraryNameChange: (name: string) => void;
   papers: Paper[];
+  onEditPaper: (paper: Paper) => void;
 }) {
   const { runTask } = useBackgroundTasks();
   const [tab, setTab] = useState<SettingsTab>("appearance");
@@ -360,7 +377,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [selectingStorageDirectory, setSelectingStorageDirectory] = useState(false);
   const [storageTarget, setStorageTarget] = useState("");
   const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
-  const [doctorModal, setDoctorModal] = useState<{ label: string; detail: string; records?: Array<{ id: string; label: string; kind: string }>; paths?: string[] } | null>(null);
+  const [doctorModal, setDoctorModal] = useState<{ label: string; detail: string; records?: Array<{ id: string; label: string; kind: string }>; paths?: string[]; paperIds?: string[] } | null>(null);
+  const doctorDialogRef = useRef<HTMLDivElement | null>(null);
+  const doctorCloseRef = useRef<HTMLButtonElement | null>(null);
+  const doctorReturnFocusRef = useRef<HTMLElement | null>(null);
   const [removingOrphans, setRemovingOrphans] = useState(false);
   const [selectingDirectory, setSelectingDirectory] = useState(false);
   const [models, setModels] = useState<BedrockModelOption[]>([]);
@@ -835,6 +855,49 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     return () => window.clearTimeout(timer);
   }, [checkVersion, checkingVersion, tab, versionInfo]);
 
+  useEffect(() => {
+    if (!doctorModal) {
+      return;
+    }
+    doctorReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => doctorCloseRef.current?.focus(), 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDoctorModal(null);
+        return;
+      }
+      if (event.key !== "Tab" || !doctorDialogRef.current) {
+        return;
+      }
+      const focusable = Array.from(doctorDialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener("keydown", onKeyDown);
+      doctorReturnFocusRef.current?.focus();
+      doctorReturnFocusRef.current = null;
+    };
+  }, [doctorModal]);
+
+  const doctorPapers = doctorModal?.paperIds
+    ?.map((paperId) => papers.find((paper) => paper.id === paperId))
+    .filter((paper): paper is Paper => Boolean(paper)) ?? [];
+
   return (
     <div className="settings-layout">
       <aside className="settings-nav" aria-label="Settings sections">
@@ -990,7 +1053,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                           ) : null}
                           <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={fileChecks ? `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked` : `${storageReport.referencedPdfFiles} referenced`} detail={fileChecks ? `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingPdfFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "PDFs", detail: `${storageReport.presentPdfFiles} of ${storageReport.referencedPdfFiles} referenced PDFs are present on disk (${storageReport.missingPdfFiles} missing). ${storageReport.storedPdfFiles} physical files total, ${byteLabel(storageReport.storedPdfBytes)}.`, paths: storageReport.missingPdfPaths })} />
                           <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={fileChecks ? `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked` : `${storageReport.referencedHtmlFiles} referenced`} detail={fileChecks ? `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingHtmlFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "HTML snapshots", detail: `${storageReport.presentHtmlFiles} of ${storageReport.referencedHtmlFiles} referenced snapshots are present on disk (${storageReport.missingHtmlFiles} missing). ${storageReport.storedHtmlFiles} physical files total, ${byteLabel(storageReport.storedHtmlBytes)}.`, paths: storageReport.missingHtmlPaths })} />
-                          <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} papers`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} onClick={() => setDoctorModal({ label: "No local source", detail: `${storageReport.papersWithoutLocalAsset} paper${storageReport.papersWithoutLocalAsset === 1 ? " has" : "s have"} neither a readable PDF nor an HTML snapshot in the library. Open a paper and use its source-acquisition dialog to attach one.` })} />
+                          <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} ${storageReport.papersWithoutLocalAsset === 1 ? "paper" : "papers"}`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Papers without a local source", detail: `${storageReport.papersWithoutLocalAsset} paper${storageReport.papersWithoutLocalAsset === 1 ? " has" : "s have"} neither a local PDF nor an HTML snapshot. Review every affected record below, then edit its source information or attach a file.`, paperIds: storageReport.paperIdsWithoutLocalAsset })} />
                           <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="File paths saved in a form Stacks can’t use" tone={storageReport.invalidReferences ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Invalid references", detail: "Stored file paths that are absolute or otherwise break Stacks’s portable-path rules. Repair library rewrites these to portable names.", paths: [...storageReport.invalidPdfPaths, ...storageReport.invalidHtmlPaths] })} />
                           <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} ${storageReport.orphanedFiles === 1 ? "file" : "files"}`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Unlinked assets", detail: `${storageReport.orphanedFiles} file${storageReport.orphanedFiles === 1 ? "" : "s"} in the managed pdfs/ and html_snapshots/ folders are not referenced by any paper (${byteLabel(storageReport.orphanedBytes)} reclaimable of ${byteLabel(storageReport.totalBytes)} managed). Use "Clean unlinked assets" below to remove them.`, records: (storageReport.orphanedNames ?? []).map((file) => ({ id: file.name, kind: file.kind.toUpperCase(), label: file.name })) })} />
                           {storageReport.systemHealth ? (
@@ -1081,12 +1144,47 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       {doctorModal ? (
         <>
           <Scrim onClick={() => setDoctorModal(null)} label="Close dialog" fixed className="z-[80]" />
-          <div className="doctor-modal" role="dialog" aria-modal="true" aria-label={doctorModal.label}>
+          <div ref={doctorDialogRef} className={`doctor-modal ${doctorModal.paperIds ? "doctor-modal-wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby="doctor-modal-title" aria-describedby="doctor-modal-description">
             <header className="doctor-modal-head">
-              <h2>{doctorModal.label}</h2>
-              <button type="button" className="doctor-modal-close" onClick={() => setDoctorModal(null)} aria-label="Close"><X size={16} /></button>
+              <h2 id="doctor-modal-title">{doctorModal.label}</h2>
+              <button ref={doctorCloseRef} type="button" className="doctor-modal-close" onClick={() => setDoctorModal(null)} aria-label="Close"><X size={16} /></button>
             </header>
-            <p className="doctor-modal-detail">{doctorModal.detail}</p>
+            <p className="doctor-modal-detail" id="doctor-modal-description">{doctorModal.detail}</p>
+            {doctorModal.paperIds && doctorPapers.length ? (
+              <ul className="doctor-paper-list" aria-label="Affected papers">
+                {doctorPapers.map((paper) => {
+                  const authors = paper.authors.map((author) => author.displayName).filter(Boolean).join(", ");
+                  return (
+                    <li className="doctor-paper-record" key={paper.id}>
+                      <div className="doctor-paper-heading">
+                        <div>
+                          <h3>{paper.title}</h3>
+                          <p>{authors || "Authors not recorded"}</p>
+                        </div>
+                        <ActionButton variant="primary" size="small" icon={<FolderOpen size={14} />} onClick={() => { doctorReturnFocusRef.current = null; setDoctorModal(null); onEditPaper(paper); }}>Edit source</ActionButton>
+                      </div>
+                      <dl className="doctor-paper-details">
+                        <div><dt>Paper type</dt><dd>{paperTypeLabel(paper.paperType)}</dd></div>
+                        <div><dt>Year</dt><dd>{recordedValue(paper.year)}</dd></div>
+                        <div><dt>Venue or repository</dt><dd>{paperVenueLabel(paper)}</dd></div>
+                        <div><dt>DOI</dt><dd>{recordedValue(paper.doi)}</dd></div>
+                        <div><dt>Preprint ID</dt><dd>{recordedValue(paper.preprintId)}</dd></div>
+                        <div><dt>arXiv ID</dt><dd>{recordedValue(paper.arxivId)}</dd></div>
+                        <div><dt>Semantic Scholar ID</dt><dd>{recordedValue(paper.semanticScholarId)}</dd></div>
+                        <div className="doctor-paper-detail-wide"><dt>Paper URL</dt><dd>{recordedValue(paper.url)}</dd></div>
+                        <div className="doctor-paper-detail-wide"><dt>PDF URL</dt><dd>{recordedValue(paper.pdfUrl)}</dd></div>
+                        <div className="doctor-paper-detail-wide"><dt>HTML URL</dt><dd>{recordedValue(paper.htmlUrl)}</dd></div>
+                        <div><dt>Local PDF</dt><dd className="is-missing">Not saved</dd></div>
+                        <div><dt>HTML snapshot</dt><dd className="is-missing">Not saved</dd></div>
+                      </dl>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+            {doctorModal.paperIds && doctorModal.paperIds.length > doctorPapers.length ? (
+              <p className="doctor-modal-unavailable" role="status">{doctorModal.paperIds.length - doctorPapers.length} affected paper record could not be matched to the current library view. Run Check now to refresh this report.</p>
+            ) : null}
             {doctorModal.records && doctorModal.records.length ? (
               <ul className="doctor-modal-list">
                 {doctorModal.records.map((record) => (

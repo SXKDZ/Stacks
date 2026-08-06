@@ -1571,3 +1571,212 @@
   margin-top: 4px;
   white-space: nowrap;
 }
+
+/* PDF extraction never overwrites edited metadata silently. The review layer
+   lists every differing field and lets the user opt into replacements one by
+   one, while the paper form remains visible as context behind the scrim. */
+.metadata-review-layer {
+  padding: 16px;
+}
+
+.metadata-review-dialog {
+  background: var(--surface-floating);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  max-height: min(720px, calc(100vh - 64px));
+  max-width: 780px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.metadata-review-heading {
+  align-items: flex-start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 20px 20px 14px;
+}
+
+.metadata-review-heading h3 {
+  font-size: var(--type-body-large);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 2px 0 0;
+}
+
+.metadata-review-heading p {
+  color: var(--muted);
+  font-size: var(--type-control);
+  line-height: 1.5;
+  margin: 5px 0 0;
+  text-wrap: pretty;
+}
+
+.metadata-review-warning {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--amber) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 28%, var(--line));
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  display: flex;
+  font-size: var(--type-label);
+  gap: 8px;
+  line-height: 1.45;
+  margin: 0 20px 12px;
+  padding: 9px 11px;
+}
+
+.metadata-review-warning svg {
+  color: var(--amber);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.metadata-review-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  /* The keyboard ring extends 4px beyond the row (2px outline + 2px offset).
+     Leave enough room inside this scroll container so the first row's top
+     perimeter is not clipped. */
+  padding: 6px 20px 18px;
+  scrollbar-gutter: stable;
+}
+
+.metadata-review-row {
+  align-items: flex-start;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 18px 104px minmax(0, 1fr);
+  padding: 11px 12px;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+
+.metadata-review-row.is-selected {
+  background: color-mix(in srgb, var(--brand-blue) 7%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--brand-blue) 34%, var(--line-strong));
+}
+
+.metadata-review-row.is-unavailable {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.metadata-review-row:has(> input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.metadata-review-row > input {
+  accent-color: var(--brand-blue);
+  height: 18px;
+  margin: 1px 0 0;
+  width: 18px;
+}
+
+.metadata-review-field {
+  color: var(--ink);
+  font-size: var(--type-label);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.metadata-review-field small {
+  color: var(--muted);
+  display: block;
+  font-size: var(--type-micro);
+  font-weight: 500;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.metadata-review-values {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.metadata-review-values > span {
+  min-width: 0;
+}
+
+.metadata-review-values small {
+  color: var(--muted);
+  display: block;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.metadata-review-values b {
+  color: var(--ink);
+  display: block;
+  font-size: var(--type-label);
+  font-weight: 500;
+  line-height: 1.45;
+  max-height: 96px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.metadata-review-actions {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 14px 20px;
+}
+
+@media (max-width: 640px) {
+  .metadata-review-dialog {
+    max-height: calc(100vh - 24px);
+  }
+
+  .metadata-review-heading {
+    padding: 16px 14px 12px;
+  }
+
+  .metadata-review-warning {
+    margin-inline: 14px;
+  }
+
+  .metadata-review-list {
+    padding: 6px 14px 14px;
+  }
+
+  .metadata-review-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .metadata-review-field {
+    grid-column: 2;
+  }
+
+  .metadata-review-values {
+    grid-column: 2;
+    grid-template-columns: 1fr;
+  }
+
+  .metadata-review-actions {
+    padding: 12px 14px;
+  }
+
+  .metadata-review-actions > button {
+    flex: 1 1 0;
+  }
+}

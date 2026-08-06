@@ -524,6 +524,9 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const [error, setError] = useState<string | null>(null);
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
+  // Keep the stream effect's dependency array shape stable for Fast Refresh
+  // while still reconnecting when an external action starts or ends a run.
+  const streamVersion = `${streamNonce}:${running ? "running" : "idle"}`;
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   // Stick-to-bottom: while pinned, every content change scrolls to the latest
@@ -616,7 +619,12 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   }, []);
 
   // Stream this snippet's events. The endpoint replays persisted history first,
-  // then live events if it's still running, then closes. Re-runs on reply.
+  // then live events if it's still running, then closes. Re-run on a local reply
+  // AND when an external action (such as GitHub sync) changes a finished thread
+  // back to running. Without that state in `streamVersion`, the old EventSource
+  // stayed closed: the pending dots appeared from the refreshed snippet status,
+  // but the synced user turn and every new agent event remained invisible until
+  // reload.
   useEffect(() => {
     const source = new EventSource(`/api/feed/snippets/${snippet.id}/events`);
     source.addEventListener("message", (event) => {
@@ -633,7 +641,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     });
     return () => source.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snippet.id, streamNonce]);
+  }, [snippet.id, streamVersion]);
 
   async function sendReply(payload: AttachSubmit): Promise<boolean> {
     setReplying(true);

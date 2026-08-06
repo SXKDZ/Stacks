@@ -117,8 +117,8 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(settingsStyles, /\.toast-message > svg\s*\{[\s\S]*?margin-block-start: 0;/);
   assert.match(settings, /MODEL_ACCESS_WARNING_TOAST,[\s\S]*?result\.available \? "success" : "warning"/);
   assert.match(settingsStyles, /\.toast\s*\{[\s\S]*?align-items: center/);
-  // Full-width selects must not inherit the global 96% button press scale.
-  assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?transform: none/);
+  // Full-width selects use the same restrained press scale as other controls.
+  assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   // The summary and extraction prompts survive chat removal; the discussion
   // prompt and its {{papers}}/{{paper1}} placeholders are gone.
   assert.match(prompts, /\{\{paper\}\}/);
@@ -141,6 +141,83 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(summarizeRoute, /pageSliceFor\(configuredPrompt, "paper"\)/);
   assert.match(summarizeRoute, /readPdfPages|readPaperText/);
   assert.match(pdfText, /export async function readPdfPages/);
+});
+
+test("pressing controls uses one shared restrained 99% scale token", async () => {
+  const [controls, designSystem, foundation, workflows, reader] = await Promise.all([
+    readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/design-system.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/foundation.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/management-workflows.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/reading-assistant.css", import.meta.url), "utf8"),
+  ]);
+  const interactiveStyles = [controls, designSystem, foundation, workflows, reader].join("\n");
+  assert.match(foundation, /--motion-press-scale:\s*0\.99;/);
+  assert.equal(interactiveStyles.match(/--motion-press-scale:\s*0\.99;/g)?.length, 1);
+  assert.match(controls, /active:scale-\[var\(--motion-press-scale\)\]/);
+  assert.match(designSystem, /\.app-select-option:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(workflows, /:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(reader, /:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.doesNotMatch(interactiveStyles, /scale\(0\.(?:96|97|98|985|99)\)|scale-\[0\.(?:96|97|98|985|99)\]/);
+});
+
+test("PDF metadata extraction preserves authors and reviews every conflicting field", async () => {
+  const [application, extraction, styles] = await Promise.all([
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The author editor is controlled during paper editing. Writing only to its
+  // hidden input used to leave both the visible chips and submitted list stale.
+  assert.match(application, /const \[authorNames, setAuthorNames\] = useState<string\[]>/);
+  assert.match(application, /<AuthorNamesField authors=\{authors\} value=\{authorNames\} onChange=\{setAuthorNames\} \/>/);
+  assert.match(application, /selected\.has\("authors"\)[\s\S]*?setAuthorNames\(metadata\.authors\)/);
+  assert.match(application, /if \(value === undefined\) \{[\s\S]*?setUncontrolledNames\(update\);[\s\S]*?return;/);
+  assert.match(application, /typeof update === "function" \? update\(value\) : update/);
+  assert.doesNotMatch(application, /update\(names\)/);
+
+  // A valid metadata response with no authors gets one focused title-page retry,
+  // and any still-missing list is surfaced instead of silently accepted.
+  assert.match(extraction, /async function recoverAuthors/);
+  assert.match(extraction, /if \(!metadata\.authors\.length\)[\s\S]*?recoverAuthors/);
+  assert.match(extraction, /No author list was found[\s\S]*?review the authors before saving/i);
+
+  // Extraction differences are an explicit, keyboard-contained review dialog.
+  // Each field is independently selectable, the form behind it is inert, and
+  // no metadata is applied until the user confirms the selection.
+  assert.match(application, /interface PendingMetadataReview/);
+  assert.match(application, /role="dialog"[\s\S]*?aria-labelledby="metadata-review-title"/);
+  assert.match(application, /type="checkbox"[\s\S]*?checked=\{selected\}[\s\S]*?disabled=\{!applicable\}/);
+  assert.match(application, /isExtractedMetadataFieldApplicable\(change\.field, metadataReviewPaperType\)/);
+  assert.match(application, /applicableSelectedFields[\s\S]*?applyExtractedMetadata/);
+  assert.match(application, /Not used by the selected paper type/);
+  assert.match(application, /inert=\{pendingMetadataReview \? true : undefined\}/);
+  assert.match(application, /event\.key === "Escape"[\s\S]*?event\.key !== "Tab"/);
+  assert.match(application, />Keep current values<\/ActionButton>/);
+  assert.match(application, />\s*Apply selected\s*<\/ActionButton>/);
+  assert.match(styles, /\.metadata-review-values\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.metadata-review-values\s*\{[\s\S]*?grid-template-columns: 1fr/);
+  assert.match(styles, /\.metadata-review-list\s*\{[\s\S]*?padding: 6px 20px 18px/);
+  assert.match(styles, /\.metadata-review-row:has\(> input:focus-visible\)/);
+
+  // The no-author line now enters the same type scale as ordinary author names.
+  assert.match(application, /className="expandable-author-buttons is-empty">No authors recorded/);
+  assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+});
+
+test("agent scopes one-paper reads and proposes complete paper metadata", async () => {
+  const prompt = await readFile(new URL("../app/lib/feed-prompt.ts", import.meta.url), "utf8");
+  assert.match(prompt, /If the user asks to read, summarize,[\s\S]*?one identified paper[\s\S]*?Do NOT call the full-library endpoint/);
+  assert.match(prompt, /For an attached library paper,[\s\S]*?paper-specific metadata and file URLs/);
+  assert.match(prompt, /complete ordered author list[\s\S]*?do not[\s\S]*?incomplete create proposal/i);
+  assert.match(prompt, /For a preprint,[\s\S]*?canonical name of the repository[\s\S]*?Verify the repository from the source metadata[\s\S]*?never infer it from paperType alone/i);
+  assert.match(prompt, /preprintId, semanticScholarId/);
+  assert.doesNotMatch(prompt, /venueAcronym|arXiv-only|set both venueName/i);
+  assert.doesNotMatch(prompt, /Always READ first/);
+  assert.match(prompt, /buildFollowUpPrompt[\s\S]*?Current rules for this turn:[\s\S]*?PAPER_SCOPE_RULES/);
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {
@@ -178,6 +255,14 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(doctor, /orphanedAssociations/);
   // Doctor also reports and cleans entities (authors/venues/collections) left with no papers.
   assert.match(doctor, /orphanedEntities/);
+  // Missing-source details retain the affected paper IDs so the Doctor can
+  // identify every record and open its source editor instead of showing a count.
+  assert.match(doctor, /paperIdsWithoutLocalAsset: papersWithoutLocalAsset\.map\(\(paper\) => paper\.id\)/);
+  assert.match(settingsView, /paperIds: storageReport\.paperIdsWithoutLocalAsset/);
+  assert.match(settingsView, /Affected papers/);
+  assert.match(settingsView, /Edit source/);
+  assert.match(settingsView, /Venue or repository/);
+  assert.match(settingsView, /Semantic Scholar ID/);
   assert.match(doctor, /DELETE FROM authors WHERE id NOT IN/);
   assert.match(doctor, /DELETE FROM venues WHERE id NOT IN/);
   assert.match(doctor, /DELETE FROM collections WHERE id NOT IN/);
@@ -813,6 +898,29 @@ test("the GitHub sync survives a deleted issue, a repeated issue, and a long thr
   assert.doesNotMatch(sync, /issueTitleSynced: issue\.title\b/);
   // A repo segment of ".." would collapse the pinned /repos/owner/name path.
   assert.match(client, /segment === "\." \|\| segment === "\.\."/);
+});
+
+test("the GitHub sync recovers linked comments that fell behind its cursor", async () => {
+  const [sync, feed] = await Promise.all([
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
+  // The issue-level `since` query is only a change-discovery optimization. Every
+  // linked issue omitted by that result still gets a complete comment-id sweep,
+  // so an unseen comment older than the cursor cannot remain hidden forever.
+  assert.match(sync, /const reconcileComments = async[\s\S]*?listCommentsPaged\(config, issueNumber\)/);
+  assert.match(sync, /for \(const \[issueNumber, feed\] of linked\) \{\s*if \(handled\.has\(issueNumber\)\) continue;\s*await reconcileLinkedComments\(issueNumber, feed\);/);
+  // Issues present in the incremental response use the same reconciliation path,
+  // keeping deduplication, edit adoption, and agent launch behavior identical.
+  assert.match(sync, /await reconcileLinkedComments\(issue\.number, feed\);/);
+  assert.match(sync, /!localByComment\.has\(comment\.id\)/);
+  // The anti-entropy sweep must finish before the high-water mark advances.
+  assert.ok(sync.indexOf("for (const [issueNumber, feed] of linked)") < sync.indexOf("writeGithubLastSyncedAt(startedAt)"));
+  // GitHub sync starts the turn outside FeedDetail. A finished thread's previous
+  // SSE connection is already closed, so the running transition must reconnect
+  // it to replay the imported user message and subscribe to the agent response.
+  assert.match(feed, /const streamVersion = `\$\{streamNonce\}:\$\{running \? "running" : "idle"\}`/);
+  assert.match(feed, /new EventSource\(`\/api\/feed\/snippets\/\$\{snippet\.id\}\/events`\)[\s\S]*?\}, \[snippet\.id, streamVersion\]\);/);
 });
 
 test("tooltips are drawn by the app, not the browser", async () => {

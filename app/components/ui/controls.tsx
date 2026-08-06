@@ -19,7 +19,7 @@ const actionVariants = cva(
     "inline-flex shrink-0 select-none items-center justify-center gap-2",
     "rounded-[var(--radius-lg)] border font-semibold leading-[1.25] no-underline",
     "transition-[background-color,border-color,color,box-shadow,filter,transform] duration-200 ease-out",
-    "hover:-translate-y-px active:translate-y-0 active:scale-[0.96]",
+    "hover:-translate-y-px active:translate-y-0 active:scale-[var(--motion-press-scale)]",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50 disabled:transform-none",
   ],

@@ -261,7 +261,7 @@ export async function POST(request: Request): Promise<Response> {
     // inspect them against the paths the database references.
     const database = await ensureDatabase();
     const assetRows = database
-      .select({ localPath: papers.localPath, htmlSnapshotPath: papers.htmlSnapshotPath })
+      .select({ id: papers.id, localPath: papers.localPath, htmlSnapshotPath: papers.htmlSnapshotPath })
       .from(papers)
       .all();
     const referencedPdf = assetRows
@@ -272,7 +272,7 @@ export async function POST(request: Request): Promise<Response> {
       .filter((name): name is string => Boolean(name));
     const papersWithoutLocalAsset = assetRows.filter(
       (row) => !row.localPath?.trim() && !row.htmlSnapshotPath?.trim(),
-    ).length;
+    );
     const storage = inspectStorage(referencedPdf, referencedHtml, clean);
 
     return Response.json({
@@ -302,8 +302,8 @@ export async function POST(request: Request): Promise<Response> {
       invalidPdfPaths: databaseHealth.absolutePdfPaths,
       invalidHtmlPaths: databaseHealth.absoluteHtmlPaths,
       invalidReferences: databaseHealth.absolutePdfPaths.length + databaseHealth.absoluteHtmlPaths.length,
-      papersWithoutLocalAsset,
-      paperIdsWithoutLocalAsset: [],
+      papersWithoutLocalAsset: papersWithoutLocalAsset.length,
+      paperIdsWithoutLocalAsset: papersWithoutLocalAsset.map((paper) => paper.id),
       storedPdfFiles: storage.pdf.storedFiles,
       storedPdfBytes: storage.pdf.storedBytes,
       storedHtmlFiles: storage.html.storedFiles,

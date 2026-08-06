@@ -47,6 +47,7 @@ test("a preprint shows its identifier and source URL but no volume", () => {
   const visible = metadataVisibility("preprint");
   assert.equal(visible.preprint, true);
   assert.equal(visible.url, true);
+  assert.equal(visible.venueAcronym, false, "preprints use the repository name without a separate acronym");
   assert.equal(visible.volumeIssue, false);
   assert.equal(visible.pages, false);
 });
