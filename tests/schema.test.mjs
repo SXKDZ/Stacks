@@ -805,7 +805,10 @@ test("the GitHub sync survives a deleted issue, a repeated issue, and a long thr
 });
 
 test("the GitHub sync recovers linked comments that fell behind its cursor", async () => {
-  const sync = await readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8");
+  const [sync, feed] = await Promise.all([
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
   // The issue-level `since` query is only a change-discovery optimization. Every
   // linked issue omitted by that result still gets a complete comment-id sweep,
   // so an unseen comment older than the cursor cannot remain hidden forever.
@@ -817,6 +820,11 @@ test("the GitHub sync recovers linked comments that fell behind its cursor", asy
   assert.match(sync, /!localByComment\.has\(comment\.id\)/);
   // The anti-entropy sweep must finish before the high-water mark advances.
   assert.ok(sync.indexOf("for (const [issueNumber, feed] of linked)") < sync.indexOf("writeGithubLastSyncedAt(startedAt)"));
+  // GitHub sync starts the turn outside FeedDetail. A finished thread's previous
+  // SSE connection is already closed, so the running transition must reconnect
+  // it to replay the imported user message and subscribe to the agent response.
+  assert.match(feed, /const streamVersion = `\$\{streamNonce\}:\$\{running \? "running" : "idle"\}`/);
+  assert.match(feed, /new EventSource\(`\/api\/feed\/snippets\/\$\{snippet\.id\}\/events`\)[\s\S]*?\}, \[snippet\.id, streamVersion\]\);/);
 });
 
 test("tooltips are drawn by the app, not the browser", async () => {
