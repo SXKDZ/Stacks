@@ -705,13 +705,10 @@
   box-shadow: 0 0 0 3px var(--brand-blue-soft);
 }
 
-/* The shared pressed-state scales ordinary buttons to 96%. That movement is
-   excessive on a full-width form control (and on full-width menu rows), where
-   four percent can be dozens of pixels. Opening and choosing should feel
-   spatially stable; the border and focus ring are sufficient feedback. */
+/* Selects share the restrained press feedback used by every other control. */
 .app-select-trigger:active:not(:disabled),
 .app-select-option:active:not(:disabled) {
-  transform: none;
+  transform: scale(0.98);
 }
 
 .app-select-trigger:disabled {

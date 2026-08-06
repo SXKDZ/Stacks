@@ -106,8 +106,8 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(settingsStyles, /\.toast-error\s*\{[\s\S]*?var\(--rose\)/);
   assert.match(settingsStyles, /\.toast\s*\{[\s\S]*?align-items: center/);
   assert.match(settingsStyles, /\.toast-message\s*\{[\s\S]*?align-items: flex-start/);
-  // Full-width selects must not inherit the global 96% button press scale.
-  assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?transform: none/);
+  // Full-width selects use the same restrained press scale as other controls.
+  assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?scale\(0\.98\)/);
   // The summary and extraction prompts survive chat removal; the discussion
   // prompt and its {{papers}}/{{paper1}} placeholders are gone.
   assert.match(prompts, /\{\{paper\}\}/);
@@ -130,6 +130,24 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(summarizeRoute, /pageSliceFor\(configuredPrompt, "paper"\)/);
   assert.match(summarizeRoute, /readPdfPages|readPaperText/);
   assert.match(pdfText, /export async function readPdfPages/);
+});
+
+test("pressing controls uses one restrained 98% scale", async () => {
+  const [controls, designSystem, foundation, workflows, reader] = await Promise.all([
+    readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/design-system.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/foundation.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/management-workflows.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/reading-assistant.css", import.meta.url), "utf8"),
+  ]);
+  const interactiveStyles = [controls, designSystem, foundation, workflows, reader].join("\n");
+  assert.match(controls, /active:scale-\[0\.98\]/);
+  assert.match(designSystem, /\.app-select-option:active:not\(:disabled\)[\s\S]*?scale\(0\.98\)/);
+  assert.match(workflows, /:active:not\(:disabled\)[\s\S]*?scale\(0\.98\)/);
+  assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(0\.98\)/);
+  assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(0\.98\)/);
+  assert.match(reader, /:active[\s\S]*?scale\(0\.98\)/);
+  assert.doesNotMatch(interactiveStyles, /scale\(0\.(?:96|97|985|99)\)|scale-\[0\.(?:96|97|985|99)\]/);
 });
 
 test("PDF metadata extraction preserves authors and reviews every conflicting field", async () => {
@@ -176,8 +194,9 @@ test("agent scopes one-paper reads and proposes complete paper metadata", async 
   assert.match(prompt, /If the user asks to read, summarize,[\s\S]*?one identified paper[\s\S]*?Do NOT call the full-library endpoint/);
   assert.match(prompt, /For an attached library paper,[\s\S]*?paper-specific metadata and file URLs/);
   assert.match(prompt, /complete ordered author list[\s\S]*?do not[\s\S]*?incomplete create proposal/i);
-  assert.match(prompt, /For a preprint proposal,[\s\S]*?source repository's canonical[\s\S]*?Do not set venueAcronym[\s\S]*?never infer a repository[\s\S]*?from paperType alone/i);
-  assert.doesNotMatch(prompt, /set both venueName and venueAcronym to "arXiv"/);
+  assert.match(prompt, /For a preprint,[\s\S]*?canonical name of the repository[\s\S]*?Verify the repository from the source metadata[\s\S]*?never infer it from paperType alone/i);
+  assert.match(prompt, /preprintId, semanticScholarId/);
+  assert.doesNotMatch(prompt, /venueAcronym|arXiv-only|set both venueName/i);
   assert.doesNotMatch(prompt, /Always READ first/);
   assert.match(prompt, /buildFollowUpPrompt[\s\S]*?Current rules for this turn:[\s\S]*?PAPER_SCOPE_RULES/);
 });

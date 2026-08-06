@@ -291,7 +291,7 @@
 }
 
 .reader-page :where(button, .reader-actions a, .reader-page-state a):not(:disabled):active {
-  transform: translateY(0) scale(0.96);
+  transform: translateY(0) scale(0.98);
   transition-duration: 70ms;
 }
 

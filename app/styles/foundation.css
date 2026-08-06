@@ -370,7 +370,7 @@ h3 {
 }
 
 .new-paper-button:active {
-  transform: translateY(0) scale(0.96);
+  transform: translateY(0) scale(0.98);
 }
 
 .new-paper-button kbd {
@@ -488,7 +488,7 @@ h3 {
 }
 
 .assistant-card:active {
-  transform: translateY(0) scale(0.96);
+  transform: translateY(0) scale(0.98);
 }
 
 .assistant-card:hover .assistant-orb,

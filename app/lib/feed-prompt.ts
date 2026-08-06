@@ -18,7 +18,8 @@ const PAPER_SCOPE_RULES = `
   or analyze one identified paper, retrieve only that paper from its supplied
   identifier, URL, or attachment. Do NOT call the full-library endpoint.
 - For an attached library paper, use the paper-specific metadata and file URLs
-  documented with the attachment; never load the whole library to read it.
+  documented with the attachment. Never load the whole library merely to read
+  an attached paper.
 - Call the full-library endpoint only when library-wide state is necessary for
   the requested task. A one-paper reading task is never a reason to inspect the
   rest of the collection.
@@ -27,9 +28,9 @@ const PAPER_SCOPE_RULES = `
 - Verify the complete ordered author list from a reliable source before proposing
   a paper create. If it cannot be verified, explain what is missing and do not
   queue an incomplete create proposal. Never invent an author.
-- For a preprint proposal, set venueName to the source repository's canonical
-  name. Do not set venueAcronym for a preprint, and never infer a repository
-  from paperType alone.`;
+- For a preprint, set venueName to the canonical name of the repository that
+  actually hosts the preprint. Verify the repository from the source metadata;
+  never infer it from paperType alone.`;
 
 const PROPOSAL_INSTRUCTIONS = `
 You can query and edit the user's Stacks library through a local HTTP
@@ -56,22 +57,26 @@ Or send several at once: {"proposals":[{...},{...}]}. Each operation:
     "summary": "<one short human-readable line describing the change>" }
 For a paper create, data MUST include title, paperType, and the complete verified
 authors array in the source's listed order. Include every other verified field:
-abstract, year, venueName, venueAcronym, doi, arxivId, url, pdfUrl,
-collectionNames (array), and notes. Never silently omit known metadata.
+abstract, year, venueName, doi, arxivId, preprintId, semanticScholarId, url,
+pdfUrl, collectionNames (array), and notes. Never silently omit known metadata.
 - paperType is REQUIRED on every create and MUST be one of: "conference",
   "journal", "workshop", "preprint", or "other". Never omit it. Choose the most
-  specific fit (an arXiv-only paper is "preprint"; a blog post or tech report
-  with no venue is "other").
-- Always set venueName when the work has one (conference/journal/repository name;
-  drop "Proceedings of" and ordinals). For conference, journal, and workshop
-  venues, set venueAcronym when there is a common one. Leave venueName empty only
-  for genuinely un-venued items such as standalone reports or personal blog posts.
+  specific fit. A repository-hosted manuscript that has not been published in a
+  conference or journal is a "preprint". A blog post, technical report, or other
+  work with no publication venue or repository should be "other".
+- Always set venueName when the work has a verified conference, journal,
+  workshop, publisher, or preprint repository. Use the source's canonical name
+  and remove decorative prefixes such as "Proceedings of" and conference
+  ordinals when they are not part of the canonical venue name.
+- Leave venueName empty only for genuinely un-venued items such as standalone
+  reports or personal blog posts.
 
 RULES:
 ${PAPER_SCOPE_RULES}
 - Never claim a change was applied: writes only queue a proposal for approval.
 - Only propose changes the user actually asked for.
-- Fill paperType and venue for every paper you add; don't leave them blank/"other" out of laziness.
+- Fill paperType and venueName whenever they can be verified. Do not use "other"
+  merely because metadata research was incomplete.
 - If curl is unavailable for any reason, fall back to emitting one fenced
   stacks-proposals block (a JSON array of the operations above) at the end of
   your reply, and Stacks will pick it up.`;
