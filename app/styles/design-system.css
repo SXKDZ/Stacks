@@ -708,7 +708,7 @@
 /* Selects share the restrained press feedback used by every other control. */
 .app-select-trigger:active:not(:disabled),
 .app-select-option:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(var(--motion-press-scale));
 }
 
 .app-select-trigger:disabled {

@@ -2197,7 +2197,7 @@
 }
 
 :where(.stacks-shell button, .stacks-shell a, .stacks-shell [role="button"]):active:not(:disabled) {
-  transform: translateY(1px) scale(0.98);
+  transform: translateY(1px) scale(var(--motion-press-scale));
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -107,7 +107,7 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(settingsStyles, /\.toast\s*\{[\s\S]*?align-items: center/);
   assert.match(settingsStyles, /\.toast-message\s*\{[\s\S]*?align-items: flex-start/);
   // Full-width selects use the same restrained press scale as other controls.
-  assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?scale\(0\.98\)/);
+  assert.match(designSystem, /\.app-select-trigger:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   // The summary and extraction prompts survive chat removal; the discussion
   // prompt and its {{papers}}/{{paper1}} placeholders are gone.
   assert.match(prompts, /\{\{paper\}\}/);
@@ -132,7 +132,7 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(pdfText, /export async function readPdfPages/);
 });
 
-test("pressing controls uses one restrained 98% scale", async () => {
+test("pressing controls uses one shared restrained 99% scale token", async () => {
   const [controls, designSystem, foundation, workflows, reader] = await Promise.all([
     readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/styles/design-system.css", import.meta.url), "utf8"),
@@ -141,13 +141,15 @@ test("pressing controls uses one restrained 98% scale", async () => {
     readFile(new URL("../app/styles/reading-assistant.css", import.meta.url), "utf8"),
   ]);
   const interactiveStyles = [controls, designSystem, foundation, workflows, reader].join("\n");
-  assert.match(controls, /active:scale-\[0\.98\]/);
-  assert.match(designSystem, /\.app-select-option:active:not\(:disabled\)[\s\S]*?scale\(0\.98\)/);
-  assert.match(workflows, /:active:not\(:disabled\)[\s\S]*?scale\(0\.98\)/);
-  assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(0\.98\)/);
-  assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(0\.98\)/);
-  assert.match(reader, /:active[\s\S]*?scale\(0\.98\)/);
-  assert.doesNotMatch(interactiveStyles, /scale\(0\.(?:96|97|985|99)\)|scale-\[0\.(?:96|97|985|99)\]/);
+  assert.match(foundation, /--motion-press-scale:\s*0\.99;/);
+  assert.equal(interactiveStyles.match(/--motion-press-scale:\s*0\.99;/g)?.length, 1);
+  assert.match(controls, /active:scale-\[var\(--motion-press-scale\)\]/);
+  assert.match(designSystem, /\.app-select-option:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(workflows, /:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(reader, /:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.doesNotMatch(interactiveStyles, /scale\(0\.(?:96|97|98|985|99)\)|scale-\[0\.(?:96|97|98|985|99)\]/);
 });
 
 test("PDF metadata extraction preserves authors and reviews every conflicting field", async () => {
