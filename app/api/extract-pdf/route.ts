@@ -54,10 +54,14 @@ function cleanYear(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 1500 && parsed <= 2200 ? parsed : null;
 }
 
+function authorNamesFrom(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map(cleanString).filter(Boolean)
+    : cleanString(value).split(/\s*(?:;|\band\b)\s*/i).map((author) => author.trim()).filter(Boolean);
+}
+
 function normalizeMetadata(value: Record<string, unknown>, fallback: ExtractedMetadata): ExtractedMetadata {
-  const authors = Array.isArray(value.authors)
-    ? value.authors.map(cleanString).filter(Boolean)
-    : cleanString(value.authors).split(/\s*(?:;|\band\b)\s*/i).map((author) => author.trim()).filter(Boolean);
+  const authors = authorNamesFrom(value.authors);
   const paperType = cleanString(value.paperType || value.paper_type).toLowerCase() as ExtractedMetadata["paperType"];
   return {
     title: cleanString(value.title) || fallback.title,
@@ -79,6 +83,37 @@ function stripJsonFence(value: string): string {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "")
     .trim();
+}
+
+async function recoverAuthors(input: {
+  sourceText: string;
+  embeddedMetadata: Record<string, unknown>;
+  token: string;
+  region: string;
+  model: string;
+  effort: ReturnType<typeof effortSetting>;
+  sendTemperature: boolean;
+}): Promise<string[]> {
+  const result = await invokeBedrockMessages({
+    token: input.token,
+    region: input.region,
+    model: input.model,
+    system: [
+      "Extract the complete ordered author list for this academic paper.",
+      "Use only the supplied title-page text and embedded PDF metadata.",
+      "Return one JSON object with exactly one key, authors, whose value is an array",
+      "of every listed author name in first-name-first order. Never use et al.",
+      "If no author names are present, return {\"authors\":[]}.",
+      `Embedded metadata: ${JSON.stringify(input.embeddedMetadata)}`,
+      `Title-page text:\n${input.sourceText}`,
+    ].join(" "),
+    messages: [{ role: "user", content: "Return the author-list JSON now." }],
+    maxTokens: 1200,
+    effort: input.effort,
+    temperature: temperatureOption(input.sendTemperature, 0),
+  });
+  const parsed = parseJsonWith(ExtractedMetadataSchema, stripJsonFence(result.content));
+  return parsed.ok ? authorNamesFrom(parsed.data.authors) : [];
 }
 
 function fallbackMetadata(text: string, info: Record<string, unknown>, filename: string): ExtractedMetadata {
@@ -143,8 +178,16 @@ export async function POST(request: Request): Promise<Response> {
     const fallback = fallbackMetadata(sourceText, info, filename);
     const token = runtimeValue(runtime, "AWS_BEARER_TOKEN_BEDROCK");
     if (!token) {
-      return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning: "Bedrock is not configured; Stacks used embedded PDF metadata and text heuristics." });
+      const warning = fallback.authors.length
+        ? "Bedrock is not configured; Stacks used embedded PDF metadata and text heuristics."
+        : "Bedrock is not configured, and the PDF metadata did not contain an author list. Review the authors before saving.";
+      return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning });
     }
+
+    const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
+    const model = runtimeValue(runtime, "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6");
+    const effort = effortSetting(runtimeValue(runtime, "STACKS_EFFORT"));
+    const sendTemperature = runtimeValue(runtime, "STACKS_SEND_TEMPERATURE", "true") !== "false";
 
     const prompt = renderPromptTemplate(template, {
       filename,
@@ -154,15 +197,15 @@ export async function POST(request: Request): Promise<Response> {
     try {
       const result = await invokeBedrockMessages({
         token,
-        region: runtimeValue(runtime, "AWS_REGION", "us-east-1"),
-        model: runtimeValue(runtime, "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
+        region,
+        model,
         system: prompt,
         messages: [{ role: "user", content: "Extract the paper metadata now and return only the requested JSON object." }],
         maxTokens: 1800,
         // Extraction wants deterministic output, but a model that rejects the
         // parameter must not fail the whole import over it.
-        effort: effortSetting(runtimeValue(runtime, "STACKS_EFFORT")),
-        temperature: temperatureOption(runtimeValue(runtime, "STACKS_SEND_TEMPERATURE", "true") !== "false", 0),
+        effort,
+        temperature: temperatureOption(sendTemperature, 0),
       });
       // The model's JSON: validated as an object before normalizeMetadata reads
       // fields off it, so a non-object reply (a bare string, an array, prose)
@@ -171,18 +214,45 @@ export async function POST(request: Request): Promise<Response> {
       if (!parsed.ok) {
         throw new Error(`The model did not return usable metadata JSON: ${parsed.error}`);
       }
+      let metadata = normalizeMetadata(parsed.data, fallback);
+      // Some otherwise-valid model replies omit `authors`, and the PDF's
+      // embedded Author field is often empty. A focused title-page pass recovers
+      // the list instead of silently saving an authorless record.
+      if (!metadata.authors.length) {
+        const recovered = await recoverAuthors({
+          sourceText,
+          embeddedMetadata: info,
+          token,
+          region,
+          model,
+          effort,
+          sendTemperature,
+        }).catch(() => []);
+        if (recovered.length) metadata = { ...metadata, authors: recovered };
+      }
       return Response.json({
-        metadata: normalizeMetadata(parsed.data, fallback),
+        metadata,
         analyzedPages: pageCount,
         totalPages: document.numPages,
         usedFallback: false,
         endpoint: result.endpoint,
+        ...(!metadata.authors.length
+          ? { warning: "No author list was found in the analyzed PDF pages. Review the authors before saving." }
+          : {}),
       });
     } catch (error) {
       const warning = error instanceof BedrockInvocationError
         ? `Bedrock returned ${error.status}: ${error.message}`
         : error instanceof Error ? error.message : "Metadata extraction failed.";
-      return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning });
+      return Response.json({
+        metadata: fallback,
+        analyzedPages: pageCount,
+        totalPages: document.numPages,
+        usedFallback: true,
+        warning: fallback.authors.length
+          ? warning
+          : `${warning} No author list was found; review the authors before saving.`,
+      });
     }
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "The PDF could not be read." }, { status: 422 });

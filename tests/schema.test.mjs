@@ -132,6 +132,43 @@ test("discovers and tests current Bedrock Runtime and Mantle models", async () =
   assert.match(pdfText, /export async function readPdfPages/);
 });
 
+test("PDF metadata extraction preserves authors and reviews every conflicting field", async () => {
+  const [application, extraction, styles] = await Promise.all([
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The author editor is controlled during paper editing. Writing only to its
+  // hidden input used to leave both the visible chips and submitted list stale.
+  assert.match(application, /const \[authorNames, setAuthorNames\] = useState<string\[]>/);
+  assert.match(application, /<AuthorNamesField authors=\{authors\} value=\{authorNames\} onChange=\{setAuthorNames\} \/>/);
+  assert.match(application, /selected\.has\("authors"\)[\s\S]*?setAuthorNames\(metadata\.authors\)/);
+
+  // A valid metadata response with no authors gets one focused title-page retry,
+  // and any still-missing list is surfaced instead of silently accepted.
+  assert.match(extraction, /async function recoverAuthors/);
+  assert.match(extraction, /if \(!metadata\.authors\.length\)[\s\S]*?recoverAuthors/);
+  assert.match(extraction, /No author list was found[\s\S]*?review the authors before saving/i);
+
+  // Extraction differences are an explicit, keyboard-contained review dialog.
+  // Each field is independently selectable, the form behind it is inert, and
+  // no metadata is applied until the user confirms the selection.
+  assert.match(application, /interface PendingMetadataReview/);
+  assert.match(application, /role="dialog"[\s\S]*?aria-labelledby="metadata-review-title"/);
+  assert.match(application, /type="checkbox"[\s\S]*?checked=\{selected\}/);
+  assert.match(application, /inert=\{pendingMetadataReview \? true : undefined\}/);
+  assert.match(application, /event\.key === "Escape"[\s\S]*?event\.key !== "Tab"/);
+  assert.match(application, />Keep current values<\/ActionButton>/);
+  assert.match(application, />\s*Apply selected\s*<\/ActionButton>/);
+  assert.match(styles, /\.metadata-review-values\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.metadata-review-values\s*\{[\s\S]*?grid-template-columns: 1fr/);
+
+  // The no-author line now enters the same type scale as ordinary author names.
+  assert.match(application, /className="expandable-author-buttons is-empty">No authors recorded/);
+  assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+});
+
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {
   const [bootstrap, localSettings, runtimeConfig, doctor, settingsView, version] = await Promise.all([
     readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
