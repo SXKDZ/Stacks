@@ -1396,7 +1396,7 @@ function StacksWorkspace() {
               onSearchLibrary={() => setCommandOpen(true)}
             />
           ) : (
-            <SettingsView notify={notify} theme={theme} onThemeChange={setTheme} libraryName={libraryName} onLibraryNameChange={setLibraryName} papers={snapshot.papers} />
+            <SettingsView notify={notify} theme={theme} onThemeChange={setTheme} libraryName={libraryName} onLibraryNameChange={setLibraryName} papers={snapshot.papers} onEditPaper={(paper) => setModal({ kind: "edit-paper", paper })} />
           )}
         </section>
       </main>

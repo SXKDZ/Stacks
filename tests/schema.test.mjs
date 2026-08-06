@@ -217,6 +217,14 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   assert.match(doctor, /orphanedAssociations/);
   // Doctor also reports and cleans entities (authors/venues/collections) left with no papers.
   assert.match(doctor, /orphanedEntities/);
+  // Missing-source details retain the affected paper IDs so the Doctor can
+  // identify every record and open its source editor instead of showing a count.
+  assert.match(doctor, /paperIdsWithoutLocalAsset: papersWithoutLocalAsset\.map\(\(paper\) => paper\.id\)/);
+  assert.match(settingsView, /paperIds: storageReport\.paperIdsWithoutLocalAsset/);
+  assert.match(settingsView, /Affected papers/);
+  assert.match(settingsView, /Edit source/);
+  assert.match(settingsView, /Venue or repository/);
+  assert.match(settingsView, /Semantic Scholar ID/);
   assert.match(doctor, /DELETE FROM authors WHERE id NOT IN/);
   assert.match(doctor, /DELETE FROM venues WHERE id NOT IN/);
   assert.match(doctor, /DELETE FROM collections WHERE id NOT IN/);
