@@ -175,6 +175,9 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   assert.match(application, /const \[authorNames, setAuthorNames\] = useState<string\[]>/);
   assert.match(application, /<AuthorNamesField authors=\{authors\} value=\{authorNames\} onChange=\{setAuthorNames\} \/>/);
   assert.match(application, /selected\.has\("authors"\)[\s\S]*?setAuthorNames\(metadata\.authors\)/);
+  assert.match(application, /if \(value === undefined\) \{[\s\S]*?setUncontrolledNames\(update\);[\s\S]*?return;/);
+  assert.match(application, /typeof update === "function" \? update\(value\) : update/);
+  assert.doesNotMatch(application, /update\(names\)/);
 
   // A valid metadata response with no authors gets one focused title-page retry,
   // and any still-missing list is surfaced instead of silently accepted.
@@ -187,7 +190,10 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   // no metadata is applied until the user confirms the selection.
   assert.match(application, /interface PendingMetadataReview/);
   assert.match(application, /role="dialog"[\s\S]*?aria-labelledby="metadata-review-title"/);
-  assert.match(application, /type="checkbox"[\s\S]*?checked=\{selected\}/);
+  assert.match(application, /type="checkbox"[\s\S]*?checked=\{selected\}[\s\S]*?disabled=\{!applicable\}/);
+  assert.match(application, /isExtractedMetadataFieldApplicable\(change\.field, metadataReviewPaperType\)/);
+  assert.match(application, /applicableSelectedFields[\s\S]*?applyExtractedMetadata/);
+  assert.match(application, /Not used by the selected paper type/);
   assert.match(application, /inert=\{pendingMetadataReview \? true : undefined\}/);
   assert.match(application, /event\.key === "Escape"[\s\S]*?event\.key !== "Tab"/);
   assert.match(application, />Keep current values<\/ActionButton>/);

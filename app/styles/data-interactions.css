@@ -1666,6 +1666,11 @@
   border-color: color-mix(in srgb, var(--brand-blue) 34%, var(--line-strong));
 }
 
+.metadata-review-row.is-unavailable {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .metadata-review-row:has(> input:focus-visible) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
@@ -1683,6 +1688,15 @@
   font-size: var(--type-label);
   font-weight: 700;
   line-height: 1.4;
+}
+
+.metadata-review-field small {
+  color: var(--muted);
+  display: block;
+  font-size: var(--type-micro);
+  font-weight: 500;
+  line-height: 1.35;
+  margin-top: 2px;
 }
 
 .metadata-review-values {

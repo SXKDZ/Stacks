@@ -79,6 +79,11 @@ import type {
   ViewId,
 } from "@/app/lib/types";
 import { editablePaperType, metadataVisibility, paperTypeOptions, type EditablePaperType } from "@/app/lib/paper-fields";
+import {
+  comparableMetadataValue,
+  isExtractedMetadataFieldApplicable,
+  type ExtractedMetadataField,
+} from "@/app/lib/metadata-review";
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
 import { gapForPointer, moveItem, moveItemToGap } from "@/app/lib/reorder";
 import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
@@ -133,19 +138,6 @@ interface PdfExtractionResponse {
   warning?: string;
 }
 
-type ExtractedMetadataField =
-  | "title"
-  | "authors"
-  | "year"
-  | "paperType"
-  | "venueName"
-  | "venueAcronym"
-  | "category"
-  | "preprintId"
-  | "doi"
-  | "url"
-  | "abstract";
-
 interface ExtractedMetadataChange {
   field: ExtractedMetadataField;
   label: string;
@@ -176,10 +168,6 @@ function extractedMetadataValue(metadata: ExtractedPdfMetadata, field: Extracted
   if (field === "authors") return metadata.authors.join(", ");
   const value = metadata[field];
   return value === null || value === undefined ? "" : String(value);
-}
-
-function comparableMetadataValue(value: string): string {
-  return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 }
 
 // Default column widths as proportional shares of each table's resizable area
@@ -3443,17 +3431,17 @@ function AnchoredOptions({ anchorRef, open, className, id, children }: {
  * submitted. A hidden input carries the comma-joined value, so the surrounding
  * form contract is unchanged.
  */
+type AuthorNamesFieldProps = { authors: Author[] } & (
+  | { defaultValue?: string; value?: never; onChange?: never }
+  | { defaultValue?: never; value: string[]; onChange: (names: string[]) => void }
+);
+
 function AuthorNamesField({
   authors,
   defaultValue = "",
   value,
   onChange,
-}: {
-  authors: Author[];
-  defaultValue?: string;
-  value?: string[];
-  onChange?: (names: string[]) => void;
-}) {
+}: AuthorNamesFieldProps) {
   const listboxId = useId();
   const editorRef = useRef<HTMLDivElement>(null);
   const [uncontrolledNames, setUncontrolledNames] = useState<string[]>(() =>
@@ -3461,11 +3449,14 @@ function AuthorNamesField({
   );
   const names = value ?? uncontrolledNames;
   function setNames(update: SetStateAction<string[]>) {
-    const next = typeof update === "function" ? update(names) : update;
     if (value === undefined) {
-      setUncontrolledNames(next);
+      // Pass the updater through to React so batched edits each receive the most
+      // recent state instead of the names captured by this render.
+      setUncontrolledNames(update);
+      return;
     }
-    onChange?.(next);
+    const next = typeof update === "function" ? update(value) : update;
+    onChange(next);
   }
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -4244,6 +4235,18 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
   const formRef = useRef<HTMLFormElement | null>(null);
   const extractionReturnFocusRef = useRef<HTMLElement | null>(null);
   const { runTask } = useBackgroundTasks();
+  const metadataReviewPaperType = pendingMetadataReview && selectedExtractedFields.has("paperType")
+    ? editablePaperType(pendingMetadataReview.extraction.metadata.paperType)
+    : paperType;
+  const applicableMetadataReviewFields = new Set(
+    pendingMetadataReview?.changes
+      .filter((change) => isExtractedMetadataFieldApplicable(change.field, metadataReviewPaperType))
+      .map((change) => change.field) ?? [],
+  );
+  const selectedApplicableMetadataCount = [...selectedExtractedFields]
+    .filter((field) => applicableMetadataReviewFields.has(field)).length;
+  const firstApplicableMetadataField = pendingMetadataReview?.changes
+    .find((change) => applicableMetadataReviewFields.has(change.field))?.field;
 
   // Restore focus only after React has removed `inert` from the editor form.
   // Trying to focus synchronously while closing the review leaves focus on the
@@ -4372,9 +4375,12 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
 
   function applySelectedMetadata() {
     if (!pendingMetadataReview) return;
-    applyExtractedMetadata(pendingMetadataReview.extraction.metadata, selectedExtractedFields);
-    const selectedCount = selectedExtractedFields.size;
-    const total = pendingMetadataReview.changes.length;
+    const applicableSelectedFields = new Set(
+      [...selectedExtractedFields].filter((field) => applicableMetadataReviewFields.has(field)),
+    );
+    applyExtractedMetadata(pendingMetadataReview.extraction.metadata, applicableSelectedFields);
+    const selectedCount = applicableSelectedFields.size;
+    const total = applicableMetadataReviewFields.size;
     const warning = pendingMetadataReview.extraction.warning;
     setPendingMetadataReview(null);
     notify(
@@ -4428,8 +4434,17 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         notify(payload.warning ?? `The extracted metadata matches the current paper details.`, payload.warning ? "info" : "success");
         return;
       }
+      const selectsExtractedPaperType = changes.some(
+        (change) => change.field === "paperType" && change.extracted.trim(),
+      );
+      const initialReviewPaperType = selectsExtractedPaperType
+        ? editablePaperType(payload.metadata.paperType)
+        : paperType;
       setSelectedExtractedFields(new Set(
-        changes.filter((change) => change.extracted.trim()).map((change) => change.field),
+        changes
+          .filter((change) => change.extracted.trim())
+          .filter((change) => isExtractedMetadataFieldApplicable(change.field, initialReviewPaperType))
+          .map((change) => change.field),
       ));
       setPendingMetadataReview({ extraction: payload, changes });
     } catch (error) {
@@ -4579,14 +4594,16 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
               <p className="metadata-review-warning"><CircleAlert size={16} />{pendingMetadataReview.extraction.warning}</p>
             ) : null}
             <div className="metadata-review-list" role="group" aria-label="Extracted metadata changes">
-              {pendingMetadataReview.changes.map((change, index) => {
-                const selected = selectedExtractedFields.has(change.field);
+              {pendingMetadataReview.changes.map((change) => {
+                const applicable = applicableMetadataReviewFields.has(change.field);
+                const selected = applicable && selectedExtractedFields.has(change.field);
                 return (
-                  <label className={`metadata-review-row ${selected ? "is-selected" : ""}`} key={change.field}>
+                  <label className={`metadata-review-row ${selected ? "is-selected" : ""} ${applicable ? "" : "is-unavailable"}`} key={change.field}>
                     <input
                       type="checkbox"
                       checked={selected}
-                      autoFocus={index === 0}
+                      disabled={!applicable}
+                      autoFocus={change.field === firstApplicableMetadataField}
                       onChange={(event) => {
                         setSelectedExtractedFields((current) => {
                           const next = new Set(current);
@@ -4596,7 +4613,10 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
                         });
                       }}
                     />
-                    <span className="metadata-review-field">{change.label}</span>
+                    <span className="metadata-review-field">
+                      {change.label}
+                      {!applicable ? <small>Not used by the selected paper type</small> : null}
+                    </span>
                     <span className="metadata-review-values">
                       <span><small>Current</small><b>{change.current || "Not recorded"}</b></span>
                       <span><small>Extracted</small><b>{change.extracted || "Not found"}</b></span>
@@ -4606,8 +4626,8 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
               })}
             </div>
             <div className="metadata-review-actions">
-              <ActionButton variant="secondary" onClick={closeMetadataReview} icon={<X />}>Keep current values</ActionButton>
-              <ActionButton variant="primary" onClick={applySelectedMetadata} icon={<Check />}>
+              <ActionButton variant="secondary" onClick={closeMetadataReview} autoFocus={!firstApplicableMetadataField} icon={<X />}>Keep current values</ActionButton>
+              <ActionButton variant="primary" onClick={applySelectedMetadata} disabled={selectedApplicableMetadataCount === 0} icon={<Check />}>
                 Apply selected
               </ActionButton>
             </div>
