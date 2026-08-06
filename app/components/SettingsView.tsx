@@ -254,6 +254,8 @@ const fallbackBedrockModels: BedrockModelOption[] = [
   { id: "us.anthropic.claude-haiku-4-5-20251001-v1:0", label: "Claude Haiku 4.5 · US", endpoint: "runtime", scope: "US" },
 ];
 
+const MODEL_ACCESS_WARNING_TOAST = "Model access unavailable. Check the message by Test access.";
+
 function normalizedModelId(modelId: string): string {
   if (modelId === "anthropic.claude-opus-4-8") {
     return "us.anthropic.claude-opus-4-8";
@@ -337,7 +339,7 @@ function byteLabel(bytes: number): string {
 
 
 export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibraryNameChange, papers }: {
-  notify: (message: string, tone?: "success" | "error" | "info") => void;
+  notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   libraryName: string;
@@ -471,15 +473,18 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       if (result.available && result.region && result.region !== settings.ai.region) {
         updateAi("region", result.region);
       }
-      // Access failures stay beside the model controls where the user can act on
-      // them. Repeating a long provider message in a transient toast obscures the
-      // form and leaves no durable context.
-      if (result.available) notify(result.message, "success");
+      // Keep the provider's full response beside the controls, and use the toast
+      // only as a short, persistent pointer to that actionable detail.
+      notify(
+        result.available ? result.message : MODEL_ACCESS_WARNING_TOAST,
+        result.available ? "success" : "warning",
+      );
     } catch (error) {
       const message = error instanceof DOMException && error.name === "TimeoutError"
         ? "Bedrock did not respond within 30 seconds. Try again, then check this model’s access in AWS."
         : error instanceof Error ? error.message : "Model access could not be tested.";
       setModelAccess({ available: false, modelId: settings.ai.modelId, message });
+      notify(MODEL_ACCESS_WARNING_TOAST, "warning");
     } finally {
       setTestingModel(false);
     }
@@ -880,12 +885,12 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 <label className="span-2"><span>Model</span><Select value={knownModel ? settings.ai.modelId : "custom"} onChange={(next) => updateAi("modelId", next === "custom" ? "" : next)} ariaLabel="Model" options={[...modelOptions.map((model) => ({ value: model.id, label: model.label })), { value: "custom", label: "Custom Bedrock model ID…" }]} /><small>{models.length ? `${models.length} Bedrock models loaded from Runtime and Mantle.` : "Using the built-in model list while the Bedrock catalogs load."} GPT-5.6 uses the Responses API. The agent feed remains Claude-only because Claude Code powers it.</small></label>
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="openai.gpt-5.6-terra or us.provider.model-id" required /></label> : null}
                 <div className={`model-access-row span-2 ${visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}`}>
-                  <span role={visibleModelAccess ? visibleModelAccess.available ? "status" : "alert" : undefined}>
+                  <span id={visibleModelAccess ? "model-access-detail" : undefined}>
                     {visibleModelAccess ? visibleModelAccess.available ? <CircleCheck size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" /> : null}
                     {visibleModelAccess ? visibleModelAccess.message : "A model can appear here before your key can use it. Select Test access to verify."}
                   </span>
                   <ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton>
-                  <ActionButton variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton>
+                  <ActionButton aria-describedby={visibleModelAccess ? "model-access-detail" : undefined} variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton>
                 </div>
                 <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
@@ -1124,7 +1129,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
   tokenDraft: string;
   onRepoChange: (value: string) => void;
   onTokenChange: (value: string) => void;
-  notify: (message: string, tone?: "success" | "error" | "info") => void;
+  notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void;
 }) {
   const [testing, setTesting] = useState(false);
 
@@ -1183,7 +1188,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
   );
 }
 
-function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "info") => void }) {
+function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void }) {
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [selectedId, setSelectedId] = useState<string | null>(DEFAULT_FEED_SKILLS[0]?.id ?? null);
   const [loading, setLoading] = useState(true);
@@ -1357,7 +1362,7 @@ const result = await agent(
 log('Proposed collection changes. Approve them above.')
 `;
 
-function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "info") => void }) {
+function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void }) {
   const [workflows, setWorkflows] = useState<StoredWorkflow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
