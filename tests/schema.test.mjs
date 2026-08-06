@@ -176,8 +176,9 @@ test("agent scopes one-paper reads and proposes complete paper metadata", async 
   assert.match(prompt, /If the user asks to read, summarize,[\s\S]*?one identified paper[\s\S]*?Do NOT call the full-library endpoint/);
   assert.match(prompt, /For an attached library paper,[\s\S]*?paper-specific metadata and file URLs/);
   assert.match(prompt, /complete ordered author list[\s\S]*?do not[\s\S]*?incomplete create proposal/i);
-  assert.match(prompt, /For an arXiv preprint, set both venueName and venueAcronym to "arXiv"/);
+  assert.match(prompt, /For an arXiv preprint proposal, set both venueName and venueAcronym to "arXiv"/);
   assert.doesNotMatch(prompt, /Always READ first/);
+  assert.match(prompt, /buildFollowUpPrompt[\s\S]*?earlier session context says otherwise[\s\S]*?PAPER_SCOPE_RULES/);
 });
 
 test("ships deployed settings, database Doctor, PDF grounding, and update checks", async () => {

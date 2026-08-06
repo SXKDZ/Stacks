@@ -13,6 +13,22 @@ import type { SnippetAttachment } from "@/app/lib/schemas/attachments";
 // from it, so the runtime contract and the compile-time type cannot drift.
 export type { ProposalOperation };
 
+const PAPER_SCOPE_RULES = `
+- Scope every read to the user's request. If the user asks to read, summarize,
+  or analyze one identified paper, retrieve only that paper from its supplied
+  identifier, URL, or attachment. Do NOT call the full-library endpoint.
+- For an attached library paper, use the paper-specific metadata and file URLs
+  documented with the attachment; never load the whole library to read it.
+- Call the full-library endpoint only when library-wide state is necessary for
+  the requested task. A one-paper reading task is never a reason to inspect the
+  rest of the collection.
+- Before proposing a library change, check only the state needed to make that
+  proposal safe. A create may use the full-library read for duplicate detection.
+- Verify the complete ordered author list from a reliable source before proposing
+  a paper create. If it cannot be verified, explain what is missing and do not
+  queue an incomplete create proposal. Never invent an author.
+- For an arXiv preprint proposal, set both venueName and venueAcronym to "arXiv".`;
+
 const PROPOSAL_INSTRUCTIONS = `
 You can query and edit the user's Stacks library through a local HTTP
 API, using the Bash tool with curl. The base URL and an auth token are in your
@@ -46,24 +62,11 @@ collectionNames (array), and notes. Never silently omit known metadata.
   with no venue is "other").
 - Always set venueName when the work has one (conference/journal/repository name;
   drop "Proceedings of" and ordinals), and venueAcronym when there is a common
-  one. For an arXiv preprint, set both venueName and venueAcronym to "arXiv".
-  Leave venueName empty only for genuinely un-venued items such as standalone
-  reports or personal blog posts.
+  one. Leave venueName empty only for genuinely un-venued items such as
+  standalone reports or personal blog posts.
 
 RULES:
-- Scope every read to the user's request. If the user asks to read, summarize,
-  or analyze one identified paper, retrieve only that paper from its supplied
-  identifier, URL, or attachment. Do NOT call the full-library endpoint.
-- For an attached library paper, use the paper-specific metadata and file URLs
-  documented with the attachment; never load the whole library to read it.
-- Call the full-library endpoint only when library-wide state is necessary for
-  the requested task. A one-paper reading task is never a reason to inspect the
-  rest of the collection.
-- Before proposing a library change, check only the state needed to make that
-  proposal safe. A create may use the full-library read for duplicate detection.
-- Verify the complete ordered author list from a reliable source before proposing
-  a paper create. If it cannot be verified, explain what is missing and do not
-  queue an incomplete create proposal. Never invent an author.
+${PAPER_SCOPE_RULES}
 - Never claim a change was applied: writes only queue a proposal for approval.
 - Only propose changes the user actually asked for.
 - Fill paperType and venue for every paper you add; don't leave them blank/"other" out of laziness.
@@ -134,7 +137,10 @@ export function buildFollowUpPrompt(input: {
   rejectedSummaries?: string[];
   attachments?: SnippetAttachment[];
 }): string {
-  const parts: string[] = [];
+  const parts: string[] = [
+    "Apply these rules to this turn even if earlier session context says otherwise:",
+    PAPER_SCOPE_RULES,
+  ];
   if (input.appliedSummaries?.length) {
     parts.push(`The user APPROVED and applied these changes:\n- ${input.appliedSummaries.join("\n- ")}`);
   }
