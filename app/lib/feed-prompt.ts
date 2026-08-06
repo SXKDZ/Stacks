@@ -27,7 +27,9 @@ const PAPER_SCOPE_RULES = `
 - Verify the complete ordered author list from a reliable source before proposing
   a paper create. If it cannot be verified, explain what is missing and do not
   queue an incomplete create proposal. Never invent an author.
-- For an arXiv preprint proposal, set both venueName and venueAcronym to "arXiv".`;
+- For a preprint proposal, set venueName to the source repository's canonical
+  name. Do not set venueAcronym for a preprint, and never infer a repository
+  from paperType alone.`;
 
 const PROPOSAL_INSTRUCTIONS = `
 You can query and edit the user's Stacks library through a local HTTP
@@ -61,9 +63,9 @@ collectionNames (array), and notes. Never silently omit known metadata.
   specific fit (an arXiv-only paper is "preprint"; a blog post or tech report
   with no venue is "other").
 - Always set venueName when the work has one (conference/journal/repository name;
-  drop "Proceedings of" and ordinals), and venueAcronym when there is a common
-  one. Leave venueName empty only for genuinely un-venued items such as
-  standalone reports or personal blog posts.
+  drop "Proceedings of" and ordinals). For conference, journal, and workshop
+  venues, set venueAcronym when there is a common one. Leave venueName empty only
+  for genuinely un-venued items such as standalone reports or personal blog posts.
 
 RULES:
 ${PAPER_SCOPE_RULES}
@@ -138,7 +140,7 @@ export function buildFollowUpPrompt(input: {
   attachments?: SnippetAttachment[];
 }): string {
   const parts: string[] = [
-    "Apply these rules to this turn even if earlier session context says otherwise:",
+    "Current rules for this turn:",
     PAPER_SCOPE_RULES,
   ];
   if (input.appliedSummaries?.length) {
