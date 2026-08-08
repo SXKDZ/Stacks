@@ -22,6 +22,10 @@ function escapeBibtex(value: string): string {
     .replace(/\^/g, "\\textasciicircum{}");
 }
 
+function bibtexPages(value: string): string {
+  return value.replace(/\s*(?:--|[-–—])\s*/g, "--");
+}
+
 function citationKey(paper: Paper): string {
   const family = paper.authors[0]?.displayName.split(/\s+/).at(-1) ?? "paper";
   const significant = paper.title.split(/\s+/).find((word) => word.replace(/[^A-Za-z0-9]/g, "").length > 3) ?? "work";
@@ -50,10 +54,10 @@ function bibtexEntry(paper: Paper): string {
     if (venue) fields.push(["journal", venue]);
     if (paper.volume) fields.push(["volume", paper.volume]);
     if (paper.issue) fields.push(["number", paper.issue]);
-    if (paper.pages) fields.push(["pages", paper.pages]);
+    if (paper.pages) fields.push(["pages", bibtexPages(paper.pages)]);
   } else {
     if (venue) fields.push(["booktitle", venue]);
-    if (paper.pages) fields.push(["pages", paper.pages]);
+    if (paper.pages) fields.push(["pages", bibtexPages(paper.pages)]);
   }
   if (paper.doi) fields.push(["doi", paper.doi]);
   if (paper.url) fields.push(["url", paper.url]);

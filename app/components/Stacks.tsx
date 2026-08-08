@@ -86,6 +86,7 @@ import {
 } from "@/app/lib/metadata-review";
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
 import { gapForPointer, moveItem, moveItemToGap } from "@/app/lib/reorder";
+import { withSummarySlot } from "@/app/lib/summary-concurrency";
 import { COLLECTION_COLORS, DEFAULT_COLLECTION_COLOR } from "@/app/lib/types";
 
 const discoveryProviders: Array<{
@@ -2989,35 +2990,42 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
 }) {
   const hasViewer = Boolean(paper.pdfViewUrl || paper.htmlUrl);
   const detailPanelRef = useRef<HTMLElement>(null);
-  const { runTask } = useBackgroundTasks();
+  const { runTask, tasks } = useBackgroundTasks();
   const [summarizing, setSummarizing] = useState(false);
   const [notesDraft, setNotesDraft] = useState(paper.notes);
+  const summaryTaskKey = `summary:${paper.id}`;
+  const summaryRunning = summarizing || tasks.some((task) => task.key === summaryTaskKey && task.status === "running");
   useEffect(() => { setNotesDraft(paper.notes); }, [paper.id, paper.notes]);
 
   async function generateSummary() {
+    if (summaryRunning) return;
     setSummarizing(true);
     try {
-      const payload = await runTask(`Generate summary · ${paper.title}`, async () => {
-        const response = await fetch("/api/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            paper: {
-              title: paper.title,
-              abstract: paper.abstract,
-              authors: paper.authors.map((author) => author.displayName),
-              venue: venueLine(paper),
-              year: paper.year,
-              url: paper.url,
-              doi: paper.doi,
-              localPath: paper.localPath,
-            },
-          }),
-        });
-        if (!response.ok) throw new Error(await readError(response));
-        return response.json() as Promise<{ summary: string }>;
-      });
-      await onUpdate(paper, { summary: payload.summary }, "Summary generated and saved.");
+      await runTask(`Generate summary · ${paper.title}`, async (log) => {
+        await withSummarySlot(async () => {
+          log.step("Generating the summary.");
+          const response = await fetch("/api/summarize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              paper: {
+                title: paper.title,
+                abstract: paper.abstract,
+                authors: paper.authors.map((author) => author.displayName),
+                venue: venueLine(paper),
+                year: paper.year,
+                url: paper.url,
+                doi: paper.doi,
+                localPath: paper.localPath,
+              },
+            }),
+          });
+          if (!response.ok) throw new Error(await readError(response));
+          const payload = await response.json() as { summary: string };
+          log.step("Saving the generated summary.");
+          await onUpdate(paper, { summary: payload.summary }, "Summary generated and saved.");
+        }, () => log.step("Waiting for an available summary slot."));
+      }, { key: summaryTaskKey });
     } catch {
       // runTask surfaces the failure in the Activity dock.
     } finally {
@@ -3141,8 +3149,8 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           <div className="detail-section summary-section">
             <p className="eyebrow eyebrow-action">
               <span>Summary</span>
-              <button type="button" className="eyebrow-generate" onClick={() => void generateSummary()} disabled={summarizing}>
-                {summarizing ? <LoaderCircle className="spin" size={13} /> : <WandSparkles size={13} />}
+              <button type="button" className="eyebrow-generate" onClick={() => void generateSummary()} disabled={summaryRunning} aria-busy={summaryRunning}>
+                {summaryRunning ? <LoaderCircle className="spin" size={13} /> : <WandSparkles size={13} />}
                 {paper.summary ? "Regenerate" : "Generate"}
               </button>
             </p>
@@ -3173,8 +3181,8 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                 {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
                 {paper.doi ? <span><b>DOI</b>{paper.doi}</span> : null}
                 {paper.preprintId || paper.arxivId ? <span><b>Preprint</b>{paper.preprintId || paper.arxivId}</span> : null}
-                {paper.localPath ? <span className="publication-file-row"><b>File</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("pdf", paper.localPath!)} title={`${paper.localPath}: show the stored PDF in its folder`}>{paper.localPath}</TextButton></span> : null}
-                {paper.htmlSnapshotPath ? <span className="publication-file-row"><b>HTML</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("html", paper.htmlSnapshotPath!)} title={`${paper.htmlSnapshotPath}: show the stored HTML snapshot in its folder`}>{paper.htmlSnapshotPath}</TextButton></span> : null}
+                {paper.localPath ? <span className="publication-file-row"><b>File</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("pdf", paper.localPath!)} title={paper.localFilePath ?? paper.localPath}>{paper.localPath}</TextButton></span> : null}
+                {paper.htmlSnapshotPath ? <span className="publication-file-row"><b>HTML</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("html", paper.htmlSnapshotPath!)} title={paper.htmlFilePath ?? paper.htmlSnapshotPath}>{paper.htmlSnapshotPath}</TextButton></span> : null}
               </div>
             </div>
           ) : null}
@@ -4234,7 +4242,9 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
   const [collectionNames, setCollectionNames] = useState<string[]>(() => paper.collections.map((collection) => collection.name));
   const formRef = useRef<HTMLFormElement | null>(null);
   const extractionReturnFocusRef = useRef<HTMLElement | null>(null);
-  const { runTask } = useBackgroundTasks();
+  const { runTask, tasks } = useBackgroundTasks();
+  const summaryTaskKey = `summary:${paper.id}`;
+  const summaryRunning = summarizing || tasks.some((task) => task.key === summaryTaskKey && task.status === "running");
   const metadataReviewPaperType = pendingMetadataReview && selectedExtractedFields.has("paperType")
     ? editablePaperType(pendingMetadataReview.extraction.metadata.paperType)
     : paperType;
@@ -4262,34 +4272,40 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
   }, [pendingMetadataReview]);
 
   async function generateSummary() {
+    if (summaryRunning) return;
     setSummarizing(true);
     try {
-      const payload = await runTask(`Generate summary · ${paper.title}`, async () => {
-        const response = await fetch("/api/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            paper: {
-              title: paper.title,
-              abstract: paper.abstract,
-              authors: paper.authors.map((author) => author.displayName),
-              venue: venueLine(paper),
-              year: paper.year,
-              url: paper.url,
-              doi: paper.doi,
-              localPath: paper.localPath,
-            },
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(await readError(response));
-        }
-        return response.json() as Promise<{ summary: string }>;
-      });
-      await mutateLibrary(
-        { entity: "paper", action: "update", id: paper.id, data: { summary: payload.summary } },
-        "Summary generated and saved.",
-      );
+      const payload = await runTask(`Generate summary · ${paper.title}`, async (log) => {
+        return withSummarySlot(async () => {
+          log.step("Generating the summary.");
+          const response = await fetch("/api/summarize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              paper: {
+                title: paper.title,
+                abstract: paper.abstract,
+                authors: paper.authors.map((author) => author.displayName),
+                venue: venueLine(paper),
+                year: paper.year,
+                url: paper.url,
+                doi: paper.doi,
+                localPath: paper.localPath,
+              },
+            }),
+          });
+          if (!response.ok) {
+            throw new Error(await readError(response));
+          }
+          const generated = await response.json() as { summary: string };
+          log.step("Saving the generated summary.");
+          await mutateLibrary(
+            { entity: "paper", action: "update", id: paper.id, data: { summary: generated.summary } },
+            "Summary generated and saved.",
+          );
+          return generated;
+        }, () => log.step("Waiting for an available summary slot."));
+      }, { key: summaryTaskKey });
       setSummary(payload.summary);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Summary generation failed.", "error");
@@ -4456,6 +4472,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     const form = new FormData(event.currentTarget);
     // Same rule as the render, so the payload covers exactly the fields the user
     // could see: reading a field the form never rendered would submit it as empty
@@ -4485,6 +4502,10 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
       notify(validationError, "error");
       return;
     }
+    // Enter the modal's own busy state before the asset check. Summary tasks use
+    // their own per-paper keys and cannot disable this save; this flag only
+    // prevents a second submit of the edit currently being saved.
+    setSaving(true);
     try {
       const assets = await checkPaperAssets(data);
       const missingNamedPdf = Boolean(assets.localPath) && !assets.pdfExists;
@@ -4492,10 +4513,12 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
       const hasStoredSource = assets.pdfExists || assets.htmlExists;
       if (missingNamedPdf || missingNamedHtml || (!hasStoredSource && hasAcquirableSource(data))) {
         setPendingSave(data);
+        setSaving(false);
         return;
       }
       await savePaper(data);
     } catch (error) {
+      setSaving(false);
       notify(error instanceof Error ? error.message : "The local source could not be validated.", "error");
     }
   }
@@ -4549,7 +4572,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         <AuthorNamesField authors={authors} value={authorNames} onChange={setAuthorNames} />
         <PaperMetadataFields paperType={paperType} paper={paper} venues={venues} notify={notify} />
         <CollectionNamesField collections={collections} value={collectionNames} onChange={setCollectionNames} />
-        <label className="field-span-2 summary-field"><span className="field-label-action"><span>Summary</span><button type="button" onClick={() => void generateSummary()} disabled={summarizing}>{summarizing ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><MarkdownCodeEditor name="summary" ariaLabel="Summary" rows={5} value={summary} onChange={setSummary} placeholder="A short summary for your library…" /></label>
+        <label className="field-span-2 summary-field"><span className="field-label-action"><span>Summary</span><button type="button" onClick={() => void generateSummary()} disabled={summaryRunning} aria-busy={summaryRunning}>{summaryRunning ? <LoaderCircle className="spin" size={14} /> : <WandSparkles size={14} />}{paper.summary || summary ? "Regenerate" : "Generate"}</button></span><MarkdownCodeEditor name="summary" ariaLabel="Summary" rows={5} value={summary} onChange={setSummary} placeholder="A short summary for your library…" /></label>
         <label className="field-span-2"><span>Abstract</span><MarkdownCodeEditor name="abstract" ariaLabel="Abstract" rows={5} value={abstract} onChange={setAbstract} placeholder="What this paper contributes…" /></label>
         <label className="field-span-2"><span>Research notes</span><MarkdownCodeEditor name="notes" ariaLabel="Research notes" rows={4} value={notes} onChange={setNotes} placeholder="Observations, questions, and connections…" /></label>
         </div>

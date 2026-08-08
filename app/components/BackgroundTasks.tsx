@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, ChevronUp, CircleAlert, LoaderCircle, ListChecks, X } from "lucide-react";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 type TaskStatus = "running" | "complete" | "error";
 
@@ -14,6 +14,8 @@ export interface TaskStep {
 
 interface BackgroundTask {
   id: string;
+  /** Stable identity used to prevent the same operation from running twice. */
+  key?: string;
   label: string;
   status: TaskStatus;
   startedAt: number;
@@ -21,6 +23,10 @@ interface BackgroundTask {
   detail?: string;
   /** The task's own progress trail, newest last. */
   steps?: TaskStep[];
+}
+
+interface BackgroundTaskOptions {
+  key?: string;
 }
 
 /**
@@ -35,7 +41,7 @@ export interface TaskLogger {
 }
 
 interface BackgroundTaskContextValue {
-  runTask: <Result>(label: string, operation: (log: TaskLogger) => Promise<Result>) => Promise<Result>;
+  runTask: <Result>(label: string, operation: (log: TaskLogger) => Promise<Result>, options?: BackgroundTaskOptions) => Promise<Result>;
   tasks: BackgroundTask[];
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -45,6 +51,14 @@ interface BackgroundTaskContextValue {
 
 const BackgroundTaskContext = createContext<BackgroundTaskContextValue | null>(null);
 const TASK_HISTORY_KEY = "stacks-activity-log-v1";
+
+/** Remove terminal formatting/control bytes from CLI and Playwright failures. */
+export function cleanTaskText(value: string): string {
+  return value
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim();
+}
 
 function readTaskHistory(): BackgroundTask[] {
   if (typeof window === "undefined") {
@@ -71,34 +85,48 @@ export function useBackgroundTasks(): BackgroundTaskContextValue {
 export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<BackgroundTask[]>(readTaskHistory);
   const [open, setOpen] = useState(false);
+  const activeTaskKeys = useRef(new Set<string>());
 
   useEffect(() => {
     window.sessionStorage.setItem(TASK_HISTORY_KEY, JSON.stringify(tasks));
   }, [tasks]);
 
-  const runTask = useCallback(async <Result,>(label: string, operation: (log: TaskLogger) => Promise<Result>): Promise<Result> => {
+  const runTask = useCallback(async <Result,>(label: string, operation: (log: TaskLogger) => Promise<Result>, options?: BackgroundTaskOptions): Promise<Result> => {
+    const key = options?.key?.trim();
+    if (key && activeTaskKeys.current.has(key)) {
+      throw new Error(`${label} is already running.`);
+    }
+    if (key) activeTaskKeys.current.add(key);
     const id = crypto.randomUUID();
-    const task: BackgroundTask = { id, label, status: "running", startedAt: Date.now(), steps: [] };
-    setTasks((current) => [task, ...current].slice(0, 40));
+    const task: BackgroundTask = { id, key, label, status: "running", startedAt: Date.now(), steps: [] };
+    setTasks((current) => {
+      const next = [task, ...current];
+      let finishedKept = 0;
+      // Running work must remain observable even when the history is busy; cap
+      // only completed/error rows so their owning controls stay disabled.
+      return next.filter((entry) => entry.status === "running" || finishedKept++ < 40);
+    });
     const append = (step: TaskStep) => {
       setTasks((current) => current.map((entry) => entry.id === id
         // Capped: a long import should not grow the log without bound.
         ? { ...entry, steps: [...(entry.steps ?? []), step].slice(-30) }
         : entry));
     };
-    const log: TaskLogger = { step: (message, tone) => append({ at: Date.now(), message, tone }) };
+    const log: TaskLogger = { step: (message, tone) => append({ at: Date.now(), message: cleanTaskText(message), tone }) };
     try {
       const result = await operation(log);
       setTasks((current) => current.map((entry) => entry.id === id ? { ...entry, status: "complete", completedAt: Date.now() } : entry));
       return result;
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "The task failed.";
+      const detail = cleanTaskText(error instanceof Error ? error.message : "The task failed.");
       // The failure is recorded as a step too, so the trail reads in order right up
       // to what went wrong.
       append({ at: Date.now(), message: detail, tone: "error" });
       setTasks((current) => current.map((entry) => entry.id === id ? { ...entry, status: "error", detail, completedAt: Date.now() } : entry));
       setOpen(true);
       throw error;
+    } finally {
+      if (key) activeTaskKeys.current.delete(key);
     }
   }, []);
 
@@ -152,7 +180,7 @@ export function BackgroundTaskDock() {
                 {task.status === "running" ? <LoaderCircle className="spin" size={16} /> : task.status === "complete" ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
                 <span>
                   <strong>{task.label}</strong>
-                  <small>{task.detail || (task.status === "running" ? "Running" : task.status === "complete" ? "Completed" : "Needs attention")} · {new Date(task.completedAt ?? task.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
+                  <small>{task.status === "running" ? "Running" : task.status === "complete" ? "Completed" : "Needs attention"} · {new Date(task.completedAt ?? task.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
                   {task.steps?.length ? (
                     <>
                       <button

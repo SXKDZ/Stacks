@@ -39,7 +39,11 @@ export interface Paper {
   pdfUrl: string | null;
   pdfViewUrl: string | null;
   localPath: string | null;
+  /** Absolute on-disk location supplied by the local library API. */
+  localFilePath?: string | null;
   htmlSnapshotPath: string | null;
+  /** Absolute on-disk location supplied by the local library API. */
+  htmlFilePath?: string | null;
   htmlUrl: string | null;
   summary: string;
   notes: string;

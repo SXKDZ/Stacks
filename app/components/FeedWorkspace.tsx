@@ -14,13 +14,8 @@ import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment }
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
 import { effortSetting, type EffortSetting } from "@/app/lib/effort";
+import { isClaudeAgentModel } from "@/app/lib/feed-model";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-
-/** The feed is a Claude Code agent. Direct OpenAI Bedrock models are available
- * for summaries/PDF extraction, but cannot be passed to the Claude CLI. */
-function isClaudeAgentModel(modelId: string): boolean {
-  return modelId.startsWith("anthropic.") || modelId.includes(".anthropic.");
-}
 
 interface FeedMessage {
   id: string;
@@ -1037,12 +1032,6 @@ export default function FeedWorkspace() {
   const [models, setModels] = useState<FeedModelOption[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
   const [defaultEffort, setDefaultEffort] = useState<EffortSetting>("");
-  // A new feed starts on the model the user last picked (persisted per browser).
-  const [lastUsedModel, setLastUsedModel] = useState("");
-  useEffect(() => {
-    const saved = window.localStorage.getItem("stacks-feed-model") ?? "";
-    setLastUsedModel(isClaudeAgentModel(saved) ? saved : "");
-  }, []);
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
@@ -1354,8 +1343,6 @@ export default function FeedWorkspace() {
       }
       if (response.ok) {
         const { id } = await response.json() as { id: string };
-        setLastUsedModel(payload.model);
-        window.localStorage.setItem("stacks-feed-model", payload.model);
         setInitialText("");
         setInitialPapers([]);
         setComposing(false);
@@ -1552,7 +1539,6 @@ export default function FeedWorkspace() {
               key={`${initialText}:${initialPapers.map((p) => p.id).join(",")}`}
               library={library}
               models={models}
-              initialModel={lastUsedModel}
               defaultModelLabel={defaultModelLabel}
               defaultEffortLabel={defaultEffort}
               placeholder="Capture anything. A link or a note, and what to do with it."

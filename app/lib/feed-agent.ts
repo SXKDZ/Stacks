@@ -10,6 +10,7 @@ import { claudeEffortArgs, effortSetting } from "@/app/lib/effort";
 import { isStoppedExit } from "@/app/lib/agent-exit";
 import { buildForkPrompt, parseProposalsResult, type ProposalOperation } from "@/app/lib/feed-prompt";
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
+import { feedAgentModel } from "@/app/lib/feed-model";
 import { proposalSummary } from "@/app/lib/schemas/proposals";
 
 /**
@@ -354,10 +355,10 @@ export async function runFeedAgent(options: {
       .from(feedSnippets)
       .where(eq(feedSnippets.id, snippetId))
       .get();
-    const snippetModel = row?.model?.trim();
     // Per-feed effort wins; otherwise the global Settings value. Either can be
     // unset, in which case no --effort is passed and the CLI picks its own.
     const runtime = await resolveRuntimeValues();
+    const model = feedAgentModel(row?.model, runtimeValue(runtime, "BEDROCK_MODEL_ID"));
     const effort = effortSetting(row?.effort) || effortSetting(runtimeValue(runtime, "STACKS_EFFORT"));
 
     // Resolve the environment (secrets, config dir) before spawn so no await
@@ -385,7 +386,7 @@ export async function runFeedAgent(options: {
       // library, so nothing it writes there can touch stored files.
       "--add-dir",
       "/tmp",
-      ...(snippetModel ? ["--model", snippetModel] : []),
+      ...(model ? ["--model", model] : []),
       ...claudeEffortArgs(effort),
       // Headless: with no user to answer prompts, the default mode auto-denies
       // every Bash/network/temp-file call, so the agent can't even read the
