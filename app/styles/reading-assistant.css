@@ -471,7 +471,10 @@
   align-items: center;
   display: flex;
   flex-direction: column;
-  padding: 42px 44px;
+  /* Keep the centered empty-state composition without giving this tab wider
+     side gutters than every other Add to Stacks tab. */
+  padding-block: 42px;
+  padding-inline: 20px;
   text-align: center;
 }
 
