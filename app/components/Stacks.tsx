@@ -4594,8 +4594,9 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
           </ActionButton>
         </div>
       </form>
-      {pendingMetadataReview ? (
-        <div className="asset-acquisition-layer metadata-review-layer" role="presentation">
+      {pendingMetadataReview && typeof document !== "undefined" ? createPortal(
+        <div className="metadata-review-layer" role="presentation">
+          <Scrim onClick={closeMetadataReview} label="Keep current metadata and close review" />
           <section
             className="metadata-review-dialog"
             role="dialog"
@@ -4655,7 +4656,8 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
               </ActionButton>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
       {pendingSave ? (
         <div className="asset-acquisition-layer" role="presentation">

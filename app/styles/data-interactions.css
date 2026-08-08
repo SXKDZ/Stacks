@@ -1572,11 +1572,17 @@
   white-space: nowrap;
 }
 
-/* PDF extraction never overwrites edited metadata silently. The review layer
-   lists every differing field and lets the user opt into replacements one by
-   one, while the paper form remains visible as context behind the scrim. */
+/* PDF extraction never overwrites edited metadata silently. This is a separate,
+   content-sized modal portaled to the viewport: it must neither inherit the edit
+   modal's fixed height nor appear as a second frame nested inside it. */
 .metadata-review-layer {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
   padding: 16px;
+  position: fixed;
+  z-index: 100;
 }
 
 .metadata-review-dialog {
@@ -1586,10 +1592,12 @@
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
-  max-height: min(720px, calc(100vh - 64px));
+  max-height: min(720px, calc(100vh - 32px));
   max-width: 780px;
   overflow: hidden;
+  position: relative;
   width: 100%;
+  z-index: 1;
 }
 
 .metadata-review-heading {
