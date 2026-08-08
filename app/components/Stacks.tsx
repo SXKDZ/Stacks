@@ -3651,10 +3651,12 @@ function AuthorNamesField({
 function VenueFields({ venues, label, defaultName = "", defaultAcronym = "", placeholder, showAcronym, span = true }: { venues: Venue[]; label: string; defaultName?: string; defaultAcronym?: string; placeholder: string; showAcronym: boolean; span?: boolean }) {
   const listboxId = useId();
   const nameFieldRef = useRef<HTMLLabelElement>(null);
+  const acronymFieldRef = useRef<HTMLLabelElement>(null);
   const [name, setName] = useState(defaultName);
   const [acronym, setAcronym] = useState(defaultAcronym);
   const [open, setOpen] = useState(false);
   const [activeField, setActiveField] = useState<"name" | "acronym">("name");
+  const activeFieldRef = activeField === "acronym" ? acronymFieldRef : nameFieldRef;
   const query = (activeField === "name" ? name : acronym).trim().toLowerCase();
   const matches = query ? venues.filter((venue) => `${venue.name} ${venue.acronym ?? ""}`.toLowerCase().includes(query)).slice(0, 8) : [];
   function choose(venue: Venue) {
@@ -3666,15 +3668,15 @@ function VenueFields({ venues, label, defaultName = "", defaultAcronym = "", pla
     <div className={`venue-field-pair ${span ? "field-span-2" : ""} ${showAcronym ? "has-acronym" : ""}`}>
       <label ref={nameFieldRef} className="autocomplete-field">
         <span>{label}</span>
-        <input name="venueName" value={name} onChange={(event) => { setName(event.target.value); setActiveField("name"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("name"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "name" && Boolean(matches.length)} aria-controls={listboxId} placeholder={placeholder} />
+        <input name="venueName" value={name} onChange={(event) => { setName(event.target.value); setActiveField("name"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("name"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "name" && Boolean(matches.length)} aria-controls={listboxId} autoComplete="off" placeholder={placeholder} />
       </label>
       {showAcronym ? (
-        <label className="autocomplete-field">
+        <label ref={acronymFieldRef} className="autocomplete-field">
           <span>Venue acronym</span>
-          <input name="venueAcronym" value={acronym} onChange={(event) => { setAcronym(event.target.value); setActiveField("acronym"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("acronym"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "acronym" && Boolean(matches.length)} aria-controls={listboxId} placeholder="NeurIPS" />
+          <input name="venueAcronym" value={acronym} onChange={(event) => { setAcronym(event.target.value); setActiveField("acronym"); if (event.nativeEvent.isTrusted) setOpen(true); }} onFocus={() => { setActiveField("acronym"); setOpen(true); }} onBlur={() => window.setTimeout(() => setOpen(false), 120)} role="combobox" aria-autocomplete="list" aria-expanded={open && activeField === "acronym" && Boolean(matches.length)} aria-controls={listboxId} autoComplete="off" spellCheck={false} placeholder="NeurIPS" />
         </label>
       ) : null}
-      <AnchoredOptions anchorRef={nameFieldRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options venue-autocomplete-options" id={listboxId}>{matches.map((venue) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(venue)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</AnchoredOptions>
+      <AnchoredOptions anchorRef={activeFieldRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options venue-autocomplete-options" id={listboxId}>{matches.map((venue) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(venue)} key={venue.id}><Building2 size={14} /><span><strong>{venue.name}</strong><small>{venue.acronym || venue.type}</small></span></button>)}</AnchoredOptions>
     </div>
   );
 }
