@@ -54,9 +54,9 @@ export function looksBlocked(html: string, title: string): boolean {
   return BLOCKED_MARKERS.some((marker) => marker.test(haystack));
 }
 
-/** Strip scripts/styles and collapse to readable text (cap at MAX_PAPER-ish length). */
-export function htmlToText(html: string, maxChars = 20_000): string {
-  const text = html
+/** Strip scripts/styles and collapse the full page to readable text. */
+export function htmlToText(html: string): string {
+  return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, "\n")
@@ -77,7 +77,6 @@ export function htmlToText(html: string, maxChars = 20_000): string {
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
-  return text.length > maxChars ? `${text.slice(0, maxChars)}\n… (content truncated)` : text;
 }
 
 let sharedBrowser: Browser | null = null;
