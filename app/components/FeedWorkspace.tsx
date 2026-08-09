@@ -359,10 +359,13 @@ function FeedErrorMessage({ content, announce = false }: { content: string; anno
     <div className="feed-error" role={announce ? "alert" : undefined}>
       <CircleAlert size={14} aria-hidden="true" />
       <div className="feed-error-content">
-        <span>{summary}</span>
+        <span className="feed-error-summary">{summary}</span>
         {details ? (
           <details className="feed-error-details">
-            <summary>Show technical details</summary>
+            <summary>
+              <ChevronRight size={14} aria-hidden="true" />
+              <span>Technical details</span>
+            </summary>
             <pre>{details}</pre>
           </details>
         ) : null}

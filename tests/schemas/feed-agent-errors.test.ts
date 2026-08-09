@@ -27,6 +27,16 @@ test("an agent failure preserves its structured result, stderr, and process exit
   assert.match(message, /code: 1/);
 });
 
+test("max-turn failures explain how to resume", () => {
+  const parts = splitFeedError(`Agent turn failed.\n\nAgent result event:\n${JSON.stringify({
+    subtype: "error_max_turns",
+    errors: ["Reached maximum number of turns (40)"],
+  }, null, 2)}`);
+
+  assert.equal(parts.summary, "This run reached its turn limit before finishing. Send “continue” to resume.");
+  assert.match(parts.details, /error_max_turns/);
+});
+
 test("legacy result and exit rows render as one failure", () => {
   const messages = [
     { id: "reported", kind: "error", content: "The agent reported an error.", createdAt: "2026-08-09T06:31:19.259Z" },
@@ -68,6 +78,22 @@ test("stream events finish saving in order before terminal status", async () => 
   assert.match(source, /eventQueue = eventQueue\s*\.then\(\(\) => handleLine\(line\)\)/s);
   assert.match(source, /await eventQueue/);
   assert.doesNotMatch(source, /void handleLine\(line\)/);
+});
+
+test("technical details use the full diagnostic width", async () => {
+  const component = await readFile(new URL("../../app/components/FeedWorkspace.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../../app/styles/workspaces.css", import.meta.url), "utf8");
+
+  assert.match(component, /<span>Technical details<\/span>/);
+  assert.match(styles, /\.feed-error-content\s*\{[^}]*flex:\s*1 1 auto/s);
+  assert.match(styles, /\.feed-error-details pre\s*\{[^}]*width:\s*100%/s);
+  assert.match(styles, /\.feed-error-details pre\s*\{[^}]*max-height:\s*min\(32vh,\s*260px\)/s);
+});
+
+test("list markers in user messages inherit the bubble text color", async () => {
+  const styles = await readFile(new URL("../../app/styles/workspaces.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\.feed-turn-user \.feed-bubble li::marker\s*\{[^}]*color:\s*currentColor/s);
 });
 
 test("a stale Done state is presented as an actionable incomplete run", () => {
