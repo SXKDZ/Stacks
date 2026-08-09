@@ -44,7 +44,7 @@ async function readPaperText(
   if (url?.startsWith("https")) {
     try {
       const snapshot = await captureWebpageSnapshot(new URL(url));
-      return snapshot.text.slice(0, 32000);
+      return snapshot.text;
     } catch {
       return "";
     }

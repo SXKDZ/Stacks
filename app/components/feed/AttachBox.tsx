@@ -1,10 +1,11 @@
 "use client";
 
-import { BookOpen, Check, Cpu, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
-import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { BookOpen, Check, Cpu, FileText, GripHorizontal, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ActionButton, type SelectOption } from "@/app/components/ui/controls";
 import { RunSettingsMenu } from "@/app/components/feed/RunSettingsMenu";
+import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
@@ -137,6 +138,53 @@ export function AttachBox({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const trayRef = useRef<HTMLDivElement>(null);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelResizeDrag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
+  const [panelHeight, setPanelHeight] = useState<number | null>(null);
+
+  const minimumPanelHeight = compact ? 150 : 210;
+
+  function clampPanelHeight(nextHeight: number): number {
+    const viewportMaximum = typeof window === "undefined" ? 680 : Math.min(680, window.innerHeight * 0.72);
+    return Math.round(Math.min(Math.max(minimumPanelHeight, viewportMaximum), Math.max(minimumPanelHeight, nextHeight)));
+  }
+
+  function currentPanelHeight(): number {
+    return panelHeight ?? panelRef.current?.getBoundingClientRect().height ?? minimumPanelHeight;
+  }
+
+  function startPanelResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    panelResizeDrag.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: currentPanelHeight(),
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  function movePanelResize(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = panelResizeDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    // The composer is bottom-docked: moving its top edge upward makes it taller.
+    setPanelHeight(clampPanelHeight(drag.startHeight + drag.startY - event.clientY));
+  }
+
+  function endPanelResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (panelResizeDrag.current?.pointerId !== event.pointerId) return;
+    panelResizeDrag.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function resizePanelWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const step = event.shiftKey ? 40 : 20;
+    if (event.key === "Home") setPanelHeight(null);
+    else if (event.key === "End") setPanelHeight(clampPanelHeight(680));
+    else setPanelHeight(clampPanelHeight(currentPanelHeight() + (event.key === "ArrowUp" ? step : -step)));
+  }
 
   // Pasted long text becomes an editable text attachment (chip), not textarea fill.
   const [texts, setTexts] = useState<Array<{ id: string; name: string; content: string }>>([]);
@@ -334,10 +382,32 @@ export function AttachBox({
         </div>
       ) : null}
 
-      <div className="feed-dock-input">
-        <textarea
+      <div
+        ref={panelRef}
+        className="feed-dock-input is-panel-resizable"
+        style={panelHeight === null ? undefined : { height: `${panelHeight}px` }}
+      >
+        <div
+          className="feed-panel-resize-handle"
+          role="separator"
+          aria-label={compact ? "Resize reply panel" : "Resize new feed panel"}
+          aria-orientation="horizontal"
+          aria-valuemin={minimumPanelHeight}
+          aria-valuemax={680}
+          aria-valuenow={Math.round(panelHeight ?? minimumPanelHeight)}
+          tabIndex={0}
+          onPointerDown={startPanelResize}
+          onPointerMove={movePanelResize}
+          onPointerUp={endPanelResize}
+          onPointerCancel={endPanelResize}
+          onKeyDown={resizePanelWithKeyboard}
+        >
+          <GripHorizontal aria-hidden="true" />
+        </div>
+        <MarkdownCodeEditor
+          className="feed-composer-editor"
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={setText}
           onKeyDown={(event) => {
             // Enter sends; Alt/Shift/Cmd/Ctrl+Enter inserts a newline instead.
             if (event.key === "Enter" && !event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
@@ -345,7 +415,8 @@ export function AttachBox({
             }
           }}
           placeholder={placeholder}
-          rows={compact ? 2 : 3}
+          ariaLabel={compact ? "Reply to agent" : "New feed instruction"}
+          rows={compact ? 3 : 6}
           autoFocus={autoFocus}
         />
 

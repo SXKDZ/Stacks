@@ -121,6 +121,8 @@ test("htmlToText decodes entities once, so escaped markup stays inert", async ()
   // Single-escaped entities still decode normally.
   assert.equal(htmlToText("<p>a &lt;b&gt; c &amp; d</p>"), "a <b> c & d");
   assert.equal(htmlToText("<p>a&nbsp;b</p>"), "a b");
+  const longPage = "x".repeat(25_000);
+  assert.equal(htmlToText(`<main>${longPage}</main>`), longPage, "readable webpage text is not truncated");
 });
 
 test("the bot-challenge heuristic does not reject legitimate security papers", async () => {

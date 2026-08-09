@@ -13,7 +13,6 @@ type PdfDocument = Awaited<ReturnType<typeof getDocumentProxy>>;
 export async function readPdfPagesFromDocument(
   document: PdfDocument,
   slice: PageSlice,
-  maxChars = 32000,
 ): Promise<{ text: string; firstPage: number; lastPage: number; totalPages: number }> {
   const totalPages = document.numPages;
   const firstPage = Math.min(totalPages, Math.max(1, slice.start));
@@ -30,15 +29,14 @@ export async function readPdfPagesFromDocument(
     pages.push(pageText);
     page.cleanup();
   }
-  return { text: pages.join("\n\n").slice(0, maxChars), firstPage, lastPage, totalPages };
+  return { text: pages.join("\n\n"), firstPage, lastPage, totalPages };
 }
 
 /** Parse raw PDF bytes and read a page range from them. */
 export async function readPdfPages(
   bytes: Uint8Array,
   slice: PageSlice,
-  maxChars = 32000,
 ): Promise<{ text: string; firstPage: number; lastPage: number; totalPages: number }> {
   const document = await getDocumentProxy(bytes);
-  return readPdfPagesFromDocument(document, slice, maxChars);
+  return readPdfPagesFromDocument(document, slice);
 }

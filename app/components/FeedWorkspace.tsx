@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -14,13 +14,9 @@ import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment }
 import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
 import { effortSetting, type EffortSetting } from "@/app/lib/effort";
+import { isClaudeAgentModel } from "@/app/lib/feed-model";
+import { coalesceLegacyAgentErrors, splitFeedError } from "@/app/lib/feed-errors";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-
-/** The feed is a Claude Code agent. Direct OpenAI Bedrock models are available
- * for summaries/PDF extraction, but cannot be passed to the Claude CLI. */
-function isClaudeAgentModel(modelId: string): boolean {
-  return modelId.startsWith("anthropic.") || modelId.includes(".anthropic.");
-}
 
 interface FeedMessage {
   id: string;
@@ -357,10 +353,29 @@ function renderToolContent(content: string): ReactNode {
   return <MarkdownContent content={toolFence(content)} className="feed-tool-md" />;
 }
 
-/** Compact token count: 1234 → "1.2k", 20345 → "20.3k". */
+function FeedErrorMessage({ content, announce = false }: { content: string; announce?: boolean }) {
+  const { summary, details } = splitFeedError(content);
+  return (
+    <div className="feed-error" role={announce ? "alert" : undefined}>
+      <CircleAlert size={14} aria-hidden="true" />
+      <div className="feed-error-content">
+        <span>{summary}</span>
+        {details ? (
+          <details className="feed-error-details">
+            <summary>Show technical details</summary>
+            <pre>{details}</pre>
+          </details>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Compact token count with a scale that remains readable for long feeds. */
 function compactTokens(value: number): string {
   if (value < 1000) return String(value);
-  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}k`;
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0).replace(/\.0$/, "")}k`;
+  return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0).replace(/\.0$/, "")}M`;
 }
 
 /** Duration in ms → "3.4s" / "1m 12s". */
@@ -385,10 +400,22 @@ function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const diff = Date.now() - then;
   const mins = Math.round(diff / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} ${mins === 1 ? "minute" : "minutes"} ago`;
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
+  if (hrs < 24) return `${hrs} ${hrs === 1 ? "hour" : "hours"} ago`;
+  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+
+/** A compact, readable age for space-constrained feed rows. */
+function compactRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr`;
   return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
 }
 
@@ -470,10 +497,20 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
           </span>
           <span className="feed-row-meta">
             <span className={`feed-row-status feed-status-${snippet.status}`}>{statusLabel(snippet.status)}</span>
-            <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>
+            <span
+              className="feed-row-time"
+              aria-label={`Updated ${relativeTime(snippet.updatedAt)}`}
+              title={`Updated ${fullTime(snippet.updatedAt)}`}
+            >
+              {compactRelativeTime(snippet.updatedAt)}
+            </span>
             {(() => {
               const tokens = (snippet.inputTokens ?? 0) + (snippet.outputTokens ?? 0);
-              return tokens ? <span>{compactTokens(tokens)} tok</span> : null;
+              return tokens ? (
+                <span aria-label={`${tokens.toLocaleString()} tokens used`} title={`${tokens.toLocaleString()} tokens used`}>
+                  {compactTokens(tokens)} tokens
+                </span>
+              ) : null;
             })()}
             {snippet.turns ? <span>{snippet.turns} {snippet.turns === 1 ? "turn" : "turns"}</span> : null}
             {snippet.pendingProposals ? <span className="feed-row-pending" title={`${snippet.pendingProposals} change${snippet.pendingProposals === 1 ? "" : "s"} to approve`}>{snippet.pendingProposals}</span> : null}
@@ -522,6 +559,8 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   // Which proposal card is expanded to its structured change details.
   const [expandedProposal, setExpandedProposal] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [workingDirectory, setWorkingDirectory] = useState<string | null>(null);
+  const [openingWorkingDirectory, setOpeningWorkingDirectory] = useState(false);
   const [streamNonce, setStreamNonce] = useState(0);
   const running = snippet.status === "running" || snippet.status === "queued";
   // Keep the stream effect's dependency array shape stable for Fast Refresh
@@ -643,6 +682,17 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snippet.id, streamVersion]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`/api/feed/snippets/${encodeURIComponent(snippet.id)}/working-directory`, { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<{ path?: string }> : null)
+      .then((payload) => {
+        if (!cancelled && payload?.path) setWorkingDirectory(payload.path);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [snippet.id]);
+
   async function sendReply(payload: AttachSubmit): Promise<boolean> {
     setReplying(true);
     setError(null);
@@ -684,6 +734,26 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
   async function stop() {
     await fetch(`/api/feed/snippets/${snippet.id}/stop`, { method: "POST" });
+  }
+
+  async function openWorkingDirectory() {
+    setOpeningWorkingDirectory(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/feed/snippets/${encodeURIComponent(snippet.id)}/working-directory`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        setError(await readError(response));
+      } else {
+        const payload = await response.json().catch(() => null) as { path?: string } | null;
+        if (payload?.path) setWorkingDirectory(payload.path);
+      }
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "The working directory could not be opened.");
+    } finally {
+      setOpeningWorkingDirectory(false);
+    }
   }
 
   // Resolve one proposal and fold the outcome into local state. Returns whether
@@ -734,6 +804,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   }
 
   const pendingCount = proposals.filter((p) => p.status === "pending").length;
+  const hasStoredError = messages.some((message) => message.kind === "error");
 
   // Anchor each proposal to the assistant message that produced it, so it renders
   // inline in the thread instead of always pinned to the bottom. Only assistant
@@ -807,7 +878,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
   return (
     <section className="feed-detail">
-      <header className="feed-detail-head">
+      <header className="feed-detail-head feed-detail-thread-head">
         <div className="feed-detail-head-inner">
           <button type="button" className="feed-detail-back" onClick={onBack} aria-label="Back to list"><ArrowLeft size={16} /></button>
           <div className="feed-detail-heading">
@@ -823,6 +894,17 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Created ${fullTime(snippet.createdAt)}`}>Created {relativeTime(snippet.createdAt)}</span>
               <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Updated ${fullTime(snippet.updatedAt)}`}>Updated {relativeTime(snippet.updatedAt)}</span>
             </div>
+            <button
+              type="button"
+              className="feed-working-directory-link"
+              disabled={openingWorkingDirectory}
+              onClick={() => void openWorkingDirectory()}
+              aria-label={workingDirectory ? `Open working directory ${workingDirectory}` : "Open feed working directory"}
+              aria-busy={openingWorkingDirectory}
+            >
+              {openingWorkingDirectory ? <LoaderCircle className="spin" /> : <FolderOpen />}
+              <code>{workingDirectory ?? "Loading working directory…"}</code>
+            </button>
           </div>
           {pendingCount ? <span className="feed-detail-badge">{pendingCount} to approve</span> : null}
         </div>
@@ -830,6 +912,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
       <div className="feed-detail-body" ref={bodyRef}>
         <div className="feed-detail-body-inner">
+        {snippet.status === "error" && snippet.error && !hasStoredError ? (
+          <div className="feed-error-banner">
+            <FeedErrorMessage content={snippet.error} />
+          </div>
+        ) : null}
         {(() => {
           const openingAttachments = parseAttachments(snippet.attachments);
           // The opening "You" turn shows the instruction the user typed plus any
@@ -850,19 +937,20 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
         <div className="feed-thread">
           {(() => {
             const nodes: ReactNode[] = [];
+            const displayMessages = coalesceLegacyAgentErrors(messages);
             // Pair each tool_use with its result by tool_use id — the agent can
             // issue calls in parallel (use A, use B, result A, result B), so
             // position alone mispairs them. Results claimed by id are skipped
             // when the loop reaches them.
             const resultById = new Map<string, FeedMessage>();
-            for (const message of messages) {
+            for (const message of displayMessages) {
               if (message.kind === "tool_result" && message.toolUseId) {
                 resultById.set(message.toolUseId, message);
               }
             }
             const claimed = new Set<string>();
-            for (let i = 0; i < messages.length; i += 1) {
-              const message = messages[i];
+            for (let i = 0; i < displayMessages.length; i += 1) {
+              const message = displayMessages[i];
               if (message.kind === "tool_use") {
                 let resultMessage: FeedMessage | null = null;
                 if (message.toolUseId && resultById.has(message.toolUseId)) {
@@ -870,7 +958,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                   if (resultMessage) claimed.add(resultMessage.id);
                 } else {
                   // Legacy rows without ids: fall back to the adjacent result.
-                  const next = messages[i + 1];
+                  const next = displayMessages[i + 1];
                   if (next && next.kind === "tool_result" && !next.toolUseId) {
                     resultMessage = next;
                     claimed.add(next.id);
@@ -907,7 +995,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               if (message.kind === "error") {
                 nodes.push(
                   <div key={message.id} className="feed-message feed-message-error">
-                    <div className="feed-error"><CircleAlert size={14} /> <span>{message.content}</span></div>
+                    <FeedErrorMessage content={message.content} />
                   </div>,
                 );
                 continue;
@@ -962,7 +1050,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
         {renderProposals(unanchoredProposals, "props-unanchored")}
 
-        {error ? <div className="feed-error feed-error-banner"><CircleAlert size={14} /> <span>{error}</span></div> : null}
+        {error ? <div className="feed-error-banner"><FeedErrorMessage content={error} announce /></div> : null}
         </div>
       </div>
 
@@ -1037,12 +1125,6 @@ export default function FeedWorkspace() {
   const [models, setModels] = useState<FeedModelOption[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
   const [defaultEffort, setDefaultEffort] = useState<EffortSetting>("");
-  // A new feed starts on the model the user last picked (persisted per browser).
-  const [lastUsedModel, setLastUsedModel] = useState("");
-  useEffect(() => {
-    const saved = window.localStorage.getItem("stacks-feed-model") ?? "";
-    setLastUsedModel(isClaudeAgentModel(saved) ? saved : "");
-  }, []);
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [initialText, setInitialText] = useState("");
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
@@ -1354,8 +1436,6 @@ export default function FeedWorkspace() {
       }
       if (response.ok) {
         const { id } = await response.json() as { id: string };
-        setLastUsedModel(payload.model);
-        window.localStorage.setItem("stacks-feed-model", payload.model);
         setInitialText("");
         setInitialPapers([]);
         setComposing(false);
@@ -1427,7 +1507,7 @@ export default function FeedWorkspace() {
 
   const showDetail = Boolean(selected) && !composing;
   return (
-    <main className={`feed-page ${showDetail || composing ? "has-selection" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
+    <main className={`feed-page ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
       <div className="feed-theme-toggle">
         <ThemeToggle />
       </div>
@@ -1552,7 +1632,6 @@ export default function FeedWorkspace() {
               key={`${initialText}:${initialPapers.map((p) => p.id).join(",")}`}
               library={library}
               models={models}
-              initialModel={lastUsedModel}
               defaultModelLabel={defaultModelLabel}
               defaultEffortLabel={defaultEffort}
               placeholder="Capture anything. A link or a note, and what to do with it."

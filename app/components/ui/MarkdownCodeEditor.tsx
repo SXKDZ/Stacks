@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useRef, type KeyboardEventHandler, type ReactNode } from "react";
 import { createLowlight, common } from "lowlight";
 import markdown from "highlight.js/lib/languages/markdown";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
@@ -63,6 +63,9 @@ export function MarkdownCodeEditor({
   variables = false,
   language = "markdown",
   textareaRef,
+  autoFocus = false,
+  className,
+  onKeyDown,
 }: {
   value: string;
   onChange?: (value: string) => void;
@@ -76,6 +79,9 @@ export function MarkdownCodeEditor({
   /** Highlight the value as JavaScript (the workflow script editor). */
   language?: Language;
   textareaRef?: (node: HTMLTextAreaElement | null) => void;
+  autoFocus?: boolean;
+  className?: string;
+  onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>;
 }) {
   const highlightLayer = useRef<HTMLPreElement | null>(null);
   const tokens = useMemo(() => highlight(value, language, variables), [value, language, variables]);
@@ -84,7 +90,7 @@ export function MarkdownCodeEditor({
   const height = `calc(${rows} * 1.58 * 12px + 26px)`;
 
   return (
-    <div className="prompt-code-editor" style={{ ["--code-editor-height" as string]: height }}>
+    <div className={`prompt-code-editor ${className ?? ""}`.trim()} style={{ ["--code-editor-height" as string]: height }}>
       <pre ref={highlightLayer} aria-hidden="true">
         {tokens}
         {value.endsWith("\n") ? "\n" : null}
@@ -103,6 +109,8 @@ export function MarkdownCodeEditor({
         spellCheck={false}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        autoFocus={autoFocus}
+        onKeyDown={onKeyDown}
       />
     </div>
   );

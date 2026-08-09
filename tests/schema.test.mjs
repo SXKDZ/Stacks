@@ -523,7 +523,15 @@ test("tracks long-running work and drives the AI feed instead of a chat workspac
   assert.match(tasks, /runTask/);
   assert.match(tasks, /Activity log/);
   assert.match(tasks, /stacks-activity-log-v1/);
+  assert.match(tasks, /activeTaskKeys/);
+  assert.match(tasks, /already running/);
   assert.match(application, /Generate summary ·/);
+  assert.match(application, /summaryTaskKey = `summary:\$\{paper\.id\}`/);
+  assert.ok((application.match(/key: summaryTaskKey/g) ?? []).length >= 2);
+  assert.match(application, /disabled=\{summaryRunning\}/);
+  assert.match(application, /withSummarySlot/);
+  assert.match(application, /if \(saving\) return;/);
+  assert.ok(application.indexOf("setSaving(true);", application.indexOf("async function submit")) < application.indexOf("checkPaperAssets(data)", application.indexOf("async function submit")));
   assert.match(application, /Copy \$\{file\.name\} into Stacks storage/);
   assert.match(settings, /Back up Stacks library to OneDrive/);
   // Chat is fully removed: no chat route, api, component, or entry points remain.

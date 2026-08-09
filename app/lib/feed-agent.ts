@@ -8,8 +8,10 @@ import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { claudeEffortArgs, effortSetting } from "@/app/lib/effort";
 import { isStoppedExit } from "@/app/lib/agent-exit";
+import { formatAgentFailure } from "@/app/lib/agent-error";
 import { buildForkPrompt, parseProposalsResult, type ProposalOperation } from "@/app/lib/feed-prompt";
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
+import { feedAgentModel } from "@/app/lib/feed-model";
 import { proposalSummary } from "@/app/lib/schemas/proposals";
 
 /**
@@ -33,7 +35,6 @@ const CLAUDE_BIN = process.env.STACKS_CLAUDE_BIN?.trim() || "claude";
 
 interface RunHandle {
   child: ChildProcess;
-  subscribers: Set<(event: FeedEvent) => void>;
   /**
    * Set when Stacks asked this run to stop (a Stop press or interrupt-then-send).
    *
@@ -54,7 +55,26 @@ export interface AgentTurnResult {
   error?: string;
 }
 
-const runs = new Map<string, RunHandle>();
+interface FeedRuntimeState {
+  runs: Map<string, RunHandle>;
+  launching: Set<string>;
+  subscribers: Map<string, Set<(event: FeedEvent) => void>>;
+}
+
+// Route modules can be re-evaluated independently in Next.js (especially during
+// development). A module-local Map then forgets a still-running child: the SSE
+// route reports Done, while the orphaned handler keeps saving messages that only
+// appear after refresh. Keep one process-wide registry so every route bundle and
+// hot reload sees the same run and subscribers.
+const feedRuntimeGlobal = globalThis as typeof globalThis & {
+  __stacksFeedRuntimeV1?: FeedRuntimeState;
+};
+const feedRuntime = feedRuntimeGlobal.__stacksFeedRuntimeV1 ??= {
+  runs: new Map<string, RunHandle>(),
+  launching: new Set<string>(),
+  subscribers: new Map<string, Set<(event: FeedEvent) => void>>(),
+};
+const { runs, launching, subscribers } = feedRuntime;
 
 function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -77,33 +97,39 @@ export function feedWorkingDir(snippetId: string): string {
   return join(libraryRoot(), "feed", snippetId);
 }
 
-/** Flatten a tool_result content field (string, or array of text blocks) to text. */
-function toolResultText(content: unknown): string {
+/** Flatten a tool_result content field (string, or array of text blocks) without
+ * truncating it: the expanded tool card is the audit trail for agent actions. */
+export function toolResultText(content: unknown): string {
   if (typeof content === "string") {
-    return content.slice(0, 4000);
+    return content;
   }
   if (Array.isArray(content)) {
-    const text = content
+    return content
       .map((block) => (block && typeof block === "object" && "text" in block ? String((block as { text: unknown }).text) : ""))
       .filter(Boolean)
       .join("\n");
-    return text.slice(0, 4000);
   }
   return "";
 }
 
 export function isFeedRunning(snippetId: string): boolean {
-  return runs.has(snippetId);
+  return runs.has(snippetId) || launching.has(snippetId);
 }
 
 /** Subscribe to live events for a running snippet; returns an unsubscribe fn. */
 export function subscribeFeed(snippetId: string, listener: (event: FeedEvent) => void): () => void {
-  const handle = runs.get(snippetId);
-  if (!handle) {
+  if (!isFeedRunning(snippetId)) {
     return () => {};
   }
-  handle.subscribers.add(listener);
-  return () => handle.subscribers.delete(listener);
+  const listeners = subscribers.get(snippetId) ?? new Set();
+  listeners.add(listener);
+  subscribers.set(snippetId, listeners);
+  return () => {
+    listeners.delete(listener);
+    if (!listeners.size && subscribers.get(snippetId) === listeners) {
+      subscribers.delete(snippetId);
+    }
+  };
 }
 
 function signalRun(snippetId: string, signal: NodeJS.Signals): void {
@@ -281,8 +307,7 @@ async function recordUsage(snippetId: string, event: Record<string, unknown>): P
 }
 
 function emit(snippetId: string, event: FeedEvent): void {
-  const handle = runs.get(snippetId);
-  handle?.subscribers.forEach((listener) => {
+  subscribers.get(snippetId)?.forEach((listener) => {
     try {
       listener(event);
     } catch {
@@ -331,6 +356,17 @@ export async function runFeedAgent(options: {
   resumeRetried?: boolean;
 }): Promise<AgentTurnResult> {
   const { snippetId, sessionId, prompt, resume, resumeRetried = false } = options;
+  // Claim synchronously, before the first await. Concurrent route requests can
+  // otherwise both pass their preflight check and launch two resumptions of the
+  // same session, allowing one process to mark Done while the other still emits.
+  if (isFeedRunning(snippetId)) {
+    return {
+      status: "error",
+      text: "",
+      error: "Another agent turn is already running. Wait for it to finish or stop it before sending another reply.",
+    };
+  }
+  launching.add(snippetId);
   // Resolved when the process exits (or the resume-fallback turn it spawns does),
   // so a caller can await the turn's outcome — the workflow runtime relies on this.
   let settle: (result: AgentTurnResult) => void;
@@ -354,10 +390,10 @@ export async function runFeedAgent(options: {
       .from(feedSnippets)
       .where(eq(feedSnippets.id, snippetId))
       .get();
-    const snippetModel = row?.model?.trim();
     // Per-feed effort wins; otherwise the global Settings value. Either can be
     // unset, in which case no --effort is passed and the CLI picks its own.
     const runtime = await resolveRuntimeValues();
+    const model = feedAgentModel(row?.model, runtimeValue(runtime, "BEDROCK_MODEL_ID"));
     const effort = effortSetting(row?.effort) || effortSetting(runtimeValue(runtime, "STACKS_EFFORT"));
 
     // Resolve the environment (secrets, config dir) before spawn so no await
@@ -385,7 +421,7 @@ export async function runFeedAgent(options: {
       // library, so nothing it writes there can touch stored files.
       "--add-dir",
       "/tmp",
-      ...(snippetModel ? ["--model", snippetModel] : []),
+      ...(model ? ["--model", model] : []),
       ...claudeEffortArgs(effort),
       // Headless: with no user to answer prompts, the default mode auto-denies
       // every Bash/network/temp-file call, so the agent can't even read the
@@ -412,6 +448,7 @@ export async function runFeedAgent(options: {
     child.stdin?.write(`${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }] } })}\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The agent could not be started.";
+    launching.delete(snippetId);
     revokeFeedToken(snippetId);
     await persistMessage(snippetId, "system", "error", message);
     await setStatus(snippetId, "error", message);
@@ -419,8 +456,9 @@ export async function runFeedAgent(options: {
     return { status: "error", text: "", error: message };
   }
 
-  const handle: RunHandle = { child, subscribers: new Set() };
+  const handle: RunHandle = { child };
   runs.set(snippetId, handle);
+  launching.delete(snippetId);
 
   let buffer = "";
   let stderr = "";
@@ -429,6 +467,11 @@ export async function runFeedAgent(options: {
   let lastAssistantId: string | null = null;
   // The final result text of this turn, surfaced to awaiting callers.
   let finalText = "";
+  // A failed result is finalized only when the process closes, when its
+  // structured event, stderr, exit code, and signal are all available. Older
+  // code persisted here and again in `close`, producing two error cards.
+  let failedResultEvent: Record<string, unknown> | null = null;
+  let terminalSettled = false;
   // Set when a --resume run fails because its session transcript is missing; the
   // close handler then restarts the turn as a fresh session with the transcript.
   let resumeFallback = false;
@@ -461,7 +504,7 @@ export async function runFeedAgent(options: {
           }
           emit(snippetId, persisted);
         } else if (block.type === "tool_use") {
-          const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {}).slice(0, 800)}`;
+          const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {})}`;
           const toolUseId = typeof block.id === "string" ? block.id : null;
           emit(snippetId, await persistMessage(snippetId, "assistant", "tool_use", summary, toolUseId));
         }
@@ -502,7 +545,7 @@ export async function runFeedAgent(options: {
       // it differs from the last assistant message (else the reply shows twice);
       // otherwise reuse that message as the anchor for parsed proposals.
       let resultMessageId: string | null = lastAssistantId;
-      if (text.trim() && text.trim() !== lastAssistantText) {
+      if (!isError && text.trim() && text.trim() !== lastAssistantText) {
         const message = await persistMessage(snippetId, "assistant", "result", text);
         if (message.type === "message") {
           resultMessageId = message.id;
@@ -515,12 +558,11 @@ export async function runFeedAgent(options: {
           resumeFallback = true;
           return;
         }
-        // An interrupt we asked for is not a failure. The CLI reports the abandoned
-        // turn as `is_error` with subtype error_during_execution, which would
-        // otherwise leave a red "The agent reported an error." row in the thread for
-        // something the user did on purpose.
+        // Defer the one persisted failure until `close`, where stderr and the
+        // process exit are available too. An interrupt we requested is a stop,
+        // not a failure, even though Claude marks its result as `is_error`.
         if (!handle.stopRequested) {
-          emit(snippetId, await persistMessage(snippetId, "system", "error", text || "The agent reported an error."));
+          failedResultEvent = event;
         }
       } else if (text) {
         // Parse any proposed library changes and enqueue them for approval.
@@ -546,13 +588,26 @@ export async function runFeedAgent(options: {
     }
   };
 
+  // stream-json lines must be persisted in arrival order. Dispatching each
+  // async handler with `void` let `close` mark the feed Done while earlier tool
+  // results were still awaiting storage; a refresh then revealed "new" output.
+  let eventQueue: Promise<void> = Promise.resolve();
+  let eventQueueError: string | null = null;
+  const enqueueLine = (line: string) => {
+    eventQueue = eventQueue
+      .then(() => handleLine(line))
+      .catch((error: unknown) => {
+        eventQueueError ??= error instanceof Error ? error.message : String(error);
+      });
+  };
+
   child.stdout?.on("data", (chunk: Buffer) => {
     buffer += chunk.toString();
     let index = buffer.indexOf("\n");
     while (index !== -1) {
       const line = buffer.slice(0, index);
       buffer = buffer.slice(index + 1);
-      void handleLine(line);
+      enqueueLine(line);
       index = buffer.indexOf("\n");
     }
   });
@@ -570,28 +625,57 @@ export async function runFeedAgent(options: {
     }
   };
 
-  child.on("error", async (error) => {
-    releaseRun();
-    await persistMessage(snippetId, "system", "error", error.message);
-    await setStatus(snippetId, "error", error.message);
+  const finishError = async ({
+    resultEvent = failedResultEvent,
+    processError,
+    code,
+    signal,
+  }: {
+    resultEvent?: Record<string, unknown> | null;
+    processError?: string;
+    code?: number | null;
+    signal?: string | null;
+  }): Promise<void> => {
+    if (terminalSettled) return;
+    terminalSettled = true;
+    const detail = formatAgentFailure({ resultEvent, stderr, processError, code, signal });
+    emit(snippetId, await persistMessage(snippetId, "system", "error", detail));
+    await setStatus(snippetId, "error", detail);
     emit(snippetId, { type: "done", status: "error" });
-    settle({ status: "error", text: "", error: error.message });
+    settle({ status: "error", text: "", error: detail });
+  };
+
+  child.on("error", async (error) => {
+    await finishError({ processError: error.message });
+    releaseRun();
   });
 
   child.on("close", async (code, signal) => {
     if (buffer.trim()) {
-      await handleLine(buffer);
+      enqueueLine(buffer);
+      buffer = "";
     }
-    releaseRun();
+    await eventQueue;
+    if (eventQueueError && !terminalSettled) {
+      await finishError({ processError: `Agent output could not be saved: ${eventQueueError}`, code, signal });
+      releaseRun();
+      return;
+    }
+    if (terminalSettled) {
+      releaseRun();
+      return;
+    }
 
     // The resume failed with a missing-session error: restart this turn as a
     // fresh session seeded with the thread transcript, so the reply still lands.
     // Chain the retry's outcome to this turn's completion so an awaiting caller
     // sees the final result, not the transient failure.
     if (resumeFallback) {
+      terminalSettled = true;
       const transcript = await threadTranscript(snippetId);
       const freshPrompt = buildForkPrompt({ reply: prompt, transcript });
       await clearSessionId(snippetId);
+      releaseRun();
       runFeedAgent({ snippetId, sessionId: crypto.randomUUID(), prompt: freshPrompt, resume: false, resumeRetried: true })
         .then(settle, (error) => settle({ status: "error", text: "", error: error instanceof Error ? error.message : String(error) }));
       return;
@@ -599,22 +683,22 @@ export async function runFeedAgent(options: {
 
     // 143 = 128 + SIGTERM, which is what the CLI exits with when it traps the
     // signal instead of dying from it; 137 is the SIGKILL equivalent.
-    // The flag comes off THIS handle, not the map: releaseRun() above has already
-    // removed the entry by the time we get here.
+    // The flag comes off THIS handle so it remains reliable even if another run
+    // later replaces the map entry.
     const stopped = isStoppedExit({ code, signal, stopRequested: handle.stopRequested });
-    const status = stopped ? "stopped" : code === 0 ? "done" : "error";
+    const status = stopped ? "stopped" : code === 0 && !failedResultEvent ? "done" : "error";
     if (status === "error") {
-      const detail = stderr.trim().slice(-500) || `The agent exited with code ${code}.`;
-      await persistMessage(snippetId, "system", "error", detail);
-      await setStatus(snippetId, "error", detail);
-      emit(snippetId, { type: "done", status });
-      settle({ status: "error", text: "", error: detail });
+      await finishError({ code, signal });
+      releaseRun();
       return;
     }
+    if (terminalSettled) return;
+    terminalSettled = true;
     await setStatus(snippetId, status);
     // Emit the terminal event so live subscribers (the SSE stream) can close.
     emit(snippetId, { type: "done", status });
     settle({ status, text: finalText, error: undefined });
+    releaseRun();
   });
 
   return completion;

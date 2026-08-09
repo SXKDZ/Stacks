@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
+import { effectiveFeedStatus } from "@/app/lib/feed-status";
 import { enqueueCloseIssue, flushGithubOutbox } from "@/app/lib/feed-github-outbox";
 import { parseWith } from "@/app/lib/schemas/parse";
 import { FeedSnippetPatchSchema } from "@/app/lib/schemas/requests";
@@ -31,7 +32,8 @@ export async function GET(
     .from(feedProposals)
     .where(eq(feedProposals.snippetId, id))
     .all();
-  return Response.json({ snippet, messages, proposals });
+  const effectiveSnippet = effectiveFeedStatus(snippet, messages.at(-1)?.createdAt, isFeedRunning(id));
+  return Response.json({ snippet: effectiveSnippet, messages, proposals });
 }
 
 /** Update a feed's editable fields: its title (rename) and collapsed state. */

@@ -487,6 +487,29 @@ export function revealLocalFile(kind: AcquisitionKind, name: string): void {
   spawn("xdg-open", [dirname(target)], { detached: true, stdio: "ignore" }).unref();
 }
 
+/** Open a managed directory in the operating system's file browser. The caller
+ * is responsible for resolving the directory from a trusted application id —
+ * browser-provided absolute paths must never be passed here. */
+export async function revealDirectory(directory: string): Promise<void> {
+  if (!existsSync(directory)) {
+    throw new Error("The feed working directory no longer exists.");
+  }
+  const [command, args] = process.platform === "darwin"
+    ? ["open", [directory]] as const
+    : process.platform === "win32"
+      ? ["explorer.exe", [directory]] as const
+      : ["xdg-open", [directory]] as const;
+
+  await new Promise<void>((resolveOpen, rejectOpen) => {
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    child.once("error", rejectOpen);
+    child.once("spawn", () => {
+      child.unref();
+      resolveOpen();
+    });
+  });
+}
+
 /** Resolve a `/stacks-files/<pdfs|html>/<name>` request to a validated absolute path. */
 export function resolveStoredFile(kind: string, requestedName: string): { path: string; kind: AcquisitionKind } | null {
   if (!requestedName || basename(requestedName) !== requestedName || (kind !== "pdfs" && kind !== "html")) {

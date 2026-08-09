@@ -18,6 +18,11 @@ function validPublicUrl(value: string): URL | null {
   }
 }
 
+function pdfTitle(url: URL): string {
+  const filename = decodeURIComponent(url.pathname.split("/").at(-1) ?? "").replace(/\.pdf$/i, "");
+  return filename.replace(/[-_]+/g, " ").trim() || url.hostname;
+}
+
 export async function POST(request: Request): Promise<Response> {
   try {
     const requested = await parseRequest(ImportUrlRequestSchema, request);
@@ -25,6 +30,22 @@ export async function POST(request: Request): Promise<Response> {
     const parsed = sourceUrl ? validPublicUrl(sourceUrl) : null;
     if (!parsed) {
       return Response.json({ error: "Enter a valid public https:// URL." }, { status: 400 });
+    }
+    // Navigating directly to a PDF makes Playwright abort with "Download is
+    // starting". Hand the URL to the source-acquisition path instead; it streams,
+    // validates, and stores the PDF without trying to render it as a webpage.
+    if (/\.pdf$/i.test(parsed.pathname)) {
+      const isArxivHost = /(^|\.)arxiv\.org$/i.test(parsed.hostname);
+      const arxivMatch = isArxivHost ? parsed.pathname.match(/^\/(?:abs|pdf)\/([^/]+)$/i) : null;
+      return Response.json({
+        source: "PDF URL",
+        title: pdfTitle(parsed),
+        abstract: "",
+        url: parsed.toString(),
+        pdfUrl: parsed.toString(),
+        arxivId: arxivMatch?.[1]?.replace(/\.pdf$/i, "") ?? null,
+        readerContent: "",
+      });
     }
     // Render the page locally (headless WebKit). Throws on a challenge/error
     // page so we never import metadata scraped from a verification screen.

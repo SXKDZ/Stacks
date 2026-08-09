@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import type { LibraryQuerier } from "@/db/client";
-import { removeStoredFile } from "@/app/lib/local-files";
+import { removeStoredFile, resolveStoredFile } from "@/app/lib/local-files";
 import { normalizeAbstract, normalizeAuthorNames, normalizePages, normalizeTitle } from "@/app/lib/metadata-normalize";
 import { scheduleAutoSync } from "@/app/lib/local-settings";
 import { idList, LibraryMutationSchema } from "@/app/lib/schemas/library";
@@ -199,6 +199,8 @@ async function readSnapshot() {
     const paperCollectionList = collectionLinks
       .filter((link) => link.paperId === paper.id)
       .map((link) => ({ id: link.id, name: link.name, color: normalizeCollectionColor(link.color) }));
+    const localFile = paper.localPath ? resolveStoredFile("pdfs", paper.localPath) : null;
+    const htmlFile = paper.htmlSnapshotPath ? resolveStoredFile("html", paper.htmlSnapshotPath) : null;
     return {
       id: paper.id,
       title: paper.title,
@@ -221,7 +223,9 @@ async function readSnapshot() {
       pdfUrl: paper.pdfUrl,
       pdfViewUrl: paper.pdfUrl || (paper.localPath ? `/stacks-files/pdfs/${encodeURIComponent(paper.localPath)}` : null),
       localPath: paper.localPath,
+      localFilePath: localFile?.path ?? null,
       htmlSnapshotPath: paper.htmlSnapshotPath,
+      htmlFilePath: htmlFile?.path ?? null,
       htmlUrl: paper.htmlSnapshotPath ? `/stacks-files/html/${encodeURIComponent(paper.htmlSnapshotPath)}` : null,
       summary: paper.summary,
       notes: paper.notes,

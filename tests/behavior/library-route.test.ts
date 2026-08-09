@@ -7,13 +7,14 @@
  * the code is merely rephrased.
  */
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import test from "node:test";
 
 import { jsonRequest, readJson, createTempLibrary } from "../support/harness.ts";
 
 // Must happen before any db module is imported (library-paths resolves the root
 // once per process, and bootstrap caches its init promise).
-createTempLibrary("stacks-library-route");
+const libraryRoot = createTempLibrary("stacks-library-route");
 
 const routeModule = import("../../app/api/library/route.ts");
 const API = "http://127.0.0.1/api/library";
@@ -27,6 +28,8 @@ interface Snapshot {
     authors: Array<{ displayName: string; order: number }>;
     collections: Array<{ name: string }>;
     venueName: string | null;
+    localFilePath: string | null;
+    htmlFilePath: string | null;
   }>;
   authors: Array<{ id: string; displayName: string; paperCount: number }>;
   venues: Array<{ id: string; name: string }>;
@@ -63,6 +66,8 @@ test("creates a paper, normalizing metadata and linking its records", async () =
       venueAcronym: "NeurIPS",
       collectionNames: ["Transformers"],
       pages: "5998--6008",
+      localPath: "attention.pdf",
+      htmlSnapshotPath: "attention.html",
     },
   });
   assert.equal(created.status, 200);
@@ -82,6 +87,10 @@ test("creates a paper, normalizing metadata and linking its records", async () =
   assert.ok(snap.venues.some((venue) => venue.name === "Neural Information Processing Systems"));
   // A collection is created by name and linked.
   assert.deepEqual(paper.collections.map((c) => c.name), ["Transformers"]);
+  // The UI keeps the portable filenames for storage operations, but receives the
+  // full locations for useful file tooltips.
+  assert.equal(paper.localFilePath, join(libraryRoot, "pdfs", "attention.pdf"));
+  assert.equal(paper.htmlFilePath, join(libraryRoot, "html_snapshots", "attention.html"));
 });
 
 test("refuses a paper with no title", async () => {
