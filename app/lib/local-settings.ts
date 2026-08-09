@@ -55,6 +55,7 @@ const SETTING_KEYS = {
   STACKS_TEMPERATURE: { runtime: true },
   STACKS_SEND_TEMPERATURE: { runtime: true },
   STACKS_EFFORT: { runtime: true },
+  STACKS_FEED_MAX_TURNS: { runtime: true },
   STACKS_AUTO_SYNC: {},
   STACKS_AUTO_SYNC_INTERVAL: {},
   STACKS_ONEDRIVE_PATH: {},
@@ -128,6 +129,7 @@ function structuredValue(settings: StructuredSettingsFile | null, key: string): 
     STACKS_TEMPERATURE: settings.ai.temperature,
     STACKS_SEND_TEMPERATURE: settings.ai.sendTemperature,
     STACKS_EFFORT: settings.ai.effort,
+    STACKS_FEED_MAX_TURNS: settings.ai.feedMaxTurns,
     STACKS_AUTO_SYNC: settings.sync.autoSync,
     STACKS_AUTO_SYNC_INTERVAL: settings.sync.autoSyncInterval,
     STACKS_ONEDRIVE_PATH: settings.sync.remotePath,
@@ -243,6 +245,7 @@ function settingsFromCurrentValues(existing: StructuredSettingsFile | null): Str
       temperature: envValue("STACKS_TEMPERATURE", "0.25"),
       sendTemperature: envValue("STACKS_SEND_TEMPERATURE", "true"),
       effort: envValue("STACKS_EFFORT"),
+      feedMaxTurns: envValue("STACKS_FEED_MAX_TURNS", "40"),
     },
     prompts: {
       extractionSystem: envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT),
@@ -333,6 +336,7 @@ function saveStructuredSettings(updates: Record<string, string>): void {
       case "STACKS_TEMPERATURE": next.ai.temperature = value; break;
       case "STACKS_SEND_TEMPERATURE": next.ai.sendTemperature = value; break;
       case "STACKS_EFFORT": next.ai.effort = value; break;
+      case "STACKS_FEED_MAX_TURNS": next.ai.feedMaxTurns = value; break;
       case "STACKS_EXTRACTION_SYSTEM_PROMPT": next.prompts.extractionSystem = value; break;
       case "STACKS_SUMMARY_SYSTEM_PROMPT": next.prompts.summarySystem = value; break;
       case "STACKS_ONEDRIVE_PATH": next.sync.remotePath = value; break;
@@ -419,6 +423,7 @@ export function currentSettings() {
       // gets a clear upstream error plus this switch to turn it off.
       sendTemperature: envValue("STACKS_SEND_TEMPERATURE", "true") !== "false",
       effort: effortSetting(envValue("STACKS_EFFORT")),
+      feedMaxTurns: Number(envValue("STACKS_FEED_MAX_TURNS", "40")),
     },
     integrations: Object.fromEntries(
       secretKeys.map((key) => [key, Boolean(envValue(key))]),
@@ -466,6 +471,7 @@ function sanitizeSettings(data: SettingsPayload): Record<string, string> {
     BEDROCK_MODEL_ID: String(data.modelId ?? envValue("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")).trim(),
     AWS_REGION: String(data.region ?? envValue("AWS_REGION", "us-east-1")).trim(),
     STACKS_MAX_TOKENS: clampInt(data.maxTokens, envValue("STACKS_MAX_TOKENS", "10000"), 128, 200000, 10000),
+    STACKS_FEED_MAX_TURNS: clampInt(data.feedMaxTurns, envValue("STACKS_FEED_MAX_TURNS", "40"), 0, Number.MAX_SAFE_INTEGER, 40),
     STACKS_EXTRACTION_SYSTEM_PROMPT: String(data.extractionSystemPrompt ?? envValue("STACKS_EXTRACTION_SYSTEM_PROMPT", DEFAULT_EXTRACTION_SYSTEM_PROMPT)).trim(),
     STACKS_SUMMARY_SYSTEM_PROMPT: String(data.summarySystemPrompt ?? envValue("STACKS_SUMMARY_SYSTEM_PROMPT", DEFAULT_SUMMARY_SYSTEM_PROMPT)).trim(),
     STACKS_TEMPERATURE: clampFloat(data.temperature, envValue("STACKS_TEMPERATURE", "0.25"), 0, 1, 0.25),

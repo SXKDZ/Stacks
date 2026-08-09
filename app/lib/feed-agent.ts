@@ -30,7 +30,6 @@ type FeedEvent =
   | { type: "proposal"; id: string; messageId: string | null; operation: string; status: string; summary: string; createdAt: string }
   | { type: "done"; status: string };
 
-const MAX_TURNS = "40";
 const CLAUDE_BIN = process.env.STACKS_CLAUDE_BIN?.trim() || "claude";
 
 interface RunHandle {
@@ -110,6 +109,14 @@ export function toolResultText(content: unknown): string {
       .join("\n");
   }
   return "";
+}
+
+/** Build Claude Code's per-run turn cap. Zero means the user chose unlimited. */
+export function feedMaxTurnsArgs(value: string | undefined): string[] {
+  const maxTurns = Number(value);
+  return Number.isSafeInteger(maxTurns) && maxTurns > 0
+    ? ["--max-turns", String(maxTurns)]
+    : [];
 }
 
 export function isFeedRunning(snippetId: string): boolean {
@@ -411,8 +418,6 @@ export async function runFeedAgent(options: {
       "--output-format",
       "stream-json",
       "--verbose",
-      "--max-turns",
-      MAX_TURNS,
       "--add-dir",
       workingDir,
       // Scratch space: the agent fetches an attached paper's PDF (via the
@@ -423,6 +428,7 @@ export async function runFeedAgent(options: {
       "/tmp",
       ...(model ? ["--model", model] : []),
       ...claudeEffortArgs(effort),
+      ...feedMaxTurnsArgs(runtimeValue(runtime, "STACKS_FEED_MAX_TURNS", "40")),
       // Headless: with no user to answer prompts, the default mode auto-denies
       // every Bash/network/temp-file call, so the agent can't even read the
       // library. "auto" keeps the background safety classifier as a guardrail

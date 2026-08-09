@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { formatAgentFailure } from "../../app/lib/agent-error.ts";
+import { feedMaxTurnsArgs } from "../../app/lib/feed-agent.ts";
 import { coalesceLegacyAgentErrors, splitFeedError } from "../../app/lib/feed-errors.ts";
 import { effectiveFeedStatus } from "../../app/lib/feed-status.ts";
 
@@ -78,6 +79,16 @@ test("stream events finish saving in order before terminal status", async () => 
   assert.match(source, /eventQueue = eventQueue\s*\.then\(\(\) => handleLine\(line\)\)/s);
   assert.match(source, /await eventQueue/);
   assert.doesNotMatch(source, /void handleLine\(line\)/);
+});
+
+test("feed runs use the saved turn cap and allow unlimited runs", async () => {
+  const source = await readFile(new URL("../../app/lib/feed-agent.ts", import.meta.url), "utf8");
+
+  assert.deepEqual(feedMaxTurnsArgs("40"), ["--max-turns", "40"]);
+  assert.deepEqual(feedMaxTurnsArgs("120"), ["--max-turns", "120"]);
+  assert.deepEqual(feedMaxTurnsArgs("0"), []);
+  assert.deepEqual(feedMaxTurnsArgs("invalid"), []);
+  assert.match(source, /feedMaxTurnsArgs\(runtimeValue\(runtime, "STACKS_FEED_MAX_TURNS", "40"\)\)/);
 });
 
 test("technical details use the full diagnostic width", async () => {
