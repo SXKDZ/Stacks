@@ -1,7 +1,8 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, max, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedProposals, feedSnippets } from "@/db/schema";
-import { feedWorkingDir, runFeedAgent } from "@/app/lib/feed-agent";
+import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
+import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
+import { effectiveFeedStatus } from "@/app/lib/feed-status";
 import { buildSnippetPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 import { parseRequest } from "@/app/lib/schemas/parse";
@@ -27,7 +28,16 @@ export async function GET(): Promise<Response> {
     .groupBy(feedProposals.snippetId)
     .all();
   const pendingBySnippet = new Map(pendingRows.map((row) => [row.snippetId, Number(row.count)]));
-  const snippets = rows.map((row) => ({ ...row, pendingProposals: pendingBySnippet.get(row.id) ?? 0 }));
+  const latestMessageRows = database
+    .select({ snippetId: feedMessages.snippetId, latestMessageAt: max(feedMessages.createdAt) })
+    .from(feedMessages)
+    .groupBy(feedMessages.snippetId)
+    .all();
+  const latestMessageBySnippet = new Map(latestMessageRows.map((row) => [row.snippetId, row.latestMessageAt]));
+  const snippets = rows.map((row) => ({
+    ...effectiveFeedStatus(row, latestMessageBySnippet.get(row.id), isFeedRunning(row.id)),
+    pendingProposals: pendingBySnippet.get(row.id) ?? 0,
+  }));
   return Response.json({ snippets });
 }
 

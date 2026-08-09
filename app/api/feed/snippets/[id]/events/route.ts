@@ -2,6 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { isFeedRunning, subscribeFeed } from "@/app/lib/feed-agent";
+import { effectiveFeedStatus } from "@/app/lib/feed-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,16 +20,18 @@ export async function GET(
 
   const encoder = new TextEncoder();
   const frame = (event: string, data: unknown) => encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const messages = database
+    .select()
+    .from(feedMessages)
+    .where(eq(feedMessages.snippetId, id))
+    .orderBy(asc(feedMessages.createdAt))
+    .all();
+  const running = isFeedRunning(id);
+  const effectiveSnippet = effectiveFeedStatus(snippet, messages.at(-1)?.createdAt, running);
 
   const stream = new ReadableStream({
     start(controller) {
       // Replay persisted history first so a late/reconnecting client is caught up.
-      const messages = database
-        .select()
-        .from(feedMessages)
-        .where(eq(feedMessages.snippetId, id))
-        .orderBy(asc(feedMessages.createdAt))
-        .all();
       for (const message of messages) {
         controller.enqueue(frame("message", {
           id: message.id,
@@ -63,8 +66,8 @@ export async function GET(
       }
 
       // If the run already finished, send the terminal status and close.
-      if (!isFeedRunning(id)) {
-        controller.enqueue(frame("done", { status: snippet.status }));
+      if (!running) {
+        controller.enqueue(frame("done", { status: effectiveSnippet.status }));
         controller.close();
         return;
       }
