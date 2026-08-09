@@ -25,7 +25,7 @@ test("tool requests and results have no display-time persistence slices", async 
   assert.doesNotMatch(source, /slice\(0,\s*(?:800|4000)\)/);
   assert.match(themeStyles, /\.markdown-content pre code[^}]*border-radius:\s*0/s);
   assert.match(toolBody, /border-radius:\s*0/);
-  assert.match(toolBody, /max-height:\s*min\(60vh,\s*720px\)/);
+  assert.match(toolBody, /max-height:\s*min\(30vh,\s*360px\)/);
   assert.match(toolBody, /overflow:\s*auto/);
   assert.doesNotMatch(toolBody, /max-height:\s*300px|overflow-y/);
 });

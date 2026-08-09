@@ -1726,6 +1726,43 @@
   padding: 10px 12px;
 }
 
+.feed-error-content {
+  min-width: 0;
+}
+
+.feed-error-details {
+  color: var(--ink);
+  margin-top: 6px;
+}
+
+.feed-error-details summary {
+  color: var(--rose);
+  cursor: pointer;
+  font-size: var(--type-caption);
+  font-weight: 650;
+  width: fit-content;
+}
+
+.feed-error-details summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.feed-error-details pre {
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rose) 24%, var(--line));
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+  line-height: 1.5;
+  margin: 8px 0 0;
+  max-height: min(40vh, 320px);
+  overflow: auto;
+  padding: 9px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Proposed library changes: a panel the user must decide on. A flat surface
    with a brand-tinted border so it stands apart without heavy shadow. */
 .feed-proposals {
@@ -2004,7 +2041,7 @@
   border: 0;
   border-radius: 0;
   margin: 0;
-  max-height: min(60vh, 720px);
+  max-height: min(30vh, 360px);
   overflow: auto;
   padding: 0;
 }
@@ -2077,9 +2114,9 @@
 .prompt-code-editor .hljs-meta,
 .prompt-code-editor .hljs-deletion { color: var(--muted) !important; }
 .markdown-content .hljs-emphasis,
-.prompt-code-editor .hljs-emphasis { font-style: italic; }
+.prompt-code-editor .hljs-emphasis { color: var(--brand-blue-strong) !important; font-style: italic; }
 .markdown-content .hljs-strong,
-.prompt-code-editor .hljs-strong { font-weight: 700; }
+.prompt-code-editor .hljs-strong { color: var(--brand-blue-strong) !important; font-weight: 700; }
 /* Prompt-template scopes: inline `code` and $math$ from the prompt grammar. */
 .markdown-content .hljs-code,
 .prompt-code-editor .hljs-code { color: var(--amber) !important; }

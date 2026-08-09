@@ -15,6 +15,7 @@ import { Brand } from "@/app/components/ui/Brand";
 import { ActionButton } from "@/app/components/ui/controls";
 import { effortSetting, type EffortSetting } from "@/app/lib/effort";
 import { isClaudeAgentModel } from "@/app/lib/feed-model";
+import { coalesceLegacyAgentErrors, splitFeedError } from "@/app/lib/feed-errors";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 
 interface FeedMessage {
@@ -352,10 +353,29 @@ function renderToolContent(content: string): ReactNode {
   return <MarkdownContent content={toolFence(content)} className="feed-tool-md" />;
 }
 
-/** Compact token count: 1234 → "1.2k", 20345 → "20.3k". */
+function FeedErrorMessage({ content, announce = false }: { content: string; announce?: boolean }) {
+  const { summary, details } = splitFeedError(content);
+  return (
+    <div className="feed-error" role={announce ? "alert" : undefined}>
+      <CircleAlert size={14} aria-hidden="true" />
+      <div className="feed-error-content">
+        <span>{summary}</span>
+        {details ? (
+          <details className="feed-error-details">
+            <summary>Show technical details</summary>
+            <pre>{details}</pre>
+          </details>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Compact token count with a scale that remains readable for long feeds. */
 function compactTokens(value: number): string {
   if (value < 1000) return String(value);
-  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}k`;
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0).replace(/\.0$/, "")}k`;
+  return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0).replace(/\.0$/, "")}M`;
 }
 
 /** Duration in ms → "3.4s" / "1m 12s". */
@@ -380,10 +400,22 @@ function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const diff = Date.now() - then;
   const mins = Math.round(diff / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} ${mins === 1 ? "minute" : "minutes"} ago`;
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
+  if (hrs < 24) return `${hrs} ${hrs === 1 ? "hour" : "hours"} ago`;
+  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+
+/** A compact, readable age for space-constrained feed rows. */
+function compactRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr`;
   return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
 }
 
@@ -465,10 +497,20 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
           </span>
           <span className="feed-row-meta">
             <span className={`feed-row-status feed-status-${snippet.status}`}>{statusLabel(snippet.status)}</span>
-            <span className="feed-row-time">{relativeTime(snippet.updatedAt)}</span>
+            <span
+              className="feed-row-time"
+              aria-label={`Updated ${relativeTime(snippet.updatedAt)}`}
+              title={`Updated ${fullTime(snippet.updatedAt)}`}
+            >
+              {compactRelativeTime(snippet.updatedAt)}
+            </span>
             {(() => {
               const tokens = (snippet.inputTokens ?? 0) + (snippet.outputTokens ?? 0);
-              return tokens ? <span>{compactTokens(tokens)} tok</span> : null;
+              return tokens ? (
+                <span aria-label={`${tokens.toLocaleString()} tokens used`} title={`${tokens.toLocaleString()} tokens used`}>
+                  {compactTokens(tokens)} tokens
+                </span>
+              ) : null;
             })()}
             {snippet.turns ? <span>{snippet.turns} {snippet.turns === 1 ? "turn" : "turns"}</span> : null}
             {snippet.pendingProposals ? <span className="feed-row-pending" title={`${snippet.pendingProposals} change${snippet.pendingProposals === 1 ? "" : "s"} to approve`}>{snippet.pendingProposals}</span> : null}
@@ -762,6 +804,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   }
 
   const pendingCount = proposals.filter((p) => p.status === "pending").length;
+  const hasStoredError = messages.some((message) => message.kind === "error");
 
   // Anchor each proposal to the assistant message that produced it, so it renders
   // inline in the thread instead of always pinned to the bottom. Only assistant
@@ -869,6 +912,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
       <div className="feed-detail-body" ref={bodyRef}>
         <div className="feed-detail-body-inner">
+        {snippet.status === "error" && snippet.error && !hasStoredError ? (
+          <div className="feed-error-banner">
+            <FeedErrorMessage content={snippet.error} />
+          </div>
+        ) : null}
         {(() => {
           const openingAttachments = parseAttachments(snippet.attachments);
           // The opening "You" turn shows the instruction the user typed plus any
@@ -889,19 +937,20 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
         <div className="feed-thread">
           {(() => {
             const nodes: ReactNode[] = [];
+            const displayMessages = coalesceLegacyAgentErrors(messages);
             // Pair each tool_use with its result by tool_use id — the agent can
             // issue calls in parallel (use A, use B, result A, result B), so
             // position alone mispairs them. Results claimed by id are skipped
             // when the loop reaches them.
             const resultById = new Map<string, FeedMessage>();
-            for (const message of messages) {
+            for (const message of displayMessages) {
               if (message.kind === "tool_result" && message.toolUseId) {
                 resultById.set(message.toolUseId, message);
               }
             }
             const claimed = new Set<string>();
-            for (let i = 0; i < messages.length; i += 1) {
-              const message = messages[i];
+            for (let i = 0; i < displayMessages.length; i += 1) {
+              const message = displayMessages[i];
               if (message.kind === "tool_use") {
                 let resultMessage: FeedMessage | null = null;
                 if (message.toolUseId && resultById.has(message.toolUseId)) {
@@ -909,7 +958,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                   if (resultMessage) claimed.add(resultMessage.id);
                 } else {
                   // Legacy rows without ids: fall back to the adjacent result.
-                  const next = messages[i + 1];
+                  const next = displayMessages[i + 1];
                   if (next && next.kind === "tool_result" && !next.toolUseId) {
                     resultMessage = next;
                     claimed.add(next.id);
@@ -946,7 +995,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               if (message.kind === "error") {
                 nodes.push(
                   <div key={message.id} className="feed-message feed-message-error">
-                    <div className="feed-error"><CircleAlert size={14} /> <span>{message.content}</span></div>
+                    <FeedErrorMessage content={message.content} />
                   </div>,
                 );
                 continue;
@@ -1001,7 +1050,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
         {renderProposals(unanchoredProposals, "props-unanchored")}
 
-        {error ? <div className="feed-error feed-error-banner" role="alert"><CircleAlert size={14} /> <span>{error}</span></div> : null}
+        {error ? <div className="feed-error-banner"><FeedErrorMessage content={error} announce /></div> : null}
         </div>
       </div>
 

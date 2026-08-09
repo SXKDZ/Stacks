@@ -19,6 +19,8 @@ test("new-feed and reply composers share a resizable highlighted Markdown editor
   assert.match(attachBox, /onKeyDown=\{resizePanelWithKeyboard\}/);
   assert.match(workspaceStyles, /\.feed-panel-resize-handle[^}]*cursor:\s*ns-resize/s);
   assert.match(workspaceStyles, /\.feed-dock \.feed-composer-editor textarea[^}]*padding:\s*5px 6px/s);
+  assert.match(workspaceStyles, /\.prompt-code-editor \.hljs-emphasis[^}]*color:\s*var\(--brand-blue-strong\)[^}]*font-style:\s*italic/s);
+  assert.match(workspaceStyles, /\.prompt-code-editor \.hljs-strong[^}]*color:\s*var\(--brand-blue-strong\)[^}]*font-weight:\s*700/s);
   assert.match(editorStyles, /\.prompt-code-editor textarea[^}]*resize:\s*none/s);
 });
 
