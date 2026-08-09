@@ -78,17 +78,17 @@ export function feedWorkingDir(snippetId: string): string {
   return join(libraryRoot(), "feed", snippetId);
 }
 
-/** Flatten a tool_result content field (string, or array of text blocks) to text. */
-function toolResultText(content: unknown): string {
+/** Flatten a tool_result content field (string, or array of text blocks) without
+ * truncating it: the expanded tool card is the audit trail for agent actions. */
+export function toolResultText(content: unknown): string {
   if (typeof content === "string") {
-    return content.slice(0, 4000);
+    return content;
   }
   if (Array.isArray(content)) {
-    const text = content
+    return content
       .map((block) => (block && typeof block === "object" && "text" in block ? String((block as { text: unknown }).text) : ""))
       .filter(Boolean)
       .join("\n");
-    return text.slice(0, 4000);
   }
   return "";
 }
@@ -462,7 +462,7 @@ export async function runFeedAgent(options: {
           }
           emit(snippetId, persisted);
         } else if (block.type === "tool_use") {
-          const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {}).slice(0, 800)}`;
+          const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {})}`;
           const toolUseId = typeof block.id === "string" ? block.id : null;
           emit(snippetId, await persistMessage(snippetId, "assistant", "tool_use", summary, toolUseId));
         }
