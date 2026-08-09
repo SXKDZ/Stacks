@@ -1,6 +1,6 @@
 {
   "name": "stacks",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "description": "A modern research library and AI reading workspace inspired by PaperCLI.",
   "engines": {

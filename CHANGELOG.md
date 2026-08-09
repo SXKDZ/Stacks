@@ -6,6 +6,37 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-08-09
+
+### Added
+
+- Each AI feed now shows its complete working-directory path and can open that
+  directory directly, making agent-created files easy to find.
+
+### Changed
+
+- New-feed and reply composers share Markdown syntax highlighting and resize as
+  complete panels. Feed headers use a compact three-row layout, clearer elapsed
+  time and token labels, and aligned controls in both themes.
+- AI tool requests and results retain their complete content while scrolling in
+  a shorter bounded panel, and file tooltips show the full stored location.
+- PDF prompt placeholders can select the whole paper without an application-level
+  character cap, while BibTeX page ranges use the standard double hyphen.
+
+### Fixed
+
+- Feed runs no longer overlap, report duplicate failures, or show Done while
+  output is still being saved. Detailed structured errors, stderr, exit status,
+  and recovery guidance remain available in one expandable error card.
+- Per-paper summary locking prevents redundant runs without blocking edits or
+  summaries for unrelated papers, and regenerate controls reflect the active
+  paper's run state.
+- Saved AI feed model choices no longer revert when the feed opens, and Markdown
+  emphasis remains visibly highlighted while composing.
+- PDF metadata review is an independent, consistently sized modal; venue
+  suggestions stay anchored to the active field, and URL-import failures retain
+  their complete diagnostics in the activity log.
+
 ## [0.3.5] - 2026-08-06
 
 ### Added
@@ -360,7 +391,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.6
 [0.3.5]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.5
 [0.3.4]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.4
 [0.3.3]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.3
