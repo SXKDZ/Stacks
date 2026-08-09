@@ -84,7 +84,7 @@ function fieldValue(value: unknown): string {
 /** The expanded view of a proposal card: the operation's fields as labeled rows,
  *  with the raw JSON tucked in a collapsible block underneath (this replaces the
  *  separate "Proposed changes (raw)" dump that used to sit next to the cards). */
-function ProposalDetails({ operation }: { operation: string }) {
+function ProposalDetails({ operation, feedId, feedName }: { operation: string; feedId: string; feedName: string }) {
   // Validated against the shared proposal schema rather than a local interface
   // plus a cast, so this renders only shapes the approval path would accept.
   const parsed = parseJsonWith(ProposalOperationSchema, operation);
@@ -108,7 +108,7 @@ function ProposalDetails({ operation }: { operation: string }) {
       ) : null}
       <details className="feed-tool-call feed-proposal-json">
         <summary><Code2 size={12} /> <span>Raw JSON</span></summary>
-        <div className="feed-tool-io"><MarkdownContent content={toolFence(pretty, "json")} className="feed-tool-md" /></div>
+        <div className="feed-tool-io"><MarkdownContent content={toolFence(pretty, "json")} className="feed-tool-md" enableFeedRichContent feedId={feedId} feedName={feedName} /></div>
       </details>
     </div>
   );
@@ -346,11 +346,11 @@ function toolFence(content: string, lang = guessLang(content)): string {
 }
 
 /** Tool request/result body: highlighted markdown, or a muted note if empty. */
-function renderToolContent(content: string): ReactNode {
+function renderToolContent(content: string, feedId: string, feedName: string): ReactNode {
   if (!content.trim()) {
     return <p className="feed-tool-empty">No output</p>;
   }
-  return <MarkdownContent content={toolFence(content)} className="feed-tool-md" />;
+  return <MarkdownContent content={toolFence(content)} className="feed-tool-md" enableFeedRichContent feedId={feedId} feedName={feedName} />;
 }
 
 function FeedErrorMessage({ content, announce = false }: { content: string; announce?: boolean }) {
@@ -554,6 +554,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   onBack: () => void;
   onChanged: () => void;
 }) {
+  const feedName = snippet.title || snippet.instruction || "Untitled";
   const [messages, setMessages] = useState<FeedMessage[]>([]);
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
@@ -570,6 +571,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   // while still reconnecting when an external action starts or ends a run.
   const streamVersion = `${streamNonce}:${running ? "running" : "idle"}`;
   const bodyRef = useRef<HTMLDivElement>(null);
+  const bodyInnerRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   // Stick-to-bottom: while pinned, every content change scrolls to the latest
   // message (a thread opens pinned, and a reply re-pins). History streams in
@@ -577,11 +579,21 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   // instead the pin persists until the user scrolls up, and re-arms when they
   // return to the bottom.
   const pinnedToBottomRef = useRef(true);
+  // Persist the opening pin until the SSE endpoint confirms that its persisted
+  // history has been replayed. Without this guard, a scroll event caused by the
+  // growing history can look like a user scroll and disable following halfway
+  // through a long conversation.
+  const replayingHistoryRef = useRef(true);
+  const userScrollIntentRef = useRef(false);
+  const userScrollIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
     pinnedToBottomRef.current = true;
-    if (body) body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
+    if (body) {
+      body.scrollTop = body.scrollHeight;
+      setAtBottom(true);
+    }
   }, []);
 
   /**
@@ -599,7 +611,8 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
    */
   useEffect(() => {
     const body = bodyRef.current;
-    if (!body) return;
+    const content = bodyInnerRef.current;
+    if (!body || !content) return;
     let frame = 0;
     // Opening a thread lands at the bottom outright. Easing there would crawl down
     // the whole history of a long feed, and any growth from images or late-loading
@@ -610,7 +623,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
       if (!pinnedToBottomRef.current) return;
       const remaining = body.scrollHeight - body.scrollTop - body.clientHeight;
       if (remaining <= 1) return;
-      if (!settled) {
+      if (!settled || replayingHistoryRef.current) {
         body.scrollTop = body.scrollHeight;
         return;
       }
@@ -626,10 +639,10 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
       }
     };
     const observer = new ResizeObserver(onGrow);
-    observer.observe(body);
-    // The scroll container's own height is fixed, so the growth to watch is the
-    // content's: observe the children that actually get taller.
-    for (const child of Array.from(body.children)) observer.observe(child);
+    // Observe the stable inner wrapper rather than whichever message children
+    // happened to exist when this effect ran. Its size changes for appended
+    // history, streamed prose, expanded details, images, and diagrams alike.
+    observer.observe(content);
     onGrow();
     // Anything after the initial layout is streaming, which is what the easing is
     // for. Two frames: one for this paint, one for the height it settles at.
@@ -641,23 +654,48 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
       observer.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [messages, proposals, running]);
+  }, [snippet.id]);
 
-  // Scroll events either come from our own pin (which lands at the bottom) or
-  // from the user. A position away from the bottom therefore means the user
-  // scrolled up: unpin so streaming stops yanking them back. Returning to the
-  // bottom re-pins.
+  // Scroll position alone cannot identify user intent: browser anchoring and
+  // late-rendering rich content also emit scroll events. Only unpin after an
+  // actual wheel, touch, pointer, or navigation-key gesture; programmatic and
+  // layout-driven movement keeps following the conversation.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
+    const markUserScrollIntent = () => {
+      userScrollIntentRef.current = true;
+      if (userScrollIntentTimerRef.current) clearTimeout(userScrollIntentTimerRef.current);
+      userScrollIntentTimerRef.current = setTimeout(() => {
+        userScrollIntentRef.current = false;
+        userScrollIntentTimerRef.current = null;
+      }, 180);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+        markUserScrollIntent();
+      }
+    };
     const onScroll = () => {
       const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
-      pinnedToBottomRef.current = nearBottom;
+      if (nearBottom) pinnedToBottomRef.current = true;
+      else if (!replayingHistoryRef.current && userScrollIntentRef.current) pinnedToBottomRef.current = false;
       setAtBottom(nearBottom);
     };
     onScroll();
     body.addEventListener("scroll", onScroll, { passive: true });
-    return () => body.removeEventListener("scroll", onScroll);
+    body.addEventListener("wheel", markUserScrollIntent, { passive: true });
+    body.addEventListener("touchstart", markUserScrollIntent, { passive: true });
+    body.addEventListener("pointerdown", markUserScrollIntent, { passive: true });
+    body.addEventListener("keydown", onKeyDown);
+    return () => {
+      body.removeEventListener("scroll", onScroll);
+      body.removeEventListener("wheel", markUserScrollIntent);
+      body.removeEventListener("touchstart", markUserScrollIntent);
+      body.removeEventListener("pointerdown", markUserScrollIntent);
+      body.removeEventListener("keydown", onKeyDown);
+      if (userScrollIntentTimerRef.current) clearTimeout(userScrollIntentTimerRef.current);
+    };
   }, []);
 
   // Stream this snippet's events. The endpoint replays persisted history first,
@@ -668,7 +706,24 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   // but the synced user turn and every new agent event remained invisible until
   // reload.
   useEffect(() => {
+    replayingHistoryRef.current = true;
     const source = new EventSource(`/api/feed/snippets/${snippet.id}/events`);
+    let replayComplete = false;
+    let replayFrame = 0;
+    let settleFrame = 0;
+    const completeReplay = () => {
+      if (replayComplete) return;
+      replayComplete = true;
+      replayFrame = requestAnimationFrame(() => {
+        settleFrame = requestAnimationFrame(() => {
+          const body = bodyRef.current;
+          pinnedToBottomRef.current = true;
+          if (body) body.scrollTop = body.scrollHeight;
+          replayingHistoryRef.current = false;
+          setAtBottom(true);
+        });
+      });
+    };
     source.addEventListener("message", (event) => {
       const message = JSON.parse((event as MessageEvent).data) as FeedMessage;
       setMessages((current) => (current.some((m) => m.id === message.id) ? current : [...current, message]));
@@ -677,11 +732,21 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
       const proposal = JSON.parse((event as MessageEvent).data) as FeedProposal;
       setProposals((current) => (current.some((p) => p.id === proposal.id) ? current : [...current, proposal]));
     });
+    // `status` follows the replay for a live run; `done` follows it for a
+    // finished run. Either boundary lets the opening view settle at the actual
+    // final message rather than the height of an early render batch.
+    source.addEventListener("status", completeReplay);
     source.addEventListener("done", () => {
+      completeReplay();
       source.close();
       onChanged();
     });
-    return () => source.close();
+    source.addEventListener("error", completeReplay);
+    return () => {
+      source.close();
+      if (replayFrame) cancelAnimationFrame(replayFrame);
+      if (settleFrame) cancelAnimationFrame(settleFrame);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snippet.id, streamVersion]);
 
@@ -871,7 +936,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                   </div>
                 ) : null}
               </div>
-              {expanded ? <ProposalDetails operation={proposal.operation} /> : null}
+              {expanded ? <ProposalDetails operation={proposal.operation} feedId={snippet.id} feedName={feedName} /> : null}
             </div>
           );
         })}
@@ -914,7 +979,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
       </header>
 
       <div className="feed-detail-body" ref={bodyRef}>
-        <div className="feed-detail-body-inner">
+        <div className="feed-detail-body-inner" ref={bodyInnerRef}>
         {snippet.status === "error" && snippet.error && !hasStoredError ? (
           <div className="feed-error-banner">
             <FeedErrorMessage content={snippet.error} />
@@ -932,7 +997,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           return (
             <div className="feed-message feed-turn feed-turn-user">
               <span className="feed-turn-label">You</span>
-              {openingText ? <MarkdownContent content={openingText} className="feed-bubble" /> : null}
+              {openingText ? <MarkdownContent content={openingText} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
             </div>
           );
@@ -975,8 +1040,8 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                     <summary><Wrench size={12} /> <span>{toolName}</span></summary>
                     <div className="feed-tool-io">
                       <span className="feed-tool-tag">Request</span>
-                      {renderToolContent(toolInput)}
-                      {resultMessage ? <><span className="feed-tool-tag">Result</span>{renderToolContent(resultMessage.content)}</> : null}
+                      {renderToolContent(toolInput, snippet.id, feedName)}
+                      {resultMessage ? <><span className="feed-tool-tag">Result</span>{renderToolContent(resultMessage.content, snippet.id, feedName)}</> : null}
                     </div>
                   </details>,
                 );
@@ -990,7 +1055,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 nodes.push(
                   <details key={message.id} className="feed-tool-call">
                     <summary><Wrench size={12} /> <span>tool result</span></summary>
-                    <div className="feed-tool-io"><span className="feed-tool-tag">Result</span>{renderToolContent(message.content)}</div>
+                    <div className="feed-tool-io"><span className="feed-tool-tag">Result</span>{renderToolContent(message.content, snippet.id, feedName)}</div>
                   </details>,
                 );
                 continue;
@@ -1018,7 +1083,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 nodes.push(
                   <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
                     <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
-                    {prose ? <MarkdownContent content={prose} className="feed-bubble" /> : null}
+                    {prose ? <MarkdownContent content={prose} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
                     <AttachmentChips snippetId={snippet.id} attachments={messageAttachments} />
                   </div>,
                 );
@@ -1031,7 +1096,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 nodes.push(
                   <details key={`${message.id}-raw`} className="feed-tool-call feed-proposal-raw">
                     <summary><Code2 size={12} /> <span>Proposed changes (raw)</span></summary>
-                    <div className="feed-tool-io"><span className="feed-tool-tag">JSON</span>{renderToolContent(raw)}</div>
+                    <div className="feed-tool-io"><span className="feed-tool-tag">JSON</span>{renderToolContent(raw, snippet.id, feedName)}</div>
                   </details>,
                 );
               }
@@ -1384,6 +1449,14 @@ export default function FeedWorkspace() {
     () => snippets.find((snippet) => snippet.id === selectedId) ?? null,
     [snippets, selectedId],
   );
+
+  useEffect(() => {
+    const title = selected
+      ? selected.title || selected.instruction || "Untitled"
+      : composing ? "New feed" : "AI feed";
+    document.title = `${title} · Stacks`;
+    return () => { document.title = "AI feed · Stacks"; };
+  }, [composing, selected]);
 
   const filteredSnippets = useMemo(() => {
     const term = query.trim().toLowerCase();
