@@ -6,6 +6,32 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-09
+
+### Added
+
+- AI feed messages can render Mermaid diagrams and open diagrams, images,
+  tables, and code blocks in dedicated visualization windows.
+- Visualization windows provide animated zoom and fit controls, pan and text
+  selection modes, code-language switching and copying, plus sortable,
+  filterable, resizable tables.
+
+### Changed
+
+- AI feed and visualization browser titles include the active feed name, while
+  rich-content actions remain unobtrusive until hover or keyboard focus.
+- Library and visualization tables share proportional column-sizing behavior,
+  with adaptive row heights and full-row or full-column resize feedback.
+
+### Fixed
+
+- Visualization pages remain within the viewport at responsive widths, avoid
+  unnecessary scrollbars, and keep Mermaid double-click fit behavior reliable.
+- Long existing feeds now finish scrolling to their latest message after
+  persisted history and late-rendering rich content have completed layout.
+- Table resize guides reach every outer edge without clipped endpoints, and
+  row and column resizing remain available from every applicable boundary.
+
 ## [0.3.7] - 2026-08-09
 
 ### Added
