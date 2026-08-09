@@ -167,3 +167,18 @@ test("the global reasoning effort persists and reaches the AI routes", async () 
   api.persistSettings({ maxTokens: 4096 });
   assert.equal(api.currentSettings().ai.effort, "medium");
 });
+
+test("the AI feed turn limit persists, reaches the runner, and supports unlimited", async () => {
+  const api = await settings;
+
+  api.persistSettings({ feedMaxTurns: 80 });
+  assert.equal(api.currentSettings().ai.feedMaxTurns, 80);
+  assert.equal(api.runtimeValues().STACKS_FEED_MAX_TURNS, "80");
+
+  api.persistSettings({ feedMaxTurns: 0 });
+  assert.equal(api.currentSettings().ai.feedMaxTurns, 0, "zero is the explicit unlimited value");
+  assert.equal(api.runtimeValues().STACKS_FEED_MAX_TURNS, "0");
+
+  api.persistSettings({ modelId: "another-model" });
+  assert.equal(api.currentSettings().ai.feedMaxTurns, 0, "an unrelated save keeps unlimited mode");
+});

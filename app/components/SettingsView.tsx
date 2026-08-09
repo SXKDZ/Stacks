@@ -72,6 +72,7 @@ interface SettingsSnapshot {
     temperature: number;
     sendTemperature: boolean;
     effort: string;
+    feedMaxTurns: number;
   };
   integrations: Record<string, boolean>;
   prompts: {
@@ -217,6 +218,7 @@ const defaultSettings: SettingsSnapshot = {
     temperature: 0.25,
     sendTemperature: true,
     effort: "",
+    feedMaxTurns: 40,
   },
   integrations: {},
   prompts: {
@@ -571,6 +573,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       temperature: settings.ai.temperature,
       sendTemperature: settings.ai.sendTemperature,
       effort: settings.ai.effort,
+      feedMaxTurns: settings.ai.feedMaxTurns,
       extractionSystemPrompt: settings.prompts.extractionSystem,
       summarySystemPrompt: settings.prompts.summarySystem,
       remotePath: settings.sync.remotePath,
@@ -957,7 +960,8 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                 </div>
                 <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
-                <label className="span-2"><span>Reasoning effort</span><Select value={settings.ai.effort} onChange={(next) => updateAi("effort", next)} ariaLabel="Reasoning effort" options={[{ value: "", label: "Let the model decide" }, ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]} /><small>How much the model thinks before answering. Left unset, Stacks sends no effort and the model chooses per request. Applies to summaries, PDF extraction, and new feeds, which can each override it. Older models reject the setting.</small></label>
+                <label><span>Reasoning effort</span><Select value={settings.ai.effort} onChange={(next) => updateAi("effort", next)} ariaLabel="Reasoning effort" options={[{ value: "", label: "Let the model decide" }, ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]} /><small>How much the model thinks before answering. Left unset, Stacks sends no effort and the model chooses per request. Applies to summaries, PDF extraction, and new feeds, which can each override it. Older models reject the setting.</small></label>
+                <label><span>Maximum agent turns</span><input type="number" min="0" step="1" value={settings.ai.feedMaxTurns} onChange={(event) => updateAi("feedMaxTurns", Number(event.target.value))} aria-describedby="feed-max-turns-help" /><small id="feed-max-turns-help">Applies to each AI feed run. Use 0 for unlimited. Higher limits can increase runtime and cost.</small></label>
                 {/* A switch rather than a model list: newer models reject `temperature`
                     outright, and which ones cannot be told from the model id. */}
                 <label className="settings-toggle span-2"><input type="checkbox" checked={settings.ai.sendTemperature} onChange={(event) => updateAi("sendTemperature", event.target.checked)} /><span /><div><strong>Send a temperature value</strong><small>Turn this off if the model reports that temperature is not supported.</small></div></label>

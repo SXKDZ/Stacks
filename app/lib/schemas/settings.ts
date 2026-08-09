@@ -27,6 +27,14 @@ const numericText = (label: string) =>
     message: `${label} must be a number.`,
   });
 
+const nonNegativeIntegerText = (label: string) =>
+  z.string().refine((value) => {
+    const number = Number(value);
+    return value.trim() !== "" && Number.isSafeInteger(number) && number >= 0;
+  }, {
+    message: `${label} must be a non-negative whole number.`,
+  });
+
 const AiSettingsSchema = z.object({
   modelId: z.string(),
   region: z.string(),
@@ -43,6 +51,8 @@ const AiSettingsSchema = z.object({
    * default). Text like the rest of this block; validated on read.
    */
   effort: z.string().catch(""),
+  /** Maximum Claude Code turns per feed run. Zero disables the app-level cap. */
+  feedMaxTurns: nonNegativeIntegerText("feedMaxTurns").catch("40"),
 });
 
 const PromptSettingsSchema = z.object({
@@ -94,7 +104,7 @@ export const StructuredSettingsFileSchema = z.object({
   // corrupt still yields its saved model and secrets, rather than the whole read
   // failing and every setting appearing unset (which, for the secrets block,
   // looks to the user like their API tokens were silently discarded).
-  ai: AiSettingsSchema.catch(() => ({ modelId: "", region: "", maxTokens: "10000", temperature: "0.25", sendTemperature: "true", effort: "" })),
+  ai: AiSettingsSchema.catch(() => ({ modelId: "", region: "", maxTokens: "10000", temperature: "0.25", sendTemperature: "true", effort: "", feedMaxTurns: "40" })),
   prompts: PromptSettingsSchema.catch(() => ({ extractionSystem: "", summarySystem: "" })),
   sync: SyncSettingsSchema.catch(() => ({ remotePath: "", autoSync: "false", autoSyncInterval: "5" })),
   github: GithubSettingsSchema.optional(),
@@ -120,6 +130,7 @@ export const SettingsPayloadSchema = z.object({
   temperature: z.union([z.string(), z.number()]).optional(),
   sendTemperature: z.boolean().optional(),
   effort: z.string().optional(),
+  feedMaxTurns: z.union([z.string(), z.number()]).optional(),
   extractionSystemPrompt: z.string().optional(),
   summarySystemPrompt: z.string().optional(),
   remotePath: z.string().optional(),

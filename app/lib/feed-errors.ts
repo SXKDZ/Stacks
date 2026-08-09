@@ -10,15 +10,24 @@ export interface FeedErrorParts {
   details: string;
 }
 
+function actionableSummary(summary: string, details: string): string {
+  if (
+    summary === "Agent turn failed."
+    && (/"subtype"\s*:\s*"error_max_turns"/.test(details) || /Reached maximum number of turns/i.test(details))
+  ) {
+    return "This run reached its turn limit before finishing. Send “continue” to resume.";
+  }
+  return summary;
+}
+
 export function splitFeedError(content: string): FeedErrorParts {
   const normalized = content.trim();
   if (!normalized) return { summary: "Agent turn failed.", details: "" };
   const newline = normalized.indexOf("\n");
   if (newline === -1) return { summary: normalized, details: "" };
-  return {
-    summary: normalized.slice(0, newline).trim() || "Agent turn failed.",
-    details: normalized.slice(newline + 1).trim(),
-  };
+  const summary = normalized.slice(0, newline).trim() || "Agent turn failed.";
+  const details = normalized.slice(newline + 1).trim();
+  return { summary: actionableSummary(summary, details), details };
 }
 
 function legacyFailurePart(content: string): { kind: "reported" | "exit"; detail: string } | null {

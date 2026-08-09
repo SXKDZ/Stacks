@@ -25,7 +25,27 @@ function validFile() {
 }
 
 test("accepts a complete settings file", () => {
-  assert.ok(StructuredSettingsFileSchema.safeParse(validFile()).success);
+  const parsed = StructuredSettingsFileSchema.safeParse(validFile());
+  assert.ok(parsed.success);
+  assert.equal(parsed.data.ai.feedMaxTurns, "40", "older settings files get the historical default");
+});
+
+test("validates the feed turn limit while keeping unlimited as zero", () => {
+  for (const value of ["40", "120", "0"]) {
+    const file = validFile();
+    (file.ai as Record<string, unknown>).feedMaxTurns = value;
+    const parsed = StructuredSettingsFileSchema.safeParse(file);
+    assert.ok(parsed.success);
+    assert.equal(parsed.data.ai.feedMaxTurns, value);
+  }
+
+  for (const value of ["-1", "2.5", "many", ""]) {
+    const file = validFile();
+    (file.ai as Record<string, unknown>).feedMaxTurns = value;
+    const parsed = StructuredSettingsFileSchema.safeParse(file);
+    assert.ok(parsed.success);
+    assert.equal(parsed.data.ai.feedMaxTurns, "40", `${JSON.stringify(value)} falls back to 40`);
+  }
 });
 
 test("treats an unrecognized schema version as unreadable", () => {
@@ -127,11 +147,12 @@ test("refuses malformed feed skill and workflow entries", () => {
 test("the posted payload accepts numbers where the file stores strings", () => {
   // A number input in the settings form yields a number; the file stores strings.
   // The payload schema is the place that tolerates both.
-  const numeric = SettingsPayloadSchema.safeParse({ maxTokens: 8000, temperature: 0.5, autoSyncInterval: 10 });
+  const numeric = SettingsPayloadSchema.safeParse({ maxTokens: 8000, feedMaxTurns: 80, temperature: 0.5, autoSyncInterval: 10 });
   assert.ok(numeric.success);
   assert.equal(numeric.data.maxTokens, 8000);
+  assert.equal(numeric.data.feedMaxTurns, 80);
 
-  const stringly = SettingsPayloadSchema.safeParse({ maxTokens: "8000", temperature: "0.5", autoSyncInterval: "10" });
+  const stringly = SettingsPayloadSchema.safeParse({ maxTokens: "8000", feedMaxTurns: "0", temperature: "0.5", autoSyncInterval: "10" });
   assert.ok(stringly.success);
 
   // autoSync is a real boolean on the wire (a checkbox), a string in the file.

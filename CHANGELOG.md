@@ -6,6 +6,24 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-08-09
+
+### Added
+
+- AI settings now expose the maximum number of agent turns per feed run. The
+  historical default remains 40, custom limits apply to new and resumed runs,
+  and 0 removes the application-level cap.
+
+### Changed
+
+- Feed failures use a compact, full-width technical-details panel with clearer
+  recovery guidance for runs that reach their configured turn limit.
+
+### Fixed
+
+- Numbered and bulleted list markers in user feed messages now inherit the
+  message text color instead of becoming low-contrast blue on the blue bubble.
+
 ## [0.3.6] - 2026-08-09
 
 ### Added
