@@ -652,10 +652,9 @@
 }
 
 
-/* Empty state: a centered hero prompt with a bottom-docked composer, so
-   starting a new feed reads like a chat entry point (Paper Scout style). The
-   dock is pinned to the bottom and taken out of the hero's centering flow, so
-   growing it (attachments) never shifts the hero. */
+/* Empty state: a centered hero prompt above a bottom-docked composer. Both stay
+   in normal flex flow so resizing the whole composer reduces the hero's share
+   instead of overlapping it. */
 .feed-compose {
   /* Same reading column as the detail view, so the composer and the reply dock
      share one width. */
@@ -682,20 +681,19 @@
 }
 
 .feed-compose-hero {
-  bottom: 268px;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
   justify-content: center;
-  left: var(--feed-gutter);
-  position: absolute;
-  right: var(--feed-gutter);
+  min-height: 0;
+  overflow-y: auto;
+  padding-block: 12px;
   text-align: center;
-  top: 0;
 }
 
 .feed-compose .feed-dock {
-  margin-top: auto;
+  margin-top: 24px;
 }
 
 .feed-compose-hero h2 {
@@ -769,7 +767,52 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px 12px 10px;
+  position: relative;
   transition: border-color var(--motion-control), box-shadow var(--motion-control);
+}
+
+.feed-dock-input.is-panel-resizable {
+  min-height: 150px;
+}
+
+.feed-compose .feed-dock-input.is-panel-resizable {
+  min-height: 210px;
+}
+
+.feed-panel-resize-handle {
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--soft);
+  cursor: ns-resize;
+  display: flex;
+  height: 18px;
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: 0;
+  touch-action: none;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  z-index: 2;
+}
+
+.feed-panel-resize-handle:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
+  color: var(--brand-blue-strong);
+}
+
+.feed-panel-resize-handle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.feed-panel-resize-handle svg {
+  height: 14px;
+  pointer-events: none;
+  stroke-width: 2;
+  width: 14px;
 }
 
 .feed-dock-input:focus-within {
@@ -797,7 +840,7 @@
   z-index: 1;
 }
 
-.feed-dock textarea {
+.feed-dock textarea:not(:where(.prompt-code-editor *)) {
   background: transparent;
   border: 0;
   color: var(--ink);
@@ -811,8 +854,39 @@
 
 /* The new-feed composer is the primary entry point, so give it more room than
    the compact inline reply box. */
-.feed-compose .feed-dock textarea {
+.feed-compose .feed-dock textarea:not(:where(.prompt-code-editor *)) {
   min-height: 128px;
+}
+
+/* Feed replies and new-feed prompts use the same highlighted Markdown editor as
+   paper notes, but the dock owns the border and focus ring around the whole
+   composer (text + attachments + actions), so avoid a nested framed surface. */
+.feed-dock .feed-composer-editor {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 82px;
+  width: 100%;
+}
+
+.feed-compose .feed-dock .feed-composer-editor {
+  min-height: 140px;
+}
+
+.feed-dock .feed-composer-editor:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* The outer panel already supplies its own padding. Reusing the edit form's
+   additional 13px editor inset doubled the top gutter and made typed text look
+   vertically detached from the panel edge. Keep the highlighting, but use the
+   compact composer inset for both synchronized layers. */
+.feed-dock .feed-composer-editor pre,
+.feed-dock .feed-composer-editor textarea {
+  padding: 5px 6px;
 }
 
 .feed-dock textarea::placeholder {
