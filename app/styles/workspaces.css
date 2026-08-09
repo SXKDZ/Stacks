@@ -290,17 +290,23 @@
   padding: 0 14px;
 }
 
-/* Theme toggle pinned to the top-right of the feed page, matching the main
-   app's topbar: same 62px band height and 34px right offset, vertically
-   centered so it aligns with the detail header row. */
+/* Theme toggle pinned to the top-right of the feed page. Its slot follows the
+   header variant so the control stays centered in both the 62px composer bar
+   and the selected thread's taller three-row bar. */
 .feed-theme-toggle {
   align-items: center;
   display: flex;
   height: 62px;
+  justify-content: center;
   position: absolute;
-  right: 34px;
+  right: 0;
   top: 0;
+  width: 76px;
   z-index: 30;
+}
+
+.feed-page.has-thread > .feed-theme-toggle {
+  height: 86px;
 }
 
 /* Filter the history list by title/instruction. */
@@ -1273,16 +1279,16 @@
   color: var(--brand-blue-strong);
 }
 
-/* The detail header is the feed's topbar: same 62px height as the main app's
-   topbar, so it lines up with the theme toggle band. Reserve room on the right
-   for the toggle so the title/badge never sit under it. */
+/* The base header shares the main app's 62px topbar. A selected feed needs
+   three rows (title, statistics, directory), so its explicit thread variant is
+   taller while the one-row New feed header remains aligned to the sidebar. */
 .feed-detail-head {
   align-items: center;
   background: var(--surface-1);
   border-bottom: 1px solid var(--line);
   display: flex;
   flex-shrink: 0;
-  height: 62px;
+  min-height: 62px;
   padding: 0;
 }
 
@@ -1292,8 +1298,19 @@
   gap: 13px;
   /* Full-width, left-aligned: the title starts just past the divider and the bar
      fills the pane. Right padding clears the floating theme toggle (34px + btn). */
+  min-height: 62px;
   padding: 0 76px 0 var(--feed-gutter);
   width: 100%;
+}
+
+.feed-detail-thread-head,
+.feed-detail-thread-head .feed-detail-head-inner {
+  min-height: 86px;
+}
+
+.feed-detail-thread-head .feed-detail-head-inner {
+  padding-bottom: 8px;
+  padding-top: 8px;
 }
 
 .feed-detail-back {
@@ -1335,9 +1352,11 @@
   align-items: center;
   color: var(--soft);
   display: flex;
+  flex-wrap: wrap;
   flex-shrink: 0;
   font-size: var(--type-caption);
   gap: 10px;
+  row-gap: 3px;
 }
 
 .feed-detail-stat {
@@ -1401,6 +1420,52 @@
   font-weight: 800;
   padding: 3px 8px;
   white-space: nowrap;
+}
+
+.feed-working-directory-link {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  gap: 5px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 0;
+  text-align: left;
+  width: fit-content;
+}
+
+.feed-working-directory-link:hover {
+  color: var(--brand-blue-strong);
+}
+
+.feed-working-directory-link:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.feed-working-directory-link:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.feed-working-directory-link svg {
+  flex-shrink: 0;
+  height: 13px;
+  stroke-width: 2;
+  width: 13px;
+}
+
+.feed-working-directory-link code {
+  color: inherit;
+  font-family: var(--font-mono);
+  min-width: 0;
+  white-space: normal;
 }
 
 /* The body is the full-width scroll container, so its scrollbar sits at the
