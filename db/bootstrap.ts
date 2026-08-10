@@ -78,6 +78,7 @@ const schemaStatements = [
     session_id TEXT,
     model TEXT,
     effort TEXT,
+    history_mode TEXT,
     error TEXT,
     issue_number INTEGER,
     issue_title_synced TEXT,
@@ -258,6 +259,9 @@ async function initializeDatabase(): Promise<void> {
   // Per-feed reasoning effort ("" / null = fall back to the global setting).
   if (!feedSnippetColumns.has("effort")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN effort TEXT").run();
+  }
+  if (!feedSnippetColumns.has("history_mode")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN history_mode TEXT").run();
   }
   if (!feedSnippetColumns.has("collapsed")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0").run();

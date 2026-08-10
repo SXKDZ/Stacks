@@ -1,75 +1,135 @@
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
+import { copyFeedHistoryAttachments } from "@/app/lib/feed-history-attachments";
+import { feedWorkingDir } from "@/app/lib/feed-agent";
+import { selectFeedHistory } from "@/app/lib/feed-history";
+import { parseWith } from "@/app/lib/schemas/parse";
+import { FeedForkRequestSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function serializedAttachments(attachments: ReturnType<typeof copyFeedHistoryAttachments>): string | null {
+  return attachments.length ? JSON.stringify(attachments) : null;
+}
+
 /**
- * Fork a feed into an independent branch: copy the snippet, its messages, and
- * its proposals into a new thread with a fresh session id. The parent is left
- * untouched. Replying to the fork starts a new agent session; the copied
- * transcript is shown as the branch's history, so the user can take the
- * conversation in a new direction without disturbing the original.
+ * Fork a feed into an independent branch.
+ *
+ * With no interactionIds this preserves the existing full-history fork. With a
+ * selection it builds a new feed from the authoritative interaction boundaries
+ * in the database, starts with zero usage and no pending proposals, and leaves
+ * the source untouched. Either form gets a fresh Claude session; the first reply
+ * seeds that session with the copied transcript.
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await context.params;
+  const decoded = await request.json().catch(() => ({}));
+  const parsed = parseWith(FeedForkRequestSchema, decoded);
+  if (!parsed.ok) {
+    return Response.json({ error: parsed.error }, { status: 400 });
+  }
+
   const database = await ensureDatabase();
   const source = database.select().from(feedSnippets).where(eq(feedSnippets.id, id)).get();
   if (!source) {
     return Response.json({ error: "Snippet not found." }, { status: 404 });
   }
 
-  const forkId = `feed-${crypto.randomUUID()}`;
-  const now = new Date().toISOString();
   const messages = database
     .select()
     .from(feedMessages)
     .where(eq(feedMessages.snippetId, id))
     .orderBy(asc(feedMessages.createdAt))
     .all();
-  const proposals = database.select().from(feedProposals).where(eq(feedProposals.snippetId, id)).all();
+  const selectedFork = parsed.data.interactionIds !== undefined;
+  let selectedHistory: ReturnType<typeof selectFeedHistory<typeof messages[number]>> | null = null;
+  if (parsed.data.interactionIds) {
+    try {
+      selectedHistory = selectFeedHistory({
+        instruction: source.instruction,
+        openingAttachments: source.attachments,
+        messages,
+        interactionIds: parsed.data.interactionIds,
+        includeToolDetails: parsed.data.includeToolDetails,
+      });
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : "The selected history is invalid." },
+        { status: 400 },
+      );
+    }
+  }
+
+  const forkId = `feed-${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const sourceWorkingDir = feedWorkingDir(id);
+  const targetWorkingDir = feedWorkingDir(forkId);
+  const historyMessages = selectedHistory?.messages ?? messages;
+  const openingRaw = selectedHistory?.openingAttachments ?? source.attachments;
+  const openingAttachments = serializedAttachments(
+    copyFeedHistoryAttachments(sourceWorkingDir, targetWorkingDir, openingRaw),
+  );
+  const copiedMessages = historyMessages.map((message) => ({
+    source: message,
+    id: `msg-${crypto.randomUUID()}`,
+    attachments: serializedAttachments(
+      copyFeedHistoryAttachments(sourceWorkingDir, targetWorkingDir, message.attachments),
+    ),
+  }));
+  const messageIds = new Map(copiedMessages.map((message) => [message.source.id, message.id]));
+  const proposals = selectedFork
+    ? []
+    : database.select().from(feedProposals).where(eq(feedProposals.snippetId, id)).all();
 
   database.transaction((tx) => {
     tx.insert(feedSnippets).values({
       id: forkId,
-      title: `Fork of ${source.title || source.instruction || "Untitled"}`.slice(0, 200),
-      instruction: source.instruction,
-      // A fresh session: the fork continues as a new agent conversation seeded
-      // with the copied history, rather than mutating the parent's session.
-      status: source.status === "running" || source.status === "queued" ? "done" : source.status,
+      title: `${selectedFork ? "Selected from" : "Fork of"} ${source.title || source.instruction || "Untitled"}`.slice(0, 200),
+      instruction: selectedHistory?.instruction ?? source.instruction,
+      status: selectedFork
+        ? "done"
+        : source.status === "running" || source.status === "queued" ? "done" : source.status,
       sessionId: "",
-      inputTokens: source.inputTokens,
-      outputTokens: source.outputTokens,
-      durationMs: source.durationMs,
-      turns: source.turns,
+      model: source.model,
+      effort: source.effort,
+      historyMode: selectedFork
+        ? (parsed.data.includeToolDetails ? "tools" : "conversation")
+        : source.historyMode,
+      attachments: openingAttachments,
+      inputTokens: selectedFork ? 0 : source.inputTokens,
+      outputTokens: selectedFork ? 0 : source.outputTokens,
+      durationMs: selectedFork ? 0 : source.durationMs,
+      turns: selectedFork ? 0 : source.turns,
       createdAt: now,
       updatedAt: now,
     }).run();
-    for (const message of messages) {
+    for (const message of copiedMessages) {
       tx.insert(feedMessages).values({
-        id: `msg-${crypto.randomUUID()}`,
+        id: message.id,
         snippetId: forkId,
-        role: message.role,
-        kind: message.kind,
-        content: message.content,
-        toolUseId: message.toolUseId,
-        createdAt: message.createdAt,
+        role: message.source.role,
+        kind: message.source.kind,
+        content: message.source.content,
+        toolUseId: message.source.toolUseId,
+        attachments: message.attachments,
+        createdAt: message.source.createdAt,
       }).run();
     }
     for (const proposal of proposals) {
       tx.insert(feedProposals).values({
         id: `prop-${crypto.randomUUID()}`,
         snippetId: forkId,
-        messageId: null,
+        messageId: proposal.messageId ? (messageIds.get(proposal.messageId) ?? null) : null,
         operation: proposal.operation,
-        // Applied/rejected decisions carry over as history; pending resets so the
-        // fork does not re-apply changes the user is still deciding on.
-        status: proposal.status === "pending" ? "pending" : proposal.status,
+        status: proposal.status,
+        resultSummary: proposal.resultSummary,
         createdAt: proposal.createdAt,
+        resolvedAt: proposal.resolvedAt,
       }).run();
     }
   });

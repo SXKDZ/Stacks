@@ -20,6 +20,36 @@ export interface GitHubConfig {
   /** "owner/repo" */
   repo: string;
   token: string;
+  /** Optional per-pass write budget used by the resumable inbox bulk sync. */
+  syncPolicy?: GitHubSyncPolicy;
+}
+
+/**
+ * A sync pass is deliberately small enough to finish inside one HTTP request.
+ * Each successful write is checkpointed in SQLite immediately, so the next pass
+ * resumes at the first unsynced issue/comment instead of repeating prior work.
+ */
+export interface GitHubSyncPolicy {
+  maxMutations: number;
+  mutations: number;
+}
+
+export function createGitHubSyncPolicy(maxMutations = 20): GitHubSyncPolicy {
+  return { maxMutations, mutations: 0 };
+}
+
+/** Internal, expected pause: the current pass is full or the local hourly
+ * safety budget is exhausted. The sync route turns this into a resumable 200
+ * response rather than presenting it as a failed GitHub request. */
+export class GitHubSyncDeferred extends Error {
+  readonly reason: "batch" | "cooldown";
+  readonly retryAfterMs: number;
+  constructor(reason: "batch" | "cooldown", retryAfterMs: number) {
+    super(reason === "batch" ? "The current GitHub write batch is complete." : "GitHub writes are cooling down.");
+    this.name = "GitHubSyncDeferred";
+    this.reason = reason;
+    this.retryAfterMs = retryAfterMs;
+  }
 }
 
 export interface GitHubIssue {
@@ -43,10 +73,92 @@ export interface GitHubComment {
 export class GitHubError extends Error {
   /** The HTTP status that caused it, or 0 for client-side/validation errors. */
   readonly status: number;
-  constructor(message: string, status = 0) {
+  /** Safe diagnostic context that can be shown without exposing the token. */
+  readonly details: string;
+  /** How long GitHub told the caller to wait before another attempt. */
+  readonly retryAfterMs: number;
+  constructor(message: string, status = 0, details = "", retryAfterMs = 0) {
     super(message);
+    this.name = "GitHubError";
     this.status = status;
+    this.details = details;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+interface GitHubApiErrorBody {
+  message?: string;
+  documentation_url?: string;
+  errors?: unknown;
+}
+
+/** Turn GitHub's response into concise recovery copy plus safe diagnostics.
+ * The access token is never part of either string. */
+function githubFailure(
+  response: Response,
+  requestUrl: string,
+  method: string,
+  rawBody: string,
+): { summary: string; details: string; retryAfterMs: number } {
+  let body: GitHubApiErrorBody = {};
+  try {
+    body = JSON.parse(rawBody) as GitHubApiErrorBody;
+  } catch {
+    // Non-JSON gateway responses are retained verbatim in the detail block.
+  }
+
+  const githubMessage = typeof body.message === "string" ? body.message.trim() : "";
+  const documentationUrl = typeof body.documentation_url === "string" ? body.documentation_url.trim() : "";
+  const rateLimitRemaining = response.headers.get("x-ratelimit-remaining");
+  const rateLimitReset = response.headers.get("x-ratelimit-reset");
+  const retryAfter = response.headers.get("retry-after");
+  const rateLimitStatus = response.status === 403 || response.status === 429;
+  const primaryRateLimited = rateLimitStatus && rateLimitRemaining === "0";
+  const secondaryRateLimited = rateLimitStatus && /secondary rate limit|temporarily blocked from content creation/i.test(githubMessage);
+  let summary = `GitHub rejected the sync request (${response.status}).`;
+  if (response.status === 401) {
+    summary = "GitHub did not accept the access token. Update it in Settings and try again.";
+  } else if (secondaryRateLimited) {
+    summary = "GitHub temporarily blocked content creation because too many write requests were sent. Wait, then sync again.";
+  } else if (primaryRateLimited) {
+    summary = "GitHub's API rate limit has been reached. Try syncing again after it resets.";
+  } else if (response.status === 403) {
+    summary = "GitHub denied access. Check this token's repository access and Issues read/write permission.";
+  } else if (response.status === 404) {
+    summary = "GitHub could not find this repository. Check the repository name and token access.";
+  }
+
+  const endpoint = new URL(requestUrl);
+  const responseDetail = body.errors !== undefined
+    ? JSON.stringify(body.errors, null, 2)
+    : !githubMessage && rawBody.trim() ? rawBody.trim() : "";
+  const resetAt = rateLimitReset && /^\d+$/.test(rateLimitReset)
+    ? new Date(Number(rateLimitReset) * 1_000).toLocaleString()
+    : "";
+  const retryAfterSeconds = retryAfter && /^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) : 0;
+  const resetDelayMs = rateLimitReset && /^\d+$/.test(rateLimitReset)
+    ? Math.max(0, Number(rateLimitReset) * 1_000 - Date.now())
+    : 0;
+  // GitHub says to wait at least one minute for a secondary limit when neither
+  // Retry-After nor the primary-limit reset header provides a deadline.
+  const retryAfterMs = retryAfterSeconds > 0
+    ? Math.ceil(retryAfterSeconds * 1_000)
+    : primaryRateLimited && resetDelayMs > 0
+      ? resetDelayMs
+      : secondaryRateLimited ? 60_000 : 0;
+  const details = [
+    `Request: ${method} ${endpoint.pathname}${endpoint.search}`,
+    `Status: ${response.status} ${response.statusText || "Unknown"}`,
+    response.headers.get("x-github-request-id") ? `GitHub request ID: ${response.headers.get("x-github-request-id")}` : "",
+    githubMessage ? `GitHub message: ${githubMessage}` : "",
+    retryAfter ? `Retry after: ${retryAfter} seconds` : "",
+    rateLimitRemaining !== null ? `Rate limit remaining: ${rateLimitRemaining}` : "",
+    resetAt ? `Rate limit resets: ${resetAt}` : "",
+    documentationUrl ? `Documentation: ${documentationUrl}` : "",
+    responseDetail ? `Response details:\n${responseDetail}` : "",
+  ].filter(Boolean).join("\n");
+
+  return { summary, details, retryAfterMs };
 }
 
 function parseRepo(repo: string): { owner: string; name: string } {
@@ -68,6 +180,51 @@ function parseRepo(repo: string): { owner: string; name: string } {
 // loop forever. 20 pages × 100/page = 2000 items, far above a personal inbox.
 const MAX_PAGES = 20;
 
+// GitHub explicitly recommends serial requests and at least one second between
+// POST/PATCH/PUT/DELETE calls. A shared queue covers manual sync, the delete
+// outbox, and any overlapping background write without relying on each caller
+// to remember the rule.
+const MIN_MUTATION_INTERVAL_MS = 1_000;
+// GitHub's documented general content-creation ceiling is 500/hour. Keep local
+// headroom for actions made in github.com and other clients using the same user.
+const MAX_MUTATIONS_PER_HOUR = 400;
+let mutationQueue: Promise<void> = Promise.resolve();
+let lastMutationAt = 0;
+const recentMutations: number[] = [];
+
+function wait(ms: number): Promise<void> {
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
+}
+
+function queueMutation<T>(config: GitHubConfig, send: () => Promise<T>): Promise<T> {
+  const run = mutationQueue.then(async () => {
+    const policy = config.syncPolicy;
+    if (policy && policy.mutations >= policy.maxMutations) {
+      throw new GitHubSyncDeferred("batch", MIN_MUTATION_INTERVAL_MS);
+    }
+
+    const now = Date.now();
+    while (recentMutations.length && recentMutations[0] <= now - 60 * 60 * 1_000) {
+      recentMutations.shift();
+    }
+    if (recentMutations.length >= MAX_MUTATIONS_PER_HOUR) {
+      throw new GitHubSyncDeferred(
+        "cooldown",
+        Math.max(MIN_MUTATION_INTERVAL_MS, recentMutations[0] + 60 * 60 * 1_000 - now),
+      );
+    }
+
+    await wait(Math.max(0, lastMutationAt + MIN_MUTATION_INTERVAL_MS - Date.now()));
+    const sentAt = Date.now();
+    lastMutationAt = sentAt;
+    recentMutations.push(sentAt);
+    if (policy) policy.mutations += 1;
+    return send();
+  });
+  mutationQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 async function githubRequest(
   config: GitHubConfig,
   path: string,
@@ -78,7 +235,8 @@ async function githubRequest(
   if (!url.startsWith(API_ROOT)) {
     throw new GitHubError("Refusing to follow a link outside api.github.com.");
   }
-  const response = await fetch(url, {
+  const method = (init.method ?? "GET").toUpperCase();
+  const send = () => fetch(url, {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
@@ -89,14 +247,13 @@ async function githubRequest(
     },
     redirect: "error",
   });
+  const response = ["POST", "PATCH", "PUT", "DELETE"].includes(method)
+    ? await queueMutation(config, send)
+    : await send();
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    const hint = response.status === 401 || response.status === 403
-      ? " Check the token has issues:write on this repo."
-      : response.status === 404
-        ? " Check the repo exists and the token can see it."
-        : "";
-    throw new GitHubError(`GitHub API ${response.status}.${hint}${detail ? ` ${detail.slice(0, 200)}` : ""}`, response.status);
+    const rawBody = await response.text().catch(() => "");
+    const failure = githubFailure(response, url, method, rawBody);
+    throw new GitHubError(failure.summary, response.status, failure.details, failure.retryAfterMs);
   }
   return response;
 }

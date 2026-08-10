@@ -157,6 +157,10 @@ export const feedSnippets = sqliteTable(
     model: text("model"),
     // Reasoning effort for this feed (null/"" = the global Settings value).
     effort: text("effort"),
+    // How a fresh fork session should seed copied history: null/conversation
+    // includes user/assistant prose only; tools also includes tool requests and
+    // results. Once Claude creates a native session this field is inert.
+    historyMode: text("history_mode"),
     error: text("error"),
     // The GitHub issue this feed is mirrored to (for remote/mobile access), if
     // GitHub inbox sync is configured. Null until the feed is first synced.
@@ -266,4 +270,3 @@ export const feedGithubOutbox = sqliteTable(
   },
   (table) => [index("feed_github_outbox_repo_idx").on(table.repo)],
 );
-

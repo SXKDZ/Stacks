@@ -7,16 +7,17 @@ import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
-import { readError } from "@/app/lib/http";
+import { readError, readErrorInfo } from "@/app/lib/http";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
 import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment } from "@/app/lib/schemas/attachments";
 import { Brand } from "@/app/components/ui/Brand";
-import { ActionButton } from "@/app/components/ui/controls";
+import { ActionButton, Scrim } from "@/app/components/ui/controls";
 import { effortSetting, type EffortSetting } from "@/app/lib/effort";
 import { isClaudeAgentModel } from "@/app/lib/feed-model";
 import { coalesceLegacyAgentErrors, splitFeedError } from "@/app/lib/feed-errors";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
+import { groupFeedInteractions, OPENING_INTERACTION_ID, type FeedInteraction } from "@/app/lib/feed-history";
 
 interface FeedMessage {
   id: string;
@@ -217,16 +218,30 @@ function AttachmentChips({ snippetId, attachments }: { snippetId: string; attach
 interface SyncLogEntry {
   id: string;
   at: number;
-  status: "success" | "error";
+  status: "success" | "error" | "paused";
   summary: string;
+  details?: string;
 }
 const SYNC_LOG_KEY = "stacks-sync-log-v1";
 
 function readSyncLog(): SyncLogEntry[] {
   if (typeof window === "undefined") return [];
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(SYNC_LOG_KEY) || "[]") as SyncLogEntry[];
-    return Array.isArray(parsed) ? parsed.slice(0, 50) : [];
+    const parsed = JSON.parse(window.localStorage.getItem(SYNC_LOG_KEY) || "[]") as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry): entry is SyncLogEntry => Boolean(
+        entry && typeof entry === "object"
+        && typeof (entry as SyncLogEntry).id === "string"
+        && typeof (entry as SyncLogEntry).at === "number"
+        && (["success", "error", "paused"] as const).includes((entry as SyncLogEntry).status)
+        && typeof (entry as SyncLogEntry).summary === "string",
+      ))
+      .map((entry) => ({
+        ...entry,
+        details: typeof entry.details === "string" ? entry.details : undefined,
+      }))
+      .slice(0, 50);
   } catch {
     return [];
   }
@@ -238,6 +253,14 @@ function writeSyncLog(entries: SyncLogEntry[]): void {
   } catch {
     // A full/blocked storage quota must not break syncing.
   }
+}
+
+function syncDiagnosticText(entry: SyncLogEntry): string {
+  if (entry.details) return entry.details;
+  const legacyNote = entry.summary.startsWith("GitHub API ")
+    ? "This entry was captured by an older Stacks version, which truncated GitHub's response before saving it. Run sync again to capture complete diagnostics."
+    : "No additional diagnostic information was returned.";
+  return `${entry.summary}\n\n${legacyNote}`;
 }
 
 /**
@@ -259,9 +282,21 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
           </header>
           <div className="background-task-list">
             {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
-              <div className={`background-task-row is-${entry.status === "success" ? "complete" : "error"}`} key={entry.id}>
-                {entry.status === "success" ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
-                <span><strong>{entry.summary}</strong><small>{new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></span>
+              <div className={`background-task-row is-${entry.status === "success" ? "complete" : entry.status === "paused" ? "running" : "error"}`} key={entry.id}>
+                {entry.status === "success" ? <CircleCheck size={16} /> : entry.status === "paused" ? <CircleDot size={16} /> : <CircleAlert size={16} />}
+                <span>
+                  <strong>{entry.summary}</strong>
+                  <small>{entry.status === "success" ? "Completed" : entry.status === "paused" ? "Paused safely" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
+                  {entry.status === "error" ? (
+                    <details className="background-task-diagnostics">
+                      <summary>
+                        <ChevronRight size={12} aria-hidden="true" />
+                        Technical details
+                      </summary>
+                      <pre>{syncDiagnosticText(entry)}</pre>
+                    </details>
+                  ) : null}
+                </span>
               </div>
             ))}
           </div>
@@ -273,6 +308,33 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
         <ChevronUp size={14} />
       </button>
     </aside>
+  );
+}
+
+/** Sync failures use the same standalone toast surface as Settings instead of
+ * becoming another nested card inside the feed sidebar. */
+function SyncFailureToast({ failure, onDismiss }: { failure: { summary: string; details: string }; onDismiss: () => void }) {
+  return (
+    <div className="toast toast-error feed-sync-toast">
+      <span className="toast-message" role="alert">
+        <CircleAlert size={17} aria-hidden="true" />
+        <span className="feed-sync-toast-content">
+          <strong>{failure.summary}</strong>
+          {failure.details ? (
+            <details className="feed-error-details">
+              <summary>
+                <ChevronRight size={14} aria-hidden="true" />
+                <span>Technical details</span>
+              </summary>
+              <pre>{failure.details}</pre>
+            </details>
+          ) : null}
+        </span>
+      </span>
+      <button type="button" className="toast-dismiss" onClick={onDismiss} aria-label="Dismiss notification">
+        <X size={14} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -432,12 +494,13 @@ function fullTime(iso: string): string {
  * on one line so the console scales to dozens of interactions, plus an overflow
  * menu (rename / fork / export / delete). Statuses stay fresh via the poll.
  */
-function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onCollapse, onDelete }: {
+function FeedRow({ snippet, active, onSelect, onRename, onFork, onSelectHistory, onExport, onCollapse, onDelete }: {
   snippet: FeedSnippet;
   active: boolean;
   onSelect: () => void;
   onRename: () => void;
   onFork: () => void;
+  onSelectHistory: (returnFocus: HTMLButtonElement | null) => void;
   onExport: () => void;
   onCollapse: () => void;
   onDelete: () => void;
@@ -446,6 +509,7 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const kebabRef = useRef<HTMLButtonElement>(null);
+  const rowButtonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -475,9 +539,9 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
     }
     const rect = kebabRef.current?.getBoundingClientRect();
     if (rect) {
-      // Open downward, but flip above the kebab when the menu (~5 items) would
+      // Open downward, but flip above the kebab when the menu (~6 items) would
       // run past the viewport bottom, so the last item is never clipped.
-      const menuHeight = 210;
+      const menuHeight = 252;
       const right = window.innerWidth - rect.right;
       if (rect.bottom + 4 + menuHeight > window.innerHeight) {
         setMenuPos({ bottom: window.innerHeight - rect.top + 4, right });
@@ -492,7 +556,7 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
 
   return (
     <div className={`feed-row feed-row-${snippet.status} ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}`}>
-      <button type="button" className="feed-row-main" onClick={onSelect} aria-current={active}>
+      <button ref={rowButtonRef} type="button" className="feed-row-main" onClick={onSelect} aria-current={active}>
         <span className={`feed-row-glyph feed-status-${snippet.status}`}><StatusGlyph status={snippet.status} /></span>
         <span className="feed-row-body">
           <span className="feed-row-title-line">
@@ -527,6 +591,17 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
               <div ref={listRef} className="feed-row-menu-list" role="menu" style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }}>
                 <button type="button" role="menuitem" onClick={run(onRename)}><Pencil size={14} /> Rename</button>
                 <button type="button" role="menuitem" onClick={run(onFork)}><GitBranch size={14} /> Fork</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={snippet.status === "running" || snippet.status === "queued"}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onSelectHistory(rowButtonRef.current);
+                  }}
+                >
+                  <ListChecks size={14} /> Select history
+                </button>
                 <button type="button" role="menuitem" onClick={run(onExport)}><Download size={14} /> Export</button>
                 <button type="button" role="menuitem" onClick={run(onCollapse)}>{snippet.collapsed ? <><ChevronUp size={14} /> Expand</> : <><ChevronDown size={14} /> Collapse</>}</button>
                 <button type="button" role="menuitem" className="is-danger" onClick={run(onDelete)}><Trash2 size={14} /> Delete</button>
@@ -539,20 +614,312 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onExport, onColl
   );
 }
 
+interface FeedHistorySelectionModalProps {
+  feedName: string;
+  interactions: FeedInteraction<FeedMessage>[];
+  selected: Set<string>;
+  includeToolDetails: boolean;
+  creating: boolean;
+  loading: boolean;
+  error: string | null;
+  returnFocus: HTMLButtonElement | null;
+  onToggle: (id: string) => void;
+  onSetVisible: (ids: string[], selected: boolean) => void;
+  onIncludeToolDetails: (include: boolean) => void;
+  onClose: () => void;
+  onCreate: () => void;
+  onJump: (id: string) => void;
+}
+
+function interactionResponseText(interaction: FeedInteraction<FeedMessage>): string {
+  return interaction.messages
+    .filter((message) => message.role === "assistant" && ["text", "result", "error"].includes(message.kind))
+    .map((message) => message.kind === "error" ? message.content : splitProposalBlock(message.content).prose)
+    .filter((content) => content.trim())
+    .join("\n\n");
+}
+
+/**
+ * A focused chooser for creating a new feed from past requests. One row is one
+ * interaction boundary: the user request plus every agent event before the next
+ * request. Responses are intentionally capped until expanded so tool-heavy runs
+ * do not turn selection into another full conversation view.
+ */
+function FeedHistorySelectionModal({
+  feedName,
+  interactions,
+  selected,
+  includeToolDetails,
+  creating,
+  loading,
+  error,
+  returnFocus,
+  onToggle,
+  onSetVisible,
+  onIncludeToolDetails,
+  onClose,
+  onCreate,
+  onJump,
+}: FeedHistorySelectionModalProps) {
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [expandedRequests, setExpandedRequests] = useState<Set<string>>(() => new Set());
+  const [activeInteractionId, setActiveInteractionId] = useState(interactions[0]?.id ?? "");
+  const dialogRef = useRef<HTMLElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const cardRefs = useRef(new Map<string, HTMLElement>());
+  const indexButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const closeRef = useRef(onClose);
+  const creatingRef = useRef(creating);
+
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => { creatingRef.current = creating; }, [creating]);
+
+  const records = useMemo(() => interactions.map((interaction, index) => ({
+    interaction,
+    number: index + 1,
+    response: interactionResponseText(interaction),
+  })), [interactions]);
+  const visible = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    if (!term) return records;
+    return records.filter(({ interaction, response }) =>
+      `${interaction.userText}\n${response}`.toLocaleLowerCase().includes(term),
+    );
+  }, [query, records]);
+  const visibleIds = visible.map(({ interaction }) => interaction.id);
+  const displayedActiveId = visibleIds.includes(activeInteractionId) ? activeInteractionId : (visibleIds[0] ?? "");
+  const allVisibleSelected = Boolean(visibleIds.length) && visibleIds.every((id) => selected.has(id));
+
+  useEffect(() => {
+    indexButtonRefs.current.get(displayedActiveId)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [displayedActiveId]);
+
+  useEffect(() => {
+    const page = document.querySelector<HTMLElement>(".feed-page");
+    const pageWasInert = page?.inert ?? false;
+    const oldOverflow = document.body.style.overflow;
+    if (page) page.inert = true;
+    document.body.style.overflow = "hidden";
+
+    const frame = requestAnimationFrame(() => searchRef.current?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (!creatingRef.current) closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+      ) ?? [])].filter((element) => element.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKeyDown);
+      if (page) page.inert = pageWasInert;
+      document.body.style.overflow = oldOverflow;
+      const focusTarget = returnFocus?.offsetParent
+        ? returnFocus
+        : document.querySelector<HTMLButtonElement>(".feed-detail-back");
+      focusTarget?.focus();
+    };
+  }, [returnFocus]);
+
+  function jumpWithinModal(id: string) {
+    setActiveInteractionId(id);
+    cardRefs.current.get(id)?.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }
+
+  function toggleExpanded(id: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleRequestExpanded(id: string) {
+    setExpandedRequests((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div className="feed-history-modal-layer">
+      <Scrim onClick={() => { if (!creating) onClose(); }} label="Close history selection" />
+      <section
+        ref={dialogRef}
+        className="feed-history-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feed-history-title"
+        aria-describedby="feed-history-description"
+      >
+        <header className="feed-history-modal-head">
+          <div>
+            <span className="feed-history-modal-kicker">{feedName}</span>
+            <h2 id="feed-history-title">Select history</h2>
+            <p id="feed-history-description">Choose user requests for a new feed. Each request includes the agent response and work that followed it.</p>
+          </div>
+          <ActionButton variant="ghost" size="icon" onClick={onClose} disabled={creating} aria-label="Close" icon={<X />} />
+        </header>
+
+        <div className="feed-history-toolbar">
+          <label className="feed-history-search">
+            <Search size={16} aria-hidden="true" />
+            <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search requests and responses…" />
+            {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button> : null}
+          </label>
+          <div className="feed-history-bulk-actions">
+            <button type="button" disabled={!visibleIds.length || loading} onClick={() => onSetVisible(visibleIds, !allVisibleSelected)}>
+              {allVisibleSelected ? "Clear shown" : "Select shown"}
+            </button>
+            <button type="button" disabled={!selected.size} onClick={() => onSetVisible([...selected], false)}>Clear all</button>
+          </div>
+        </div>
+
+        <div className="feed-history-modal-body">
+          <nav className="feed-history-index" aria-label="Jump to a user request">
+            <span>Requests</span>
+            <div className="feed-history-index-list">
+              {visible.map(({ interaction, number }) => (
+                <div
+                  key={interaction.id}
+                  className={`feed-history-index-row ${displayedActiveId === interaction.id ? "is-active" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(interaction.id)}
+                    disabled={loading}
+                    onChange={() => onToggle(interaction.id)}
+                    aria-label={`Select request ${number} from the request list`}
+                  />
+                  <button
+                    type="button"
+                    ref={(node) => {
+                      if (node) indexButtonRefs.current.set(interaction.id, node);
+                      else indexButtonRefs.current.delete(interaction.id);
+                    }}
+                    onClick={() => jumpWithinModal(interaction.id)}
+                    aria-label={`Jump to request ${number}`}
+                    aria-current={displayedActiveId === interaction.id ? "true" : undefined}
+                  >
+                    <b>{number}</b>
+                    <span>{interaction.userText.trim() || "Request with attachments"}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </nav>
+
+          <div className="feed-history-interactions" aria-busy={loading}>
+            {loading && records.length <= 1 ? (
+              <div className="feed-history-loading"><LoaderCircle className="spin" size={18} /><span>Loading conversation history…</span></div>
+            ) : visible.length ? visible.map(({ interaction, number, response }) => {
+              const isExpanded = expanded.has(interaction.id);
+              const isRequestExpanded = expandedRequests.has(interaction.id);
+              const isSelected = selected.has(interaction.id);
+              const requestCanExpand = interaction.userText.length > 180 || interaction.userText.split("\n").length > 3;
+              return (
+                <article
+                  key={interaction.id}
+                  ref={(node) => {
+                    if (node) cardRefs.current.set(interaction.id, node);
+                    else cardRefs.current.delete(interaction.id);
+                  }}
+                  className={`feed-history-interaction ${isSelected ? "is-selected" : ""}`}
+                >
+                  <label className="feed-history-interaction-select">
+                    <input type="checkbox" checked={isSelected} disabled={loading} onChange={() => onToggle(interaction.id)} />
+                    <span>Request {number}</span>
+                  </label>
+                  <div className="feed-history-request-preview">
+                    <strong>You</strong>
+                    <p className={isRequestExpanded ? "is-expanded" : ""}>{interaction.userText.trim() || "Request with attachments"}</p>
+                  </div>
+                  <div className="feed-history-response-preview">
+                    <strong>Agent response</strong>
+                    <p className={isExpanded ? "is-expanded" : ""}>{response || "No agent response before the next request."}</p>
+                  </div>
+                  <div className="feed-history-interaction-actions">
+                    <span className="feed-history-expand-actions">
+                      {requestCanExpand ? (
+                        <button type="button" onClick={() => toggleRequestExpanded(interaction.id)} aria-expanded={isRequestExpanded}>
+                          {isRequestExpanded ? "Collapse request" : "Show full request"}
+                        </button>
+                      ) : null}
+                      {response ? (
+                        <button type="button" onClick={() => toggleExpanded(interaction.id)} aria-expanded={isExpanded}>
+                          {isExpanded ? "Collapse response" : "Show full response"}
+                        </button>
+                      ) : null}
+                    </span>
+                    <button type="button" onClick={() => onJump(interaction.id)}>View in feed</button>
+                  </div>
+                </article>
+              );
+            }) : (
+              <div className="feed-history-empty">No requests or responses match “{query}”.</div>
+            )}
+          </div>
+        </div>
+
+        {error ? <div className="feed-history-modal-error" role="alert"><CircleAlert size={15} /> {error}</div> : null}
+        <footer className="feed-history-modal-foot">
+          <div className="feed-history-selection-copy" aria-live="polite">
+            <strong>{selected.size} request{selected.size === 1 ? "" : "s"} selected</strong>
+            <span>Kept in their original chronological order.</span>
+          </div>
+          <label className="feed-history-tool-toggle">
+            <input type="checkbox" checked={includeToolDetails} onChange={(event) => onIncludeToolDetails(event.target.checked)} />
+            Include tool calls
+          </label>
+          <ActionButton variant="secondary" size="small" onClick={onClose} disabled={creating}>Cancel</ActionButton>
+          <ActionButton variant="primary" size="small" disabled={!selected.size || creating || loading} onClick={onCreate} icon={creating ? <LoaderCircle className="spin" /> : <GitBranch />}>
+            Create feed
+          </ActionButton>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 /**
  * The right detail pane: the selected snippet's full thread. Streams its own SSE
  * (history is replayed on connect, so any snippet — live or long-finished — fills
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, onBack, onChanged }: {
+function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, selectHistoryInitially, historySelectionReturnFocus, onBack, onChanged, onCreated }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   models: FeedModelOption[];
   defaultModelLabel: string;
   defaultEffort: EffortSetting;
+  selectHistoryInitially: boolean;
+  historySelectionReturnFocus: HTMLButtonElement | null;
   onBack: () => void;
   onChanged: () => void;
+  onCreated: (id: string) => void;
 }) {
   const feedName = snippet.title || snippet.instruction || "Untitled";
   const [messages, setMessages] = useState<FeedMessage[]>([]);
@@ -566,6 +933,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const [workingDirectory, setWorkingDirectory] = useState<string | null>(null);
   const [openingWorkingDirectory, setOpeningWorkingDirectory] = useState(false);
   const [streamNonce, setStreamNonce] = useState(0);
+  const [selectingHistory, setSelectingHistory] = useState(selectHistoryInitially);
+  const [selectedInteractions, setSelectedInteractions] = useState<Set<string>>(() => new Set());
+  const [includeToolDetails, setIncludeToolDetails] = useState(false);
+  const [creatingFromHistory, setCreatingFromHistory] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
   const running = snippet.status === "running" || snippet.status === "queued";
   // Keep the stream effect's dependency array shape stable for Fast Refresh
   // while still reconnecting when an external action starts or ends a run.
@@ -720,6 +1092,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           pinnedToBottomRef.current = true;
           if (body) body.scrollTop = body.scrollHeight;
           replayingHistoryRef.current = false;
+          setHistoryReady(true);
           setAtBottom(true);
         });
       });
@@ -873,6 +1246,73 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
   const pendingCount = proposals.filter((p) => p.status === "pending").length;
   const hasStoredError = messages.some((message) => message.kind === "error");
+  const interactions = useMemo(
+    () => groupFeedInteractions(snippet.instruction, snippet.attachments, messages),
+    [messages, snippet.attachments, snippet.instruction],
+  );
+
+  function toggleInteraction(id: string) {
+    setSelectedInteractions((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function cancelHistorySelection() {
+    if (creatingFromHistory) return;
+    setSelectingHistory(false);
+    setSelectedInteractions(new Set());
+    setIncludeToolDetails(false);
+  }
+
+  function setVisibleInteractions(ids: string[], shouldSelect: boolean) {
+    setSelectedInteractions((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (shouldSelect) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  function jumpToInteraction(id: string) {
+    cancelHistorySelection();
+    pinnedToBottomRef.current = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const target = [...(bodyRef.current?.querySelectorAll<HTMLElement>("[data-interaction-id]") ?? [])]
+        .find((element) => element.dataset.interactionId === id);
+      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }));
+  }
+
+  async function createFromSelectedHistory() {
+    if (!selectedInteractions.size || creatingFromHistory) return;
+    setCreatingFromHistory(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippet.id}/fork`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interactionIds: [...selectedInteractions],
+          includeToolDetails,
+        }),
+      });
+      if (!response.ok) {
+        setError(await readError(response));
+        return;
+      }
+      const payload = await response.json() as { id: string };
+      onCreated(payload.id);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "The new feed could not be created.");
+    } finally {
+      setCreatingFromHistory(false);
+    }
+  }
 
   // Anchor each proposal to the assistant message that produced it, so it renders
   // inline in the thread instead of always pinned to the bottom. Only assistant
@@ -995,7 +1435,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           const openingText = snippet.instruction?.trim() ?? "";
           if (!openingText && openingAttachments.length === 0) return null;
           return (
-            <div className="feed-message feed-turn feed-turn-user">
+            <div className="feed-message feed-turn feed-turn-user" data-interaction-id={OPENING_INTERACTION_ID}>
               <span className="feed-turn-label">You</span>
               {openingText ? <MarkdownContent content={openingText} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
@@ -1081,7 +1521,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               const prose = messageAttachments.length && /^\(attached \d+ files?\)$/.test(rawProse.trim()) ? "" : rawProse;
               if (prose || messageAttachments.length) {
                 nodes.push(
-                  <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`}>
+                  <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`} data-interaction-id={message.role === "user" ? message.id : undefined}>
                     <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
                     {prose ? <MarkdownContent content={prose} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
                     <AttachmentChips snippetId={snippet.id} attachments={messageAttachments} />
@@ -1148,6 +1588,25 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           ) : undefined}
         />
       </footer>
+      {selectingHistory ? createPortal(
+        <FeedHistorySelectionModal
+          feedName={feedName}
+          interactions={interactions}
+          selected={selectedInteractions}
+          includeToolDetails={includeToolDetails}
+          creating={creatingFromHistory}
+          loading={!historyReady}
+          error={error}
+          returnFocus={historySelectionReturnFocus}
+          onToggle={toggleInteraction}
+          onSetVisible={setVisibleInteractions}
+          onIncludeToolDetails={setIncludeToolDetails}
+          onClose={cancelHistorySelection}
+          onCreate={() => void createFromSelectedHistory()}
+          onJump={jumpToInteraction}
+        />,
+        document.body,
+      ) : null}
     </section>
   );
 }
@@ -1160,6 +1619,7 @@ export default function FeedWorkspace() {
   const [ready, setReady] = useState(false);
   const [snippets, setSnippets] = useState<FeedSnippet[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [historySelectionRequest, setHistorySelectionRequest] = useState<{ id: string; nonce: number; returnFocus: HTMLButtonElement | null } | null>(null);
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -1172,7 +1632,7 @@ export default function FeedWorkspace() {
     if (saved >= FEED_SIDEBAR_MIN && saved <= FEED_SIDEBAR_MAX) setSidebarWidth(saved);
   }, []);
 
-  const startSidebarResize = useCallback((event: React.PointerEvent) => {
+  function startSidebarResize(event: React.PointerEvent) {
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = sidebarWidth;
@@ -1188,7 +1648,7 @@ export default function FeedWorkspace() {
     document.body.classList.add("is-resizing-column");
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, { once: true });
-  }, [sidebarWidth]);
+  }
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
   const [models, setModels] = useState<FeedModelOption[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
@@ -1198,17 +1658,17 @@ export default function FeedWorkspace() {
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
   const [githubReady, setGithubReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  // Sync outcomes are surfaced through the persistent sync log (below), so the
-  // transient notice is write-only: kept as a setter to clear/record state
-  // without rendering a second, duplicate banner.
-  const [, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [syncProgress, setSyncProgress] = useState(0);
+  // The current failure stays visible until dismissed or a later sync succeeds;
+  // the activity log below remains the durable history across reloads.
+  const [syncAlert, setSyncAlert] = useState<{ summary: string; details: string } | null>(null);
   const [syncLog, setSyncLog] = useState<SyncLogEntry[]>([]);
 
   useEffect(() => { setSyncLog(readSyncLog()); }, []);
 
-  const recordSync = useCallback((status: "success" | "error", summary: string) => {
+  const recordSync = useCallback((status: SyncLogEntry["status"], summary: string, details = "") => {
     setSyncLog((current) => {
-      const next = [{ id: crypto.randomUUID(), at: Date.now(), status, summary }, ...current].slice(0, 50);
+      const next = [{ id: crypto.randomUUID(), at: Date.now(), status, summary, details: details || undefined }, ...current].slice(0, 50);
       writeSyncLog(next);
       return next;
     });
@@ -1284,15 +1744,50 @@ export default function FeedWorkspace() {
 
   const syncGithub = useCallback(async () => {
     setSyncing(true);
-    setNotice(null);
+    setSyncProgress(0);
     try {
-      const response = await fetch("/api/feed/github/sync", { method: "POST" });
-      if (!response.ok) throw new Error(await readError(response));
-      // Read the body defensively: a stale/misrouted server can answer with an
-      // HTML error page, which would otherwise blow up JSON.parse with a cryptic
-      // "Unexpected token '<'" instead of a legible failure.
-      const data = (await response.json().catch(() => ({}))) as { counts?: Record<string, number>; truncated?: boolean };
-      const c = data.counts ?? {};
+      const totals: Record<string, number> = {};
+      let totalMutations = 0;
+      let truncated = false;
+      let pausedForMs = 0;
+
+      // GitHub has no bulk Issues endpoint. The server therefore checkpoints a
+      // small serial write batch and asks for another pass. Continue those
+      // passes here so one Sync action can drain a large feed backlog safely.
+      while (true) {
+        const response = await fetch("/api/feed/github/sync", { method: "POST" });
+        if (!response.ok) {
+          const failure = await readErrorInfo(response);
+          setSyncAlert(failure);
+          recordSync("error", failure.summary, failure.details);
+          return;
+        }
+        // Read the body defensively: a stale/misrouted server can answer with an
+        // HTML error page, which would otherwise blow up JSON.parse with a cryptic
+        // "Unexpected token '<'" instead of a legible failure.
+        const data = (await response.json().catch(() => ({}))) as {
+          counts?: Record<string, number>;
+          truncated?: boolean;
+          pending?: boolean;
+          pauseReason?: "batch" | "cooldown";
+          retryAfterMs?: number;
+          mutations?: number;
+        };
+        for (const [key, value] of Object.entries(data.counts ?? {})) {
+          totals[key] = (totals[key] ?? 0) + (Number.isFinite(value) ? value : 0);
+        }
+        totalMutations += typeof data.mutations === "number" && Number.isFinite(data.mutations) ? data.mutations : 0;
+        setSyncProgress(totalMutations);
+        truncated ||= Boolean(data.truncated);
+        if (!data.pending) break;
+        if (data.pauseReason === "cooldown") {
+          pausedForMs = Math.max(1_000, data.retryAfterMs ?? 60_000);
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.max(1_000, data.retryAfterMs ?? 1_000)));
+      }
+
+      const c = totals;
       const parts = [
         c.issuesCreated ? `${c.issuesCreated} issue${c.issuesCreated === 1 ? "" : "s"} created` : "",
         c.commentsPosted ? `${c.commentsPosted} posted` : "",
@@ -1305,17 +1800,24 @@ export default function FeedWorkspace() {
         c.proposalsUpdated ? `${c.proposalsUpdated} change status${c.proposalsUpdated === 1 ? "" : "es"} updated` : "",
         c.feedsUnlinked ? `${c.feedsUnlinked} feed${c.feedsUnlinked === 1 ? "" : "s"} relinked to the new repo` : "",
       ].filter(Boolean);
-      const base = parts.length ? `Synced: ${parts.join(", ")}` : "Synced, already up to date";
-      const message = data.truncated ? `${base} (more remain, sync again)` : base;
-      setNotice({ tone: "success", message });
-      recordSync("success", message);
+      const base = parts.length
+        ? `Synced: ${parts.join(", ")}`
+        : pausedForMs ? "No items were sent in this pass" : "Synced, already up to date";
+      setSyncAlert(null);
+      if (pausedForMs) {
+        recordSync("paused", `${base}. More items remain; sync again in ${formatDuration(pausedForMs)}.`);
+      } else {
+        recordSync("success", truncated ? `${base} (more remain, sync again)` : base);
+      }
       await loadSnippets();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "GitHub sync failed.";
-      setNotice({ tone: "error", message });
-      recordSync("error", message);
+      const details = error instanceof Error ? error.message : "No diagnostic information was returned.";
+      const summary = "Unable to reach the GitHub sync service. Check your connection and try again.";
+      setSyncAlert({ summary, details });
+      recordSync("error", summary, details);
     } finally {
       setSyncing(false);
+      setSyncProgress(0);
     }
   }, [loadSnippets, recordSync]);
 
@@ -1546,6 +2048,13 @@ export default function FeedWorkspace() {
     }
   }
 
+  function selectSnippetHistory(snippet: FeedSnippet, returnFocus: HTMLButtonElement | null) {
+    if (snippet.status === "running" || snippet.status === "queued") return;
+    setComposing(false);
+    setSelectedId(snippet.id);
+    setHistorySelectionRequest((current) => ({ id: snippet.id, nonce: (current?.nonce ?? 0) + 1, returnFocus }));
+  }
+
   async function deleteSnippet(snippet: FeedSnippet) {
     if (!window.confirm(`Delete "${snippet.title || snippet.instruction || "this feed"}"? This cannot be undone.`)) return;
     const response = await fetch(`/api/feed/snippets/${snippet.id}`, { method: "DELETE" });
@@ -1614,6 +2123,7 @@ export default function FeedWorkspace() {
                   onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
                   onRename={() => void renameSnippet(snippet)}
                   onFork={() => void forkSnippet(snippet)}
+                  onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
                   onExport={() => void exportSnippet(snippet)}
                   onCollapse={() => void toggleCollapse(snippet)}
                   onDelete={() => void deleteSnippet(snippet)}
@@ -1634,6 +2144,7 @@ export default function FeedWorkspace() {
                       onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
                       onRename={() => void renameSnippet(snippet)}
                       onFork={() => void forkSnippet(snippet)}
+                      onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
                       onExport={() => void exportSnippet(snippet)}
                       onCollapse={() => void toggleCollapse(snippet)}
                       onDelete={() => void deleteSnippet(snippet)}
@@ -1650,10 +2161,10 @@ export default function FeedWorkspace() {
             <div className="sync-card">
               <span>
                 <strong>{libraryName}</strong>
-                <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
+                <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : syncLog[0].status === "paused" ? "Sync paused" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
               </span>
               <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} kbd={`${modKey}S`}>
-                {syncing ? "Syncing…" : "Sync"}
+                {syncing ? syncProgress ? `Syncing ${syncProgress}…` : "Syncing…" : "Sync"}
               </ActionButton>
             </div>
           </div>
@@ -1672,14 +2183,22 @@ export default function FeedWorkspace() {
       <div className="feed-detail-pane">
         {showDetail && selected ? (
           <FeedDetail
-            key={selected.id}
+            key={`${selected.id}:${historySelectionRequest?.id === selected.id ? historySelectionRequest.nonce : 0}`}
             snippet={selected}
             library={library}
             models={models}
             defaultModelLabel={defaultModelLabel}
             defaultEffort={defaultEffort}
+            selectHistoryInitially={historySelectionRequest?.id === selected.id}
+            historySelectionReturnFocus={historySelectionRequest?.id === selected.id ? historySelectionRequest.returnFocus : null}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
+            onCreated={(id) => {
+              void loadSnippets().then(() => {
+                setComposing(false);
+                setSelectedId(id);
+              });
+            }}
           />
         ) : (
           <>
@@ -1723,6 +2242,7 @@ export default function FeedWorkspace() {
           </>
         )}
       </div>
+      {syncAlert ? <SyncFailureToast failure={syncAlert} onDismiss={() => setSyncAlert(null)} /> : null}
     </main>
   );
 }

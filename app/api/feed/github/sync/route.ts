@@ -15,7 +15,9 @@ import {
   patchIssueTitle,
   postComment,
   uploadAttachment,
+  createGitHubSyncPolicy,
   GitHubError,
+  GitHubSyncDeferred,
   type GitHubConfig,
 } from "@/app/lib/github-sync";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
@@ -132,7 +134,11 @@ export async function POST(): Promise<Response> {
   if (!repo || !token) {
     return Response.json({ error: "Set the GitHub repo and access token in Settings → Integrations first." }, { status: 400 });
   }
-  const config: GitHubConfig = { repo, token };
+  // A large first sync can require hundreds of issue/comment mutations. Keep
+  // each HTTP pass bounded; every completed mutation is checkpointed below, so
+  // the client can immediately request the next pass without duplicating it.
+  const syncPolicy = createGitHubSyncPolicy();
+  const config: GitHubConfig = { repo, token, syncPolicy };
 
   // Refuse to start while another sync is running (see syncInProgress above).
   if (syncInProgress) {
@@ -174,7 +180,7 @@ export async function POST(): Promise<Response> {
     // 0b. Drain pending GitHub actions (e.g. closing the issue of a deleted
     //     feed) BEFORE reading issues, so a just-deleted feed's issue is already
     //     closed and the inbound pass won't recreate it from an open issue.
-    await flushGithubOutbox();
+    await flushGithubOutbox(config);
 
     // 1. OUTBOUND — ensure an issue per feed, push local renames, mirror
     //    unposted local messages. Runs over all feeds (not the incremental
@@ -479,10 +485,28 @@ export async function POST(): Promise<Response> {
     if (!truncated && !deferredInbound) {
       writeGithubLastSyncedAt(startedAt);
     }
-    return Response.json({ ok: true, counts, truncated });
+    return Response.json({ ok: true, counts, truncated, pending: false, mutations: syncPolicy.mutations });
   } catch (error) {
+    if (error instanceof GitHubSyncDeferred) {
+      return Response.json({
+        ok: true,
+        counts,
+        pending: true,
+        pauseReason: error.reason,
+        retryAfterMs: error.retryAfterMs,
+        mutations: syncPolicy.mutations,
+      });
+    }
     const message = error instanceof GitHubError || error instanceof Error ? error.message : "GitHub sync failed.";
-    return Response.json({ error: message }, { status: 400 });
+    const details = error instanceof GitHubError ? error.details : "";
+    const status = error instanceof GitHubError && error.status >= 400 && error.status <= 599
+      ? error.status
+      : error instanceof GitHubError ? 400 : 500;
+    return Response.json({
+      error: message,
+      details: details || undefined,
+      retryAfterMs: error instanceof GitHubError && error.retryAfterMs > 0 ? error.retryAfterMs : undefined,
+    }, { status });
   } finally {
     syncInProgress = false;
   }

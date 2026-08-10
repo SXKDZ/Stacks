@@ -7,6 +7,7 @@ import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/fee
 import { parseWith } from "@/app/lib/schemas/parse";
 import { effortSetting } from "@/app/lib/effort";
 import { FeedReplyRequestSchema } from "@/app/lib/schemas/requests";
+import { buildFeedTranscript } from "@/app/lib/feed-history";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -115,6 +116,22 @@ export async function POST(
   const appliedSummaries = proposals.filter((p) => p.status === "applied").map((p) => proposalSummary(p.operation));
   const rejectedSummaries = proposals.filter((p) => p.status === "rejected").map((p) => proposalSummary(p.operation));
 
+  // A fork has no native Claude session. Capture its copied history BEFORE the
+  // current reply is inserted, otherwise the fresh-session prompt includes the
+  // same user turn once in the transcript and again as the continuation.
+  const forkTranscript = snippet.sessionId
+    ? ""
+    : buildFeedTranscript(
+        snippet.instruction,
+        database
+          .select()
+          .from(feedMessages)
+          .where(eq(feedMessages.snippetId, id))
+          .orderBy(asc(feedMessages.createdAt))
+          .all(),
+        snippet.historyMode === "tools",
+      );
+
   const displayReply = reply || `(attached ${attachments.length} file${attachments.length === 1 ? "" : "s"})`;
   database
     .insert(feedMessages)
@@ -128,16 +145,7 @@ export async function POST(
   } else {
     // No session yet (a forked thread): start a fresh session seeded with the
     // copied conversation as a transcript so the branch keeps its context.
-    const history = database
-      .select()
-      .from(feedMessages)
-      .where(eq(feedMessages.snippetId, id))
-      .orderBy(asc(feedMessages.createdAt))
-      .all()
-      .filter((message) => message.kind === "text" || message.kind === "result")
-      .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
-      .join("\n\n");
-    const prompt = buildForkPrompt({ reply, transcript: history, attachments });
+    const prompt = buildForkPrompt({ reply, transcript: forkTranscript, attachments });
     void runFeedAgent({ snippetId: id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
   }
 

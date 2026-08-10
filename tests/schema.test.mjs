@@ -705,6 +705,16 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   // A manual "Sync now" affordance exists, gated on being configured.
   assert.match(feed, /githubReady/);
   assert.match(feed, /\/api\/feed\/github\/sync/);
+  // Large libraries are drained as resumable write batches. GitHub mutations
+  // are globally serial, spaced by its recommended one-second interval, and
+  // the client keeps requesting checkpointed passes instead of bursting them.
+  assert.match(client, /const MIN_MUTATION_INTERVAL_MS = 1_000/);
+  assert.match(client, /createGitHubSyncPolicy/);
+  assert.match(client, /queueMutation/);
+  assert.match(sync, /error instanceof GitHubSyncDeferred/);
+  assert.match(sync, /pauseReason: error\.reason/);
+  assert.match(feed, /data\.pauseReason === "cooldown"/);
+  assert.match(feed, /while \(true\)[\s\S]*?fetch\("\/api\/feed\/github\/sync"/);
   // Collapsing a feed closes its issue on sync (reopened when expanded), tracked
   // by a 3-way base so the API is only called on a real state change.
   assert.match(client, /patchIssueState/);
@@ -744,7 +754,7 @@ test("deleting a mirrored feed closes its issue via a durable, repo-scoped outbo
   assert.match(deleteRoute, /void flushGithubOutbox\(\)/);
   // Sync drains the outbox BEFORE the inbound pass, so a deleted feed's issue is
   // already closed and won't be recreated from an open issue.
-  assert.match(sync, /await flushGithubOutbox\(\)/);
+  assert.match(sync, /await flushGithubOutbox\(config\)/);
   // Startup also flushes, so a delete made offline still reaches GitHub.
   assert.match(boot, /flushGithubOutbox/);
 });

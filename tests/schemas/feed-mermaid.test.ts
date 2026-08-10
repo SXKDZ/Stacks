@@ -96,6 +96,18 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
   assert.match(styles, /tr\.is-row-resize-highlight::after\s*\{[^}]*left:\s*-1px[^}]*right:\s*-1px/s);
   assert.match(styles, /\.mermaid-visualization-svg,[^}]*\.feed-image-visualization\s*\{[^}]*transition-property:\s*width, height/s);
   assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*overflow-x:\s*clip/s);
+  assert.match(styles, /\.feed-rich-table-scroll\s*\{[^}]*border:\s*1px solid var\(--line-strong\)[^}]*border-radius:\s*var\(--radius-md\)/s);
+  assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*border:\s*1px solid var\(--line-strong\)[^}]*border-radius:\s*var\(--radius-md\)/s);
+  assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*flex:\s*0 1 auto/s);
+  assert.match(styles, /\.feed-table-visualization-scroll:has\(\.feed-table-row:last-child\.is-row-resize-highlight\)\s*\{[^}]*border-block-end-color:\s*var\(--brand-blue\)/s);
+  assert.match(styles, /\.feed-visualization-table tbody tr:last-child > td\.is-column-resize-highlight::after\s*\{[^}]*block-size:\s*calc\(100% \+ 1px\)/s);
+  assert.match(styles, /\.markdown-content \.feed-rich-table :is\(th, td\)\s*\{[^}]*border-block-end:\s*1px solid var\(--line-strong\)[^}]*border-inline-end:\s*1px solid var\(--line-strong\)/s);
+  assert.match(styles, /\.feed-visualization-table tbody tr:last-child > \*\s*\{[^}]*border-block-end:\s*0/s);
+  assert.match(visualization, /<span>Line numbers<\/span>/);
+  assert.match(visualization, /<span>Wrap lines<\/span>/);
+  assert.match(visualization, /showCodeLineNumbers=\{showLineNumbers\}/);
+  assert.match(markdown, /function HighlightedCodeLines/);
+  assert.match(styles, /\.feed-code-visualization \.code-wrap-lines pre,[^}]*white-space:\s*pre-wrap/s);
   assert.match(visualization, /const availableWidth = Math\.max\(1, viewport\.clientWidth - viewportInsets\.horizontal - canvasInsets\.horizontal\)/);
   assert.match(styles, /\.feed-table-row:last-child \.feed-table-row-resize/);
   assert.match(styles, /\.mermaid-visualization-viewport\s*\{[^}]*min-width:\s*0[^}]*width:\s*100%/s);

@@ -96,6 +96,12 @@ export const FeedReplyRequestSchema = z.object({
   effort: z.string().optional(),
 });
 
+/** Omitted interactionIds preserves the existing full-feed fork operation. */
+export const FeedForkRequestSchema = z.object({
+  interactionIds: z.array(z.string().trim().min(1)).min(1).max(500).optional(),
+  includeToolDetails: z.boolean().prefault(false),
+});
+
 /** The composer's JSON form (the multipart form is handled separately). */
 export const FeedSnippetCreateSchema = z.object({
   instruction: z.string().optional(),
