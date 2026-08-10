@@ -11,10 +11,11 @@ import {
   selectFeedHistory,
   type FeedHistoryMessage,
 } from "../../app/lib/feed-history";
+import { feedMarkdown } from "../../app/lib/feed-export";
 
 function message(
   id: string,
-  role: "user" | "assistant" | "system",
+  role: "user" | "assistant" | "system" | "tool",
   kind: string,
   content: string,
   extras: Partial<FeedHistoryMessage> = {},
@@ -26,7 +27,7 @@ const history: FeedHistoryMessage[] = [
   message("a1", "assistant", "text", "Opening answer"),
   message("u2", "user", "text", "Second question", { attachments: '[{"kind":"upload","label":"notes.txt","relativePath":"attachments/notes.txt"}]' }),
   message("t2", "assistant", "tool_use", "Read file", { toolUseId: "tool-2" }),
-  message("r2", "assistant", "tool_result", "file contents", { toolUseId: "tool-2" }),
+  message("r2", "tool", "tool_result", "file contents", { toolUseId: "tool-2" }),
   message("a2", "assistant", "result", "Second answer"),
   message("u3", "user", "text", "Third question"),
   message("a3", "assistant", "result", "Third answer"),
@@ -106,6 +107,27 @@ test("fresh-session transcript includes paired tool details when the feed reques
   assert.match(transcript, /Assistant tool request: Read file/);
   assert.match(transcript, /Tool result: file contents/);
   assert.ok(transcript.indexOf("Assistant tool request") < transcript.indexOf("Tool result"));
+});
+
+test("Markdown export starts with the full opening request and preserves every event", () => {
+  const markdown = feedMarkdown({
+    title: "Selected history",
+    instruction: "Opening request\n\nRead both papers.",
+    messages: [
+      message("a1", "assistant", "text", "Opening answer"),
+      message("u2", "user", "text", "Follow-up request"),
+      message("t2", "assistant", "tool_use", "Bash {\"command\":\"echo `ok`\"}"),
+      message("r2", "tool", "tool_result", "`ok`", { toolUseId: "tool-2" }),
+      message("e2", "system", "error", "Turn failed"),
+    ],
+  });
+
+  assert.ok(markdown.indexOf("**You:** Opening request") < markdown.indexOf("**Agent:** Opening answer"));
+  assert.match(markdown, /Opening request\n\nRead both papers\./);
+  assert.match(markdown, /\*\*You:\*\* Follow-up request/);
+  assert.match(markdown, /\*\*Agent tool request:\*\*/);
+  assert.match(markdown, /\*\*Tool result:\*\*/);
+  assert.match(markdown, /\*\*Error:\*\* Turn failed/);
 });
 
 test("history attachment cloning copies staged uploads but keeps papers as references", () => {

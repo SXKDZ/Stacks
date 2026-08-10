@@ -16,6 +16,7 @@ import { ActionButton, Scrim } from "@/app/components/ui/controls";
 import { effortSetting, type EffortSetting } from "@/app/lib/effort";
 import { isClaudeAgentModel } from "@/app/lib/feed-model";
 import { coalesceLegacyAgentErrors, splitFeedError } from "@/app/lib/feed-errors";
+import { feedMarkdown } from "@/app/lib/feed-export";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 import { groupFeedInteractions, OPENING_INTERACTION_ID, type FeedInteraction } from "@/app/lib/feed-history";
 
@@ -1457,6 +1458,32 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               }
             }
             const claimed = new Set<string>();
+            let pendingToolNodes: ReactNode[] = [];
+            let firstPendingToolId = "";
+            const addToolNode = (id: string, node: ReactNode) => {
+              if (!pendingToolNodes.length) firstPendingToolId = id;
+              pendingToolNodes.push(node);
+            };
+            const flushToolNodes = () => {
+              if (!pendingToolNodes.length) return;
+              if (pendingToolNodes.length === 1) {
+                nodes.push(pendingToolNodes[0]);
+              } else {
+                const count = pendingToolNodes.length;
+                nodes.push(
+                  <details key={`tool-group-${firstPendingToolId}`} className="feed-tool-group">
+                    <summary>
+                      <ChevronRight className="feed-tool-group-chevron" size={14} />
+                      <Wrench size={13} />
+                      <span>{count} tool operations</span>
+                    </summary>
+                    <div className="feed-tool-group-items">{pendingToolNodes}</div>
+                  </details>,
+                );
+              }
+              pendingToolNodes = [];
+              firstPendingToolId = "";
+            };
             for (let i = 0; i < displayMessages.length; i += 1) {
               const message = displayMessages[i];
               if (message.kind === "tool_use") {
@@ -1475,7 +1502,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 const space = message.content.indexOf(" ");
                 const toolName = space === -1 ? message.content : message.content.slice(0, space);
                 const toolInput = space === -1 ? "" : message.content.slice(space + 1);
-                nodes.push(
+                addToolNode(message.id,
                   <details key={message.id} className="feed-tool-call">
                     <summary><Wrench size={12} /> <span>{toolName}</span></summary>
                     <div className="feed-tool-io">
@@ -1492,7 +1519,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 if (claimed.has(message.id)) {
                   continue;
                 }
-                nodes.push(
+                addToolNode(message.id,
                   <details key={message.id} className="feed-tool-call">
                     <summary><Wrench size={12} /> <span>tool result</span></summary>
                     <div className="feed-tool-io"><span className="feed-tool-tag">Result</span>{renderToolContent(message.content, snippet.id, feedName)}</div>
@@ -1500,6 +1527,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 );
                 continue;
               }
+              flushToolNodes();
               if (message.kind === "error") {
                 nodes.push(
                   <div key={message.id} className="feed-message feed-message-error">
@@ -1544,6 +1572,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 nodes.push(renderProposals(anchored, `props-${message.id}`));
               }
             }
+            flushToolNodes();
             return nodes;
           })()}
           {running ? (
@@ -2067,17 +2096,14 @@ export default function FeedWorkspace() {
   async function exportSnippet(snippet: FeedSnippet) {
     const response = await fetch(`/api/feed/snippets/${snippet.id}`, { cache: "no-store" });
     if (!response.ok) return;
-    const data = await response.json() as { messages: FeedMessage[] };
-    const title = snippet.title || snippet.instruction || "feed";
-    const lines = [`# ${title}`, ""];
-    for (const message of data.messages) {
-      if (message.kind === "text" || message.kind === "result") {
-        lines.push(`**${message.role === "user" ? "You" : "Agent"}:** ${message.content}`, "");
-      } else if (message.kind === "tool_use") {
-        lines.push(`> \`${message.content}\``, "");
-      }
-    }
-    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const data = await response.json() as { snippet: FeedSnippet; messages: FeedMessage[] };
+    const title = data.snippet.title || data.snippet.instruction || "feed";
+    const markdown = feedMarkdown({
+      title,
+      instruction: data.snippet.instruction,
+      messages: data.messages,
+    });
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;

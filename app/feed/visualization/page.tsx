@@ -137,7 +137,7 @@ function ZoomableViewer({ visualization, mermaidSvg }: {
       const now = event.timeStamp;
       if (previous && now - previous.time <= 400 && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= 16) {
         lastPanTapRef.current = null;
-        toggleFit();
+        advanceDoubleClickZoom({ clientX: event.clientX, clientY: event.clientY });
       } else {
         lastPanTapRef.current = { time: now, x: event.clientX, y: event.clientY };
       }
@@ -147,11 +147,6 @@ function ZoomableViewer({ visualization, mermaidSvg }: {
   const fit = useCallback(() => {
     if (baseSize) fitSize(baseSize);
   }, [baseSize, fitSize]);
-
-  const toggleFit = useCallback(() => {
-    if (Math.abs(scale - 1) < 0.01) fit();
-    else setScale(1);
-  }, [fit, scale]);
 
   const zoomBy = useCallback((factor: number, anchor?: { clientX: number; clientY: number }) => {
     const viewport = viewportRef.current;
@@ -171,6 +166,16 @@ function ZoomableViewer({ visualization, mermaidSvg }: {
       return next;
     });
   }, []);
+
+  const advanceDoubleClickZoom = useCallback((anchor: { clientX: number; clientY: number }) => {
+    if (scale < 0.99) {
+      zoomBy(1 / scale, anchor);
+    } else if (Math.abs(scale - 1) < 0.01) {
+      zoomBy(1.2, anchor);
+    } else {
+      fit();
+    }
+  }, [fit, scale, zoomBy]);
 
   const handleWheel = (event: ReactWheelEvent<HTMLElement>) => {
     if (!event.ctrlKey && !event.metaKey) return;
