@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("long feeds hydrate once, render a bounded tail, and defer hidden tool bodies", async () => {
-  const [route, feed] = await Promise.all([
+test("long feeds hydrate once, render bounded work, and retain the full history chooser", async () => {
+  const [route, feed, historyStyles] = await Promise.all([
     readFile(new URL("../../app/api/feed/snippets/[id]/events/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/styles/feed-history.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(route, /controller\.enqueue\(frame\("snapshot", \{/);
@@ -26,7 +27,17 @@ test("long feeds hydrate once, render a bounded tail, and defer hidden tool bodi
   assert.match(feed, /const FeedToolCall = memo/);
   assert.match(feed, /const FeedToolGroup = memo/);
   assert.match(feed, /\{expanded \? \([\s\S]*renderToolContent\(operation\.result/s);
-  assert.match(feed, /activeRecord \? \(\(\) =>/);
-  assert.doesNotMatch(feed, /visible\.length \? visible\.map\(\(\{ interaction, number, response \}\)/);
+  assert.match(feed, /visible\.length \? visible\.map\(\(\{ interaction, number, response \}\)/);
+  assert.doesNotMatch(feed, /const activeRecord = visible\.find/);
+  assert.match(feed, /cappedHistoryPreview\(response, FEED_HISTORY_RESPONSE_PREVIEW_LENGTH\)/);
+  assert.match(feed, /window\.matchMedia\("\(prefers-reduced-motion: reduce\)"\)/);
+  assert.match(feed, /const FEED_HISTORY_JUMP_DURATION_MS = 260/);
+  assert.match(feed, /\(time - startTime\) \/ FEED_HISTORY_JUMP_DURATION_MS/);
+  assert.match(feed, /historyScrollFrameRef\.current = requestAnimationFrame\(animate\)/);
+  assert.match(feed, /pane\.addEventListener\("wheel", cancelAnimatedScroll/);
+  assert.match(feed, /const paneTop = pane\.getBoundingClientRect\(\)\.top/);
+  assert.match(feed, /Math\.max\(0, pane\.scrollTop \+ cardTop - paneTop\)/);
+  assert.doesNotMatch(feed, /interactionCardRefs\.current\.get\(id\)\?\.scrollIntoView/);
+  assert.doesNotMatch(historyStyles, /content-visibility:\s*auto/);
   assert.match(feed, /\{loading \? \(\s*<div className="feed-history-loading"/s);
 });
