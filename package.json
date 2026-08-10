@@ -1,6 +1,6 @@
 {
   "name": "stacks",
-  "version": "0.3.7",
+  "version": "0.4.0",
   "private": true,
   "description": "A modern research library and AI reading workspace inspired by PaperCLI.",
   "engines": {
@@ -25,6 +25,7 @@
     "katex": "^0.16.47",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.468.0",
+    "mermaid": "^11.16.1",
     "next": "16.2.6",
     "playwright": "^1.61.1",
     "react": "19.2.6",

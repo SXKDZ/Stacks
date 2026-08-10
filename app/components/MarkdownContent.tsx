@@ -1,11 +1,13 @@
 "use client";
 
-import { memo } from "react";
+import { Children, isValidElement, memo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { FeedCodeBlock, FeedImage, FeedTable } from "@/app/components/FeedRichContent";
+import { MermaidDiagram } from "@/app/components/MermaidDiagram";
 
 function normalizeLatexLists(source: string): string {
   let normalized = source;
@@ -53,7 +55,26 @@ function normalizeLatexDelimiters(source: string): string {
 // normalization pass, so it is comparatively expensive. Memoize on the
 // primitive props so an unrelated parent re-render (e.g. typing in the feed
 // search box) never re-parses an unchanged thread.
-export const MarkdownContent = memo(function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
+function mermaidSource(children: ReactNode): string | null {
+  const child = Children.toArray(children)[0];
+  if (!isValidElement<{ className?: string; children?: ReactNode }>(child)) return null;
+  if (!child.props.className?.split(/\s+/).includes("language-mermaid")) return null;
+  return String(child.props.children ?? "").replace(/\n$/, "");
+}
+
+export const MarkdownContent = memo(function MarkdownContent({
+  content,
+  className = "",
+  enableFeedRichContent = false,
+  feedId,
+  feedName,
+}: {
+  content: string;
+  className?: string;
+  enableFeedRichContent?: boolean;
+  feedId?: string;
+  feedName?: string;
+}) {
   return (
     <div className={`markdown-content ${className}`.trim()}>
       <ReactMarkdown
@@ -64,6 +85,21 @@ export const MarkdownContent = memo(function MarkdownContent({ content, classNam
           a: ({ href, children, ...props }) => (
             <a href={href} target="_blank" rel="noreferrer" {...props}>{children}</a>
           ),
+          pre: ({ children, node, ...props }) => {
+            void node;
+            const source = enableFeedRichContent ? mermaidSource(children) : null;
+            if (source !== null && feedId) return <MermaidDiagram source={source} feedId={feedId} feedName={feedName ?? "AI feed"} />;
+            if (enableFeedRichContent && feedId) return <FeedCodeBlock feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedCodeBlock>;
+            return <pre {...props}>{children}</pre>;
+          },
+          table: ({ children, node, ...props }) => {
+            void node;
+            return enableFeedRichContent && feedId ? <FeedTable feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedTable> : <table {...props}>{children}</table>;
+          },
+          img: ({ node, alt = "", ...props }) => {
+            void node;
+            return enableFeedRichContent && feedId ? <FeedImage feedId={feedId} feedName={feedName ?? "AI feed"} alt={alt} {...props} /> : <img alt={alt} {...props} />;
+          },
         }}
       >
         {normalizeLatexDelimiters(content)}

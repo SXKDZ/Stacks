@@ -48,7 +48,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import type { AriaAttributes, ChangeEvent, Dispatch, DragEvent as ReactDragEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from "react";
+import type { ChangeEvent, Dispatch, DragEvent as ReactDragEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { readError } from "@/app/lib/http";
@@ -60,6 +60,7 @@ import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks, type Ta
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, Select, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
+import { cycleTableSort, SortableTableHeader, useResizableColumns, type TableSort } from "@/app/components/ui/ResizableTable";
 import { useTheme } from "@/app/lib/use-theme";
 import {
   downloadReferences,
@@ -195,148 +196,6 @@ const defaultVenueColumnWidths: Record<VenueColumnKey, number> = {
   papers: 10,
   latest: 10,
 };
-
-/** A table's sort state: which column, and which way. */
-interface TableSort<Key extends string> {
-  key: Key;
-  direction: "asc" | "desc";
-}
-
-/**
- * Cycle one column of a sortable table: first click sorts by `firstDirection`,
- * second click reverses it, third returns to the table's default order.
- *
- * The third step matters because the default order (e.g. "most recently added")
- * usually has no column of its own, so without it the user can never get back
- * to how the table looked before they touched a header.
- */
-function cycleTableSort<Key extends string>(
-  current: TableSort<Key>,
-  key: Key,
-  fallback: TableSort<Key>,
-  descendingFirst: (key: Key) => boolean,
-): TableSort<Key> {
-  const firstDirection: "asc" | "desc" = descendingFirst(key) ? "desc" : "asc";
-  if (current.key !== key) {
-    return { key, direction: firstDirection };
-  }
-  if (current.direction === firstDirection) {
-    return { key, direction: firstDirection === "asc" ? "desc" : "asc" };
-  }
-  return fallback;
-}
-
-/**
- * Per-column widths for a resizable table, kept as PROPORTIONAL SHARES of the
- * table's resizable area and persisted per table in localStorage.
- *
- * Shares rather than pixels because the table always fits its pane: there is a
- * fixed amount of width to divide, so widening one column necessarily narrows its
- * neighbours, and the layout stays correct when the window resizes. `minimums`
- * are still expressed in pixels (that is how readability is judged) and are
- * converted into share space per drag.
- *
- * Two things this has to get right, both of which were wrong before:
- *  - the dragged edge must follow the cursor 1:1, which means the shares of the
- *    resizable columns must sum to a constant instead of being renormalized;
- *  - a column's narrowest width must not depend on which of its two edges was
- *    grabbed, which means every neighbour's pixel minimum is enforced during the
- *    drag, and no column carries an extra ratio cap of its own.
- */
-function useResizableColumns<Key extends string>(
-  storageKey: string,
-  defaults: Record<Key, number>,
-  minimums: Record<Key, number>,
-  /** The columns that carry a drag handle. Others are sized by CSS. */
-  resizableKeys: Key[] = Object.keys(defaults) as Key[],
-) {
-  const [widths, setWidths] = useState<Record<Key, number>>(defaults);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      try {
-        const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as Partial<Record<Key, number>> | null;
-        if (saved && Object.values(saved).every((value) => typeof value === "number" && Number.isFinite(value) && value > 0)) {
-          setWidths((current) => ({ ...current, ...saved }));
-        }
-      } catch {
-        // Invalid browser preferences fall back to the balanced default widths.
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [storageKey]);
-
-  function resizeColumn(event: ReactPointerEvent<HTMLButtonElement>, key: Key) {
-    event.preventDefault();
-    event.stopPropagation();
-    const header = event.currentTarget.closest("th");
-    const table = event.currentTarget.closest("table");
-    if (!header || !table) {
-      return;
-    }
-    const startX = event.clientX;
-    const startWidth = header.getBoundingClientRect().width;
-    // The pixel span the resizable columns divide between them.
-    const resizableWidth = [...table.querySelectorAll("th.is-resizable")]
-      .reduce((total, cell) => total + cell.getBoundingClientRect().width, 0)
-      || table.getBoundingClientRect().width;
-    const others = resizableKeys.filter((candidate) => candidate !== key);
-    const neighbourFloor = others.reduce((total, candidate) => total + minimums[candidate], 0);
-    // Grow until the neighbours are at their minimums, shrink to this column's own.
-    const ceiling = Math.max(minimums[key], resizableWidth - neighbourFloor);
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const targetWidth = Math.min(ceiling, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
-      setWidths((current) => {
-        const pool = resizableKeys.reduce((total, candidate) => total + current[candidate], 0);
-        if (pool <= 0) {
-          return current;
-        }
-        // Pixel minimums in the same units as the stored shares.
-        const floorFor = (candidate: Key) => (minimums[candidate] / resizableWidth) * pool;
-        const othersFloor = others.reduce((total, candidate) => total + floorFor(candidate), 0);
-        const share = Math.min(
-          Math.max(floorFor(key), (targetWidth / resizableWidth) * pool),
-          Math.max(floorFor(key), pool - othersFloor),
-        );
-        const next = { ...current, [key]: Number(share.toFixed(3)) } as Record<Key, number>;
-        // Hand the remainder to the neighbours: each keeps its floor, and what is
-        // left over is split by how much slack each currently has. The shares
-        // therefore still sum to `pool`, which is what keeps the edge under the
-        // cursor and the table inside its pane.
-        const surplus = Math.max(0, pool - share - othersFloor);
-        const slackTotal = others.reduce((total, candidate) => total + Math.max(0, current[candidate] - floorFor(candidate)), 0);
-        for (const candidate of others) {
-          const slack = Math.max(0, current[candidate] - floorFor(candidate));
-          const extra = slackTotal > 0 ? (slack / slackTotal) * surplus : surplus / (others.length || 1);
-          next[candidate] = Number((floorFor(candidate) + extra).toFixed(3));
-        }
-        window.localStorage.setItem(storageKey, JSON.stringify(next));
-        return next;
-      });
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      document.body.classList.remove("is-resizing-column");
-    };
-    document.body.classList.add("is-resizing-column");
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-  }
-
-  function resetColumnWidth(event: ReactMouseEvent<HTMLButtonElement>, key: Key) {
-    event.preventDefault();
-    event.stopPropagation();
-    setWidths((current) => {
-      const next = { ...current, [key]: defaults[key] };
-      window.localStorage.setItem(storageKey, JSON.stringify(next));
-      return next;
-    });
-  }
-
-  return { widths, resizeColumn, resetColumnWidth };
-}
 
 function providerLabel(provider: DiscoveryProvider): string {
   return discoveryProviders.find((item) => item.id === provider)?.label ?? provider;
@@ -1911,10 +1770,10 @@ function LibraryView({
                     <SelectionBox checked={Boolean(pagedPapers.length) && pagedPapers.every((paper) => selected.includes(paper.id))} />
                   </button>
                 </th>
-                <SortablePaperHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
-                <SortablePaperHeader label="Paper" sortKey="title" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-                <SortablePaperHeader label="Venue" sortKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-                <SortablePaperHeader label="Year" sortKey="year" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
+                <SortableTableHeader label="Status" columnKey="status" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+                <SortableTableHeader label="Paper" columnKey="title" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+                <SortableTableHeader label="Venue" columnKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+                <SortableTableHeader label="Year" columnKey="year" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
               </tr>
             </thead>
             <tbody>
@@ -2034,37 +1893,6 @@ const DEFAULT_PAPER_SORT: PaperSort = { key: "recent", direction: "desc" };
 const DEFAULT_AUTHOR_SORT: TableSort<AuthorColumnKey> = { key: "author", direction: "asc" };
 const DEFAULT_VENUE_SORT: TableSort<VenueColumnKey> = { key: "venue", direction: "asc" };
 
-function SortablePaperHeader({ label, sortKey, sort, onSort, onResize, onResetWidth, resizable = true }: {
-  label: string;
-  sortKey: PaperColumnKey;
-  sort: { key: "recent" | "title" | "venue" | "year" | "status"; direction: "asc" | "desc" };
-  onSort: (key: PaperColumnKey) => void;
-  onResize: (event: ReactPointerEvent<HTMLButtonElement>, key: PaperColumnKey) => void;
-  onResetWidth: (event: ReactMouseEvent<HTMLButtonElement>, key: PaperColumnKey) => void;
-  resizable?: boolean;
-}) {
-  const active = sort.key === sortKey;
-  const ariaSort: AriaAttributes["aria-sort"] = active
-    ? sort.direction === "asc" ? "ascending" : "descending"
-    : "none";
-  return (
-    <th aria-sort={ariaSort} className={`${resizable ? "is-resizable" : "is-fixed-width"} ${sortKey === "year" || sortKey === "status" ? "is-centered" : ""}`}>
-      <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(sortKey)}>
-        <span>{label}</span>
-        {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
-      </button>
-      {resizable ? <button
-        type="button"
-        className="column-resize-handle"
-        aria-label={`Resize ${label} column`}
-        title={`Drag to resize ${label}; double-click to reset`}
-        onPointerDown={(event) => onResize(event, sortKey)}
-        onDoubleClick={(event) => onResetWidth(event, sortKey)}
-      /> : null}
-    </th>
-  );
-}
-
 function AuthorsView({
   authors,
   query,
@@ -2149,9 +1977,9 @@ function AuthorsView({
                   <SelectionBox checked={Boolean(pagedAuthors.length) && pagedAuthors.every((author) => selected.includes(author.id))} />
                 </button>
               </th>
-              <SortableEntityHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
-              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
-              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableTableHeader label="Author" columnKey="author" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
+              <SortableTableHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableTableHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
               <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -2289,11 +2117,11 @@ function VenuesView({
                   <SelectionBox checked={Boolean(pagedVenues.length) && pagedVenues.every((venue) => selected.includes(venue.id))} />
                 </button>
               </th>
-              <SortableEntityHeader label="Venue" columnKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Type" columnKey="type" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
-              <SortableEntityHeader label="Publisher" columnKey="publisher" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
-              <SortableEntityHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
-              <SortableEntityHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableTableHeader label="Venue" columnKey="venue" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableTableHeader label="Type" columnKey="type" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} resizable={false} />
+              <SortableTableHeader label="Publisher" columnKey="publisher" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} />
+              <SortableTableHeader label="Papers" columnKey="papers" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
+              <SortableTableHeader label="Latest" columnKey="latest" sort={sort} onSort={toggleSort} onResize={resizeColumn} onResetWidth={resetColumnWidth} centered resizable={false} />
               <th className="actions-cell" scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -2513,48 +2341,6 @@ function CollectionCard({ collection, papers, onEdit, onDelete, onOpen, onOpenPa
         </div>
       ) : null}
     </article>
-  );
-}
-
-function SortableEntityHeader<Key extends string>({
-  label,
-  columnKey,
-  sort,
-  onSort,
-  onResize,
-  onResetWidth,
-  centered = false,
-  resizable = true,
-}: {
-  label: string;
-  columnKey: Key;
-  sort: { key: string; direction: "asc" | "desc" };
-  onSort: (key: Key) => void;
-  onResize: (event: ReactPointerEvent<HTMLButtonElement>, key: Key) => void;
-  onResetWidth: (event: ReactMouseEvent<HTMLButtonElement>, key: Key) => void;
-  centered?: boolean;
-  /** Narrow, fixed-content columns (a count, a short type label) carry no handle. */
-  resizable?: boolean;
-}) {
-  const active = sort.key === columnKey;
-  const ariaSort: AriaAttributes["aria-sort"] = active
-    ? sort.direction === "asc" ? "ascending" : "descending"
-    : "none";
-  return (
-    <th aria-sort={ariaSort} className={`${resizable ? "is-resizable" : "is-fixed-width"} ${centered ? "is-centered" : ""}`}>
-      <button type="button" className={`table-sort-button ${active ? "is-active" : ""}`} onClick={() => onSort(columnKey)}>
-        <span>{label}</span>
-        {active ? sort.direction === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} /> : null}
-      </button>
-      {resizable ? <button
-        type="button"
-        className="column-resize-handle"
-        aria-label={`Resize ${label} column`}
-        title={`Drag to resize ${label}; double-click to reset`}
-        onPointerDown={(event) => onResize(event, columnKey)}
-        onDoubleClick={(event) => onResetWidth(event, columnKey)}
-      /> : null}
-    </th>
   );
 }
 

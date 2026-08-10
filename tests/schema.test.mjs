@@ -438,12 +438,14 @@ test("surfaces failed agent launches and keeps filters/selection consistent", as
 });
 
 test("uses integrated sortable table headers without a detached sort control", async () => {
-  const [component, styles] = await Promise.all([
+  const [component, sharedTable, styles] = await Promise.all([
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ui/ResizableTable.tsx", import.meta.url), "utf8"),
     readApplicationStyles(),
   ]);
-  assert.match(component, /SortablePaperHeader/);
-  assert.match(component, /aria-sort/);
+  assert.match(component, /SortableTableHeader/);
+  assert.match(sharedTable, /aria-sort/);
+  assert.match(sharedTable, /useResizableColumns/);
   assert.doesNotMatch(component, /SORT\s*<\/span>/);
   assert.match(styles, /\.table-sort-button/);
   assert.match(styles, /\.library-toolbar/);
@@ -929,6 +931,14 @@ test("the GitHub sync recovers linked comments that fell behind its cursor", asy
   // it to replay the imported user message and subscribe to the agent response.
   assert.match(feed, /const streamVersion = `\$\{streamNonce\}:\$\{running \? "running" : "idle"\}`/);
   assert.match(feed, /new EventSource\(`\/api\/feed\/snippets\/\$\{snippet\.id\}\/events`\)[\s\S]*?\}, \[snippet\.id, streamVersion\]\);/);
+  // Opening a long feed stays pinned until persisted history is fully replayed,
+  // and observes the stable content wrapper so later batches cannot strand the
+  // viewport in the middle of the conversation.
+  assert.match(feed, /const replayingHistoryRef = useRef\(true\)/);
+  assert.match(feed, /observer\.observe\(content\)/);
+  assert.match(feed, /source\.addEventListener\("status", completeReplay\)/);
+  assert.match(feed, /const userScrollIntentRef = useRef\(false\)/);
+  assert.match(feed, /else if \(!replayingHistoryRef\.current && userScrollIntentRef\.current\) pinnedToBottomRef\.current = false/);
 });
 
 test("tooltips are drawn by the app, not the browser", async () => {
