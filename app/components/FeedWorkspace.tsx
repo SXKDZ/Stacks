@@ -218,7 +218,7 @@ function AttachmentChips({ snippetId, attachments }: { snippetId: string; attach
 interface SyncLogEntry {
   id: string;
   at: number;
-  status: "success" | "error";
+  status: "success" | "error" | "paused";
   summary: string;
   details?: string;
 }
@@ -234,7 +234,7 @@ function readSyncLog(): SyncLogEntry[] {
         entry && typeof entry === "object"
         && typeof (entry as SyncLogEntry).id === "string"
         && typeof (entry as SyncLogEntry).at === "number"
-        && ((entry as SyncLogEntry).status === "success" || (entry as SyncLogEntry).status === "error")
+        && (["success", "error", "paused"] as const).includes((entry as SyncLogEntry).status)
         && typeof (entry as SyncLogEntry).summary === "string",
       ))
       .map((entry) => ({
@@ -282,11 +282,11 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
           </header>
           <div className="background-task-list">
             {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
-              <div className={`background-task-row is-${entry.status === "success" ? "complete" : "error"}`} key={entry.id}>
-                {entry.status === "success" ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
+              <div className={`background-task-row is-${entry.status === "success" ? "complete" : entry.status === "paused" ? "running" : "error"}`} key={entry.id}>
+                {entry.status === "success" ? <CircleCheck size={16} /> : entry.status === "paused" ? <CircleDot size={16} /> : <CircleAlert size={16} />}
                 <span>
                   <strong>{entry.summary}</strong>
-                  <small>{entry.status === "success" ? "Completed" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
+                  <small>{entry.status === "success" ? "Completed" : entry.status === "paused" ? "Paused safely" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
                   {entry.status === "error" ? (
                     <details className="background-task-diagnostics">
                       <summary>
@@ -1658,6 +1658,7 @@ export default function FeedWorkspace() {
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
   const [githubReady, setGithubReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
   // The current failure stays visible until dismissed or a later sync succeeds;
   // the activity log below remains the durable history across reloads.
   const [syncAlert, setSyncAlert] = useState<{ summary: string; details: string } | null>(null);
@@ -1665,7 +1666,7 @@ export default function FeedWorkspace() {
 
   useEffect(() => { setSyncLog(readSyncLog()); }, []);
 
-  const recordSync = useCallback((status: "success" | "error", summary: string, details = "") => {
+  const recordSync = useCallback((status: SyncLogEntry["status"], summary: string, details = "") => {
     setSyncLog((current) => {
       const next = [{ id: crypto.randomUUID(), at: Date.now(), status, summary, details: details || undefined }, ...current].slice(0, 50);
       writeSyncLog(next);
@@ -1743,19 +1744,50 @@ export default function FeedWorkspace() {
 
   const syncGithub = useCallback(async () => {
     setSyncing(true);
+    setSyncProgress(0);
     try {
-      const response = await fetch("/api/feed/github/sync", { method: "POST" });
-      if (!response.ok) {
-        const failure = await readErrorInfo(response);
-        setSyncAlert(failure);
-        recordSync("error", failure.summary, failure.details);
-        return;
+      const totals: Record<string, number> = {};
+      let totalMutations = 0;
+      let truncated = false;
+      let pausedForMs = 0;
+
+      // GitHub has no bulk Issues endpoint. The server therefore checkpoints a
+      // small serial write batch and asks for another pass. Continue those
+      // passes here so one Sync action can drain a large feed backlog safely.
+      while (true) {
+        const response = await fetch("/api/feed/github/sync", { method: "POST" });
+        if (!response.ok) {
+          const failure = await readErrorInfo(response);
+          setSyncAlert(failure);
+          recordSync("error", failure.summary, failure.details);
+          return;
+        }
+        // Read the body defensively: a stale/misrouted server can answer with an
+        // HTML error page, which would otherwise blow up JSON.parse with a cryptic
+        // "Unexpected token '<'" instead of a legible failure.
+        const data = (await response.json().catch(() => ({}))) as {
+          counts?: Record<string, number>;
+          truncated?: boolean;
+          pending?: boolean;
+          pauseReason?: "batch" | "cooldown";
+          retryAfterMs?: number;
+          mutations?: number;
+        };
+        for (const [key, value] of Object.entries(data.counts ?? {})) {
+          totals[key] = (totals[key] ?? 0) + (Number.isFinite(value) ? value : 0);
+        }
+        totalMutations += typeof data.mutations === "number" && Number.isFinite(data.mutations) ? data.mutations : 0;
+        setSyncProgress(totalMutations);
+        truncated ||= Boolean(data.truncated);
+        if (!data.pending) break;
+        if (data.pauseReason === "cooldown") {
+          pausedForMs = Math.max(1_000, data.retryAfterMs ?? 60_000);
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.max(1_000, data.retryAfterMs ?? 1_000)));
       }
-      // Read the body defensively: a stale/misrouted server can answer with an
-      // HTML error page, which would otherwise blow up JSON.parse with a cryptic
-      // "Unexpected token '<'" instead of a legible failure.
-      const data = (await response.json().catch(() => ({}))) as { counts?: Record<string, number>; truncated?: boolean };
-      const c = data.counts ?? {};
+
+      const c = totals;
       const parts = [
         c.issuesCreated ? `${c.issuesCreated} issue${c.issuesCreated === 1 ? "" : "s"} created` : "",
         c.commentsPosted ? `${c.commentsPosted} posted` : "",
@@ -1768,10 +1800,15 @@ export default function FeedWorkspace() {
         c.proposalsUpdated ? `${c.proposalsUpdated} change status${c.proposalsUpdated === 1 ? "" : "es"} updated` : "",
         c.feedsUnlinked ? `${c.feedsUnlinked} feed${c.feedsUnlinked === 1 ? "" : "s"} relinked to the new repo` : "",
       ].filter(Boolean);
-      const base = parts.length ? `Synced: ${parts.join(", ")}` : "Synced, already up to date";
-      const message = data.truncated ? `${base} (more remain, sync again)` : base;
+      const base = parts.length
+        ? `Synced: ${parts.join(", ")}`
+        : pausedForMs ? "No items were sent in this pass" : "Synced, already up to date";
       setSyncAlert(null);
-      recordSync("success", message);
+      if (pausedForMs) {
+        recordSync("paused", `${base}. More items remain; sync again in ${formatDuration(pausedForMs)}.`);
+      } else {
+        recordSync("success", truncated ? `${base} (more remain, sync again)` : base);
+      }
       await loadSnippets();
     } catch (error) {
       const details = error instanceof Error ? error.message : "No diagnostic information was returned.";
@@ -1780,6 +1817,7 @@ export default function FeedWorkspace() {
       recordSync("error", summary, details);
     } finally {
       setSyncing(false);
+      setSyncProgress(0);
     }
   }, [loadSnippets, recordSync]);
 
@@ -2123,10 +2161,10 @@ export default function FeedWorkspace() {
             <div className="sync-card">
               <span>
                 <strong>{libraryName}</strong>
-                <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
+                <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : syncLog[0].status === "paused" ? "Sync paused" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
               </span>
               <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} kbd={`${modKey}S`}>
-                {syncing ? "Syncing…" : "Sync"}
+                {syncing ? syncProgress ? `Syncing ${syncProgress}…` : "Syncing…" : "Sync"}
               </ActionButton>
             </div>
           </div>

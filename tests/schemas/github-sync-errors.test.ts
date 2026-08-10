@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { GitHubError, verifyRepo } from "../../app/lib/github-sync";
+import {
+  createGitHubSyncPolicy,
+  GitHubError,
+  GitHubSyncDeferred,
+  postComment,
+  verifyRepo,
+} from "../../app/lib/github-sync";
 import { readErrorInfo } from "../../app/lib/http";
 
 test("GitHub failures retain safe request diagnostics without exposing the token", async () => {
@@ -59,9 +65,63 @@ test("secondary rate limits are identified and their complete message is retaine
         assert.match(error.details, /Retry after: 60 seconds/);
         assert.match(error.details, /COMPLETE-END/);
         assert.doesNotMatch(error.details, /secret-token/);
+        assert.equal(error.retryAfterMs, 60_000);
         return true;
       },
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("GitHub 429 responses carry their retry window", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    message: "You have exceeded a secondary rate limit.",
+  }), {
+    status: 429,
+    statusText: "Too Many Requests",
+    headers: { "retry-after": "5" },
+  });
+
+  try {
+    await assert.rejects(
+      verifyRepo({ repo: "owner/inbox", token: "secret-token" }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubError);
+        assert.equal(error.status, 429);
+        assert.equal(error.retryAfterMs, 5_000);
+        assert.match(error.message, /too many write requests/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a GitHub write batch stops before sending beyond its mutation budget", async () => {
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    return Response.json({ id: 123 });
+  };
+  const syncPolicy = createGitHubSyncPolicy(1);
+  const config = { repo: "owner/inbox", token: "secret-token", syncPolicy };
+
+  try {
+    assert.equal(await postComment(config, 7, "first"), 123);
+    await assert.rejects(
+      postComment(config, 7, "second"),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubSyncDeferred);
+        assert.equal(error.reason, "batch");
+        return true;
+      },
+    );
+    assert.equal(requests, 1);
+    assert.equal(syncPolicy.mutations, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
