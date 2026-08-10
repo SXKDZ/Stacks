@@ -2488,11 +2488,6 @@
 
 .feed-error-details summary svg {
   color: var(--rose);
-  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1);
-}
-
-.feed-error-details[open] summary svg {
-  transform: rotate(90deg);
 }
 
 .feed-error-details summary:focus-visible {
@@ -2746,7 +2741,7 @@
 
 /* Collapsed agent tool calls: a compact one-line summary that expands to show
    the request and, folded into the same block, its result — both highlighted. */
-.feed-tool-call {
+:is(.feed-tool-call, .feed-tool-group) {
   align-self: stretch;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -2755,7 +2750,7 @@
   overflow: hidden;
 }
 
-.feed-tool-call > summary {
+:is(.feed-tool-call, .feed-tool-group) > summary {
   align-items: center;
   color: var(--muted);
   cursor: pointer;
@@ -2763,11 +2758,17 @@
   font-size: var(--type-control);
   gap: 7px;
   list-style: none;
+  min-height: 38px;
   padding: 8px 11px;
 }
 
-.feed-tool-call > summary::-webkit-details-marker {
+:is(.feed-tool-call, .feed-tool-group) > summary::-webkit-details-marker {
   display: none;
+}
+
+:is(.feed-tool-call, .feed-tool-group) > summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .feed-tool-call > summary > span {
@@ -2775,8 +2776,26 @@
   font-weight: 600;
 }
 
-.feed-tool-call[open] > summary {
+:is(.feed-tool-call, .feed-tool-group)[open] > summary {
   border-bottom: 1px solid var(--line);
+}
+
+.feed-tool-group {
+  box-shadow: var(--edge-highlight);
+}
+
+.feed-tool-group > summary span {
+  font-weight: 650;
+}
+
+.feed-tool-group-items {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.feed-tool-group-items > .feed-tool-call {
+  background: var(--surface-1);
 }
 
 .feed-tool-io {

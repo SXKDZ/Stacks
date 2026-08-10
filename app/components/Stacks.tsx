@@ -1066,7 +1066,7 @@ function StacksWorkspace() {
   const currentViewLabel = navigation.find((item) => item.id === view)?.label ?? "Overview";
 
   return (
-    <div className="stacks-shell">
+    <div className="stacks-shell workspace-enter">
       <a className="skip-link" href="#main-content" tabIndex={mobileNav ? -1 : 0}>Skip to content</a>
       <aside className={`sidebar ${mobileNav ? "is-open" : ""}`} aria-label="Primary navigation">
         <div className="brand-row">

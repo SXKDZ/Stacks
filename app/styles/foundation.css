@@ -162,6 +162,44 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Shared, restrained workspace entrance. Full-page workspaces reuse this one
+   motion primitive so navigation never accumulates page-specific keyframes. */
+.workspace-enter {
+  animation: workspace-enter var(--motion-control);
+}
+
+@keyframes workspace-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* One disclosure affordance for activity diagnostics, errors, and grouped
+   tools. State comes from native <details>; CSS only supplies the visual cue. */
+.disclosure-chevron {
+  flex: 0 0 auto;
+  transition: transform var(--motion-fast);
+}
+
+details[open] > summary .disclosure-chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-enter {
+    animation: none;
+  }
+
+  .disclosure-chevron {
+    transition: none;
+  }
+}
+
 @media (max-width: 760px) {
   input,
   textarea,

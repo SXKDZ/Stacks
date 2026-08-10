@@ -73,6 +73,10 @@ const CONVERSATION_KINDS = new Set(["text", "result"]);
 const TOOL_DETAIL_KINDS = new Set(["text", "result", "tool_use", "tool_result"]);
 
 function historyMessageAllowed(message: FeedHistoryMessage, includeToolDetails: boolean): boolean {
+  // Claude persists tool observations with role="tool". Check the kind before
+  // applying the conversational-role guard, otherwise selecting "tool details"
+  // silently keeps every request but drops every corresponding result.
+  if (message.kind === "tool_result") return includeToolDetails && message.role === "tool";
   if (message.role !== "user" && message.role !== "assistant") return false;
   return (includeToolDetails ? TOOL_DETAIL_KINDS : CONVERSATION_KINDS).has(message.kind);
 }

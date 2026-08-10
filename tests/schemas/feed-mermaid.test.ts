@@ -72,11 +72,14 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
   assert.match(visualization, /ariaLabel="Syntax highlighting language"/);
   assert.match(visualization, /className="feed-code-language-select"/);
   assert.match(visualization, /fenceCode\(visualization\.source, language\)/);
-  assert.match(visualization, /const toggleFit = useCallback/);
+  assert.match(visualization, /const advanceDoubleClickZoom = useCallback/);
   assert.match(visualization, /Math\.abs\(scale - 1\) < 0\.01/);
+  assert.match(visualization, /Math\.abs\(fittedScaleRef\.current - 1\) < 0\.01\) zoomBy\(1\.2, anchor\)/);
+  assert.match(visualization, /else fit\(\)/);
+  assert.match(visualization, /else \{\s*setScale\(1\)/);
   assert.match(visualization, /lastPanTapRef/);
   assert.match(visualization, /now - previous\.time <= 400/);
-  assert.match(visualization, /toggleFit\(\)/);
+  assert.match(visualization, /advanceDoubleClickZoom\(\{ clientX: event\.clientX, clientY: event\.clientY \}\)/);
   assert.match(visualization, /new MutationObserver\(applyTitle\)/);
   assert.match(visualization, /return `\$\{visualizationKindLabel\(visualization\)\} · \$\{visualization\.feedName\}`/);
   assert.match(visualization, /onWheel=\{handleWheel\}/);
@@ -112,4 +115,8 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
   assert.match(styles, /\.feed-table-row:last-child \.feed-table-row-resize/);
   assert.match(styles, /\.mermaid-visualization-viewport\s*\{[^}]*min-width:\s*0[^}]*width:\s*100%/s);
   assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*min-width:\s*0[^}]*width:\s*100%/s);
+  assert.match(feed, /className="feed-tool-group"/);
+  assert.match(feed, /\{count\} tool operations/);
+  assert.match(feed, /flushToolNodes\(\)/);
+  assert.match(styles, /\.feed-tool-group-items\s*\{[^}]*display:\s*grid[^}]*gap:\s*8px/s);
 });
