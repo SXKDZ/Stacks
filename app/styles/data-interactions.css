@@ -730,11 +730,6 @@
 
 .background-task-diagnostics summary svg {
   flex: 0 0 auto;
-  transition: transform var(--motion-fast);
-}
-
-.background-task-diagnostics[open] summary svg {
-  transform: rotate(90deg);
 }
 
 .background-task-diagnostics summary:focus-visible {

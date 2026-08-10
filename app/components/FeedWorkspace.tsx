@@ -291,7 +291,7 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
                   {entry.status === "error" ? (
                     <details className="background-task-diagnostics">
                       <summary>
-                        <ChevronRight size={12} aria-hidden="true" />
+                        <ChevronRight className="disclosure-chevron" size={12} aria-hidden="true" />
                         Technical details
                       </summary>
                       <pre>{syncDiagnosticText(entry)}</pre>
@@ -324,7 +324,7 @@ function SyncFailureToast({ failure, onDismiss }: { failure: { summary: string; 
           {failure.details ? (
             <details className="feed-error-details">
               <summary>
-                <ChevronRight size={14} aria-hidden="true" />
+                <ChevronRight className="disclosure-chevron" size={14} aria-hidden="true" />
                 <span>Technical details</span>
               </summary>
               <pre>{failure.details}</pre>
@@ -426,7 +426,7 @@ function FeedErrorMessage({ content, announce = false }: { content: string; anno
         {details ? (
           <details className="feed-error-details">
             <summary>
-              <ChevronRight size={14} aria-hidden="true" />
+              <ChevronRight className="disclosure-chevron" size={14} aria-hidden="true" />
               <span>Technical details</span>
             </summary>
             <pre>{details}</pre>
@@ -1473,7 +1473,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 nodes.push(
                   <details key={`tool-group-${firstPendingToolId}`} className="feed-tool-group">
                     <summary>
-                      <ChevronRight className="feed-tool-group-chevron" size={14} />
+                      <ChevronRight className="disclosure-chevron" size={14} aria-hidden="true" />
                       <Wrench size={13} />
                       <span>{count} tool operations</span>
                     </summary>
@@ -2118,7 +2118,7 @@ export default function FeedWorkspace() {
 
   const showDetail = Boolean(selected) && !composing;
   return (
-    <main className={`feed-page ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
+    <main className={`feed-page workspace-enter ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
       <div className="feed-theme-toggle">
         <ThemeToggle />
       </div>

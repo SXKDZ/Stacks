@@ -78,6 +78,7 @@ function ZoomableViewer({ visualization, mermaidSvg }: {
 }) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const visualRef = useRef<HTMLDivElement | null>(null);
+  const fittedScaleRef = useRef(1);
   const dragRef = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number; moved: boolean } | null>(null);
   const lastPanTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
   const [baseSize, setBaseSize] = useState<{ width: number; height: number } | null>(null);
@@ -92,7 +93,9 @@ function ZoomableViewer({ visualization, mermaidSvg }: {
     const canvasInsets = elementInsets(visualRef.current?.parentElement ?? null);
     const availableWidth = Math.max(1, viewport.clientWidth - viewportInsets.horizontal - canvasInsets.horizontal);
     const availableHeight = Math.max(1, viewport.clientHeight - viewportInsets.vertical - canvasInsets.vertical);
-    setScale(clampScale(Math.min(1, availableWidth / size.width, availableHeight / size.height)));
+    const fittedScale = clampScale(Math.min(1, availableWidth / size.width, availableHeight / size.height));
+    fittedScaleRef.current = fittedScale;
+    setScale(fittedScale);
   }, []);
 
   useLayoutEffect(() => {
@@ -168,12 +171,11 @@ function ZoomableViewer({ visualization, mermaidSvg }: {
   }, []);
 
   const advanceDoubleClickZoom = useCallback((anchor: { clientX: number; clientY: number }) => {
-    if (scale < 0.99) {
-      zoomBy(1 / scale, anchor);
-    } else if (Math.abs(scale - 1) < 0.01) {
-      zoomBy(1.2, anchor);
+    if (Math.abs(scale - 1) < 0.01) {
+      if (Math.abs(fittedScaleRef.current - 1) < 0.01) zoomBy(1.2, anchor);
+      else fit();
     } else {
-      fit();
+      setScale(1);
     }
   }, [fit, scale, zoomBy]);
 

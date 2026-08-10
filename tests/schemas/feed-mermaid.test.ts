@@ -73,9 +73,10 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
   assert.match(visualization, /className="feed-code-language-select"/);
   assert.match(visualization, /fenceCode\(visualization\.source, language\)/);
   assert.match(visualization, /const advanceDoubleClickZoom = useCallback/);
-  assert.match(visualization, /scale < 0\.99/);
   assert.match(visualization, /Math\.abs\(scale - 1\) < 0\.01/);
-  assert.match(visualization, /zoomBy\(1\.2, anchor\)/);
+  assert.match(visualization, /Math\.abs\(fittedScaleRef\.current - 1\) < 0\.01\) zoomBy\(1\.2, anchor\)/);
+  assert.match(visualization, /else fit\(\)/);
+  assert.match(visualization, /else \{\s*setScale\(1\)/);
   assert.match(visualization, /lastPanTapRef/);
   assert.match(visualization, /now - previous\.time <= 400/);
   assert.match(visualization, /advanceDoubleClickZoom\(\{ clientX: event\.clientX, clientY: event\.clientY \}\)/);
