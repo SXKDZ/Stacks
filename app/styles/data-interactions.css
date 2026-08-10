@@ -706,6 +706,58 @@
   color: var(--brand-blue);
 }
 
+/* Expandable diagnostics shared by durable activity rows. The row keeps its
+   concise one-line label; this block preserves the complete service response. */
+.background-task-diagnostics {
+  margin-block-start: 4px;
+  min-width: 0;
+}
+
+.background-task-diagnostics summary {
+  align-items: center;
+  color: var(--brand-blue-strong);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--type-micro);
+  font-weight: 650;
+  gap: 3px;
+  list-style: none;
+}
+
+.background-task-diagnostics summary::-webkit-details-marker {
+  display: none;
+}
+
+.background-task-diagnostics summary svg {
+  flex: 0 0 auto;
+  transition: transform var(--motion-fast);
+}
+
+.background-task-diagnostics[open] summary svg {
+  transform: rotate(90deg);
+}
+
+.background-task-diagnostics summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.background-task-diagnostics pre {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+  line-height: 1.45;
+  margin: 7px 0 2px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .background-task-steps {
   border-left: 2px solid var(--line-strong);
   display: flex;

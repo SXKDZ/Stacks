@@ -43,10 +43,77 @@ export interface GitHubComment {
 export class GitHubError extends Error {
   /** The HTTP status that caused it, or 0 for client-side/validation errors. */
   readonly status: number;
-  constructor(message: string, status = 0) {
+  /** Safe diagnostic context that can be shown without exposing the token. */
+  readonly details: string;
+  constructor(message: string, status = 0, details = "") {
     super(message);
+    this.name = "GitHubError";
     this.status = status;
+    this.details = details;
   }
+}
+
+interface GitHubApiErrorBody {
+  message?: string;
+  documentation_url?: string;
+  errors?: unknown;
+}
+
+/** Turn GitHub's response into concise recovery copy plus safe diagnostics.
+ * The access token is never part of either string. */
+function githubFailure(
+  response: Response,
+  requestUrl: string,
+  method: string,
+  rawBody: string,
+): { summary: string; details: string } {
+  let body: GitHubApiErrorBody = {};
+  try {
+    body = JSON.parse(rawBody) as GitHubApiErrorBody;
+  } catch {
+    // Non-JSON gateway responses are retained verbatim in the detail block.
+  }
+
+  const githubMessage = typeof body.message === "string" ? body.message.trim() : "";
+  const documentationUrl = typeof body.documentation_url === "string" ? body.documentation_url.trim() : "";
+  const rateLimitRemaining = response.headers.get("x-ratelimit-remaining");
+  const rateLimitReset = response.headers.get("x-ratelimit-reset");
+  const retryAfter = response.headers.get("retry-after");
+  const primaryRateLimited = response.status === 403 && rateLimitRemaining === "0";
+  const secondaryRateLimited = response.status === 403 && /secondary rate limit|temporarily blocked from content creation/i.test(githubMessage);
+  let summary = `GitHub rejected the sync request (${response.status}).`;
+  if (response.status === 401) {
+    summary = "GitHub did not accept the access token. Update it in Settings and try again.";
+  } else if (secondaryRateLimited) {
+    summary = "GitHub temporarily blocked content creation because too many write requests were sent. Wait, then sync again.";
+  } else if (primaryRateLimited) {
+    summary = "GitHub's API rate limit has been reached. Try syncing again after it resets.";
+  } else if (response.status === 403) {
+    summary = "GitHub denied access. Check this token's repository access and Issues read/write permission.";
+  } else if (response.status === 404) {
+    summary = "GitHub could not find this repository. Check the repository name and token access.";
+  }
+
+  const endpoint = new URL(requestUrl);
+  const responseDetail = body.errors !== undefined
+    ? JSON.stringify(body.errors, null, 2)
+    : !githubMessage && rawBody.trim() ? rawBody.trim() : "";
+  const resetAt = rateLimitReset && /^\d+$/.test(rateLimitReset)
+    ? new Date(Number(rateLimitReset) * 1_000).toLocaleString()
+    : "";
+  const details = [
+    `Request: ${method} ${endpoint.pathname}${endpoint.search}`,
+    `Status: ${response.status} ${response.statusText || "Unknown"}`,
+    response.headers.get("x-github-request-id") ? `GitHub request ID: ${response.headers.get("x-github-request-id")}` : "",
+    githubMessage ? `GitHub message: ${githubMessage}` : "",
+    retryAfter ? `Retry after: ${retryAfter} seconds` : "",
+    rateLimitRemaining !== null ? `Rate limit remaining: ${rateLimitRemaining}` : "",
+    resetAt ? `Rate limit resets: ${resetAt}` : "",
+    documentationUrl ? `Documentation: ${documentationUrl}` : "",
+    responseDetail ? `Response details:\n${responseDetail}` : "",
+  ].filter(Boolean).join("\n");
+
+  return { summary, details };
 }
 
 function parseRepo(repo: string): { owner: string; name: string } {
@@ -90,13 +157,9 @@ async function githubRequest(
     redirect: "error",
   });
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    const hint = response.status === 401 || response.status === 403
-      ? " Check the token has issues:write on this repo."
-      : response.status === 404
-        ? " Check the repo exists and the token can see it."
-        : "";
-    throw new GitHubError(`GitHub API ${response.status}.${hint}${detail ? ` ${detail.slice(0, 200)}` : ""}`, response.status);
+    const rawBody = await response.text().catch(() => "");
+    const failure = githubFailure(response, url, (init.method ?? "GET").toUpperCase(), rawBody);
+    throw new GitHubError(failure.summary, response.status, failure.details);
   }
   return response;
 }

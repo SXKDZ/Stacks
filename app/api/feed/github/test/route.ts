@@ -30,6 +30,10 @@ export async function POST(request: Request): Promise<Response> {
     const message = error instanceof GitHubError || error instanceof Error
       ? error.message
       : "The connection could not be verified.";
-    return Response.json({ error: message }, { status: 400 });
+    const details = error instanceof GitHubError ? error.details : "";
+    const status = error instanceof GitHubError && error.status >= 400 && error.status <= 599
+      ? error.status
+      : error instanceof GitHubError ? 400 : 500;
+    return Response.json({ error: message, details: details || undefined }, { status });
   }
 }

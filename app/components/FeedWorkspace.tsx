@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
-import { readError } from "@/app/lib/http";
+import { readError, readErrorInfo } from "@/app/lib/http";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
 import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment } from "@/app/lib/schemas/attachments";
@@ -220,14 +220,28 @@ interface SyncLogEntry {
   at: number;
   status: "success" | "error";
   summary: string;
+  details?: string;
 }
 const SYNC_LOG_KEY = "stacks-sync-log-v1";
 
 function readSyncLog(): SyncLogEntry[] {
   if (typeof window === "undefined") return [];
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(SYNC_LOG_KEY) || "[]") as SyncLogEntry[];
-    return Array.isArray(parsed) ? parsed.slice(0, 50) : [];
+    const parsed = JSON.parse(window.localStorage.getItem(SYNC_LOG_KEY) || "[]") as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry): entry is SyncLogEntry => Boolean(
+        entry && typeof entry === "object"
+        && typeof (entry as SyncLogEntry).id === "string"
+        && typeof (entry as SyncLogEntry).at === "number"
+        && ((entry as SyncLogEntry).status === "success" || (entry as SyncLogEntry).status === "error")
+        && typeof (entry as SyncLogEntry).summary === "string",
+      ))
+      .map((entry) => ({
+        ...entry,
+        details: typeof entry.details === "string" ? entry.details : undefined,
+      }))
+      .slice(0, 50);
   } catch {
     return [];
   }
@@ -239,6 +253,14 @@ function writeSyncLog(entries: SyncLogEntry[]): void {
   } catch {
     // A full/blocked storage quota must not break syncing.
   }
+}
+
+function syncDiagnosticText(entry: SyncLogEntry): string {
+  if (entry.details) return entry.details;
+  const legacyNote = entry.summary.startsWith("GitHub API ")
+    ? "This entry was captured by an older Stacks version, which truncated GitHub's response before saving it. Run sync again to capture complete diagnostics."
+    : "No additional diagnostic information was returned.";
+  return `${entry.summary}\n\n${legacyNote}`;
 }
 
 /**
@@ -262,7 +284,19 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
             {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
               <div className={`background-task-row is-${entry.status === "success" ? "complete" : "error"}`} key={entry.id}>
                 {entry.status === "success" ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
-                <span><strong>{entry.summary}</strong><small>{new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small></span>
+                <span>
+                  <strong>{entry.summary}</strong>
+                  <small>{entry.status === "success" ? "Completed" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
+                  {entry.status === "error" ? (
+                    <details className="background-task-diagnostics">
+                      <summary>
+                        <ChevronRight size={12} aria-hidden="true" />
+                        Technical details
+                      </summary>
+                      <pre>{syncDiagnosticText(entry)}</pre>
+                    </details>
+                  ) : null}
+                </span>
               </div>
             ))}
           </div>
@@ -274,6 +308,33 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
         <ChevronUp size={14} />
       </button>
     </aside>
+  );
+}
+
+/** Sync failures use the same standalone toast surface as Settings instead of
+ * becoming another nested card inside the feed sidebar. */
+function SyncFailureToast({ failure, onDismiss }: { failure: { summary: string; details: string }; onDismiss: () => void }) {
+  return (
+    <div className="toast toast-error feed-sync-toast">
+      <span className="toast-message" role="alert">
+        <CircleAlert size={17} aria-hidden="true" />
+        <span className="feed-sync-toast-content">
+          <strong>{failure.summary}</strong>
+          {failure.details ? (
+            <details className="feed-error-details">
+              <summary>
+                <ChevronRight size={14} aria-hidden="true" />
+                <span>Technical details</span>
+              </summary>
+              <pre>{failure.details}</pre>
+            </details>
+          ) : null}
+        </span>
+      </span>
+      <button type="button" className="toast-dismiss" onClick={onDismiss} aria-label="Dismiss notification">
+        <X size={14} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -1597,17 +1658,16 @@ export default function FeedWorkspace() {
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
   const [githubReady, setGithubReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  // Sync outcomes are surfaced through the persistent sync log (below), so the
-  // transient notice is write-only: kept as a setter to clear/record state
-  // without rendering a second, duplicate banner.
-  const [, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  // The current failure stays visible until dismissed or a later sync succeeds;
+  // the activity log below remains the durable history across reloads.
+  const [syncAlert, setSyncAlert] = useState<{ summary: string; details: string } | null>(null);
   const [syncLog, setSyncLog] = useState<SyncLogEntry[]>([]);
 
   useEffect(() => { setSyncLog(readSyncLog()); }, []);
 
-  const recordSync = useCallback((status: "success" | "error", summary: string) => {
+  const recordSync = useCallback((status: "success" | "error", summary: string, details = "") => {
     setSyncLog((current) => {
-      const next = [{ id: crypto.randomUUID(), at: Date.now(), status, summary }, ...current].slice(0, 50);
+      const next = [{ id: crypto.randomUUID(), at: Date.now(), status, summary, details: details || undefined }, ...current].slice(0, 50);
       writeSyncLog(next);
       return next;
     });
@@ -1683,10 +1743,14 @@ export default function FeedWorkspace() {
 
   const syncGithub = useCallback(async () => {
     setSyncing(true);
-    setNotice(null);
     try {
       const response = await fetch("/api/feed/github/sync", { method: "POST" });
-      if (!response.ok) throw new Error(await readError(response));
+      if (!response.ok) {
+        const failure = await readErrorInfo(response);
+        setSyncAlert(failure);
+        recordSync("error", failure.summary, failure.details);
+        return;
+      }
       // Read the body defensively: a stale/misrouted server can answer with an
       // HTML error page, which would otherwise blow up JSON.parse with a cryptic
       // "Unexpected token '<'" instead of a legible failure.
@@ -1706,13 +1770,14 @@ export default function FeedWorkspace() {
       ].filter(Boolean);
       const base = parts.length ? `Synced: ${parts.join(", ")}` : "Synced, already up to date";
       const message = data.truncated ? `${base} (more remain, sync again)` : base;
-      setNotice({ tone: "success", message });
+      setSyncAlert(null);
       recordSync("success", message);
       await loadSnippets();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "GitHub sync failed.";
-      setNotice({ tone: "error", message });
-      recordSync("error", message);
+      const details = error instanceof Error ? error.message : "No diagnostic information was returned.";
+      const summary = "Unable to reach the GitHub sync service. Check your connection and try again.";
+      setSyncAlert({ summary, details });
+      recordSync("error", summary, details);
     } finally {
       setSyncing(false);
     }
@@ -2139,6 +2204,7 @@ export default function FeedWorkspace() {
           </>
         )}
       </div>
+      {syncAlert ? <SyncFailureToast failure={syncAlert} onDismiss={() => setSyncAlert(null)} /> : null}
     </main>
   );
 }

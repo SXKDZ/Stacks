@@ -482,7 +482,11 @@ export async function POST(): Promise<Response> {
     return Response.json({ ok: true, counts, truncated });
   } catch (error) {
     const message = error instanceof GitHubError || error instanceof Error ? error.message : "GitHub sync failed.";
-    return Response.json({ error: message }, { status: 400 });
+    const details = error instanceof GitHubError ? error.details : "";
+    const status = error instanceof GitHubError && error.status >= 400 && error.status <= 599
+      ? error.status
+      : error instanceof GitHubError ? 400 : 500;
+    return Response.json({ error: message, details: details || undefined }, { status });
   } finally {
     syncInProgress = false;
   }

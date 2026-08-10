@@ -1,0 +1,551 @@
+/* Feed history selection
+   --------------------------------------------------------------------------
+   The chooser is a self-contained modal: selection summary, search and bulk
+   controls, request navigator, interaction previews, footer, and responsive
+   behavior live together here instead of being buried in workspaces.css. */
+
+.feed-history-selection-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.feed-history-selection-copy strong {
+  color: var(--ink);
+  font-size: var(--type-label);
+}
+
+.feed-history-selection-copy span {
+  color: var(--soft);
+  font-size: var(--type-caption);
+}
+
+.feed-history-tool-toggle {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--type-label);
+  font-weight: 650;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.feed-history-tool-toggle input {
+  accent-color: var(--brand-blue);
+  height: 16px;
+  width: 16px;
+}
+
+/* History selection lives in a dedicated chooser instead of altering the
+   conversation itself. Requests form the navigation rail; the main column caps
+   each agent response until the user explicitly expands it. */
+.feed-history-modal-layer {
+  inset: 0;
+  position: fixed;
+  z-index: 100;
+}
+
+.feed-history-modal {
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  height: min(820px, calc(100dvh - 32px));
+  left: 50%;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1080px, calc(100vw - 32px));
+}
+
+.feed-history-modal-head {
+  align-items: flex-start;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 24px;
+  justify-content: space-between;
+  padding: 22px 24px 14px;
+}
+
+.feed-history-modal-head > div {
+  min-width: 0;
+}
+
+.feed-history-modal-kicker {
+  color: var(--brand-blue-strong);
+  display: block;
+  font-size: var(--type-caption);
+  font-weight: 700;
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-history-modal-head h2 {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--type-heading);
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.feed-history-modal-head p {
+  color: var(--soft);
+  font-size: var(--type-label);
+  line-height: 1.5;
+  margin: 5px 0 0;
+  max-width: 680px;
+}
+
+.feed-history-toolbar {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  padding: 0 24px 14px;
+}
+
+.feed-history-search {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  display: flex;
+  flex: 1;
+  gap: 9px;
+  height: 38px;
+  min-width: 180px;
+  padding: 0 10px;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
+}
+
+.feed-history-search:focus-within {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-blue) 15%, transparent);
+}
+
+.feed-history-search input {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  flex: 1;
+  font: inherit;
+  font-size: var(--type-control);
+  min-width: 0;
+  outline: 0;
+}
+
+.feed-history-search input::placeholder {
+  color: var(--soft);
+}
+
+.feed-history-search button,
+.feed-history-bulk-actions button,
+.feed-history-interaction-actions button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--brand-blue-strong);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 700;
+  justify-content: center;
+}
+
+.feed-history-search button {
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  height: 26px;
+  padding: 0;
+  width: 26px;
+}
+
+.feed-history-search button:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+
+.feed-history-bulk-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.feed-history-bulk-actions button {
+  border-radius: var(--radius-control);
+  height: 34px;
+  padding: 0 10px;
+}
+
+.feed-history-bulk-actions button:hover:not(:disabled),
+.feed-history-interaction-actions button:hover {
+  background: var(--brand-blue-soft);
+}
+
+.feed-history-bulk-actions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.feed-history-modal-body {
+  background: var(--surface-2);
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px;
+}
+
+.feed-history-index {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-right: 10px;
+}
+
+.feed-history-index > span {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  padding: 4px 8px 8px;
+  text-transform: uppercase;
+}
+
+.feed-history-index-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.feed-history-index-row {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-height: 38px;
+  padding: 2px 4px 2px 7px;
+}
+
+.feed-history-index-row:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.feed-history-index-row.is-active {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-color: var(--line-strong);
+}
+
+.feed-history-index-row > input {
+  accent-color: var(--brand-blue);
+  height: 15px;
+  margin: 0;
+  width: 15px;
+}
+
+.feed-history-index-row > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  grid-template-columns: 27px minmax(0, 1fr);
+  min-height: 32px;
+  padding: 3px 5px;
+  text-align: left;
+}
+
+.feed-history-index-row > button:hover,
+.feed-history-index-row.is-active > button {
+  color: var(--ink);
+}
+
+.feed-history-index b {
+  align-items: center;
+  border-radius: var(--radius-pill);
+  display: flex;
+  font-size: var(--type-caption);
+  font-variant-numeric: tabular-nums;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.feed-history-index-row > button span {
+  font-size: var(--type-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-history-interactions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 5px 0 4px;
+  scroll-padding-top: 2px;
+}
+
+.feed-history-interaction {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 11px;
+  padding: 14px 16px 11px;
+  scroll-margin-top: 2px;
+  transition: border-color var(--motion-control), box-shadow var(--motion-control);
+}
+
+.feed-history-interaction.is-selected {
+  border-color: color-mix(in srgb, var(--brand-blue) 54%, var(--line-strong));
+}
+
+.feed-history-interaction-select {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--type-label);
+  font-weight: 750;
+  gap: 8px;
+  width: max-content;
+}
+
+.feed-history-interaction-select input {
+  accent-color: var(--brand-blue);
+  height: 17px;
+  margin: 0;
+  width: 17px;
+}
+
+.feed-history-request-preview,
+.feed-history-response-preview {
+  min-width: 0;
+}
+
+.feed-history-request-preview strong,
+.feed-history-response-preview strong {
+  color: var(--soft);
+  display: block;
+  font-size: var(--type-micro);
+  letter-spacing: 0.045em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.feed-history-request-preview p,
+.feed-history-response-preview p {
+  color: var(--ink);
+  font-size: var(--type-control);
+  line-height: 1.52;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.feed-history-request-preview p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.feed-history-request-preview p.is-expanded {
+  display: block;
+  max-height: none;
+  overflow: visible;
+}
+
+.feed-history-response-preview p {
+  color: var(--muted);
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+
+.feed-history-response-preview p.is-expanded {
+  display: block;
+  max-height: none;
+  overflow: visible;
+}
+
+.feed-history-interaction-actions {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 28px;
+}
+
+.feed-history-expand-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.feed-history-interaction-actions button {
+  border-radius: var(--radius-sm);
+  min-height: 28px;
+  padding: 0 7px;
+}
+
+.feed-history-loading,
+.feed-history-empty {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  font-size: var(--type-control);
+  gap: 9px;
+  justify-content: center;
+  min-height: 180px;
+  padding: 20px;
+  text-align: center;
+}
+
+.feed-history-modal-error {
+  align-items: flex-start;
+  background: var(--rose-soft);
+  color: var(--rose);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: var(--type-label);
+  gap: 8px;
+  padding: 10px 24px;
+}
+
+.feed-history-modal-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.feed-history-modal-foot {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  padding: 14px 24px 16px;
+}
+
+.feed-history-modal :where(button, input):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The search wrapper owns the visible focus ring. Suppress the generic input
+   ring here so it does not draw a second sharp rectangle inside that control. */
+.feed-history-modal .feed-history-search input:focus-visible {
+  outline: 0;
+}
+
+@media (max-width: 760px) {
+  .feed-history-modal {
+    height: calc(100dvh - 16px);
+    max-width: calc(100vw - 16px);
+    width: calc(100vw - 16px);
+  }
+
+  .feed-history-modal-head {
+    padding: 16px 16px 11px;
+  }
+
+  .feed-history-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+    padding: 0 16px 11px;
+  }
+
+  .feed-history-bulk-actions {
+    justify-content: flex-end;
+  }
+
+  .feed-history-modal-body {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+  }
+
+  .feed-history-index {
+    flex: 0 0 auto;
+    padding: 0 0 8px;
+  }
+
+  .feed-history-index > span {
+    display: none;
+  }
+
+  .feed-history-index-list {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .feed-history-index-row {
+    flex: 0 0 61px;
+    grid-template-columns: 17px 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0 3px;
+  }
+
+  .feed-history-index-row > button {
+    display: flex;
+    height: 30px;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0;
+  }
+
+  .feed-history-index-row > button span {
+    display: none;
+  }
+
+  .feed-history-interactions {
+    flex: 1;
+  }
+
+  .feed-history-modal-foot {
+    flex-wrap: wrap;
+    padding: 11px 16px 13px;
+  }
+
+  .feed-history-selection-copy {
+    flex-basis: 100%;
+  }
+
+  .feed-history-tool-toggle {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-history-interaction,
+  .feed-history-search {
+    transition: none;
+  }
+}
