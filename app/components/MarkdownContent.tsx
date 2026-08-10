@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, isValidElement, memo, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, memo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
@@ -62,18 +62,64 @@ function mermaidSource(children: ReactNode): string | null {
   return String(child.props.children ?? "").replace(/\n$/, "");
 }
 
+function splitHighlightedNode(node: ReactNode, key: string): ReactNode[][] {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node).split("\n").map((part) => [part]);
+  }
+  if (!isValidElement<{ children?: ReactNode }>(node)) return [[node]];
+  return splitHighlightedChildren(node.props.children).map((line, index) => [
+    cloneElement(node, { key: `${key}-${index}` }, line),
+  ]);
+}
+
+function splitHighlightedChildren(children: ReactNode): ReactNode[][] {
+  const lines: ReactNode[][] = [[]];
+  Children.toArray(children).forEach((child, childIndex) => {
+    const parts = splitHighlightedNode(child, `code-token-${childIndex}`);
+    lines.at(-1)?.push(...parts[0]);
+    parts.slice(1).forEach((part) => lines.push([...part]));
+  });
+  return lines;
+}
+
+function HighlightedCodeLines({ children, className, showLineNumbers, wrapLines, ...props }: {
+  children: ReactNode;
+  className?: string;
+  showLineNumbers: boolean;
+  wrapLines: boolean;
+}) {
+  if (!showLineNumbers && !wrapLines) return <code className={className} {...props}>{children}</code>;
+  const lines = splitHighlightedChildren(children);
+  if (lines.length > 1 && lines.at(-1)?.every((part) => part === "")) lines.pop();
+  return (
+    <code className={className} {...props}>
+      <span className="code-visualization-lines">
+        {lines.map((line, index) => (
+          <span className="code-visualization-line" key={`code-line-${index}`}>
+            {line}
+          </span>
+        ))}
+      </span>
+    </code>
+  );
+}
+
 export const MarkdownContent = memo(function MarkdownContent({
   content,
   className = "",
   enableFeedRichContent = false,
   feedId,
   feedName,
+  showCodeLineNumbers = false,
+  wrapCodeLines = false,
 }: {
   content: string;
   className?: string;
   enableFeedRichContent?: boolean;
   feedId?: string;
   feedName?: string;
+  showCodeLineNumbers?: boolean;
+  wrapCodeLines?: boolean;
 }) {
   return (
     <div className={`markdown-content ${className}`.trim()}>
@@ -91,6 +137,19 @@ export const MarkdownContent = memo(function MarkdownContent({
             if (source !== null && feedId) return <MermaidDiagram source={source} feedId={feedId} feedName={feedName ?? "AI feed"} />;
             if (enableFeedRichContent && feedId) return <FeedCodeBlock feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedCodeBlock>;
             return <pre {...props}>{children}</pre>;
+          },
+          code: ({ children, className, node, ...props }) => {
+            void node;
+            return (
+              <HighlightedCodeLines
+                className={className}
+                showLineNumbers={showCodeLineNumbers}
+                wrapLines={wrapCodeLines}
+                {...props}
+              >
+                {children}
+              </HighlightedCodeLines>
+            );
           },
           table: ({ children, node, ...props }) => {
             void node;

@@ -1793,16 +1793,34 @@
 }
 
 .feed-rich-table-scroll {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
   max-width: 100%;
   overflow: auto;
 }
 
 .markdown-content .feed-rich-table table {
+  border-collapse: separate;
+  border-spacing: 0;
   display: table;
   margin: 0;
   min-width: 100%;
   overflow: visible;
   width: max-content;
+}
+
+.markdown-content .feed-rich-table :is(th, td) {
+  border: 0;
+  border-block-end: 1px solid var(--line-strong);
+  border-inline-end: 1px solid var(--line-strong);
+}
+
+.markdown-content .feed-rich-table tr > :last-child {
+  border-inline-end: 0;
+}
+
+.markdown-content .feed-rich-table tbody tr:last-child > * {
+  border-block-end: 0;
 }
 
 /* Mermaid fences render as diagrams only in feed message bubbles. The neutral
@@ -2012,7 +2030,8 @@
 }
 
 .feed-code-controls,
-.feed-code-language {
+.feed-code-language,
+.feed-code-option {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -2028,6 +2047,27 @@
   font: 600 var(--type-control) var(--font-ui);
 }
 
+.feed-code-option {
+  color: var(--muted);
+  cursor: pointer;
+  font: 600 var(--type-caption) var(--font-ui);
+  min-height: 40px;
+  padding-inline: 4px;
+}
+
+.feed-code-option input {
+  accent-color: var(--brand-blue);
+  cursor: pointer;
+  height: 17px;
+  margin: 0;
+  width: 17px;
+}
+
+.feed-code-option input:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
 .feed-code-language-select {
   width: min(180px, 32vw);
 }
@@ -2037,6 +2077,47 @@
   border-radius: var(--radius-control);
   font-family: var(--font-mono);
   min-height: 40px;
+}
+
+.feed-code-visualization .code-visualization-lines,
+.feed-code-visualization .code-visualization-line {
+  display: block;
+}
+
+.feed-code-visualization .code-visualization-lines {
+  counter-reset: code-visualization-line;
+  min-width: max-content;
+}
+
+.feed-code-visualization .code-visualization-line {
+  counter-increment: code-visualization-line;
+  min-height: 1.6em;
+  position: relative;
+}
+
+.feed-code-visualization .code-show-line-numbers .code-visualization-line {
+  padding-inline-start: 4.5ch;
+}
+
+.feed-code-visualization .code-show-line-numbers .code-visualization-line::before {
+  color: var(--soft);
+  content: counter(code-visualization-line);
+  font-variant-numeric: tabular-nums;
+  inset-inline-start: 0;
+  position: absolute;
+  text-align: end;
+  user-select: none;
+  width: 3ch;
+}
+
+.feed-code-visualization .code-wrap-lines pre,
+.feed-code-visualization .code-wrap-lines pre code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.feed-code-visualization .code-wrap-lines .code-visualization-lines {
+  min-width: 0;
 }
 
 .feed-table-filter {
@@ -2082,7 +2163,9 @@
 }
 
 .feed-table-visualization-scroll {
-  flex: 1 1 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  flex: 0 1 auto;
   min-height: 0;
   min-width: 0;
   overflow-x: clip;
@@ -2091,7 +2174,8 @@
 }
 
 .feed-visualization-table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   color: var(--ink);
   font-size: inherit;
   min-width: 100%;
@@ -2101,12 +2185,22 @@
 
 .feed-visualization-table th,
 .feed-visualization-table td {
-  border: 1px solid var(--line-strong);
+  border: 0;
+  border-block-end: 1px solid var(--line-strong);
+  border-inline-end: 1px solid var(--line-strong);
   font-size: inherit;
   padding: 12px 16px;
   position: relative;
   text-align: start;
   vertical-align: top;
+}
+
+.feed-visualization-table tr > :last-child {
+  border-inline-end: 0;
+}
+
+.feed-visualization-table tbody tr:last-child > * {
+  border-block-end: 0;
 }
 
 .feed-visualization-table th {
@@ -2213,6 +2307,18 @@
   position: absolute;
   right: -1px;
   z-index: 5;
+}
+
+.feed-table-visualization-scroll:has(.feed-table-row:last-child.is-row-resize-highlight) {
+  border-block-end-color: var(--brand-blue);
+}
+
+.feed-visualization-table .feed-table-row:last-child.is-row-resize-highlight::after {
+  display: none;
+}
+
+.feed-visualization-table tbody tr:last-child > td.is-column-resize-highlight::after {
+  block-size: calc(100% + 1px);
 }
 
 .feed-table-cell-content {

@@ -6,6 +6,28 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Existing AI feeds can create a new feed from selected request-and-response
+  interactions through a searchable history-selection dialog.
+- Code visualization windows can independently show line numbers and wrap long
+  lines while preserving syntax highlighting.
+
+### Changed
+
+- GitHub inbox synchronization processes large feed sets in resumable batches,
+  reports progress, and preserves complete technical diagnostics.
+- Feed and standalone visualization tables share continuous rounded frames,
+  content-sized rows, and overflow-safe resize feedback.
+
+### Fixed
+
+- History selection distinguishes the active request from selected requests,
+  exposes complete request and response text, and avoids sidebar jumps while
+  reading details.
+- Final-row table highlights no longer create a scrollbar or leave column
+  dividers short of the rounded outer border.
+
 ## [0.4.0] - 2026-08-09
 
 ### Added

@@ -267,6 +267,8 @@ function fenceCode(source: string, language: string): string {
 function CodeViewer({ visualization }: { visualization: Extract<FeedVisualization, { kind: "code" }> }) {
   const [copied, setCopied] = useState(false);
   const [language, setLanguage] = useState(visualization.language);
+  const [showLineNumbers, setShowLineNumbers] = useState(false);
+  const [wrapLines, setWrapLines] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const languageOptions = useMemo(() => Array.from(new Set([language, ...CODE_LANGUAGE_OPTIONS].filter(Boolean))).map((value) => ({
     value,
@@ -294,6 +296,22 @@ function CodeViewer({ visualization }: { visualization: Extract<FeedVisualizatio
           className="feed-code-language-select"
         />
       </div>
+      <label className="feed-code-option">
+        <input
+          type="checkbox"
+          checked={showLineNumbers}
+          onChange={(event) => setShowLineNumbers(event.target.checked)}
+        />
+        <span>Line numbers</span>
+      </label>
+      <label className="feed-code-option">
+        <input
+          type="checkbox"
+          checked={wrapLines}
+          onChange={(event) => setWrapLines(event.target.checked)}
+        />
+        <span>Wrap lines</span>
+      </label>
       <div className="mermaid-zoom-controls">
         <button type="button" onClick={() => void copy()}>{copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy code"}</button>
       </div>
@@ -302,7 +320,12 @@ function CodeViewer({ visualization }: { visualization: Extract<FeedVisualizatio
   return (
     <ViewerShell title={visualizationTitle(visualization)} controls={controls}>
       <section className="feed-code-visualization" aria-label="Code snippet">
-        <MarkdownContent content={fenceCode(visualization.source, language)} />
+        <MarkdownContent
+          content={fenceCode(visualization.source, language)}
+          className={`${showLineNumbers ? "code-show-line-numbers" : ""} ${wrapLines ? "code-wrap-lines" : ""}`}
+          showCodeLineNumbers={showLineNumbers}
+          wrapCodeLines={wrapLines}
+        />
       </section>
     </ViewerShell>
   );
