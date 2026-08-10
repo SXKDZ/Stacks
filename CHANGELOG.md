@@ -6,6 +6,8 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-10
+
 ### Added
 
 - Existing AI feeds can create a new feed from selected request-and-response
@@ -457,7 +459,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.1
 [0.3.6]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.6
 [0.3.5]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.5
 [0.3.4]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.4
