@@ -1565,6 +1565,21 @@
   width: 100%;
 }
 
+.feed-thread-loading {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: var(--type-control);
+  gap: 8px;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.feed-history-window-control {
+  display: flex;
+  justify-content: center;
+}
+
 .feed-detail-foot {
   background: var(--surface-1);
   border-top: 1px solid var(--line);
