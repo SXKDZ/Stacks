@@ -28,12 +28,36 @@ export async function GET(
     .all();
   const running = isFeedRunning(id);
   const effectiveSnippet = effectiveFeedStatus(snippet, messages.at(-1)?.createdAt, running);
+  const proposals = database
+    .select()
+    .from(feedProposals)
+    .where(eq(feedProposals.snippetId, id))
+    .all()
+    .map((proposal) => {
+      let summary = "Proposed change";
+      try {
+        summary = (JSON.parse(proposal.operation) as { summary?: string }).summary ?? summary;
+      } catch {
+        // Keep the default summary if the stored operation isn't parseable.
+      }
+      return {
+        id: proposal.id,
+        messageId: proposal.messageId,
+        operation: proposal.operation,
+        status: proposal.status,
+        summary,
+        createdAt: proposal.createdAt,
+      };
+    });
 
   const stream = new ReadableStream({
     start(controller) {
-      // Replay persisted history first so a late/reconnecting client is caught up.
-      for (const message of messages) {
-        controller.enqueue(frame("message", {
+      // Persisted history is one atomic snapshot. Replaying thousands of rows as
+      // individual SSE events made React rebuild the growing thread once per row
+      // before the browser could settle. SSE remains responsible only for events
+      // produced after this snapshot while a feed is live.
+      controller.enqueue(frame("snapshot", {
+        messages: messages.map((message) => ({
           id: message.id,
           role: message.role,
           kind: message.kind,
@@ -41,29 +65,9 @@ export async function GET(
           toolUseId: message.toolUseId,
           attachments: message.attachments,
           createdAt: message.createdAt,
-        }));
-      }
-      const proposals = database
-        .select()
-        .from(feedProposals)
-        .where(eq(feedProposals.snippetId, id))
-        .all();
-      for (const proposal of proposals) {
-        let summary = "Proposed change";
-        try {
-          summary = (JSON.parse(proposal.operation) as { summary?: string }).summary ?? summary;
-        } catch {
-          // Keep the default summary if the stored operation isn't parseable.
-        }
-        controller.enqueue(frame("proposal", {
-          id: proposal.id,
-          messageId: proposal.messageId,
-          operation: proposal.operation,
-          status: proposal.status,
-          summary,
-          createdAt: proposal.createdAt,
-        }));
-      }
+        })),
+        proposals,
+      }));
 
       // If the run already finished, send the terminal status and close.
       if (!running) {

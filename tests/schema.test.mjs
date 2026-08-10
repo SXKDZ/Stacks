@@ -941,10 +941,11 @@ test("the GitHub sync recovers linked comments that fell behind its cursor", asy
   // it to replay the imported user message and subscribe to the agent response.
   assert.match(feed, /const streamVersion = `\$\{streamNonce\}:\$\{running \? "running" : "idle"\}`/);
   assert.match(feed, /new EventSource\(`\/api\/feed\/snippets\/\$\{snippet\.id\}\/events`\)[\s\S]*?\}, \[snippet\.id, streamVersion\]\);/);
-  // Opening a long feed stays pinned until persisted history is fully replayed,
-  // and observes the stable content wrapper so later batches cannot strand the
-  // viewport in the middle of the conversation.
+  // Opening a long feed receives persisted history atomically, stays pinned until
+  // that snapshot settles, and observes the stable content wrapper so later live
+  // events cannot strand the viewport in the middle of the conversation.
   assert.match(feed, /const replayingHistoryRef = useRef\(true\)/);
+  assert.match(feed, /source\.addEventListener\("snapshot"/);
   assert.match(feed, /observer\.observe\(content\)/);
   assert.match(feed, /source\.addEventListener\("status", completeReplay\)/);
   assert.match(feed, /const userScrollIntentRef = useRef\(false\)/);

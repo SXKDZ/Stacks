@@ -22,7 +22,7 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
   assert.match(markdown, /FeedImage/);
   assert.match(markdown, /FeedTable/);
   assert.match(feed, /className="feed-bubble" enableFeedRichContent feedId=\{snippet\.id\}/);
-  assert.match(feed, /renderToolContent\(toolInput, snippet\.id, feedName\)/);
+  assert.match(feed, /renderToolContent\(operation\.input, feedId, feedName\)/);
   assert.match(feed, /document\.title = `\$\{title\} · Stacks`/);
 
   assert.match(diagram, /import\("mermaid"\)/);
@@ -116,7 +116,7 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
   assert.match(styles, /\.mermaid-visualization-viewport\s*\{[^}]*min-width:\s*0[^}]*width:\s*100%/s);
   assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*min-width:\s*0[^}]*width:\s*100%/s);
   assert.match(feed, /className="feed-tool-group"/);
-  assert.match(feed, /\{count\} tool operations/);
-  assert.match(feed, /flushToolNodes\(\)/);
+  assert.match(feed, /\{operations\.length\} tool operations/);
+  assert.match(feed, /flushToolOperations\(\)/);
   assert.match(styles, /\.feed-tool-group-items\s*\{[^}]*display:\s*grid[^}]*gap:\s*8px/s);
 });

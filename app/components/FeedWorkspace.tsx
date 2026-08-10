@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
@@ -38,6 +38,20 @@ interface FeedProposal {
   summary: string;
   createdAt: string;
 }
+
+interface FeedSnapshot {
+  messages: FeedMessage[];
+  proposals: FeedProposal[];
+}
+
+interface FeedToolOperation {
+  id: string;
+  label: string;
+  input?: string;
+  result?: string;
+}
+
+const FEED_HISTORY_WINDOW = 8;
 
 /** A meta chip on a proposal card. The `action` chip (e.g. "Create paper") is
  *  the primary, brand-tinted label; the rest (paper type, venue) are neutral. */
@@ -416,6 +430,65 @@ function renderToolContent(content: string, feedId: string, feedName: string): R
   return <MarkdownContent content={toolFence(content)} className="feed-tool-md" enableFeedRichContent feedId={feedId} feedName={feedName} />;
 }
 
+/**
+ * Keep expensive Markdown/highlighting out of the tree until the user opens a
+ * tool operation. Native <details> hides its descendants visually but React
+ * would otherwise still parse and mount every multi-kilobyte request/result.
+ */
+const FeedToolCall = memo(function FeedToolCall({ operation, feedId, feedName }: {
+  operation: FeedToolOperation;
+  feedId: string;
+  feedName: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <details className="feed-tool-call" onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary><Wrench size={12} /> <span>{operation.label}</span></summary>
+      {expanded ? (
+        <div className="feed-tool-io">
+          {operation.input !== undefined ? (
+            <>
+              <span className="feed-tool-tag">Request</span>
+              {renderToolContent(operation.input, feedId, feedName)}
+            </>
+          ) : null}
+          {operation.result !== undefined ? (
+            <>
+              <span className="feed-tool-tag">Result</span>
+              {renderToolContent(operation.result, feedId, feedName)}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </details>
+  );
+});
+
+/** A consecutive run of tools mounts only its count until the group is opened. */
+const FeedToolGroup = memo(function FeedToolGroup({ operations, feedId, feedName }: {
+  operations: FeedToolOperation[];
+  feedId: string;
+  feedName: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <details className="feed-tool-group" onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary>
+        <ChevronRight className="disclosure-chevron" size={14} aria-hidden="true" />
+        <Wrench size={13} />
+        <span>{operations.length} tool operations</span>
+      </summary>
+      {expanded ? (
+        <div className="feed-tool-group-items">
+          {operations.map((operation) => (
+            <FeedToolCall key={operation.id} operation={operation} feedId={feedId} feedName={feedName} />
+          ))}
+        </div>
+      ) : null}
+    </details>
+  );
+});
+
 function FeedErrorMessage({ content, announce = false }: { content: string; announce?: boolean }) {
   const { summary, details } = splitFeedError(content);
   return (
@@ -641,10 +714,10 @@ function interactionResponseText(interaction: FeedInteraction<FeedMessage>): str
 }
 
 /**
- * A focused chooser for creating a new feed from past requests. One row is one
- * interaction boundary: the user request plus every agent event before the next
- * request. Responses are intentionally capped until expanded so tool-heavy runs
- * do not turn selection into another full conversation view.
+ * A focused chooser for creating a new feed from past requests. The complete,
+ * lightweight request index stays available on the left while only its active
+ * request/response card is mounted on the right. Responses remain capped until
+ * expanded so a long history never becomes a second full conversation DOM.
  */
 function FeedHistorySelectionModal({
   feedName,
@@ -668,7 +741,6 @@ function FeedHistorySelectionModal({
   const [activeInteractionId, setActiveInteractionId] = useState(interactions[0]?.id ?? "");
   const dialogRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const cardRefs = useRef(new Map<string, HTMLElement>());
   const indexButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const closeRef = useRef(onClose);
   const creatingRef = useRef(creating);
@@ -676,20 +748,23 @@ function FeedHistorySelectionModal({
   useEffect(() => { closeRef.current = onClose; }, [onClose]);
   useEffect(() => { creatingRef.current = creating; }, [creating]);
 
-  const records = useMemo(() => interactions.map((interaction, index) => ({
-    interaction,
-    number: index + 1,
-    response: interactionResponseText(interaction),
-  })), [interactions]);
+  const records = useMemo(() => interactions.map((interaction, index) => {
+    const response = interactionResponseText(interaction);
+    return {
+      interaction,
+      number: index + 1,
+      response,
+      searchText: `${interaction.userText}\n${response}`.toLocaleLowerCase(),
+    };
+  }), [interactions]);
   const visible = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     if (!term) return records;
-    return records.filter(({ interaction, response }) =>
-      `${interaction.userText}\n${response}`.toLocaleLowerCase().includes(term),
-    );
+    return records.filter(({ searchText }) => searchText.includes(term));
   }, [query, records]);
   const visibleIds = visible.map(({ interaction }) => interaction.id);
   const displayedActiveId = visibleIds.includes(activeInteractionId) ? activeInteractionId : (visibleIds[0] ?? "");
+  const activeRecord = visible.find(({ interaction }) => interaction.id === displayedActiveId);
   const allVisibleSelected = Boolean(visibleIds.length) && visibleIds.every((id) => selected.has(id));
 
   useEffect(() => {
@@ -740,10 +815,6 @@ function FeedHistorySelectionModal({
 
   function jumpWithinModal(id: string) {
     setActiveInteractionId(id);
-    cardRefs.current.get(id)?.scrollIntoView({
-      block: "start",
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-    });
   }
 
   function toggleExpanded(id: string) {
@@ -833,9 +904,10 @@ function FeedHistorySelectionModal({
           </nav>
 
           <div className="feed-history-interactions" aria-busy={loading}>
-            {loading && records.length <= 1 ? (
+            {loading ? (
               <div className="feed-history-loading"><LoaderCircle className="spin" size={18} /><span>Loading conversation history…</span></div>
-            ) : visible.length ? visible.map(({ interaction, number, response }) => {
+            ) : activeRecord ? (() => {
+              const { interaction, number, response } = activeRecord;
               const isExpanded = expanded.has(interaction.id);
               const isRequestExpanded = expandedRequests.has(interaction.id);
               const isSelected = selected.has(interaction.id);
@@ -843,10 +915,6 @@ function FeedHistorySelectionModal({
               return (
                 <article
                   key={interaction.id}
-                  ref={(node) => {
-                    if (node) cardRefs.current.set(interaction.id, node);
-                    else cardRefs.current.delete(interaction.id);
-                  }}
                   className={`feed-history-interaction ${isSelected ? "is-selected" : ""}`}
                 >
                   <label className="feed-history-interaction-select">
@@ -878,7 +946,7 @@ function FeedHistorySelectionModal({
                   </div>
                 </article>
               );
-            }) : (
+            })() : (
               <div className="feed-history-empty">No requests or responses match “{query}”.</div>
             )}
           </div>
@@ -939,6 +1007,8 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const [includeToolDetails, setIncludeToolDetails] = useState(false);
   const [creatingFromHistory, setCreatingFromHistory] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
+  const [visibleInteractionCount, setVisibleInteractionCount] = useState(FEED_HISTORY_WINDOW);
+  const [visibleInteractionStart, setVisibleInteractionStart] = useState<number | null>(null);
   const running = snippet.status === "running" || snippet.status === "queued";
   // Keep the stream effect's dependency array shape stable for Fast Refresh
   // while still reconnecting when an external action starts or ends a run.
@@ -962,11 +1032,13 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
+    setVisibleInteractionStart(null);
+    setVisibleInteractionCount(FEED_HISTORY_WINDOW);
     pinnedToBottomRef.current = true;
-    if (body) {
-      body.scrollTop = body.scrollHeight;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (body) body.scrollTop = body.scrollHeight;
       setAtBottom(true);
-    }
+    }));
   }, []);
 
   /**
@@ -1102,6 +1174,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
       const message = JSON.parse((event as MessageEvent).data) as FeedMessage;
       setMessages((current) => (current.some((m) => m.id === message.id) ? current : [...current, message]));
     });
+    source.addEventListener("snapshot", (event) => {
+      const snapshot = JSON.parse((event as MessageEvent).data) as FeedSnapshot;
+      setMessages(snapshot.messages);
+      setProposals(snapshot.proposals);
+    });
     source.addEventListener("proposal", (event) => {
       const proposal = JSON.parse((event as MessageEvent).data) as FeedProposal;
       setProposals((current) => (current.some((p) => p.id === proposal.id) ? current : [...current, proposal]));
@@ -1160,6 +1237,8 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
         // Re-pin the view to the bottom so the new turn (and the incoming
         // response) stays in view even if the user had scrolled up.
         pinnedToBottomRef.current = true;
+        setVisibleInteractionStart(null);
+        setVisibleInteractionCount(FEED_HISTORY_WINDOW);
         setStreamNonce((nonce) => nonce + 1);
         onChanged();
         return true;
@@ -1251,6 +1330,18 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     () => groupFeedInteractions(snippet.instruction, snippet.attachments, messages),
     [messages, snippet.attachments, snippet.instruction],
   );
+  const visibleStart = visibleInteractionStart ?? Math.max(0, interactions.length - visibleInteractionCount);
+  const visibleInteractions = useMemo(
+    () => interactions.slice(visibleStart, visibleStart + visibleInteractionCount),
+    [interactions, visibleInteractionCount, visibleStart],
+  );
+  const visibleMessages = useMemo(
+    () => visibleInteractions.flatMap((interaction) => interaction.messages),
+    [visibleInteractions],
+  );
+  const hiddenInteractionCount = visibleStart;
+  const hiddenLaterInteractionCount = Math.max(0, interactions.length - visibleStart - visibleInteractions.length);
+  const openingInteractionVisible = visibleInteractions.some((interaction) => interaction.opening);
 
   function toggleInteraction(id: string) {
     setSelectedInteractions((current) => {
@@ -1268,6 +1359,17 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     setIncludeToolDetails(false);
   }
 
+  function showEarlierInteractions() {
+    const body = bodyRef.current;
+    const previousHeight = body?.scrollHeight ?? 0;
+    const added = Math.min(FEED_HISTORY_WINDOW, hiddenInteractionCount);
+    if (visibleInteractionStart !== null) setVisibleInteractionStart(Math.max(0, visibleStart - added));
+    setVisibleInteractionCount((current) => Math.min(interactions.length, current + added));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (body) body.scrollTop += body.scrollHeight - previousHeight;
+    }));
+  }
+
   function setVisibleInteractions(ids: string[], shouldSelect: boolean) {
     setSelectedInteractions((current) => {
       const next = new Set(current);
@@ -1280,6 +1382,15 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   }
 
   function jumpToInteraction(id: string) {
+    const index = interactions.findIndex((interaction) => interaction.id === id);
+    if (index !== -1) {
+      const centeredStart = Math.max(0, Math.min(
+        index - Math.floor(FEED_HISTORY_WINDOW / 2),
+        interactions.length - FEED_HISTORY_WINDOW,
+      ));
+      setVisibleInteractionStart(centeredStart);
+      setVisibleInteractionCount(FEED_HISTORY_WINDOW);
+    }
     cancelHistorySelection();
     pinnedToBottomRef.current = false;
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -1426,7 +1537,21 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
             <FeedErrorMessage content={snippet.error} />
           </div>
         ) : null}
+        {!historyReady ? (
+          <div className="feed-thread-loading" role="status">
+            <LoaderCircle className="spin" size={18} />
+            <span>Loading conversation history…</span>
+          </div>
+        ) : null}
+        {historyReady && hiddenInteractionCount ? (
+          <div className="feed-history-window-control">
+            <ActionButton variant="secondary" size="small" onClick={showEarlierInteractions} icon={<ChevronUp size={14} />}>
+              Show {Math.min(FEED_HISTORY_WINDOW, hiddenInteractionCount)} earlier interaction{Math.min(FEED_HISTORY_WINDOW, hiddenInteractionCount) === 1 ? "" : "s"}
+            </ActionButton>
+          </div>
+        ) : null}
         {(() => {
+          if (!historyReady || !openingInteractionVisible) return null;
           const openingAttachments = parseAttachments(snippet.attachments);
           // The opening "You" turn shows the instruction the user typed plus any
           // attachments. Render the instruction bubble whenever it exists — it is
@@ -1445,8 +1570,9 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
         })()}
         <div className="feed-thread">
           {(() => {
+            if (!historyReady) return null;
             const nodes: ReactNode[] = [];
-            const displayMessages = coalesceLegacyAgentErrors(messages);
+            const displayMessages = coalesceLegacyAgentErrors(visibleMessages);
             // Pair each tool_use with its result by tool_use id — the agent can
             // issue calls in parallel (use A, use B, result A, result B), so
             // position alone mispairs them. Results claimed by id are skipped
@@ -1458,31 +1584,22 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               }
             }
             const claimed = new Set<string>();
-            let pendingToolNodes: ReactNode[] = [];
-            let firstPendingToolId = "";
-            const addToolNode = (id: string, node: ReactNode) => {
-              if (!pendingToolNodes.length) firstPendingToolId = id;
-              pendingToolNodes.push(node);
+            let pendingToolOperations: FeedToolOperation[] = [];
+            const addToolOperation = (operation: FeedToolOperation) => {
+              pendingToolOperations.push(operation);
             };
-            const flushToolNodes = () => {
-              if (!pendingToolNodes.length) return;
-              if (pendingToolNodes.length === 1) {
-                nodes.push(pendingToolNodes[0]);
+            const flushToolOperations = () => {
+              if (!pendingToolOperations.length) return;
+              if (pendingToolOperations.length === 1) {
+                const operation = pendingToolOperations[0];
+                nodes.push(<FeedToolCall key={operation.id} operation={operation} feedId={snippet.id} feedName={feedName} />);
               } else {
-                const count = pendingToolNodes.length;
+                const operations = pendingToolOperations;
                 nodes.push(
-                  <details key={`tool-group-${firstPendingToolId}`} className="feed-tool-group">
-                    <summary>
-                      <ChevronRight className="disclosure-chevron" size={14} aria-hidden="true" />
-                      <Wrench size={13} />
-                      <span>{count} tool operations</span>
-                    </summary>
-                    <div className="feed-tool-group-items">{pendingToolNodes}</div>
-                  </details>,
+                  <FeedToolGroup key={`tool-group-${operations[0].id}`} operations={operations} feedId={snippet.id} feedName={feedName} />,
                 );
               }
-              pendingToolNodes = [];
-              firstPendingToolId = "";
+              pendingToolOperations = [];
             };
             for (let i = 0; i < displayMessages.length; i += 1) {
               const message = displayMessages[i];
@@ -1502,16 +1619,12 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 const space = message.content.indexOf(" ");
                 const toolName = space === -1 ? message.content : message.content.slice(0, space);
                 const toolInput = space === -1 ? "" : message.content.slice(space + 1);
-                addToolNode(message.id,
-                  <details key={message.id} className="feed-tool-call">
-                    <summary><Wrench size={12} /> <span>{toolName}</span></summary>
-                    <div className="feed-tool-io">
-                      <span className="feed-tool-tag">Request</span>
-                      {renderToolContent(toolInput, snippet.id, feedName)}
-                      {resultMessage ? <><span className="feed-tool-tag">Result</span>{renderToolContent(resultMessage.content, snippet.id, feedName)}</> : null}
-                    </div>
-                  </details>,
-                );
+                addToolOperation({
+                  id: message.id,
+                  label: toolName,
+                  input: toolInput,
+                  result: resultMessage?.content,
+                });
                 continue;
               }
               if (message.kind === "tool_result") {
@@ -1519,15 +1632,10 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 if (claimed.has(message.id)) {
                   continue;
                 }
-                addToolNode(message.id,
-                  <details key={message.id} className="feed-tool-call">
-                    <summary><Wrench size={12} /> <span>tool result</span></summary>
-                    <div className="feed-tool-io"><span className="feed-tool-tag">Result</span>{renderToolContent(message.content, snippet.id, feedName)}</div>
-                  </details>,
-                );
+                addToolOperation({ id: message.id, label: "tool result", result: message.content });
                 continue;
               }
-              flushToolNodes();
+              flushToolOperations();
               if (message.kind === "error") {
                 nodes.push(
                   <div key={message.id} className="feed-message feed-message-error">
@@ -1572,10 +1680,10 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 nodes.push(renderProposals(anchored, `props-${message.id}`));
               }
             }
-            flushToolNodes();
+            flushToolOperations();
             return nodes;
           })()}
-          {running ? (
+          {historyReady && running ? (
             // Dots only: an agent turn is bare prose, so wrapping them in a bubble
             // would make the pending turn look unlike the reply that replaces it.
             <div className="feed-message feed-turn feed-turn-assistant feed-turn-pending">
@@ -1585,14 +1693,14 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           ) : null}
         </div>
 
-        {renderProposals(unanchoredProposals, "props-unanchored")}
+        {historyReady ? renderProposals(unanchoredProposals, "props-unanchored") : null}
 
         {error ? <div className="feed-error-banner"><FeedErrorMessage content={error} announce /></div> : null}
         </div>
       </div>
 
       <footer className="feed-detail-foot">
-        {!atBottom ? (
+        {!atBottom || hiddenLaterInteractionCount ? (
           <button type="button" className="feed-scroll-bottom" onClick={scrollToBottom} aria-label="Scroll to latest">
             <ArrowDown size={16} />
           </button>
