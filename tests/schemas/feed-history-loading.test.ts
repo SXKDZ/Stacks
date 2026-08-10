@@ -37,6 +37,12 @@ test("long feeds hydrate once, render bounded work, and retain the full history 
   assert.match(feed, /pane\.addEventListener\("wheel", cancelAnimatedScroll/);
   assert.match(feed, /const paneTop = pane\.getBoundingClientRect\(\)\.top/);
   assert.match(feed, /Math\.max\(0, pane\.scrollTop \+ cardTop - paneTop\)/);
+  assert.match(feed, /const \[selectingHistory, setSelectingHistory\] = useState\(false\)/);
+  assert.match(feed, /if \(historySelectionRequestNonce !== null\) setSelectingHistory\(true\)/);
+  assert.match(feed, /onHistorySelectionClosed\(\);/);
+  assert.match(feed, /onSelect=\{\(\) => \{ setHistorySelectionRequest\(null\); setComposing\(false\); setSelectedId\(snippet\.id\); \}\}/);
+  assert.match(feed, /key=\{selected\.id\}/);
+  assert.doesNotMatch(feed, /selectHistoryInitially/);
   assert.doesNotMatch(feed, /interactionCardRefs\.current\.get\(id\)\?\.scrollIntoView/);
   assert.doesNotMatch(historyStyles, /content-visibility:\s*auto/);
   assert.match(feed, /\{loading \? \(\s*<div className="feed-history-loading"/s);

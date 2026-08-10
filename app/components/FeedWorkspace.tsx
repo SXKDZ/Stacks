@@ -1047,14 +1047,14 @@ function FeedHistorySelectionModal({
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, selectHistoryInitially, historySelectionReturnFocus, onBack, onChanged, onCreated }: {
+function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   models: FeedModelOption[];
   defaultModelLabel: string;
   defaultEffort: EffortSetting;
-  selectHistoryInitially: boolean;
-  historySelectionReturnFocus: HTMLButtonElement | null;
+  historySelectionRequest: { nonce: number; returnFocus: HTMLButtonElement | null } | null;
+  onHistorySelectionClosed: () => void;
   onBack: () => void;
   onChanged: () => void;
   onCreated: (id: string) => void;
@@ -1071,7 +1071,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const [workingDirectory, setWorkingDirectory] = useState<string | null>(null);
   const [openingWorkingDirectory, setOpeningWorkingDirectory] = useState(false);
   const [streamNonce, setStreamNonce] = useState(0);
-  const [selectingHistory, setSelectingHistory] = useState(selectHistoryInitially);
+  const [selectingHistory, setSelectingHistory] = useState(false);
   const [selectedInteractions, setSelectedInteractions] = useState<Set<string>>(() => new Set());
   const [includeToolDetails, setIncludeToolDetails] = useState(false);
   const [creatingFromHistory, setCreatingFromHistory] = useState(false);
@@ -1098,6 +1098,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const replayingHistoryRef = useRef(true);
   const userScrollIntentRef = useRef(false);
   const userScrollIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historySelectionRequestNonce = historySelectionRequest?.nonce ?? null;
+
+  useEffect(() => {
+    if (historySelectionRequestNonce !== null) setSelectingHistory(true);
+  }, [historySelectionRequestNonce]);
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
@@ -1426,6 +1431,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     setSelectingHistory(false);
     setSelectedInteractions(new Set());
     setIncludeToolDetails(false);
+    onHistorySelectionClosed();
   }
 
   function showEarlierInteractions() {
@@ -1487,6 +1493,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
         return;
       }
       const payload = await response.json() as { id: string };
+      onHistorySelectionClosed();
       onCreated(payload.id);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "The new feed could not be created.");
@@ -1803,7 +1810,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           creating={creatingFromHistory}
           loading={!historyReady}
           error={error}
-          returnFocus={historySelectionReturnFocus}
+          returnFocus={historySelectionRequest?.returnFocus ?? null}
           onToggle={toggleInteraction}
           onSetVisible={setVisibleInteractions}
           onIncludeToolDetails={setIncludeToolDetails}
@@ -2302,7 +2309,7 @@ export default function FeedWorkspace() {
       <aside className="feed-list-pane">
         <header className="feed-list-head">
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
-          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />} kbd={`${modKey}M`}>New</ActionButton>
+          <ActionButton variant="primary" size="small" onClick={() => { setHistorySelectionRequest(null); setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />} kbd={`${modKey}M`}>New</ActionButton>
         </header>
         {snippets.length ? (
           <div className="feed-search">
@@ -2323,7 +2330,7 @@ export default function FeedWorkspace() {
                   key={snippet.id}
                   snippet={snippet}
                   active={snippet.id === selectedId && !composing}
-                  onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                  onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                   onRename={() => void renameSnippet(snippet)}
                   onFork={() => void forkSnippet(snippet)}
                   onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
@@ -2344,7 +2351,7 @@ export default function FeedWorkspace() {
                       key={snippet.id}
                       snippet={snippet}
                       active={snippet.id === selectedId && !composing}
-                      onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                      onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                       onRename={() => void renameSnippet(snippet)}
                       onFork={() => void forkSnippet(snippet)}
                       onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
@@ -2386,14 +2393,14 @@ export default function FeedWorkspace() {
       <div className="feed-detail-pane">
         {showDetail && selected ? (
           <FeedDetail
-            key={`${selected.id}:${historySelectionRequest?.id === selected.id ? historySelectionRequest.nonce : 0}`}
+            key={selected.id}
             snippet={selected}
             library={library}
             models={models}
             defaultModelLabel={defaultModelLabel}
             defaultEffort={defaultEffort}
-            selectHistoryInitially={historySelectionRequest?.id === selected.id}
-            historySelectionReturnFocus={historySelectionRequest?.id === selected.id ? historySelectionRequest.returnFocus : null}
+            historySelectionRequest={historySelectionRequest?.id === selected.id ? historySelectionRequest : null}
+            onHistorySelectionClosed={() => setHistorySelectionRequest(null)}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
             onCreated={(id) => {
