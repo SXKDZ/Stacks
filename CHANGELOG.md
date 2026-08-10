@@ -6,6 +6,11 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- AI feed composer resize handles stay hidden until hover, keyboard focus, or
+  active interaction, reducing visual clutter without hiding the control.
+
 ## [0.4.1] - 2026-08-10
 
 ### Added
