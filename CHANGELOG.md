@@ -6,6 +6,8 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-10
+
 ### Fixed
 
 - AI feed composer resize handles stay hidden until hover, keyboard focus, or
@@ -464,7 +466,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.2
 [0.4.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.1
 [0.3.6]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.6
 [0.3.5]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.5
