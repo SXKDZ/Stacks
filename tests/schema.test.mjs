@@ -213,12 +213,22 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   // The no-author line now enters the same type scale as ordinary author names.
   assert.match(adaptiveAuthors, /className="expandable-author-buttons is-empty">No authors recorded/);
   assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
-  // Disclosure fitting must use the byline's visible box, not the wider table
-  // cell behind it. It also revalidates after rendering so "authors" can never
-  // be clipped to an incomplete word at an intermediate column width.
-  assert.match(adaptiveAuthors, /container\.clientWidth - AUTHOR_DISCLOSURE_INLINE_RESERVE/);
-  assert.match(adaptiveAuthors, /scheduleFitValidation\(attempt \+ 1\)/);
-  assert.doesNotMatch(adaptiveAuthors, /cellRect\.right[^\n]*containerRect\.left/);
+  // Disclosure fitting measures complete rendered labels on every resize frame,
+  // including active column drags, and commits one exact candidate count.
+  assert.match(adaptiveAuthors, /Math\.floor\(container\.getBoundingClientRect\(\)\.width\)/);
+  assert.match(adaptiveAuthors, /for \(let count = 0; count <= nameWidths\.length; count \+= 1\)/);
+  assert.match(adaptiveAuthors, /Math\.ceil\(requiredWidth\) <= availableWidth/);
+  assert.match(adaptiveAuthors, /new ResizeObserver\(requestMeasure\)/);
+  // Candidates must cost exactly what the byline costs: a non-breaking
+  // separator (a plain trailing space is trimmed in the hidden measure, which
+  // bought one space of width per visible author) and the live toggle class,
+  // so type and inline margin come from the rendered control's own rules.
+  assert.match(adaptiveAuthors, /data-author-measure-separator>\{",\u00a0"\}/);
+  assert.doesNotMatch(adaptiveAuthors, /\? ", " : ""/);
+  assert.match(adaptiveAuthors, /className="author-toggle author-toggle-measure"/);
+  assert.doesNotMatch(styles, /\.author-adaptive-measure \.author-toggle-measure\s*\{[^}]*font-size/);
+  assert.doesNotMatch(adaptiveAuthors, /is-resizing-column/);
+  assert.doesNotMatch(adaptiveAuthors, /scheduleFitValidation|AUTHOR_DISCLOSURE_INLINE_RESERVE/);
 });
 
 test("agent scopes one-paper reads and proposes complete paper metadata", async () => {

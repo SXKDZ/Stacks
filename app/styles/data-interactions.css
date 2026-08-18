@@ -485,8 +485,7 @@
   line-height: 1.35;
 }
 
-.expandable-author-buttons .author-toggle,
-.author-adaptive-measure .author-toggle-measure {
+.expandable-author-buttons .author-toggle {
   margin-inline-start: 5px;
 }
 
@@ -504,11 +503,10 @@
   flex: 0 0 auto;
 }
 
+/* Type, weight, and inline margin come from the live .author-toggle rules the
+   candidate also carries, so a measured label can never be narrower than the
+   control that replaces it. */
 .author-adaptive-measure .author-toggle-measure {
-  font-family: inherit;
-  font-size: var(--type-micro);
-  font-weight: 700;
-  line-height: inherit;
   white-space: nowrap;
 }
 
