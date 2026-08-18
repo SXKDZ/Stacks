@@ -71,6 +71,19 @@ pdfUrl, collectionNames (array), and notes. Never silently omit known metadata.
 - Leave venueName empty only for genuinely un-venued items such as standalone
   reports or personal blog posts.
 
+DATA FIELDS PER ENTITY (only these are read; ids come from the library read):
+- paper: title, paperType, authors[], year, abstract, summary, notes, venueName,
+  doi, preprintId, url, pdfUrl, volume, issue, pages, category, readingStatus
+  ("inbox"|"reading"|"complete"), favorite, collectionNames[] or collectionIds[]
+  (either one REPLACES the paper's collections).
+- author: displayName, givenName, familyName, orcid, notes.
+- venue: name, acronym, type, publisher, url, notes.
+- collection: name (this is how you RENAME a collection), color, and membership:
+    addPaperIds[] / removePaperIds[]: add or remove those papers only, leaving the
+      rest of the collection untouched. Prefer these.
+    paperIds[]: the complete membership, REPLACING it. Every paper you leave out
+      is removed from the collection, so only use it when you intend that.
+
 RULES:
 ${PAPER_SCOPE_RULES}
 - Never claim a change was applied: writes only queue a proposal for approval.

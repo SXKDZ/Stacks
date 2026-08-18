@@ -1142,6 +1142,26 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /message\.id === usage\.messageId/);
 });
 
+test("a proposal can rename a collection and edit its membership", async () => {
+  const [libraryRoute, prompt] = await Promise.all([
+    readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-prompt.ts", import.meta.url), "utf8"),
+  ]);
+
+  // A collection can be renamed and its membership edited without restating it:
+  // paperIds reconciles to an exact set, which silently drops every paper a caller
+  // omits, so an agent that only knows what to add needs a delta. Both, and the
+  // fields each entity accepts, are documented where the agent will read them.
+  assert.match(libraryRoute, /function editCollectionPapers/);
+  assert.match(libraryRoute, /editCollectionPapers\(tx, id, data\.addPaperIds, data\.removePaperIds\)/);
+  assert.match(prompt, /collection: name \(this is how you RENAME a collection\)/);
+  assert.match(prompt, /addPaperIds\[\] \/ removePaperIds\[\]/);
+  assert.match(prompt, /paperIds\[\]: the complete membership, REPLACING it/);
+  // An update used to drop semanticScholarId even though a create stores it.
+  assert.match(libraryRoute, /const paperTextFields = \{[\s\S]*?semanticScholarId: papers\.semanticScholarId/);
+
+});
+
 test("a user's Markdown stays legible on the blue bubble", async () => {
   const styles = await readApplicationStyles();
   // Headings, quotes, tables, and math each declare an ink-dark colour, which the
