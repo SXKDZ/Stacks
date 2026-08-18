@@ -1747,6 +1747,27 @@
   color: var(--white);
 }
 
+/* Markdown that carries its own colour has to inherit inside the user bubble.
+   Headings, quotes, tables, and math each set an ink-dark colour of their own,
+   which rendered as black text on the blue gradient (a Setext heading is easy to
+   write by accident: any line of "=" underlines the line above it). */
+.feed-turn-user .feed-bubble :is(h1, h2, h3, h4, h5, h6, blockquote, th, td, .katex) {
+  color: inherit;
+}
+
+.feed-turn-user .feed-bubble blockquote {
+  background: rgba(255, 255, 255, 0.14);
+  border-left-color: rgba(255, 255, 255, 0.45);
+}
+
+.feed-turn-user .feed-bubble :is(.markdown-table-scroll, .markdown-table-scroll :is(th, td)) {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.feed-turn-user .feed-bubble .markdown-table-scroll th {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .feed-bubble {
   color: var(--ink);
   font-size: var(--type-body);

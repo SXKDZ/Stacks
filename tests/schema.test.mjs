@@ -1142,6 +1142,19 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /message\.id === usage\.messageId/);
 });
 
+test("a user's Markdown stays legible on the blue bubble", async () => {
+  const styles = await readApplicationStyles();
+  // Headings, quotes, tables, and math each declare an ink-dark colour, which the
+  // bubble's own white cannot override through inheritance: they rendered as black
+  // text on the gradient. A line of "=" under any line makes a heading, so this is
+  // easy to hit by accident in a pasted request.
+  assert.match(styles, /\.feed-turn-user \.feed-bubble :is\(h1, h2, h3, h4, h5, h6, blockquote, th, td, \.katex\) \{[^}]*color: inherit/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*border-left-color: rgba\(255, 255, 255/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble \.markdown-table-scroll th \{[^}]*background: rgba\(255, 255, 255/);
+  // The dark declarations these override are the shared Markdown rules.
+  assert.match(styles, /\.markdown-content h1,[\s\S]*?color: var\(--ink\)/);
+});
+
 test("the feed composer reads as one control, with a visible placeholder", async () => {
   const [attachBox, feed, styles] = await Promise.all([
     readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
