@@ -1663,34 +1663,24 @@
   text-transform: uppercase;
 }
 
-/* The turn's footer: its local date and time, then what the turn cost. Quiet
-   chips below the reply, so they read as provenance rather than content. */
+/* The turn's footer: its local date and time, then what the turn cost. Plain
+   dot-separated text, no chrome: this is provenance for the reply above it, so it
+   should be legible when looked for and invisible when not. */
 .feed-turn-meta {
-  align-items: center;
+  align-items: baseline;
+  color: var(--soft);
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-}
-
-.feed-turn-metric {
-  align-items: center;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--soft);
-  display: inline-flex;
   font-size: var(--type-micro);
   font-variant-numeric: tabular-nums;
-  font-weight: 550;
-  gap: 5px;
-  padding: 2px 9px;
+  gap: 0 7px;
+  line-height: 1.5;
 }
 
-.feed-turn-metric > svg {
-  color: var(--soft);
-  flex: 0 0 12px;
-  height: 12px;
-  width: 12px;
+.feed-turn-metric + .feed-turn-metric::before {
+  color: var(--line-strong);
+  content: "·";
+  margin-inline-end: 7px;
 }
 
 .feed-turn-user {

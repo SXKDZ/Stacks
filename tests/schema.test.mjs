@@ -1125,13 +1125,21 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   // first, then speed, tokens, and elapsed time. Speed and tokens are only shown
   // when the turn actually reported them, so older threads show the time alone.
   assert.match(feed, /function fullTime[\s\S]*?toLocaleString\("en", \{ dateStyle: "medium", timeStyle: "short" \}\)/);
-  assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}><Clock aria-hidden="true" \/>\{fullTime\(iso\)\}<\/time>/);
-  assert.match(feed, /\{speed \? <span className="feed-turn-metric"><Gauge aria-hidden="true" \/>\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
+  assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}>\{fullTime\(iso\)\}<\/time>/);
+  assert.match(feed, /\{speed \? <span className="feed-turn-metric">\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
   assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
   assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
   assert.match(feed, /<TurnMeta iso=\{message\.createdAt\} message=\{message\} \/>/);
-  assert.match(styles, /\.feed-turn-meta \{[^}]*flex-wrap: wrap/);
-  assert.match(styles, /\.feed-turn-metric \{[^}]*font-variant-numeric: tabular-nums/);
+  // Provenance, not content: dot-separated text with no chip chrome around it.
+  assert.match(styles, /\.feed-turn-meta \{[^}]*font-variant-numeric: tabular-nums/);
+  assert.match(styles, /\.feed-turn-metric \+ \.feed-turn-metric::before \{[^}]*content: "·"/);
+  assert.doesNotMatch(styles, /\.feed-turn-metric \{[^}]*border-radius/);
+  // Usage lands after its message was streamed, so a live thread is told about it
+  // rather than showing the turn's cost only after a reload.
+  assert.match(agent, /\| \{ type: "usage"; messageId: string/);
+  assert.match(agent, /emit\(snippetId, \{\s*type: "usage",\s*messageId: resultMessageId/);
+  assert.match(feed, /source\.addEventListener\("usage"/);
+  assert.match(feed, /message\.id === usage\.messageId/);
 });
 
 test("the toolbar search field gives way instead of squeezing the status tabs", async () => {

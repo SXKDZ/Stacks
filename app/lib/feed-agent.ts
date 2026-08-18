@@ -28,6 +28,7 @@ type FeedEvent =
   | { type: "status"; status: string }
   | { type: "message"; id: string; role: string; kind: string; content: string; toolUseId?: string | null; createdAt: string }
   | { type: "proposal"; id: string; messageId: string | null; operation: string; status: string; summary: string; createdAt: string }
+  | { type: "usage"; messageId: string; inputTokens: number; outputTokens: number; durationMs: number }
   | { type: "done"; status: string };
 
 const CLAUDE_BIN = process.env.STACKS_CLAUDE_BIN?.trim() || "claude";
@@ -581,9 +582,18 @@ export async function runFeedAgent(options: {
         emit(snippetId, message);
       }
       // The turn's cost belongs to the reply the reader sees, which is either the
-      // result message just written or the last streamed assistant message.
+      // result message just written or the last streamed assistant message. Its
+      // message was already streamed, so announce the usage separately: an open
+      // thread patches that turn instead of showing its cost only after a reload.
       if (usage && resultMessageId) {
         await recordMessageUsage(resultMessageId, usage);
+        emit(snippetId, {
+          type: "usage",
+          messageId: resultMessageId,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          durationMs: usage.durationMs,
+        });
       }
       if (isError) {
         // Rather than dead-end the thread, restart as a fresh session (below).
