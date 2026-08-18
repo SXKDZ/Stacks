@@ -153,10 +153,14 @@ test("pressing controls uses one shared restrained 99% scale token", async () =>
   ]);
   const interactiveStyles = [controls, designSystem, foundation, workflows, reader].join("\n");
   assert.match(foundation, /--motion-press-scale:\s*0\.99;/);
+  assert.match(foundation, /@keyframes popover-enter/);
   assert.equal(interactiveStyles.match(/--motion-press-scale:\s*0\.99;/g)?.length, 1);
   assert.match(controls, /app-control-motion/);
   assert.match(controls, /active:scale-\[var\(--motion-press-scale\)\]/);
   assert.match(designSystem, /\.app-select-option:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(designSystem, /\.page-size-menu\s*\{[\s\S]*?animation: popover-enter var\(--motion-fast\)/);
+  assert.match(designSystem, /\.app-select-menu\s*\{[\s\S]*?animation: popover-enter var\(--motion-fast\)/);
+  assert.match(controls, /data-placement=\{pos\.bottom !== undefined \? "top" : "bottom"\}/);
   assert.match(foundation, /\.app-interaction-scope :is\(button, a, \[role="button"\]\)[\s\S]*?:active:not\(:disabled\):not\(\[aria-disabled="true"\]\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);

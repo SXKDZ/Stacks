@@ -657,6 +657,7 @@ export function Select({
               role="listbox"
               id={listboxId}
               aria-label={ariaLabel}
+              data-placement={pos.bottom !== undefined ? "top" : "bottom"}
               style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, minWidth: pos.width }}
             >
               {options.map((option) => {
