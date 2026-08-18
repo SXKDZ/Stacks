@@ -211,8 +211,21 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   assert.match(styles, /\.metadata-review-row:has\(> input:focus-visible\)/);
 
   // The no-author line now enters the same type scale as ordinary author names.
-  assert.match(adaptiveAuthors, /className="expandable-author-buttons is-empty">No authors recorded/);
-  assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+  assert.match(adaptiveAuthors, /className="expandable-author-list is-empty">\{emptyLabel\}/);
+  assert.match(adaptiveAuthors, /emptyLabel = "No authors recorded"/);
+  assert.match(styles, /\.paper-secondary-line \.expandable-author-list\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+  // One byline component for every surface, so a surface cannot restyle the
+  // disclosure behind the hidden measurement's back: names become links only
+  // where a handler is passed, and the control is the same element in both
+  // states, at the end of the name run.
+  assert.match(adaptiveAuthors, /export function AdaptiveAuthors\(/);
+  assert.doesNotMatch(adaptiveAuthors, /AdaptiveAuthorNames|AdaptiveAuthorButtons/);
+  assert.match(adaptiveAuthors, /onOpenAuthor\s*\?\s*<button type="button"/);
+  assert.match(adaptiveAuthors, /if \(onOpenAuthor\) classes\.push\("is-linked"\)/);
+  assert.doesNotMatch(styles, /expandable-author-buttons/);
+  assert.doesNotMatch(styles, /\.reader-authors [^{]*> button/);
+  assert.doesNotMatch(styles, /\.expandable-author-list \.author-toggle \{[^}]*font: inherit/);
+  assert.match(styles, /\.expandable-author-list \.author-toggle \{[^}]*font-size: var\(--type-micro\)[^}]*font-weight: 700/);
   // Disclosure fitting measures complete rendered labels on every resize frame,
   // including active column drags, and commits one exact candidate count.
   assert.match(adaptiveAuthors, /Math\.floor\(container\.getBoundingClientRect\(\)\.width\)/);

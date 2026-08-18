@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
-import { AdaptiveAuthorNames } from "@/app/components/ui/AdaptiveAuthors";
+import { AdaptiveAuthors } from "@/app/components/ui/AdaptiveAuthors";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { ActionButton, ActionLink, StatusPill } from "@/app/components/ui/controls";
 import { readError } from "@/app/lib/http";
@@ -277,7 +277,7 @@ export default function ReaderWorkspace() {
             <span>{paper.year ?? "n.d."}</span>
           </div>
           <h2>{paper.title}</h2>
-          <p className="reader-authors"><AdaptiveAuthorNames authors={paper.authors} emptyLabel="Authors unavailable" /></p>
+          <p className="reader-authors"><AdaptiveAuthors authors={paper.authors} emptyLabel="Authors unavailable" /></p>
           <section className="reader-summary reader-summary-scroll">
             <p className="eyebrow">Summary</p>
             <MarkdownContent content={paper.summary || paper.abstract || "No summary yet."} />

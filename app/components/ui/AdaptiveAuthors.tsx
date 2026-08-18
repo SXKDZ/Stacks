@@ -106,63 +106,18 @@ function AuthorMeasurement({ authors, measurementRef }: {
   );
 }
 
-export function AdaptiveAuthorNames({ authors, emptyLabel = "Authors not recorded" }: {
+/**
+ * One byline for every surface: the reader header, the paper rows, the detail
+ * header, and the compact meta lines. Names are plain text unless onOpenAuthor is
+ * given, in which case each is a link to its author. The disclosure control is the
+ * same element in both states, so it cannot pick up a style the hidden measurement
+ * does not see: that mismatch is what clipped the reader's "N more authors".
+ */
+export function AdaptiveAuthors({ authors, onOpenAuthor, showAll = false, emptyLabel = "No authors recorded" }: {
   authors: AuthorEntry[];
-  emptyLabel?: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const { containerRef, measurementRef, visibleCount } = useAdaptiveAuthorLine(authors);
-  const visibleAuthors = expanded ? authors : authors.slice(0, visibleCount);
-  const hiddenCount = Math.max(0, authors.length - visibleAuthors.length);
-
-  if (!authors.length) {
-    return <span className="expandable-author-list"><span>{emptyLabel}</span></span>;
-  }
-
-  return (
-    <span ref={containerRef} className={`expandable-author-list is-adaptive-single-line ${expanded ? "is-expanded" : ""}`}>
-      <span className="adaptive-author-name-run">
-        {visibleAuthors.map((author, index) => (
-          <span key={author.id}>
-            {author.displayName}{index < visibleAuthors.length - 1 ? ",\u00a0" : ""}
-            {expanded && index === visibleAuthors.length - 1 ? (
-              <button
-                type="button"
-                className="author-toggle"
-                aria-expanded="true"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setExpanded(false);
-                }}
-              >
-                Show fewer authors
-              </button>
-            ) : null}
-          </span>
-        ))}
-      </span>
-      {!expanded && hiddenCount ? (
-        <button
-          type="button"
-          className="author-toggle"
-          aria-expanded="false"
-          onClick={(event) => {
-            event.stopPropagation();
-            setExpanded(true);
-          }}
-        >
-          {`${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
-        </button>
-      ) : null}
-      <AuthorMeasurement authors={authors} measurementRef={measurementRef} />
-    </span>
-  );
-}
-
-export function AdaptiveAuthorButtons({ authors, onOpenAuthor, showAll = false }: {
-  authors: AuthorEntry[];
-  onOpenAuthor: (authorName: string) => void;
+  onOpenAuthor?: (authorName: string) => void;
   showAll?: boolean;
+  emptyLabel?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { containerRef, measurementRef, visibleCount } = useAdaptiveAuthorLine(authors);
@@ -171,31 +126,48 @@ export function AdaptiveAuthorButtons({ authors, onOpenAuthor, showAll = false }
   const hiddenCount = Math.max(0, authors.length - visibleAuthors.length);
 
   if (!authors.length) {
-    return <span className="expandable-author-buttons is-empty">No authors recorded</span>;
+    return <span className="expandable-author-list is-empty">{emptyLabel}</span>;
   }
 
+  const classes = ["expandable-author-list", "is-adaptive-single-line"];
+  if (onOpenAuthor) classes.push("is-linked");
+  if (isExpanded) classes.push("is-expanded");
+  if (showAll) classes.push("shows-all");
+
   return (
-    <span
-      ref={containerRef}
-      className={`expandable-author-buttons is-adaptive-single-line ${isExpanded ? "is-expanded" : ""} ${showAll ? "shows-all" : ""}`}
-    >
-      {visibleAuthors.map((author, index) => (
-        <span key={author.id}>
-          <button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>
-          {index < visibleAuthors.length - 1 ? ", " : ""}
-          {!showAll && expanded && index === visibleAuthors.length - 1 ? (
-            <button type="button" className="author-toggle" aria-expanded="true" onClick={() => setExpanded(false)}>
-              Show fewer authors
-            </button>
-          ) : null}
-        </span>
-      ))}
-      {!showAll && !expanded && hiddenCount ? (
-        <button type="button" className="author-toggle" aria-expanded="false" onClick={() => setExpanded(true)}>
-          {`${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
-        </button>
-      ) : null}
-      {!showAll ? <AuthorMeasurement authors={authors} measurementRef={measurementRef} /> : null}
+    <span ref={containerRef} className={classes.join(" ")}>
+      <span className="adaptive-author-name-run">
+        {visibleAuthors.map((author, index) => (
+          <span key={author.id}>
+            {onOpenAuthor
+              ? <button type="button" onClick={(event) => { event.stopPropagation(); onOpenAuthor(author.displayName); }}>{author.displayName}</button>
+              : author.displayName}
+            {index < visibleAuthors.length - 1 ? ", " : ""}
+          </span>
+        ))}
+        {/* Last child of the name run in both states, so the control stays on the
+            byline's line and is styled by one rule the measurement mirrors. */}
+        {showAll ? null : isExpanded ? (
+          <button
+            type="button"
+            className="author-toggle"
+            aria-expanded="true"
+            onClick={(event) => { event.stopPropagation(); setExpanded(false); }}
+          >
+            Show fewer authors
+          </button>
+        ) : hiddenCount ? (
+          <button
+            type="button"
+            className="author-toggle"
+            aria-expanded="false"
+            onClick={(event) => { event.stopPropagation(); setExpanded(true); }}
+          >
+            {`${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
+          </button>
+        ) : null}
+      </span>
+      {showAll ? null : <AuthorMeasurement authors={authors} measurementRef={measurementRef} />}
     </span>
   );
 }

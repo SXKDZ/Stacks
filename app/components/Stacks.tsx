@@ -57,7 +57,7 @@ import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
-import { AdaptiveAuthorButtons, AdaptiveAuthorNames } from "@/app/components/ui/AdaptiveAuthors";
+import { AdaptiveAuthors } from "@/app/components/ui/AdaptiveAuthors";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks, type TaskLogger } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
@@ -1385,7 +1385,7 @@ function Dashboard({
             <div className="paper-byline">
               {/* The available width—not a fixed author count—decides how many
                   names precede the expansion control. */}
-              <AdaptiveAuthorNames authors={currentPaper.authors} />
+              <AdaptiveAuthors authors={currentPaper.authors} />
               <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
             </div>
             <div className="continue-actions">
@@ -1440,7 +1440,7 @@ function Dashboard({
               <span className={`type-tile type-${paper.paperType}`}><FileText size={18} /></span>
               <span className="recent-copy">
                 <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
-                <span className="recent-meta"><AdaptiveAuthorNames authors={paper.authors} /><span>{venueLine(paper)} {paper.year}</span></span>
+                <span className="recent-meta"><AdaptiveAuthors authors={paper.authors} /><span>{venueLine(paper)} {paper.year}</span></span>
               </span>
               <StatusPill className="recent-row-status" status={paper.readingStatus} />
             </article>
@@ -1789,7 +1789,7 @@ function LibraryView({
                             name, the show-more toggle, a chip) is kept from
                             reaching the row. */}
                         <span className="paper-secondary-line" onClick={stopIfInteractive}>
-                          <AdaptiveAuthorButtons authors={paper.authors} onOpenAuthor={(authorName) => { const author = paper.authors.find((candidate) => candidate.displayName === authorName); if (author) onOpenAuthor(author.id, author.displayName); }} />
+                          <AdaptiveAuthors authors={paper.authors} onOpenAuthor={(authorName) => { const author = paper.authors.find((candidate) => candidate.displayName === authorName); if (author) onOpenAuthor(author.id, author.displayName); }} />
                         </span>
                         {paper.collections.length ? (
                           <span className="paper-collection-line" aria-label="Collections" onClick={stopIfInteractive}>
@@ -2895,7 +2895,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
           </div>
           <h2 id={detailTitleId}>{paper.title}</h2>
           <div className="detail-authors" aria-label="Paper authors">
-            <AdaptiveAuthorButtons authors={paper.authors} onOpenAuthor={onOpenAuthor} showAll />
+            <AdaptiveAuthors authors={paper.authors} onOpenAuthor={onOpenAuthor} showAll />
           </div>
           <div className="paper-detail-toolbar" aria-label="Paper actions">
             {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />} kbd="↵">Read</ActionButton> : null}
@@ -4663,7 +4663,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
             <div className="transfer-paper-details">
               {/* The same expandable author line as the paper detail panel, so the
                   hidden names are reachable here instead of being a dead "+5". */}
-              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><AdaptiveAuthorNames authors={selectedTransferPaper.authors} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to inspect it before moving.</small>}
+              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><AdaptiveAuthors authors={selectedTransferPaper.authors} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to inspect it before moving.</small>}
             </div>
           </section>
         </>}

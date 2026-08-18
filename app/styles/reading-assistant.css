@@ -259,19 +259,6 @@
   padding-left: 8px;
 }
 
-.reader-authors .expandable-author-list > button {
-  background: transparent;
-  border: 0;
-  color: var(--brand-blue-strong);
-  cursor: pointer;
-  display: inline;
-  font: inherit;
-  font-weight: 700;
-  padding: 0;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 @media (max-width: 850px) {
   .reader-workspace {
     grid-template-columns: 1fr;

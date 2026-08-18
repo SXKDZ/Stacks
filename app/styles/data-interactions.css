@@ -479,15 +479,13 @@
   color: var(--brand-blue);
 }/* Clickable authors in the paper-row secondary line: each name is a link to its
    author filter, so the byline reads as muted text with the names as accents. */
-.paper-secondary-line .expandable-author-buttons {
+.paper-secondary-line .expandable-author-list {
   color: var(--muted);
   font-size: var(--type-label);
   line-height: 1.35;
 }
 
-.expandable-author-buttons .author-toggle {
-  margin-inline-start: 5px;
-}
+
 
 .author-adaptive-measure {
   align-items: baseline;
@@ -510,8 +508,7 @@
   white-space: nowrap;
 }
 
-.paper-secondary-line .expandable-author-buttons > span > button,
-.paper-secondary-line .expandable-author-buttons > span > span > button {
+.paper-secondary-line .expandable-author-list.is-linked > span > span > button {
   background: transparent;
   border: 0;
   color: var(--muted);
@@ -521,25 +518,9 @@
   text-align: left;
 }
 
-.paper-secondary-line .expandable-author-buttons > span > button:hover,
-.paper-secondary-line .expandable-author-buttons > span > span > button:hover {
+.paper-secondary-line .expandable-author-list.is-linked > span > span > button:hover {
   color: var(--brand-blue-strong);
   text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.paper-secondary-line .expandable-author-buttons .author-toggle {
-  background: transparent;
-  display: inline;
-  white-space: nowrap;
-  color: var(--brand-blue-strong);
-  cursor: pointer;
-  flex: 0 0 auto;
-  font-size: var(--type-micro);
-  font-weight: 700;
-  padding: 0;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--brand-blue) 44%, transparent);
   text-underline-offset: 2px;
 }
 
@@ -921,26 +902,15 @@
   white-space: normal;
 }
 
-.detail-authors .expandable-author-buttons {
+.detail-authors .expandable-author-list {
   align-items: baseline;
   display: inline;
   line-height: 1.45;
 }
 
-.detail-authors .expandable-author-buttons > span > span > button {
+.detail-authors .expandable-author-list.is-linked > span > span > button {
   display: inline;
   padding: 0;
-}
-
-.detail-authors .expandable-author-buttons .author-toggle {
-  color: var(--brand-blue-strong);
-  display: inline;
-  font-size: inherit;
-  font-weight: 700;
-  margin-left: 6px;
-  padding: 0;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .reader-authors .expandable-author-list {

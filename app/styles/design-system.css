@@ -183,18 +183,16 @@
   min-height: 18px;
 }
 
+/* Layout only. Type, weight, and colour are the one canonical treatment in
+   data-interactions.css: a `font: inherit` here used to reset them per surface,
+   which the hidden measurement could not see, so the control rendered wider than
+   it was measured and ran past the byline's clip edge. */
 .expandable-author-list .author-toggle {
   display: inline;
-  font: inherit;
-  line-height: inherit;
-  margin-inline-start: 0.35em;
-  vertical-align: baseline;
-  white-space: nowrap;
-}
-
-.expandable-author-list .author-toggle,
-.expandable-author-buttons > .author-toggle {
   flex: 0 0 auto;
+  line-height: inherit;
+  margin-inline-start: 5px;
+  vertical-align: baseline;
   white-space: nowrap;
 }
 
@@ -209,20 +207,16 @@
   padding-top: 4px;
 }
 
-.detail-authors .expandable-author-buttons,
-.detail-authors .expandable-author-buttons > span,
-.detail-authors .expandable-author-buttons > .author-toggle {
+.detail-authors .expandable-author-list,
+.detail-authors .expandable-author-list > span,
+.detail-authors .expandable-author-list .author-toggle {
   display: inline;
-}
-
-.detail-authors .expandable-author-buttons > .author-toggle {
-  margin-left: 5px;
 }
 
 /* Punctuation belongs to the preceding author. Keep each name and its comma in
    one inline unit, while allowing a long full-author list to wrap between
    authors. This prevents an orphan comma from starting a new line. */
-.expandable-author-buttons > span:not(.author-adaptive-measure) {
+.expandable-author-list > span:not(.author-adaptive-measure) {
   white-space: nowrap;
 }
 
@@ -282,8 +276,7 @@
   white-space: normal;
 }
 
-.expandable-author-buttons.is-adaptive-single-line,
-.detail-authors .expandable-author-buttons.is-adaptive-single-line {
+.detail-authors .expandable-author-list.is-adaptive-single-line {
   display: block;
   overflow: hidden;
   position: relative;
@@ -291,9 +284,8 @@
   width: 100%;
 }
 
-.expandable-author-buttons.is-adaptive-single-line.is-expanded,
-.detail-authors .expandable-author-buttons.is-adaptive-single-line.is-expanded,
-.paper-secondary-line .expandable-author-buttons.is-adaptive-single-line.is-expanded {
+.detail-authors .expandable-author-list.is-adaptive-single-line.is-expanded,
+.paper-secondary-line .expandable-author-list.is-adaptive-single-line.is-expanded {
   column-gap: 0.25em;
   display: flex;
   flex-wrap: wrap;
@@ -309,7 +301,7 @@
 
 /* The detail header deliberately shows the complete author list. Unlike compact
    bylines it wraps, but only between author units so punctuation cannot orphan. */
-.detail-authors .expandable-author-buttons.shows-all {
+.detail-authors .expandable-author-list.shows-all {
   column-gap: 0.25em;
   display: flex;
   flex-wrap: wrap;
