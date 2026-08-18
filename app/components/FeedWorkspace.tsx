@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Clock, Code2, Coins, Download, FolderOpen, Gauge, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Timer, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -576,9 +576,10 @@ function formatSpeed(tokensPerSecond: number): string {
 
 /**
  * The footer of a turn: when it was written, and for an agent reply the usage the
- * CLI reported for that turn. The stored stamp is UTC and toLocaleString renders
- * it in the reader's own zone. A reply recorded before per-turn usage was stored
- * simply shows its time.
+ * CLI reported for that turn. Set as quiet text rather than chips, since it is
+ * provenance for the reply above it, not content. The stored stamp is UTC and
+ * toLocaleString renders it in the reader's own zone. A reply recorded before
+ * per-turn usage was stored shows its time alone.
  */
 function TurnMeta({ iso, message }: { iso: string; message?: FeedMessage }) {
   const inputTokens = message?.inputTokens ?? 0;
@@ -587,18 +588,14 @@ function TurnMeta({ iso, message }: { iso: string; message?: FeedMessage }) {
   const speed = outputTokens && durationMs ? outputTokens / (durationMs / 1000) : 0;
   return (
     <div className="feed-turn-meta">
-      <time className="feed-turn-metric" dateTime={iso}><Clock aria-hidden="true" />{fullTime(iso)}</time>
-      {speed ? <span className="feed-turn-metric"><Gauge aria-hidden="true" />{formatSpeed(speed)} tok/sec</span> : null}
+      <time className="feed-turn-metric" dateTime={iso}>{fullTime(iso)}</time>
+      {speed ? <span className="feed-turn-metric">{formatSpeed(speed)} tok/sec</span> : null}
       {outputTokens ? (
-        <span
-          className="feed-turn-metric feed-time-tip"
-          tabIndex={0}
-          data-tip={`${inputTokens.toLocaleString("en")} prompt tokens, ${outputTokens.toLocaleString("en")} generated`}
-        >
-          <Coins aria-hidden="true" />{compactTokens(outputTokens)} tokens
+        <span className="feed-turn-metric" title={`${inputTokens.toLocaleString("en")} prompt tokens, ${outputTokens.toLocaleString("en")} generated`}>
+          {compactTokens(outputTokens)} tokens
         </span>
       ) : null}
-      {durationMs ? <span className="feed-turn-metric"><Timer aria-hidden="true" />{formatDuration(durationMs)}</span> : null}
+      {durationMs ? <span className="feed-turn-metric">{formatDuration(durationMs)}</span> : null}
     </div>
   );
 }
@@ -1287,6 +1284,16 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     source.addEventListener("message", (event) => {
       const message = JSON.parse((event as MessageEvent).data) as FeedMessage;
       setMessages((current) => (current.some((m) => m.id === message.id) ? current : [...current, message]));
+    });
+    source.addEventListener("usage", (event) => {
+      // Usage is known only when the turn ends, after its message was streamed, so
+      // the running thread patches that message instead of waiting for a reload.
+      const usage = JSON.parse((event as MessageEvent).data) as { messageId: string; inputTokens: number; outputTokens: number; durationMs: number };
+      setMessages((current) => current.map((message) => (
+        message.id === usage.messageId
+          ? { ...message, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, durationMs: usage.durationMs }
+          : message
+      )));
     });
     source.addEventListener("snapshot", (event) => {
       const snapshot = JSON.parse((event as MessageEvent).data) as FeedSnapshot;

@@ -1125,13 +1125,72 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   // first, then speed, tokens, and elapsed time. Speed and tokens are only shown
   // when the turn actually reported them, so older threads show the time alone.
   assert.match(feed, /function fullTime[\s\S]*?toLocaleString\("en", \{ dateStyle: "medium", timeStyle: "short" \}\)/);
-  assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}><Clock aria-hidden="true" \/>\{fullTime\(iso\)\}<\/time>/);
-  assert.match(feed, /\{speed \? <span className="feed-turn-metric"><Gauge aria-hidden="true" \/>\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
+  assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}>\{fullTime\(iso\)\}<\/time>/);
+  assert.match(feed, /\{speed \? <span className="feed-turn-metric">\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
   assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
   assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
   assert.match(feed, /<TurnMeta iso=\{message\.createdAt\} message=\{message\} \/>/);
-  assert.match(styles, /\.feed-turn-meta \{[^}]*flex-wrap: wrap/);
-  assert.match(styles, /\.feed-turn-metric \{[^}]*font-variant-numeric: tabular-nums/);
+  // Provenance, not content: dot-separated text with no chip chrome around it.
+  assert.match(styles, /\.feed-turn-meta \{[^}]*font-variant-numeric: tabular-nums/);
+  assert.match(styles, /\.feed-turn-metric \+ \.feed-turn-metric::before \{[^}]*content: "·"/);
+  assert.doesNotMatch(styles, /\.feed-turn-metric \{[^}]*border-radius/);
+  // Usage lands after its message was streamed, so a live thread is told about it
+  // rather than showing the turn's cost only after a reload.
+  assert.match(agent, /\| \{ type: "usage"; messageId: string/);
+  assert.match(agent, /emit\(snippetId, \{\s*type: "usage",\s*messageId: resultMessageId/);
+  assert.match(feed, /source\.addEventListener\("usage"/);
+  assert.match(feed, /message\.id === usage\.messageId/);
+});
+
+test("a user's Markdown stays legible on the blue bubble", async () => {
+  const styles = await readApplicationStyles();
+  // Headings, quotes, tables, and math each declare an ink-dark colour, which the
+  // bubble's own white cannot override through inheritance: they rendered as black
+  // text on the gradient. A line of "=" under any line makes a heading, so this is
+  // easy to hit by accident in a pasted request.
+  assert.match(styles, /\.feed-turn-user \.feed-bubble :is\(h1, h2, h3, h4, h5, h6, blockquote, th, td, \.katex\) \{[^}]*color: inherit/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*border-left-color: rgba\(255, 255, 255/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble \.markdown-table-scroll th \{[^}]*background: rgba\(255, 255, 255/);
+  // The dark declarations these override are the shared Markdown rules.
+  assert.match(styles, /\.markdown-content h1,[\s\S]*?color: var\(--ink\)/);
+});
+
+test("the feed composer reads as one control, with a visible placeholder", async () => {
+  const [attachBox, feed, styles] = await Promise.all([
+    readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Attachments live inside the composer frame, above the text and under the same
+  // focus ring, instead of in a second bordered panel floating above it.
+  assert.match(attachBox, /is-panel-resizable[\s\S]*?feed-attach-tray[\s\S]*?<MarkdownCodeEditor/);
+  assert.match(styles, /\.feed-attach-tray \{[^}]*border-bottom: 1px solid var\(--line\)/);
+  assert.doesNotMatch(styles, /\.feed-attach-tray \{[^}]*background:/);
+
+  // The newline reminder stays on the row (it is the one shortcut that is not
+  // guessable from the ↵ badge), and the button repeats both in its tooltip.
+  assert.match(attachBox, /\{hint \? <span className="feed-dock-hint">\{hint\}<\/span> : null\}/);
+  assert.match(styles, /\.feed-dock-hint \{[^}]*font-size: var\(--type-caption\)/);
+  assert.equal([...feed.matchAll(/hint=\{<><kbd>⌥↵<\/kbd> newline<\/>\}/g)].length, 2);
+  assert.match(attachBox, /title="Enter sends, Option Enter starts a newline"/);
+
+  // The composer is resizable by pointer and keyboard, and the grip fades in with
+  // the composer instead of waiting for the pointer to find a pill on its edge.
+  // Its floor has to match the CSS floor, or a drag cannot reach the resting size.
+  assert.match(attachBox, /const minimumPanelHeight = compact \? 128 : 210/);
+  assert.match(styles, /\.feed-dock-input\.is-panel-resizable \{[^}]*min-height: 128px/);
+  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,\s*\.feed-dock-input:focus-within \.feed-panel-resize-handle \{[^}]*opacity: 0\.7/);
+  assert.match(attachBox, /if \(event\.key === "Home"\) setPanelHeight\(null\)/);
+  assert.match(attachBox, /role="separator"[\s\S]*?aria-valuenow=/);
+  // Attach controls and truncated chips say what they are on hover (one shared
+  // TooltipLayer picks up every title).
+  assert.match(attachBox, /title="Attach files"/);
+  assert.match(attachBox, /className="feed-chip" title=\{paper\.title\}/);
+
+  // The highlighted editor paints the textarea's glyphs transparent, which hid its
+  // placeholder too: every prompt and the composer had one that never showed.
+  assert.match(styles, /\.prompt-code-editor textarea::placeholder \{[^}]*-webkit-text-fill-color: var\(--soft\)/);
 });
 
 test("the toolbar search field gives way instead of squeezing the status tabs", async () => {
