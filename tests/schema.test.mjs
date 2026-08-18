@@ -1142,6 +1142,35 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /message\.id === usage\.messageId/);
 });
 
+test("the feed composer reads as one control, with a visible placeholder", async () => {
+  const [attachBox, feed, styles] = await Promise.all([
+    readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Attachments live inside the composer frame, above the text and under the same
+  // focus ring, instead of in a second bordered panel floating above it.
+  assert.match(attachBox, /is-panel-resizable[\s\S]*?feed-attach-tray[\s\S]*?<MarkdownCodeEditor/);
+  assert.match(styles, /\.feed-attach-tray \{[^}]*border-bottom: 1px solid var\(--line\)/);
+  assert.doesNotMatch(styles, /\.feed-attach-tray \{[^}]*background:/);
+
+  // The keyboard shortcut is the send button's tooltip, not a standing label that
+  // spends the action row's best space on what the ↵ badge already implies.
+  assert.match(attachBox, /title="Enter sends, Option Enter starts a newline"/);
+  assert.doesNotMatch(attachBox, /feed-dock-hint/);
+  assert.doesNotMatch(styles, /\.feed-dock-hint/);
+  assert.doesNotMatch(feed, /newline<\/>/);
+  // Attach controls and truncated chips say what they are on hover (one shared
+  // TooltipLayer picks up every title).
+  assert.match(attachBox, /title="Attach files"/);
+  assert.match(attachBox, /className="feed-chip" title=\{paper\.title\}/);
+
+  // The highlighted editor paints the textarea's glyphs transparent, which hid its
+  // placeholder too: every prompt and the composer had one that never showed.
+  assert.match(styles, /\.prompt-code-editor textarea::placeholder \{[^}]*-webkit-text-fill-color: var\(--soft\)/);
+});
+
 test("the toolbar search field gives way instead of squeezing the status tabs", async () => {
   const styles = await readApplicationStyles();
   // A fixed-width search field left the tabs as the row's only flexible item, so

@@ -83,7 +83,6 @@ export function AttachBox({
   compact = false,
   initialText = "",
   initialPapers = [],
-  hint,
   leadingAction,
   models = [],
   initialModel = "",
@@ -100,7 +99,6 @@ export function AttachBox({
   compact?: boolean;
   initialText?: string;
   initialPapers?: LibraryPaper[];
-  hint?: ReactNode;
   /** Optional control shown beside the submit button (e.g. Stop while running). */
   leadingAction?: ReactNode;
   /** Selectable agent models; empty hides the picker. */
@@ -338,50 +336,6 @@ export function AttachBox({
     >
       {dragging ? <div className="feed-drop-hint"><Paperclip size={18} /> Drop files to attach</div> : null}
 
-      {hasAttachments ? (
-        <div className="feed-attach-tray" ref={trayRef}>
-          {papers.map((paper) => (
-            <span key={paper.id} className="feed-chip">
-              <BookOpen size={12} />
-              <span className="feed-chip-label">{paper.title}</span>
-              <button type="button" onClick={() => togglePaper(paper)} aria-label={`Remove ${paper.title}`}><X size={12} /></button>
-            </span>
-          ))}
-          {texts.map((entry) => (
-            <span key={entry.id} className="feed-chip">
-              <button type="button" className="feed-chip-open" onClick={() => setEditingText(entry)} title="Edit text">
-                <FileText size={12} />
-                <span className="feed-chip-label">{entry.name}</span>
-              </button>
-              <button type="button" onClick={() => setTexts((current) => current.filter((item) => item.id !== entry.id))} aria-label={`Remove ${entry.name}`}><X size={12} /></button>
-            </span>
-          ))}
-          {files.map((file, index) => {
-            const preview = previews.get(file);
-            return (
-              <span key={`${file.name}-${index}`} className="feed-chip">
-                {preview ? (
-                  <button
-                    type="button"
-                    className="feed-chip-open"
-                    onClick={() => setZoomedImage(preview)}
-                    onMouseEnter={(event) => showPreview(preview, event.currentTarget)}
-                    onMouseLeave={() => setHoverPreview(null)}
-                    title="View image"
-                  >
-                    <span className="feed-chip-preview"><ImageIcon size={12} /></span>
-                    <span className="feed-chip-label">{file.name || "image"}</span>
-                  </button>
-                ) : (
-                  <><FileText size={12} /><span className="feed-chip-label">{file.name}</span></>
-                )}
-                <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} aria-label={`Remove ${file.name || "image"}`}><X size={12} /></button>
-              </span>
-            );
-          })}
-        </div>
-      ) : null}
-
       <div
         ref={panelRef}
         className="feed-dock-input is-panel-resizable"
@@ -404,6 +358,49 @@ export function AttachBox({
         >
           <GripHorizontal aria-hidden="true" />
         </div>
+        {hasAttachments ? (
+          <div className="feed-attach-tray" ref={trayRef}>
+            {papers.map((paper) => (
+              <span key={paper.id} className="feed-chip" title={paper.title}>
+                <BookOpen size={12} />
+                <span className="feed-chip-label">{paper.title}</span>
+                <button type="button" onClick={() => togglePaper(paper)} aria-label={`Remove ${paper.title}`}><X size={12} /></button>
+              </span>
+            ))}
+            {texts.map((entry) => (
+              <span key={entry.id} className="feed-chip">
+                <button type="button" className="feed-chip-open" onClick={() => setEditingText(entry)} title="Edit text">
+                  <FileText size={12} />
+                  <span className="feed-chip-label">{entry.name}</span>
+                </button>
+                <button type="button" onClick={() => setTexts((current) => current.filter((item) => item.id !== entry.id))} aria-label={`Remove ${entry.name}`}><X size={12} /></button>
+              </span>
+            ))}
+            {files.map((file, index) => {
+              const preview = previews.get(file);
+              return (
+                <span key={`${file.name}-${index}`} className="feed-chip" title={file.name || "image"}>
+                  {preview ? (
+                    <button
+                      type="button"
+                      className="feed-chip-open"
+                      onClick={() => setZoomedImage(preview)}
+                      onMouseEnter={(event) => showPreview(preview, event.currentTarget)}
+                      onMouseLeave={() => setHoverPreview(null)}
+                      title="View image"
+                    >
+                      <span className="feed-chip-preview"><ImageIcon size={12} /></span>
+                      <span className="feed-chip-label">{file.name || "image"}</span>
+                    </button>
+                  ) : (
+                    <><FileText size={12} /><span className="feed-chip-label">{file.name}</span></>
+                  )}
+                  <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))} aria-label={`Remove ${file.name || "image"}`}><X size={12} /></button>
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
         <MarkdownCodeEditor
           className="feed-composer-editor"
           value={text}
@@ -423,8 +420,8 @@ export function AttachBox({
         <div className="feed-dock-actions">
           <div className="feed-dock-tools">
             <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
-            <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file"><Paperclip size={16} /></button>
-            <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library"><BookOpen size={16} /></button>
+            <button type="button" className="feed-tool-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file" title="Attach files"><Paperclip size={16} /></button>
+            <button type="button" className={`feed-tool-btn ${pickerOpen ? "is-active" : ""}`} onClick={() => setPickerOpen((open) => !open)} aria-label="Attach a paper from your library" title="Attach a paper from your library"><BookOpen size={16} /></button>
             {/* Model and effort share one trigger with a submenu each. Side by side
                 they were wide enough to push the send group outside the composer
                 while the agent ran, when the row also gains Stop and the submit
@@ -463,9 +460,17 @@ export function AttachBox({
             />
           </div>
           <div className="feed-dock-send">
-            {hint ? <span className="feed-dock-hint">{hint}</span> : null}
             {leadingAction}
-            <ActionButton type="submit" variant="primary" size={compact ? "small" : undefined} disabled={!canSubmit} icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}><span className="feed-send-label">{submitLabel}</span><kbd className="feed-send-kbd">↵</kbd></ActionButton>
+            {/* The shortcut lives in the button's own tooltip: as a standing label it
+                spent the row's best space on something the badge already implies. */}
+            <ActionButton
+              type="submit"
+              variant="primary"
+              size={compact ? "small" : undefined}
+              disabled={!canSubmit}
+              title="Enter sends, Option Enter starts a newline"
+              icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}
+            ><span className="feed-send-label">{submitLabel}</span><kbd className="feed-send-kbd">↵</kbd></ActionButton>
           </div>
         </div>
       </div>

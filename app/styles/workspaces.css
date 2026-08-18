@@ -792,7 +792,7 @@
 }
 
 .feed-dock-input.is-panel-resizable {
-  min-height: 150px;
+  min-height: 128px;
 }
 
 .feed-compose .feed-dock-input.is-panel-resizable {
@@ -897,7 +897,7 @@
   border-radius: var(--radius-sm);
   flex: 1 1 auto;
   height: auto;
-  min-height: 82px;
+  min-height: 62px;
   width: 100%;
 }
 
@@ -996,28 +996,6 @@
   color: var(--brand-blue-strong);
 }
 
-.feed-dock-hint {
-  align-items: center;
-  color: var(--soft);
-  display: flex;
-  font-size: var(--type-caption);
-  gap: 4px;
-  line-height: 1;
-  user-select: none;
-}
-
-.feed-dock-hint kbd {
-  background: var(--surface-1);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.94em;
-  padding: 1px 4px;
-}
-
-/* The ↵ badge inside the submit button, matching the main-page "Add paper [N]"
-   key badge (white-on-translucent on the brand button). */
 .feed-send-kbd {
   align-items: center;
   background: var(--kbd-badge-bg);
@@ -1035,18 +1013,19 @@
   padding: 3px 5px;
 }
 
-/* Attachment chips above the composer input. Capped at two rows so a large
-   selection scrolls instead of pushing the textarea off-screen. */
+/* Attachments sit inside the composer frame, above the text, as a chip row under
+   the focus ring that already surrounds the input: what is attached belongs to
+   what is being written, not to a second panel floating above it. Capped at two
+   rows so a large selection scrolls instead of pushing the text off-screen. */
 .feed-attach-tray {
-  background: var(--surface-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-bottom: 1px solid var(--line);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 78px;
+  margin-bottom: 2px;
+  max-height: 74px;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0 2px 8px;
 }
 
 .feed-chip {
