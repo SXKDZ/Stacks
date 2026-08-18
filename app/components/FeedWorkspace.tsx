@@ -713,11 +713,22 @@ function interactionResponseText(interaction: FeedInteraction<FeedMessage>): str
     .join("\n\n");
 }
 
+const FEED_HISTORY_REQUEST_PREVIEW_LENGTH = 800;
+const FEED_HISTORY_RESPONSE_PREVIEW_LENGTH = 2_000;
+const FEED_HISTORY_JUMP_DURATION_MS = 260;
+
+function cappedHistoryPreview(content: string, limit: number): string {
+  const trimmed = content.trim();
+  if (trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit).trimEnd()}…`;
+}
+
 /**
  * A focused chooser for creating a new feed from past requests. The complete,
- * lightweight request index stays available on the left while only its active
- * request/response card is mounted on the right. Responses remain capped until
- * expanded so a long history never becomes a second full conversation DOM.
+ * lightweight request index stays available on the left while the complete
+ * chronological request/response list remains visible on the right. Collapsed
+ * previews use bounded strings and CSS rendering containment so a long history
+ * does not become a second full conversation DOM.
  */
 function FeedHistorySelectionModal({
   feedName,
@@ -742,6 +753,9 @@ function FeedHistorySelectionModal({
   const dialogRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const indexButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const interactionsPaneRef = useRef<HTMLDivElement>(null);
+  const interactionCardRefs = useRef(new Map<string, HTMLElement>());
+  const historyScrollFrameRef = useRef<number | null>(null);
   const closeRef = useRef(onClose);
   const creatingRef = useRef(creating);
 
@@ -764,12 +778,30 @@ function FeedHistorySelectionModal({
   }, [query, records]);
   const visibleIds = visible.map(({ interaction }) => interaction.id);
   const displayedActiveId = visibleIds.includes(activeInteractionId) ? activeInteractionId : (visibleIds[0] ?? "");
-  const activeRecord = visible.find(({ interaction }) => interaction.id === displayedActiveId);
   const allVisibleSelected = Boolean(visibleIds.length) && visibleIds.every((id) => selected.has(id));
 
   useEffect(() => {
     indexButtonRefs.current.get(displayedActiveId)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [displayedActiveId]);
+
+  useEffect(() => {
+    const pane = interactionsPaneRef.current;
+    if (!pane) return;
+    const cancelAnimatedScroll = () => {
+      if (historyScrollFrameRef.current === null) return;
+      cancelAnimationFrame(historyScrollFrameRef.current);
+      historyScrollFrameRef.current = null;
+    };
+    pane.addEventListener("wheel", cancelAnimatedScroll, { passive: true });
+    pane.addEventListener("touchstart", cancelAnimatedScroll, { passive: true });
+    pane.addEventListener("pointerdown", cancelAnimatedScroll);
+    return () => {
+      cancelAnimatedScroll();
+      pane.removeEventListener("wheel", cancelAnimatedScroll);
+      pane.removeEventListener("touchstart", cancelAnimatedScroll);
+      pane.removeEventListener("pointerdown", cancelAnimatedScroll);
+    };
+  }, []);
 
   useEffect(() => {
     const page = document.querySelector<HTMLElement>(".feed-page");
@@ -815,6 +847,33 @@ function FeedHistorySelectionModal({
 
   function jumpWithinModal(id: string) {
     setActiveInteractionId(id);
+    const pane = interactionsPaneRef.current;
+    const card = interactionCardRefs.current.get(id);
+    if (!pane || !card) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const paneTop = pane.getBoundingClientRect().top;
+    const cardTop = card.getBoundingClientRect().top;
+    const targetTop = Math.min(
+      pane.scrollHeight - pane.clientHeight,
+      Math.max(0, pane.scrollTop + cardTop - paneTop),
+    );
+    if (historyScrollFrameRef.current !== null) cancelAnimationFrame(historyScrollFrameRef.current);
+    if (reduceMotion) {
+      pane.scrollTop = targetTop;
+      historyScrollFrameRef.current = null;
+      return;
+    }
+    const startTop = pane.scrollTop;
+    const distance = targetTop - startTop;
+    let startTime: number | null = null;
+    const animate = (time: number) => {
+      startTime ??= time;
+      const progress = Math.min(1, (time - startTime) / FEED_HISTORY_JUMP_DURATION_MS);
+      const eased = 1 - ((1 - progress) ** 3);
+      pane.scrollTop = startTop + (distance * eased);
+      historyScrollFrameRef.current = progress < 1 ? requestAnimationFrame(animate) : null;
+    };
+    historyScrollFrameRef.current = requestAnimationFrame(animate);
   }
 
   function toggleExpanded(id: string) {
@@ -903,18 +962,28 @@ function FeedHistorySelectionModal({
             </div>
           </nav>
 
-          <div className="feed-history-interactions" aria-busy={loading}>
+          <div ref={interactionsPaneRef} className="feed-history-interactions" aria-busy={loading}>
             {loading ? (
               <div className="feed-history-loading"><LoaderCircle className="spin" size={18} /><span>Loading conversation history…</span></div>
-            ) : activeRecord ? (() => {
-              const { interaction, number, response } = activeRecord;
+            ) : visible.length ? visible.map(({ interaction, number, response }) => {
               const isExpanded = expanded.has(interaction.id);
               const isRequestExpanded = expandedRequests.has(interaction.id);
               const isSelected = selected.has(interaction.id);
               const requestCanExpand = interaction.userText.length > 180 || interaction.userText.split("\n").length > 3;
+              const requestText = interaction.userText.trim() || "Request with attachments";
+              const requestPreview = isRequestExpanded
+                ? requestText
+                : cappedHistoryPreview(requestText, FEED_HISTORY_REQUEST_PREVIEW_LENGTH);
+              const responsePreview = isExpanded
+                ? response
+                : cappedHistoryPreview(response, FEED_HISTORY_RESPONSE_PREVIEW_LENGTH);
               return (
                 <article
                   key={interaction.id}
+                  ref={(node) => {
+                    if (node) interactionCardRefs.current.set(interaction.id, node);
+                    else interactionCardRefs.current.delete(interaction.id);
+                  }}
                   className={`feed-history-interaction ${isSelected ? "is-selected" : ""}`}
                 >
                   <label className="feed-history-interaction-select">
@@ -923,11 +992,11 @@ function FeedHistorySelectionModal({
                   </label>
                   <div className="feed-history-request-preview">
                     <strong>You</strong>
-                    <p className={isRequestExpanded ? "is-expanded" : ""}>{interaction.userText.trim() || "Request with attachments"}</p>
+                    <p className={isRequestExpanded ? "is-expanded" : ""}>{requestPreview}</p>
                   </div>
                   <div className="feed-history-response-preview">
                     <strong>Agent response</strong>
-                    <p className={isExpanded ? "is-expanded" : ""}>{response || "No agent response before the next request."}</p>
+                    <p className={isExpanded ? "is-expanded" : ""}>{responsePreview || "No agent response before the next request."}</p>
                   </div>
                   <div className="feed-history-interaction-actions">
                     <span className="feed-history-expand-actions">
@@ -946,7 +1015,7 @@ function FeedHistorySelectionModal({
                   </div>
                 </article>
               );
-            })() : (
+            }) : (
               <div className="feed-history-empty">No requests or responses match “{query}”.</div>
             )}
           </div>
@@ -978,14 +1047,14 @@ function FeedHistorySelectionModal({
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, selectHistoryInitially, historySelectionReturnFocus, onBack, onChanged, onCreated }: {
+function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   models: FeedModelOption[];
   defaultModelLabel: string;
   defaultEffort: EffortSetting;
-  selectHistoryInitially: boolean;
-  historySelectionReturnFocus: HTMLButtonElement | null;
+  historySelectionRequest: { nonce: number; returnFocus: HTMLButtonElement | null } | null;
+  onHistorySelectionClosed: () => void;
   onBack: () => void;
   onChanged: () => void;
   onCreated: (id: string) => void;
@@ -1002,7 +1071,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const [workingDirectory, setWorkingDirectory] = useState<string | null>(null);
   const [openingWorkingDirectory, setOpeningWorkingDirectory] = useState(false);
   const [streamNonce, setStreamNonce] = useState(0);
-  const [selectingHistory, setSelectingHistory] = useState(selectHistoryInitially);
+  const [selectingHistory, setSelectingHistory] = useState(false);
   const [selectedInteractions, setSelectedInteractions] = useState<Set<string>>(() => new Set());
   const [includeToolDetails, setIncludeToolDetails] = useState(false);
   const [creatingFromHistory, setCreatingFromHistory] = useState(false);
@@ -1029,6 +1098,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const replayingHistoryRef = useRef(true);
   const userScrollIntentRef = useRef(false);
   const userScrollIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historySelectionRequestNonce = historySelectionRequest?.nonce ?? null;
+
+  useEffect(() => {
+    if (historySelectionRequestNonce !== null) setSelectingHistory(true);
+  }, [historySelectionRequestNonce]);
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
@@ -1357,6 +1431,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     setSelectingHistory(false);
     setSelectedInteractions(new Set());
     setIncludeToolDetails(false);
+    onHistorySelectionClosed();
   }
 
   function showEarlierInteractions() {
@@ -1418,6 +1493,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
         return;
       }
       const payload = await response.json() as { id: string };
+      onHistorySelectionClosed();
       onCreated(payload.id);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "The new feed could not be created.");
@@ -1734,7 +1810,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           creating={creatingFromHistory}
           loading={!historyReady}
           error={error}
-          returnFocus={historySelectionReturnFocus}
+          returnFocus={historySelectionRequest?.returnFocus ?? null}
           onToggle={toggleInteraction}
           onSetVisible={setVisibleInteractions}
           onIncludeToolDetails={setIncludeToolDetails}
@@ -2233,7 +2309,7 @@ export default function FeedWorkspace() {
       <aside className="feed-list-pane">
         <header className="feed-list-head">
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
-          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />} kbd={`${modKey}M`}>New</ActionButton>
+          <ActionButton variant="primary" size="small" onClick={() => { setHistorySelectionRequest(null); setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />} kbd={`${modKey}M`}>New</ActionButton>
         </header>
         {snippets.length ? (
           <div className="feed-search">
@@ -2254,7 +2330,7 @@ export default function FeedWorkspace() {
                   key={snippet.id}
                   snippet={snippet}
                   active={snippet.id === selectedId && !composing}
-                  onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                  onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                   onRename={() => void renameSnippet(snippet)}
                   onFork={() => void forkSnippet(snippet)}
                   onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
@@ -2275,7 +2351,7 @@ export default function FeedWorkspace() {
                       key={snippet.id}
                       snippet={snippet}
                       active={snippet.id === selectedId && !composing}
-                      onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                      onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                       onRename={() => void renameSnippet(snippet)}
                       onFork={() => void forkSnippet(snippet)}
                       onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
@@ -2317,14 +2393,14 @@ export default function FeedWorkspace() {
       <div className="feed-detail-pane">
         {showDetail && selected ? (
           <FeedDetail
-            key={`${selected.id}:${historySelectionRequest?.id === selected.id ? historySelectionRequest.nonce : 0}`}
+            key={selected.id}
             snippet={selected}
             library={library}
             models={models}
             defaultModelLabel={defaultModelLabel}
             defaultEffort={defaultEffort}
-            selectHistoryInitially={historySelectionRequest?.id === selected.id}
-            historySelectionReturnFocus={historySelectionRequest?.id === selected.id ? historySelectionRequest.returnFocus : null}
+            historySelectionRequest={historySelectionRequest?.id === selected.id ? historySelectionRequest : null}
+            onHistorySelectionClosed={() => setHistorySelectionRequest(null)}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
             onCreated={(id) => {
