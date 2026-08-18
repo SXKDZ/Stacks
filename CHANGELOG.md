@@ -6,6 +6,45 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-18
+
+### Added
+
+- Paper details open as an accessible modal with tabbed panels instead of a side
+  drawer, keeping keyboard focus and Escape handling inside the dialog.
+- Every AI feed turn ends with its own local date and time, plus the tokens,
+  generation speed, and elapsed time that turn reported.
+- Floating menus and pickers animate in from the edge they open on, including the
+  pagination size menu that opens downward into the table.
+
+### Changed
+
+- Preprint identifiers are consolidated onto one editable field per paper.
+- Long AI feed threads hydrate from a single snapshot and render a bounded window
+  of interactions, with collapsed tool details mounted only when opened: a
+  2,606-message feed opens in about 0.7 seconds.
+- Consecutive tool operations collapse into one readable entry.
+- Feed figures size to their own content. A diagram narrower than the message
+  keeps its width and stays centred, and a wider one scales down only until its
+  labels reach the smallest readable size, then scrolls in place with the
+  open-in-new-window action still in its corner.
+- Wide feed tables wrap into taller rows instead of pushing every row onto one
+  scrolling line, and a table narrower than the message stays centred in it.
+- Every paper byline shares one adaptive component, so the reader, the library
+  rows, and the detail header disclose authors identically.
+- The library toolbar search field resizes between 220 and 390 pixels so the
+  status tabs stay fully readable once the selection actions appear.
+
+### Fixed
+
+- Author disclosures are measured at the width they actually render at, so
+  "N more authors" can no longer be clipped mid-word.
+- "Show fewer authors" now matches the style of "N more authors" everywhere.
+- Venue monogram chips fit all four letters and centre them in the chip.
+- Feed Markdown exports keep the opening request, the complete tool history, and
+  the original order.
+- Mermaid diagrams zoom past 100% on double-click when they already fit.
+
 ## [0.4.2] - 2026-08-10
 
 ### Fixed
@@ -466,7 +505,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.0
 [0.4.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.2
 [0.4.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.1
 [0.3.6]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.6
