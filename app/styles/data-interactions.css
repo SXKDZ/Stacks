@@ -1338,17 +1338,25 @@
   width: 52px;
 }
 
-/* One search control geometry across Papers, Authors, Venues, and Collections. */
+/* One search control geometry across Papers, Authors, Venues, and Collections.
+   The field is elastic between 220px and 390px rather than fixed at 390px: an
+   unshrinkable field left the status tabs as the only flexible item in the row,
+   so as soon as the selection actions appeared the tabs were squeezed down to
+   "All" behind a hidden scrollbar. Sizing from the smaller basis also keeps the
+   other controls on the row (a flex line wraps before it shrinks), and the field
+   then grows back into whatever width is left over. */
 .library-toolbar > .page-search.inline-search,
 .entity-toolbar > .page-search.inline-search,
 .compact-toolbar > .page-search.inline-search {
   border-radius: var(--radius-md);
-  flex: 0 0 390px;
+  /* Grows ahead of the tabs so it reaches its preferred 390px first, and the
+     tabs then absorb whatever is left instead of the row spreading apart. */
+  flex: 6 1 220px;
   height: 42px;
-  max-width: 100%;
+  max-width: 390px;
   min-height: 42px;
   padding: 0 11px;
-  width: 390px;
+  width: auto;
 }
 
 .library-toolbar > .page-search.inline-search input,
@@ -1400,10 +1408,12 @@
 }
 
 @media (max-width: 900px) {
+  /* On a narrow window search owns its own row, so the elastic cap is released. */
   .library-toolbar > .page-search.inline-search,
   .entity-toolbar > .page-search.inline-search,
   .compact-toolbar > .page-search.inline-search {
     flex: 1 1 100%;
+    max-width: 100%;
     width: 100%;
   }
 

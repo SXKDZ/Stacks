@@ -1121,6 +1121,19 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(styles, /\.feed-turn-metric \{[^}]*font-variant-numeric: tabular-nums/);
 });
 
+test("the toolbar search field gives way instead of squeezing the status tabs", async () => {
+  const styles = await readApplicationStyles();
+  // A fixed-width search field left the tabs as the row's only flexible item, so
+  // the selection actions squeezed them down to "All" behind a hidden scrollbar.
+  // The field is elastic between 220px and 390px and grows ahead of the tabs, and
+  // the tabs take the leftover width without ever giving any back, so the row
+  // neither clips them nor spreads apart on justify-content: space-between.
+  assert.match(styles, /\.compact-toolbar > \.page-search\.inline-search \{[^}]*flex: 6 1 220px/);
+  assert.match(styles, /\.compact-toolbar > \.page-search\.inline-search \{[^}]*max-width: 390px/);
+  assert.match(styles, /\.library-toolbar \.filter-tabs \{[^}]*flex: 1 0 auto/);
+  assert.match(styles, /@media \(max-width: 900px\)[\s\S]*?\.compact-toolbar > \.page-search\.inline-search \{[^}]*max-width: 100%/);
+});
+
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
   // The stylesheets accumulated selectors defined three and four times across
   // files, where the later copy silently won: a value was set in one file and

@@ -171,7 +171,12 @@
   width: min(360px, 36vw);
 }
 
+/* The tabs keep every status readable: they take the row's leftover width but
+   never give any back, so the search field is what shrinks and the tabs wrap to
+   their own row when even that is not enough. The scroll is the last resort on a
+   narrow window, where the media query hands them the full row. */
 .library-toolbar .filter-tabs {
+  flex: 1 0 auto;
   gap: 2px;
   overflow-x: auto;
   scrollbar-width: none;
