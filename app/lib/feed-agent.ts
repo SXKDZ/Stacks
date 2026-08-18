@@ -288,28 +288,49 @@ async function threadTranscript(snippetId: string): Promise<string> {
     .join("\n\n");
 }
 
-/** Accumulate a turn's usage from the stream-json `result` event. Tokens sum
- *  across cache + input/output; duration and turn count add up over follow-ups. */
-async function recordUsage(snippetId: string, event: Record<string, unknown>): Promise<void> {
+interface TurnUsage {
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  turns: number;
+}
+
+/** A turn's usage as reported by the stream-json `result` event. Tokens sum
+ *  across cache + input/output. Null when the event carried no usage at all. */
+function turnUsage(event: Record<string, unknown>): TurnUsage | null {
   const usage = (event.usage ?? {}) as Record<string, unknown>;
   const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
   const inputTokens = num(usage.input_tokens) + num(usage.cache_read_input_tokens) + num(usage.cache_creation_input_tokens);
   const outputTokens = num(usage.output_tokens);
   const durationMs = num(event.duration_ms);
-  const turns = num(event.num_turns) || 1;
-  if (!inputTokens && !outputTokens && !durationMs) {
-    return;
-  }
+  if (!inputTokens && !outputTokens && !durationMs) return null;
+  return { inputTokens, outputTokens, durationMs, turns: num(event.num_turns) || 1 };
+}
+
+/** Accumulate a turn's usage onto the feed: duration and turn count add up over
+ *  follow-ups, so the header keeps showing the whole thread's cost. */
+async function recordUsage(snippetId: string, usage: TurnUsage): Promise<void> {
   const database = await ensureDatabase();
   database
     .update(feedSnippets)
     .set({
-      inputTokens: sql`${feedSnippets.inputTokens} + ${inputTokens}`,
-      outputTokens: sql`${feedSnippets.outputTokens} + ${outputTokens}`,
-      durationMs: sql`${feedSnippets.durationMs} + ${durationMs}`,
-      turns: sql`${feedSnippets.turns} + ${turns}`,
+      inputTokens: sql`${feedSnippets.inputTokens} + ${usage.inputTokens}`,
+      outputTokens: sql`${feedSnippets.outputTokens} + ${usage.outputTokens}`,
+      durationMs: sql`${feedSnippets.durationMs} + ${usage.durationMs}`,
+      turns: sql`${feedSnippets.turns} + ${usage.turns}`,
     })
     .where(eq(feedSnippets.id, snippetId))
+    .run();
+}
+
+/** Stamp the same usage on the message the turn ends with, so the thread can show
+ *  that reply's own tokens and speed instead of only the feed-wide totals. */
+async function recordMessageUsage(messageId: string, usage: TurnUsage): Promise<void> {
+  const database = await ensureDatabase();
+  database
+    .update(feedMessages)
+    .set({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, durationMs: usage.durationMs })
+    .where(eq(feedMessages.id, messageId))
     .run();
 }
 
@@ -544,8 +565,9 @@ export async function runFeedAgent(options: {
       // Accumulate this turn's usage onto the snippet (tokens, duration, turns),
       // but not for a failed attempt we're about to retry — else the failed try
       // and the fresh-session retry would both count against the snippet totals.
-      if (!willRetry) {
-        await recordUsage(snippetId, event);
+      const usage = willRetry ? null : turnUsage(event);
+      if (usage) {
+        await recordUsage(snippetId, usage);
       }
       // The result event repeats the final assistant text. Only persist it when
       // it differs from the last assistant message (else the reply shows twice);
@@ -557,6 +579,11 @@ export async function runFeedAgent(options: {
           resultMessageId = message.id;
         }
         emit(snippetId, message);
+      }
+      // The turn's cost belongs to the reply the reader sees, which is either the
+      // result message just written or the last streamed assistant message.
+      if (usage && resultMessageId) {
+        await recordMessageUsage(resultMessageId, usage);
       }
       if (isError) {
         // Rather than dead-end the thread, restart as a fresh session (below).

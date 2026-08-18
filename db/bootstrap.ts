@@ -102,6 +102,9 @@ const schemaStatements = [
     github_comment_id INTEGER,
     attachments TEXT,
     attachments_synced INTEGER NOT NULL DEFAULT 0,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS feed_proposals (
@@ -275,6 +278,14 @@ async function initializeDatabase(): Promise<void> {
   const feedMessageColumns = tableColumns(raw, "feed_messages");
   if (!feedMessageColumns.has("attachments_synced")) {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
+  }
+
+  // Per-turn usage. Existing threads keep 0, so their replies simply show no
+  // token or speed chip instead of a fabricated one.
+  for (const column of ["input_tokens", "output_tokens", "duration_ms"]) {
+    if (!feedMessageColumns.has(column)) {
+      raw.prepare(`ALTER TABLE feed_messages ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();
+    }
   }
 
   // Consolidate the retired provider-specific arxiv_id into the one editable

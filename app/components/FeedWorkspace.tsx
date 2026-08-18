@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Clock, Code2, Coins, Download, FolderOpen, Gauge, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Timer, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -27,6 +27,11 @@ interface FeedMessage {
   content: string;
   toolUseId?: string | null;
   attachments?: string | null;
+  // The usage the CLI reported for the turn this message concludes. Absent (or 0)
+  // on user turns, on tool traffic, and on threads recorded before it was stored.
+  inputTokens?: number;
+  outputTokens?: number;
+  durationMs?: number;
   createdAt: string;
 }
 
@@ -561,6 +566,41 @@ function compactRelativeTime(iso: string): string {
 /** Full local date+time, for the exact-timestamp tooltips. */
 function fullTime(iso: string): string {
   return new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** Generated tokens per second, kept to three significant figures. */
+function formatSpeed(tokensPerSecond: number): string {
+  if (tokensPerSecond < 10) return tokensPerSecond.toFixed(2);
+  return tokensPerSecond.toFixed(tokensPerSecond < 100 ? 1 : 0);
+}
+
+/**
+ * The footer of a turn: when it was written, and for an agent reply the usage the
+ * CLI reported for that turn. The stored stamp is UTC and toLocaleString renders
+ * it in the reader's own zone. A reply recorded before per-turn usage was stored
+ * simply shows its time.
+ */
+function TurnMeta({ iso, message }: { iso: string; message?: FeedMessage }) {
+  const inputTokens = message?.inputTokens ?? 0;
+  const outputTokens = message?.outputTokens ?? 0;
+  const durationMs = message?.durationMs ?? 0;
+  const speed = outputTokens && durationMs ? outputTokens / (durationMs / 1000) : 0;
+  return (
+    <div className="feed-turn-meta">
+      <time className="feed-turn-metric" dateTime={iso}><Clock aria-hidden="true" />{fullTime(iso)}</time>
+      {speed ? <span className="feed-turn-metric"><Gauge aria-hidden="true" />{formatSpeed(speed)} tok/sec</span> : null}
+      {outputTokens ? (
+        <span
+          className="feed-turn-metric feed-time-tip"
+          tabIndex={0}
+          data-tip={`${inputTokens.toLocaleString("en")} prompt tokens, ${outputTokens.toLocaleString("en")} generated`}
+        >
+          <Coins aria-hidden="true" />{compactTokens(outputTokens)} tokens
+        </span>
+      ) : null}
+      {durationMs ? <span className="feed-turn-metric"><Timer aria-hidden="true" />{formatDuration(durationMs)}</span> : null}
+    </div>
+  );
 }
 
 /**
@@ -1641,6 +1681,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               <span className="feed-turn-label">You</span>
               {openingText ? <MarkdownContent content={openingText} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
+              <TurnMeta iso={snippet.createdAt} />
             </div>
           );
         })()}
@@ -1737,6 +1778,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                     <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
                     {prose ? <MarkdownContent content={prose} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
                     <AttachmentChips snippetId={snippet.id} attachments={messageAttachments} />
+                    <TurnMeta iso={message.createdAt} message={message} />
                   </div>,
                 );
               }

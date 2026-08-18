@@ -218,6 +218,13 @@ export const feedMessages = sqliteTable(
     // (posted with links, or backfilled into an older comment). Lets sync skip
     // the per-message backfill probe instead of re-fetching the comment forever.
     attachmentsSynced: integer("attachments_synced").notNull().default(0),
+    // The usage of the agent turn this message concludes, as reported by the CLI's
+    // result event: prompt tokens (including cache reads), generated tokens, and
+    // wall-clock milliseconds. 0 on every other message, so the thread can show
+    // each reply's own token count and speed rather than only feed-wide totals.
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    durationMs: integer("duration_ms").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("feed_messages_snippet_idx").on(table.snippetId, table.createdAt)],

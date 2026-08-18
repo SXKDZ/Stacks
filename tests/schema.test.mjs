@@ -1086,6 +1086,41 @@ test("feed figures and tables size to their content and stay centred", async () 
   assert.match(styles, /\.markdown-media \{[^}]*margin: 0\.9em auto[^}]*width: fit-content/);
 });
 
+test("each feed turn ends with its own time and the turn's measured usage", async () => {
+  const [feed, agent, events, schema, bootstrap, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/events/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The CLI reports usage once per turn, in the result event. It is accumulated
+  // onto the feed (the header totals) and stamped on the message that turn ends
+  // with, which is what lets a reply show its own tokens and speed. A retry's
+  // failed attempt is still excluded from both.
+  assert.match(schema, /inputTokens: integer\("input_tokens"\).notNull\(\).default\(0\)/);
+  assert.match(schema, /durationMs: integer\("duration_ms"\).notNull\(\).default\(0\)/);
+  assert.match(bootstrap, /for \(const column of \["input_tokens", "output_tokens", "duration_ms"\]\)[\s\S]*?ALTER TABLE feed_messages ADD COLUMN \$\{column\} INTEGER NOT NULL DEFAULT 0/);
+  assert.match(agent, /function turnUsage\(event: Record<string, unknown>\): TurnUsage \| null/);
+  assert.match(agent, /const usage = willRetry \? null : turnUsage\(event\)/);
+  assert.match(agent, /if \(usage && resultMessageId\) \{\s*await recordMessageUsage\(resultMessageId, usage\)/);
+  assert.match(events, /inputTokens: message\.inputTokens,\s*outputTokens: message\.outputTokens,\s*durationMs: message\.durationMs/);
+
+  // The footer sits after the reply, not beside the eyebrow: local date and time
+  // first, then speed, tokens, and elapsed time. Speed and tokens are only shown
+  // when the turn actually reported them, so older threads show the time alone.
+  assert.match(feed, /function fullTime[\s\S]*?toLocaleString\("en", \{ dateStyle: "medium", timeStyle: "short" \}\)/);
+  assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}><Clock aria-hidden="true" \/>\{fullTime\(iso\)\}<\/time>/);
+  assert.match(feed, /\{speed \? <span className="feed-turn-metric"><Gauge aria-hidden="true" \/>\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
+  assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
+  assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
+  assert.match(feed, /<TurnMeta iso=\{message\.createdAt\} message=\{message\} \/>/);
+  assert.match(styles, /\.feed-turn-meta \{[^}]*flex-wrap: wrap/);
+  assert.match(styles, /\.feed-turn-metric \{[^}]*font-variant-numeric: tabular-nums/);
+});
+
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
   // The stylesheets accumulated selectors defined three and four times across
   // files, where the later copy silently won: a value was set in one file and

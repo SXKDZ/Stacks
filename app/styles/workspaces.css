@@ -1663,6 +1663,36 @@
   text-transform: uppercase;
 }
 
+/* The turn's footer: its local date and time, then what the turn cost. Quiet
+   chips below the reply, so they read as provenance rather than content. */
+.feed-turn-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feed-turn-metric {
+  align-items: center;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--soft);
+  display: inline-flex;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+  gap: 5px;
+  padding: 2px 9px;
+}
+
+.feed-turn-metric > svg {
+  color: var(--soft);
+  flex: 0 0 12px;
+  height: 12px;
+  width: 12px;
+}
+
 .feed-turn-user {
   align-items: flex-end;
   align-self: flex-end;
