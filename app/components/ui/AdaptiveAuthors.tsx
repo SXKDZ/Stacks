@@ -26,7 +26,7 @@ function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
       setVisibleCount(nextVisibleCount);
       window.cancelAnimationFrame(fitValidationFrame);
       fitValidationFrame = window.requestAnimationFrame(() => {
-        if (!active) return;
+        if (!active || document.body.classList.contains("is-resizing-column")) return;
         const disclosure = container.querySelector<HTMLElement>(":scope > .author-toggle");
         if (!disclosure) return;
         const containerRect = container.getBoundingClientRect();
@@ -40,7 +40,7 @@ function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
       });
     };
     const measure = () => {
-      if (!active) return;
+      if (!active || document.body.classList.contains("is-resizing-column")) return;
       const cell = container.closest("td");
       const containerRect = container.getBoundingClientRect();
       const cellRect = cell?.getBoundingClientRect();
@@ -93,12 +93,14 @@ function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
     if (container.parentElement) resizeObserver.observe(container.parentElement);
     const cell = container.closest("td");
     if (cell) resizeObserver.observe(cell);
+    window.addEventListener("stacks:resize-end", measure);
     void document.fonts?.ready.then(measure);
     return () => {
       active = false;
       window.cancelAnimationFrame(animationFrame);
       window.cancelAnimationFrame(fitValidationFrame);
       resizeObserver.disconnect();
+      window.removeEventListener("stacks:resize-end", measure);
     };
   }, [authorSignature]);
 

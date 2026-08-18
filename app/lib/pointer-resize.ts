@@ -32,6 +32,7 @@ export function beginPointerResize(
     window.removeEventListener("blur", finish);
     document.body.classList.remove("is-resizing-column");
     onEnd?.();
+    window.dispatchEvent(new Event("stacks:resize-end"));
   };
   const move = (event: PointerEvent) => {
     if (event.pointerId !== pointerId) return;
