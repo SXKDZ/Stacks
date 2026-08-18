@@ -153,19 +153,26 @@ test("pressing controls uses one shared restrained 99% scale token", async () =>
   ]);
   const interactiveStyles = [controls, designSystem, foundation, workflows, reader].join("\n");
   assert.match(foundation, /--motion-press-scale:\s*0\.99;/);
+  assert.match(foundation, /@keyframes popover-enter/);
   assert.equal(interactiveStyles.match(/--motion-press-scale:\s*0\.99;/g)?.length, 1);
+  assert.match(controls, /app-control-motion/);
   assert.match(controls, /active:scale-\[var\(--motion-press-scale\)\]/);
   assert.match(designSystem, /\.app-select-option:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
-  assert.match(workflows, /:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(designSystem, /\.page-size-menu\s*\{[\s\S]*?animation: popover-enter var\(--motion-fast\)/);
+  assert.match(designSystem, /\.app-select-menu\s*\{[\s\S]*?animation: popover-enter var\(--motion-fast\)/);
+  assert.match(controls, /data-placement=\{pos\.bottom !== undefined \? "top" : "bottom"\}/);
+  assert.match(foundation, /\.app-interaction-scope :is\(button, a, \[role="button"\]\)[\s\S]*?:active:not\(:disabled\):not\(\[aria-disabled="true"\]\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
-  assert.match(reader, /:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.doesNotMatch(workflows, /\.stacks-shell[^{}]*:active/);
+  assert.doesNotMatch(reader, /\.reader-page[^{}]*:active/);
   assert.doesNotMatch(interactiveStyles, /scale\(0\.(?:96|97|98|985|99)\)|scale-\[0\.(?:96|97|98|985|99)\]/);
 });
 
 test("PDF metadata extraction preserves authors and reviews every conflicting field", async () => {
-  const [application, extraction, styles] = await Promise.all([
+  const [application, adaptiveAuthors, extraction, styles] = await Promise.all([
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ui/AdaptiveAuthors.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
     readApplicationStyles(),
   ]);
@@ -204,8 +211,37 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   assert.match(styles, /\.metadata-review-row:has\(> input:focus-visible\)/);
 
   // The no-author line now enters the same type scale as ordinary author names.
-  assert.match(application, /className="expandable-author-buttons is-empty">No authors recorded/);
-  assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+  assert.match(adaptiveAuthors, /className="expandable-author-list is-empty">\{emptyLabel\}/);
+  assert.match(adaptiveAuthors, /emptyLabel = "No authors recorded"/);
+  assert.match(styles, /\.paper-secondary-line \.expandable-author-list\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+  // One byline component for every surface, so a surface cannot restyle the
+  // disclosure behind the hidden measurement's back: names become links only
+  // where a handler is passed, and the control is the same element in both
+  // states, at the end of the name run.
+  assert.match(adaptiveAuthors, /export function AdaptiveAuthors\(/);
+  assert.doesNotMatch(adaptiveAuthors, /AdaptiveAuthorNames|AdaptiveAuthorButtons/);
+  assert.match(adaptiveAuthors, /onOpenAuthor\s*\?\s*<button type="button"/);
+  assert.match(adaptiveAuthors, /if \(onOpenAuthor\) classes\.push\("is-linked"\)/);
+  assert.doesNotMatch(styles, /expandable-author-buttons/);
+  assert.doesNotMatch(styles, /\.reader-authors [^{]*> button/);
+  assert.doesNotMatch(styles, /\.expandable-author-list \.author-toggle \{[^}]*font: inherit/);
+  assert.match(styles, /\.expandable-author-list \.author-toggle \{[^}]*font-size: var\(--type-micro\)[^}]*font-weight: 700/);
+  // Disclosure fitting measures complete rendered labels on every resize frame,
+  // including active column drags, and commits one exact candidate count.
+  assert.match(adaptiveAuthors, /Math\.floor\(container\.getBoundingClientRect\(\)\.width\)/);
+  assert.match(adaptiveAuthors, /for \(let count = 0; count <= nameWidths\.length; count \+= 1\)/);
+  assert.match(adaptiveAuthors, /Math\.ceil\(requiredWidth\) <= availableWidth/);
+  assert.match(adaptiveAuthors, /new ResizeObserver\(requestMeasure\)/);
+  // Candidates must cost exactly what the byline costs: a non-breaking
+  // separator (a plain trailing space is trimmed in the hidden measure, which
+  // bought one space of width per visible author) and the live toggle class,
+  // so type and inline margin come from the rendered control's own rules.
+  assert.match(adaptiveAuthors, /data-author-measure-separator>\{",\u00a0"\}/);
+  assert.doesNotMatch(adaptiveAuthors, /\? ", " : ""/);
+  assert.match(adaptiveAuthors, /className="author-toggle author-toggle-measure"/);
+  assert.doesNotMatch(styles, /\.author-adaptive-measure \.author-toggle-measure\s*\{[^}]*font-size/);
+  assert.doesNotMatch(adaptiveAuthors, /is-resizing-column/);
+  assert.doesNotMatch(adaptiveAuthors, /scheduleFitValidation|AUTHOR_DISCLOSURE_INLINE_RESERVE/);
 });
 
 test("agent scopes one-paper reads and proposes complete paper metadata", async () => {
@@ -393,11 +429,11 @@ test("enforces paper identifier uniqueness and atomic proposal/seed handling", a
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/proposals/[id]/route.ts", import.meta.url), "utf8"),
   ]);
-  // arXiv / Semantic Scholar ids are unique (import dedup relies on it), and the
+  // Preprint / Semantic Scholar ids are unique (import dedup relies on it), and the
   // bootstrap creates the indexes after unlinking any pre-existing duplicates.
-  assert.match(schema, /uniqueIndex\("papers_arxiv_id_unique"\)/);
+  assert.match(schema, /uniqueIndex\("papers_preprint_id_unique"\)/);
   assert.match(schema, /uniqueIndex\("papers_semantic_scholar_id_unique"\)/);
-  assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_arxiv_id_unique/);
+  assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_preprint_id_unique/);
   assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_semantic_scholar_id_unique/);
   assert.match(bootstrap, /ROW_NUMBER\(\) OVER \(PARTITION BY \$\{column\}/);
   // The duplicate check runs inside the insert transaction (not check-then-insert
@@ -953,8 +989,9 @@ test("the GitHub sync recovers linked comments that fell behind its cursor", asy
 });
 
 test("tooltips are drawn by the app, not the browser", async () => {
-  const [layer, styles, layout] = await Promise.all([
+  const [layer, reader, styles, layout] = await Promise.all([
     readFile(new URL("../app/components/ui/TooltipLayer.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ReaderWorkspace.tsx", import.meta.url), "utf8"),
     readApplicationStyles(),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
@@ -973,11 +1010,141 @@ test("tooltips are drawn by the app, not the browser", async () => {
   // Keyboard focus shows it too, not just the pointer.
   assert.match(layer, /addEventListener\("focusin"/);
   assert.match(layer, /role="tooltip"/);
+  // Accessibility-only titles can explicitly opt out of visual hover help. The
+  // PDF iframe keeps its required accessible name without covering the page in
+  // a tooltip containing its generated local filename.
+  assert.match(layer, /closest\("\[data-tooltip-disabled\]"\)/);
+  assert.match(reader, /className="reader-document"[\s\S]*?data-tooltip-disabled/);
   // Styled from the theme tokens, so it inverts with light/dark instead of looking
   // like the operating system.
   assert.match(styles, /\.app-tooltip \{/);
   assert.match(styles, /background: var\(--ink\)/);
   assert.match(styles, /max-width: 320px/);
+});
+
+test("paper details open as an accessible modal instead of a side drawer", async () => {
+  const [application, styles] = await Promise.all([
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+  assert.match(application, /className="detail-drawer"[\s\S]*?role="dialog"[\s\S]*?aria-modal="true"[\s\S]*?aria-labelledby=\{detailTitleId\}/);
+  assert.match(application, /return createPortal\(dialog, document\.body\)/);
+  assert.match(application, /function ModalFrame[\s\S]*?return createPortal\(\([\s\S]*?document\.body\)/);
+  assert.match(application, /appShellRef\.current\.inert = !suspendAutoClose/);
+  assert.match(application, /event\.key === "Escape"/);
+  assert.match(application, /event\.key === "Tab"/);
+  assert.match(application, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
+  assert.match(application, /role="tablist"/);
+  assert.match(application, /role="tabpanel"/);
+  assert.match(styles, /\.detail-drawer \{[\s\S]*?left: 50%;[\s\S]*?top: 50%;[\s\S]*?transform: translate\(-50%, -50%\)/);
+  assert.match(styles, /\.modal-layer \{[\s\S]*?z-index: 90/);
+  assert.match(styles, /\.paper-detail-tab-panel \{[\s\S]*?max-height:[\s\S]*?overflow-y: auto/);
+  assert.match(styles, /\.paper-detail-tab-panel\.is-notes \{[\s\S]*?flex: 1;[\s\S]*?max-height: none/);
+  assert.match(styles, /\.paper-detail-tab-panel\.is-notes \.prompt-code-editor \{[\s\S]*?flex: 1;[\s\S]*?height: auto/);
+  assert.doesNotMatch(styles, /\.drawer-layer > \.drawer-scrim \{[\s\S]*?display: none/);
+});
+
+test("venue monograms fit their chip and stay centred in it", async () => {
+  const [application, styles] = await Promise.all([
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Four uppercase glyphs are what makes a venue chip recognizable (COLM, AAAI),
+  // so the chip drops a type step instead of dropping a letter. Tracking stays
+  // at normal because letter-spacing trails the last glyph too, which pulls the
+  // centred acronym off centre, and 1.3 is this font's ascent plus descent, so
+  // the line box has no leading left to round the caps off the chip's middle.
+  assert.match(application, /function venueMonogram[\s\S]*?\.slice\(0, 4\)/);
+  assert.match(styles, /--type-nano: 10px/);
+  assert.match(styles, /\.entity-research-grid \.venue-monogram \{[^}]*font-size: var\(--type-nano\)/);
+  assert.match(styles, /\.entity-research-grid \.venue-monogram \{[^}]*line-height: 1\.3/);
+  assert.doesNotMatch(styles, /\.entity-research-grid \.venue-monogram \{[^}]*letter-spacing: -/);
+  assert.match(styles, /\.entity-research-grid \.venue-monogram \{[\s\S]*?align-items: center[\s\S]*?justify-content: center/);
+
+});
+
+test("feed figures and tables size to their content and stay centred", async () => {
+  const [mermaid, styles] = await Promise.all([
+    readFile(new URL("../app/components/MermaidDiagram.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Feed figures size to their content, not to a fraction of the message. Mermaid
+  // writes width="100%" on its SVG, which contributes nothing to a shrink-to-fit
+  // box (every diagram then rendered at the 300px default of a replaced element),
+  // so the viewBox becomes the SVG's intrinsic size: the block hugs a small
+  // diagram and a large one scales down to the measure.
+  assert.match(mermaid, /function withIntrinsicSize/);
+  assert.match(mermaid, /viewBox="\(\[\^"\]\+\)"/);
+  assert.match(mermaid, /<svg width="\$\{width\}" height="\$\{height\}"/);
+  assert.match(mermaid, /"--diagram-natural-width": `\$\{state\.diagram\.width\}px`/);
+  assert.match(styles, /\.mermaid-diagram-canvas > svg \{[^}]*margin-inline: auto/);
+  assert.match(styles, /\.mermaid-diagram-canvas > svg \{[^}]*height: auto/);
+  assert.doesNotMatch(styles, /\.mermaid-diagram \{[^}]*width: 100%/);
+
+  // Scaling a diagram to fit shrinks its 16px labels with it, so the floor is
+  // 0.7 (11px, the app's smallest text) and a wider diagram scrolls inside the
+  // canvas. The scroll must stay off the block, which is what the own-window
+  // action is positioned against.
+  assert.match(styles, /\.mermaid-diagram-canvas > svg \{[^}]*min-width: calc\(var\(--diagram-natural-width, 0px\) \* 0\.7\)/);
+  assert.match(styles, /\.mermaid-diagram-canvas \{[^}]*max-height: 70vh[^}]*overflow: auto/);
+  assert.doesNotMatch(styles, /\.mermaid-diagram \{[^}]*overflow: auto/);
+
+  // Tables wrap into more rows rather than pushing every row onto one scrolling
+  // line, and a table narrower than the message stays centred in it.
+  assert.match(styles, /\.markdown-content \.markdown-table-scroll table \{[^}]*width: auto/);
+  assert.doesNotMatch(styles, /\.markdown-content \.markdown-table-scroll table \{[^}]*width: max-content/);
+  assert.match(styles, /\.feed-rich-table \{[^}]*margin-inline: auto[^}]*width: fit-content/);
+  assert.match(styles, /\.markdown-media \{[^}]*margin: 0\.9em auto[^}]*width: fit-content/);
+});
+
+test("each feed turn ends with its own time and the turn's measured usage", async () => {
+  const [feed, agent, events, schema, bootstrap, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/events/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The CLI reports usage once per turn, in the result event. It is accumulated
+  // onto the feed (the header totals) and stamped on the message that turn ends
+  // with, which is what lets a reply show its own tokens and speed. A retry's
+  // failed attempt is still excluded from both.
+  assert.match(schema, /inputTokens: integer\("input_tokens"\).notNull\(\).default\(0\)/);
+  assert.match(schema, /durationMs: integer\("duration_ms"\).notNull\(\).default\(0\)/);
+  assert.match(bootstrap, /for \(const column of \["input_tokens", "output_tokens", "duration_ms"\]\)[\s\S]*?ALTER TABLE feed_messages ADD COLUMN \$\{column\} INTEGER NOT NULL DEFAULT 0/);
+  assert.match(agent, /function turnUsage\(event: Record<string, unknown>\): TurnUsage \| null/);
+  assert.match(agent, /const usage = willRetry \? null : turnUsage\(event\)/);
+  assert.match(agent, /if \(usage && resultMessageId\) \{\s*await recordMessageUsage\(resultMessageId, usage\)/);
+  assert.match(events, /inputTokens: message\.inputTokens,\s*outputTokens: message\.outputTokens,\s*durationMs: message\.durationMs/);
+
+  // The footer sits after the reply, not beside the eyebrow: local date and time
+  // first, then speed, tokens, and elapsed time. Speed and tokens are only shown
+  // when the turn actually reported them, so older threads show the time alone.
+  assert.match(feed, /function fullTime[\s\S]*?toLocaleString\("en", \{ dateStyle: "medium", timeStyle: "short" \}\)/);
+  assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}><Clock aria-hidden="true" \/>\{fullTime\(iso\)\}<\/time>/);
+  assert.match(feed, /\{speed \? <span className="feed-turn-metric"><Gauge aria-hidden="true" \/>\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
+  assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
+  assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
+  assert.match(feed, /<TurnMeta iso=\{message\.createdAt\} message=\{message\} \/>/);
+  assert.match(styles, /\.feed-turn-meta \{[^}]*flex-wrap: wrap/);
+  assert.match(styles, /\.feed-turn-metric \{[^}]*font-variant-numeric: tabular-nums/);
+});
+
+test("the toolbar search field gives way instead of squeezing the status tabs", async () => {
+  const styles = await readApplicationStyles();
+  // A fixed-width search field left the tabs as the row's only flexible item, so
+  // the selection actions squeezed them down to "All" behind a hidden scrollbar.
+  // The field is elastic between 220px and 390px and grows ahead of the tabs, and
+  // the tabs take the leftover width without ever giving any back, so the row
+  // neither clips them nor spreads apart on justify-content: space-between.
+  assert.match(styles, /\.compact-toolbar > \.page-search\.inline-search \{[^}]*flex: 6 1 220px/);
+  assert.match(styles, /\.compact-toolbar > \.page-search\.inline-search \{[^}]*max-width: 390px/);
+  assert.match(styles, /\.library-toolbar \.filter-tabs \{[^}]*flex: 1 0 auto/);
+  assert.match(styles, /@media \(max-width: 900px\)[\s\S]*?\.compact-toolbar > \.page-search\.inline-search \{[^}]*max-width: 100%/);
 });
 
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {

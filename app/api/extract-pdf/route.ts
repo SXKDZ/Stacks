@@ -74,7 +74,7 @@ function normalizeMetadata(value: Record<string, unknown>, fallback: ExtractedMe
     doi: cleanNullable(value.doi) ?? fallback.doi,
     url: cleanNullable(value.url) ?? fallback.url,
     category: cleanNullable(value.category) ?? fallback.category,
-    preprintId: cleanNullable(value.preprintId || value.preprint_id || value.arxivId) ?? fallback.preprintId,
+    preprintId: cleanNullable(value.preprintId || value.preprint_id) ?? fallback.preprintId,
   };
 }
 

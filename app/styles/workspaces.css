@@ -39,13 +39,6 @@
   gap: 6px;
 }
 
-@media (max-width: 900px) {
-  .page-size-menu {
-    bottom: calc(100% + 6px);
-    top: auto;
-  }
-}
-
 /* --- detail-final.css --- */
 /* Compact paper facts, status, and collection controls share one visual rhythm. */
 /* Paper detail meta: publication facts + reading status + collections. A calm
@@ -128,9 +121,24 @@
   transition: background var(--motion-control), color var(--motion-control);
 }
 
-.reading-status-option [class*="lucide"] {
-  height: 15px;
-  width: 15px;
+.reading-status-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 18px;
+  height: 18px;
+  justify-content: center;
+  width: 18px;
+}
+
+.reading-status-icon [class*="lucide"] {
+  height: 16px;
+  stroke-width: 2;
+  width: 16px;
+}
+
+.reading-status-label {
+  font: inherit;
+  line-height: 1;
 }
 
 .reading-status-option:hover:not(.is-active) {
@@ -189,6 +197,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.publication-detail-list .publication-link {
+  color: var(--brand-blue-strong);
+  display: block;
+  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-decoration-color: transparent;
+  text-overflow: ellipsis;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.publication-detail-list .publication-link:hover {
+  color: var(--brand-blue);
+  text-decoration-color: currentColor;
 }
 
 
@@ -1638,6 +1663,36 @@
   text-transform: uppercase;
 }
 
+/* The turn's footer: its local date and time, then what the turn cost. Quiet
+   chips below the reply, so they read as provenance rather than content. */
+.feed-turn-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feed-turn-metric {
+  align-items: center;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--soft);
+  display: inline-flex;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+  gap: 5px;
+  padding: 2px 9px;
+}
+
+.feed-turn-metric > svg {
+  color: var(--soft);
+  flex: 0 0 12px;
+  height: 12px;
+  width: 12px;
+}
+
 .feed-turn-user {
   align-items: flex-end;
   align-self: flex-end;
@@ -1800,87 +1855,57 @@
   padding-inline-end: 88px;
 }
 
-.feed-rich-image {
-  display: block;
-  margin: 0.9em 0;
-  max-width: 100%;
-}
-
-.feed-rich-image > img {
-  border-radius: var(--radius-md);
-  display: block;
-  height: auto;
-  max-width: 100%;
-}
-
+/* A narrow table keeps its own width and sits centred in the message; a wide one
+   grows to the full measure and scrolls inside .markdown-table-scroll. */
 .feed-rich-table {
-  margin: 0.9em 0;
-}
-
-.feed-rich-table-scroll {
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  margin-inline: auto;
   max-width: 100%;
-  overflow: auto;
-}
-
-.markdown-content .feed-rich-table table {
-  border-collapse: separate;
-  border-spacing: 0;
-  display: table;
-  margin: 0;
-  min-width: 100%;
-  overflow: visible;
-  width: max-content;
-}
-
-.markdown-content .feed-rich-table :is(th, td) {
-  border: 0;
-  border-block-end: 1px solid var(--line-strong);
-  border-inline-end: 1px solid var(--line-strong);
-}
-
-.markdown-content .feed-rich-table tr > :last-child {
-  border-inline-end: 0;
-}
-
-.markdown-content .feed-rich-table tbody tr:last-child > * {
-  border-block-end: 0;
+  width: fit-content;
 }
 
 /* Mermaid fences render as diagrams only in feed message bubbles. The neutral
    surface keeps both Mermaid themes legible, including inside a blue user
-   bubble, while overflow remains local to unusually wide diagrams. */
+   bubble, while overflow remains local to unusually wide diagrams. The block
+   sizes to the diagram (.markdown-media): a diagram that is narrower than the
+   message keeps its own width and stays centred, and a wider one scales down to
+   the full measure, with the aspect ratio carrying the height. */
 .mermaid-diagram {
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   color: var(--ink);
-  margin: 0.9em 0;
-  max-width: 100%;
-  overflow: auto;
   padding: 14px;
   position: relative;
   text-align: center;
 }
 
+/* The scroll lives on the canvas, not on the block: the block is what the
+   own-window action is positioned against, and an absolutely positioned control
+   inside a scroll container travels with the content instead of staying in the
+   corner. A diagram held at readable type can also be taller than the window, so
+   the canvas stays a pane inside the message rather than a page-long block. */
+.mermaid-diagram-canvas {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+/* Legibility floor. Mermaid draws its labels at 16px in the diagram's own units,
+   so scaling the SVG below 0.7 puts them under the app's 11px text floor: a wide
+   diagram scales down only that far and then scrolls inside the block, where the
+   toolbar's own-window view shows it whole, instead of shrinking into type no one
+   can read. */
 .mermaid-diagram-canvas > svg {
   display: block;
   height: auto;
   margin-inline: auto;
   max-width: 100%;
+  min-width: calc(var(--diagram-natural-width, 0px) * 0.7);
 }
 
 @media (hover: none) {
   .feed-rich-actions {
     opacity: 1;
     pointer-events: auto;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .feed-rich-actions {
-    transition: none;
   }
 }
 
@@ -2404,13 +2429,6 @@
   .feed-table-filter input {
     min-width: 0;
     width: 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mermaid-visualization-svg,
-  .feed-image-visualization {
-    transition: none;
   }
 }
 

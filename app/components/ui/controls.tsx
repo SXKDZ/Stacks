@@ -16,9 +16,8 @@ export function cx(...values: Array<string | false | null | undefined>) {
 
 const actionVariants = cva(
   [
-    "inline-flex shrink-0 select-none items-center justify-center gap-2",
+    "app-control-motion inline-flex shrink-0 select-none items-center justify-center gap-2",
     "rounded-[var(--radius-lg)] border font-semibold leading-[1.25] no-underline",
-    "transition-[background-color,border-color,color,box-shadow,filter,transform] duration-200 ease-out",
     "hover:-translate-y-px active:translate-y-0 active:scale-[var(--motion-press-scale)]",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50 disabled:transform-none",
@@ -211,8 +210,7 @@ export type TabVariant = "pill" | "underline" | "segmented" | "nav";
 
 const tabVariants = cva(
   [
-    "inline-flex shrink-0 select-none items-center gap-1.5 border font-semibold leading-[1.25]",
-    "transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out",
+    "app-control-motion inline-flex shrink-0 select-none items-center gap-1.5 border font-semibold leading-[1.25]",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50",
     "[&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:stroke-2",
@@ -659,6 +657,7 @@ export function Select({
               role="listbox"
               id={listboxId}
               aria-label={ariaLabel}
+              data-placement={pos.bottom !== undefined ? "top" : "bottom"}
               style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, minWidth: pos.width }}
             >
               {options.map((option) => {

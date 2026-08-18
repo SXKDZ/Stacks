@@ -16,8 +16,7 @@ test("a direct PDF URL bypasses webpage rendering and is returned for acquisitio
     abstract: "",
     url,
     pdfUrl: url,
-    arxivId: null,
+    preprintId: null,
     readerContent: "",
   });
 });
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Clock, Code2, Coins, Download, FolderOpen, Gauge, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Timer, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -27,6 +27,11 @@ interface FeedMessage {
   content: string;
   toolUseId?: string | null;
   attachments?: string | null;
+  // The usage the CLI reported for the turn this message concludes. Absent (or 0)
+  // on user turns, on tool traffic, and on threads recorded before it was stored.
+  inputTokens?: number;
+  outputTokens?: number;
+  durationMs?: number;
   createdAt: string;
 }
 
@@ -563,6 +568,41 @@ function fullTime(iso: string): string {
   return new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** Generated tokens per second, kept to three significant figures. */
+function formatSpeed(tokensPerSecond: number): string {
+  if (tokensPerSecond < 10) return tokensPerSecond.toFixed(2);
+  return tokensPerSecond.toFixed(tokensPerSecond < 100 ? 1 : 0);
+}
+
+/**
+ * The footer of a turn: when it was written, and for an agent reply the usage the
+ * CLI reported for that turn. The stored stamp is UTC and toLocaleString renders
+ * it in the reader's own zone. A reply recorded before per-turn usage was stored
+ * simply shows its time.
+ */
+function TurnMeta({ iso, message }: { iso: string; message?: FeedMessage }) {
+  const inputTokens = message?.inputTokens ?? 0;
+  const outputTokens = message?.outputTokens ?? 0;
+  const durationMs = message?.durationMs ?? 0;
+  const speed = outputTokens && durationMs ? outputTokens / (durationMs / 1000) : 0;
+  return (
+    <div className="feed-turn-meta">
+      <time className="feed-turn-metric" dateTime={iso}><Clock aria-hidden="true" />{fullTime(iso)}</time>
+      {speed ? <span className="feed-turn-metric"><Gauge aria-hidden="true" />{formatSpeed(speed)} tok/sec</span> : null}
+      {outputTokens ? (
+        <span
+          className="feed-turn-metric feed-time-tip"
+          tabIndex={0}
+          data-tip={`${inputTokens.toLocaleString("en")} prompt tokens, ${outputTokens.toLocaleString("en")} generated`}
+        >
+          <Coins aria-hidden="true" />{compactTokens(outputTokens)} tokens
+        </span>
+      ) : null}
+      {durationMs ? <span className="feed-turn-metric"><Timer aria-hidden="true" />{formatDuration(durationMs)}</span> : null}
+    </div>
+  );
+}
+
 /**
  * A single row in the left list: status glyph, title, and a relative timestamp,
  * on one line so the console scales to dozens of interactions, plus an overflow
@@ -713,11 +753,22 @@ function interactionResponseText(interaction: FeedInteraction<FeedMessage>): str
     .join("\n\n");
 }
 
+const FEED_HISTORY_REQUEST_PREVIEW_LENGTH = 800;
+const FEED_HISTORY_RESPONSE_PREVIEW_LENGTH = 2_000;
+const FEED_HISTORY_JUMP_DURATION_MS = 260;
+
+function cappedHistoryPreview(content: string, limit: number): string {
+  const trimmed = content.trim();
+  if (trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit).trimEnd()}…`;
+}
+
 /**
  * A focused chooser for creating a new feed from past requests. The complete,
- * lightweight request index stays available on the left while only its active
- * request/response card is mounted on the right. Responses remain capped until
- * expanded so a long history never becomes a second full conversation DOM.
+ * lightweight request index stays available on the left while the complete
+ * chronological request/response list remains visible on the right. Collapsed
+ * previews use bounded strings and CSS rendering containment so a long history
+ * does not become a second full conversation DOM.
  */
 function FeedHistorySelectionModal({
   feedName,
@@ -742,6 +793,9 @@ function FeedHistorySelectionModal({
   const dialogRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const indexButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const interactionsPaneRef = useRef<HTMLDivElement>(null);
+  const interactionCardRefs = useRef(new Map<string, HTMLElement>());
+  const historyScrollFrameRef = useRef<number | null>(null);
   const closeRef = useRef(onClose);
   const creatingRef = useRef(creating);
 
@@ -764,12 +818,30 @@ function FeedHistorySelectionModal({
   }, [query, records]);
   const visibleIds = visible.map(({ interaction }) => interaction.id);
   const displayedActiveId = visibleIds.includes(activeInteractionId) ? activeInteractionId : (visibleIds[0] ?? "");
-  const activeRecord = visible.find(({ interaction }) => interaction.id === displayedActiveId);
   const allVisibleSelected = Boolean(visibleIds.length) && visibleIds.every((id) => selected.has(id));
 
   useEffect(() => {
     indexButtonRefs.current.get(displayedActiveId)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [displayedActiveId]);
+
+  useEffect(() => {
+    const pane = interactionsPaneRef.current;
+    if (!pane) return;
+    const cancelAnimatedScroll = () => {
+      if (historyScrollFrameRef.current === null) return;
+      cancelAnimationFrame(historyScrollFrameRef.current);
+      historyScrollFrameRef.current = null;
+    };
+    pane.addEventListener("wheel", cancelAnimatedScroll, { passive: true });
+    pane.addEventListener("touchstart", cancelAnimatedScroll, { passive: true });
+    pane.addEventListener("pointerdown", cancelAnimatedScroll);
+    return () => {
+      cancelAnimatedScroll();
+      pane.removeEventListener("wheel", cancelAnimatedScroll);
+      pane.removeEventListener("touchstart", cancelAnimatedScroll);
+      pane.removeEventListener("pointerdown", cancelAnimatedScroll);
+    };
+  }, []);
 
   useEffect(() => {
     const page = document.querySelector<HTMLElement>(".feed-page");
@@ -815,6 +887,33 @@ function FeedHistorySelectionModal({
 
   function jumpWithinModal(id: string) {
     setActiveInteractionId(id);
+    const pane = interactionsPaneRef.current;
+    const card = interactionCardRefs.current.get(id);
+    if (!pane || !card) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const paneTop = pane.getBoundingClientRect().top;
+    const cardTop = card.getBoundingClientRect().top;
+    const targetTop = Math.min(
+      pane.scrollHeight - pane.clientHeight,
+      Math.max(0, pane.scrollTop + cardTop - paneTop),
+    );
+    if (historyScrollFrameRef.current !== null) cancelAnimationFrame(historyScrollFrameRef.current);
+    if (reduceMotion) {
+      pane.scrollTop = targetTop;
+      historyScrollFrameRef.current = null;
+      return;
+    }
+    const startTop = pane.scrollTop;
+    const distance = targetTop - startTop;
+    let startTime: number | null = null;
+    const animate = (time: number) => {
+      startTime ??= time;
+      const progress = Math.min(1, (time - startTime) / FEED_HISTORY_JUMP_DURATION_MS);
+      const eased = 1 - ((1 - progress) ** 3);
+      pane.scrollTop = startTop + (distance * eased);
+      historyScrollFrameRef.current = progress < 1 ? requestAnimationFrame(animate) : null;
+    };
+    historyScrollFrameRef.current = requestAnimationFrame(animate);
   }
 
   function toggleExpanded(id: string) {
@@ -903,18 +1002,28 @@ function FeedHistorySelectionModal({
             </div>
           </nav>
 
-          <div className="feed-history-interactions" aria-busy={loading}>
+          <div ref={interactionsPaneRef} className="feed-history-interactions" aria-busy={loading}>
             {loading ? (
               <div className="feed-history-loading"><LoaderCircle className="spin" size={18} /><span>Loading conversation history…</span></div>
-            ) : activeRecord ? (() => {
-              const { interaction, number, response } = activeRecord;
+            ) : visible.length ? visible.map(({ interaction, number, response }) => {
               const isExpanded = expanded.has(interaction.id);
               const isRequestExpanded = expandedRequests.has(interaction.id);
               const isSelected = selected.has(interaction.id);
               const requestCanExpand = interaction.userText.length > 180 || interaction.userText.split("\n").length > 3;
+              const requestText = interaction.userText.trim() || "Request with attachments";
+              const requestPreview = isRequestExpanded
+                ? requestText
+                : cappedHistoryPreview(requestText, FEED_HISTORY_REQUEST_PREVIEW_LENGTH);
+              const responsePreview = isExpanded
+                ? response
+                : cappedHistoryPreview(response, FEED_HISTORY_RESPONSE_PREVIEW_LENGTH);
               return (
                 <article
                   key={interaction.id}
+                  ref={(node) => {
+                    if (node) interactionCardRefs.current.set(interaction.id, node);
+                    else interactionCardRefs.current.delete(interaction.id);
+                  }}
                   className={`feed-history-interaction ${isSelected ? "is-selected" : ""}`}
                 >
                   <label className="feed-history-interaction-select">
@@ -923,11 +1032,11 @@ function FeedHistorySelectionModal({
                   </label>
                   <div className="feed-history-request-preview">
                     <strong>You</strong>
-                    <p className={isRequestExpanded ? "is-expanded" : ""}>{interaction.userText.trim() || "Request with attachments"}</p>
+                    <p className={isRequestExpanded ? "is-expanded" : ""}>{requestPreview}</p>
                   </div>
                   <div className="feed-history-response-preview">
                     <strong>Agent response</strong>
-                    <p className={isExpanded ? "is-expanded" : ""}>{response || "No agent response before the next request."}</p>
+                    <p className={isExpanded ? "is-expanded" : ""}>{responsePreview || "No agent response before the next request."}</p>
                   </div>
                   <div className="feed-history-interaction-actions">
                     <span className="feed-history-expand-actions">
@@ -946,7 +1055,7 @@ function FeedHistorySelectionModal({
                   </div>
                 </article>
               );
-            })() : (
+            }) : (
               <div className="feed-history-empty">No requests or responses match “{query}”.</div>
             )}
           </div>
@@ -978,14 +1087,14 @@ function FeedHistorySelectionModal({
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, selectHistoryInitially, historySelectionReturnFocus, onBack, onChanged, onCreated }: {
+function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   models: FeedModelOption[];
   defaultModelLabel: string;
   defaultEffort: EffortSetting;
-  selectHistoryInitially: boolean;
-  historySelectionReturnFocus: HTMLButtonElement | null;
+  historySelectionRequest: { nonce: number; returnFocus: HTMLButtonElement | null } | null;
+  onHistorySelectionClosed: () => void;
   onBack: () => void;
   onChanged: () => void;
   onCreated: (id: string) => void;
@@ -1002,7 +1111,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const [workingDirectory, setWorkingDirectory] = useState<string | null>(null);
   const [openingWorkingDirectory, setOpeningWorkingDirectory] = useState(false);
   const [streamNonce, setStreamNonce] = useState(0);
-  const [selectingHistory, setSelectingHistory] = useState(selectHistoryInitially);
+  const [selectingHistory, setSelectingHistory] = useState(false);
   const [selectedInteractions, setSelectedInteractions] = useState<Set<string>>(() => new Set());
   const [includeToolDetails, setIncludeToolDetails] = useState(false);
   const [creatingFromHistory, setCreatingFromHistory] = useState(false);
@@ -1029,6 +1138,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
   const replayingHistoryRef = useRef(true);
   const userScrollIntentRef = useRef(false);
   const userScrollIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historySelectionRequestNonce = historySelectionRequest?.nonce ?? null;
+
+  useEffect(() => {
+    if (historySelectionRequestNonce !== null) setSelectingHistory(true);
+  }, [historySelectionRequestNonce]);
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
@@ -1357,6 +1471,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     setSelectingHistory(false);
     setSelectedInteractions(new Set());
     setIncludeToolDetails(false);
+    onHistorySelectionClosed();
   }
 
   function showEarlierInteractions() {
@@ -1418,6 +1533,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
         return;
       }
       const payload = await response.json() as { id: string };
+      onHistorySelectionClosed();
       onCreated(payload.id);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "The new feed could not be created.");
@@ -1565,6 +1681,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               <span className="feed-turn-label">You</span>
               {openingText ? <MarkdownContent content={openingText} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
+              <TurnMeta iso={snippet.createdAt} />
             </div>
           );
         })()}
@@ -1661,6 +1778,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                     <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
                     {prose ? <MarkdownContent content={prose} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
                     <AttachmentChips snippetId={snippet.id} attachments={messageAttachments} />
+                    <TurnMeta iso={message.createdAt} message={message} />
                   </div>,
                 );
               }
@@ -1734,7 +1852,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           creating={creatingFromHistory}
           loading={!historyReady}
           error={error}
-          returnFocus={historySelectionReturnFocus}
+          returnFocus={historySelectionRequest?.returnFocus ?? null}
           onToggle={toggleInteraction}
           onSetVisible={setVisibleInteractions}
           onIncludeToolDetails={setIncludeToolDetails}
@@ -2226,14 +2344,14 @@ export default function FeedWorkspace() {
 
   const showDetail = Boolean(selected) && !composing;
   return (
-    <main className={`feed-page workspace-enter ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
+    <main className={`feed-page workspace-enter app-interaction-scope ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
       <div className="feed-theme-toggle">
         <ThemeToggle />
       </div>
       <aside className="feed-list-pane">
         <header className="feed-list-head">
           <Link href="/" aria-label="Return to Stacks" className="brand"><Brand subtitle="AI feed" /></Link>
-          <ActionButton variant="primary" size="small" onClick={() => { setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />} kbd={`${modKey}M`}>New</ActionButton>
+          <ActionButton variant="primary" size="small" onClick={() => { setHistorySelectionRequest(null); setComposing(true); setSelectedId(null); }} icon={<Plus size={14} />} kbd={`${modKey}M`}>New</ActionButton>
         </header>
         {snippets.length ? (
           <div className="feed-search">
@@ -2254,7 +2372,7 @@ export default function FeedWorkspace() {
                   key={snippet.id}
                   snippet={snippet}
                   active={snippet.id === selectedId && !composing}
-                  onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                  onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                   onRename={() => void renameSnippet(snippet)}
                   onFork={() => void forkSnippet(snippet)}
                   onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
@@ -2275,7 +2393,7 @@ export default function FeedWorkspace() {
                       key={snippet.id}
                       snippet={snippet}
                       active={snippet.id === selectedId && !composing}
-                      onSelect={() => { setComposing(false); setSelectedId(snippet.id); }}
+                      onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                       onRename={() => void renameSnippet(snippet)}
                       onFork={() => void forkSnippet(snippet)}
                       onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
@@ -2317,14 +2435,14 @@ export default function FeedWorkspace() {
       <div className="feed-detail-pane">
         {showDetail && selected ? (
           <FeedDetail
-            key={`${selected.id}:${historySelectionRequest?.id === selected.id ? historySelectionRequest.nonce : 0}`}
+            key={selected.id}
             snippet={selected}
             library={library}
             models={models}
             defaultModelLabel={defaultModelLabel}
             defaultEffort={defaultEffort}
-            selectHistoryInitially={historySelectionRequest?.id === selected.id}
-            historySelectionReturnFocus={historySelectionRequest?.id === selected.id ? historySelectionRequest.returnFocus : null}
+            historySelectionRequest={historySelectionRequest?.id === selected.id ? historySelectionRequest : null}
+            onHistorySelectionClosed={() => setHistorySelectionRequest(null)}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
             onCreated={(id) => {

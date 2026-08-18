@@ -62,7 +62,7 @@ function visualizationTitle(visualization: FeedVisualization): string {
 
 function ViewerShell({ title, controls, children }: { title: string; controls?: ReactNode; children: ReactNode }) {
   return (
-    <main className="mermaid-visualization-page">
+    <main className="mermaid-visualization-page workspace-enter app-interaction-scope">
       <header className="mermaid-visualization-header">
         <h1>{title}</h1>
         {controls}

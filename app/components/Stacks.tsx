@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlignLeft,
   ArrowDownUp,
   ArrowRight,
   ArrowUpRight,
@@ -34,7 +35,7 @@ import {
   ListFilter,
   LoaderCircle,
   Menu,
-  PanelRightClose,
+  NotebookPen,
   Pencil,
   Plus,
   Save,
@@ -56,6 +57,7 @@ import { demoSnapshot } from "@/app/lib/demo-data";
 import { SettingsView } from "@/app/components/SettingsView";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
+import { AdaptiveAuthors } from "@/app/components/ui/AdaptiveAuthors";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks, type TaskLogger } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
@@ -205,7 +207,9 @@ function providerLabel(provider: DiscoveryProvider): string {
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   const Icon = TOAST_ICONS[toast.tone] ?? Sparkles;
   const isAssertive = toast.tone === "error" || toast.tone === "warning";
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal((
     <div className={`toast toast-${toast.tone}`} key={toast.id}>
       <span className="toast-message" role={isAssertive ? "alert" : "status"}>
         <Icon size={17} aria-hidden="true" />
@@ -215,7 +219,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         <X size={14} aria-hidden="true" />
       </button>
     </div>
-  );
+  ), document.body);
 }
 
 /** Toast icon per tone. A table rather than a ternary ladder in the markup. */
@@ -330,6 +334,13 @@ function initials(value: string): string {
     .join("");
 }
 
+// A venue monogram: the leading letters of the acronym. Four uppercase glyphs
+// are what makes the chip recognizable (COLM, AAAI), so the chip sets its own
+// type size to fit them whole rather than clipping the widest labels.
+function venueMonogram(venue: { acronym: string | null; name: string }): string {
+  return (venue.acronym || venue.name).slice(0, 4);
+}
+
 function authorLine(paper: Paper): string {
   const names = paper.authors.map((author) => author.displayName);
   if (names.length <= 3) {
@@ -441,37 +452,6 @@ function previewCut(sample: HTMLElement, text: string, lines: number): number {
   }
 }
 
-function ExpandableAuthorNames({ paper, limit = 5 }: { paper: Paper; limit?: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const authors = paper.authors.map((author) => author.displayName);
-  const hiddenCount = Math.max(0, authors.length - limit);
-  const visibleAuthors = expanded ? authors : authors.slice(0, limit);
-
-  if (!authors.length) {
-    return <span className="expandable-author-list"><span>Authors not recorded</span></span>;
-  }
-
-  return (
-    <span className={`expandable-author-list ${expanded ? "is-expanded" : ""}`}>
-      <span>{visibleAuthors.join(", ")}</span>
-      {hiddenCount ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          // No title: it only restated the button's own text ("Show 21 more
-          // authors" over a button reading "21 more authors").
-          onClick={(event) => {
-            event.stopPropagation();
-            setExpanded((current) => !current);
-          }}
-        >
-          {expanded ? "Show fewer authors" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}
-        </button>
-      ) : null}
-    </span>
-  );
-}
-
 /**
  * Keep a click from reaching the row only when it actually hit a control.
  *
@@ -485,32 +465,16 @@ function stopIfInteractive(event: ReactMouseEvent<HTMLElement>): void {
   }
 }
 
-function ExpandableAuthorButtons({ paper, onOpenAuthor, limit = 5 }: {
-  paper: Paper;
-  onOpenAuthor: (authorName: string) => void;
-  limit?: number;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const visibleAuthors = expanded ? paper.authors : paper.authors.slice(0, limit);
-  const hiddenCount = Math.max(0, paper.authors.length - limit);
-  if (!paper.authors.length) {
-    return <span className="expandable-author-buttons is-empty">No authors recorded</span>;
-  }
-  // One inline run of text, so the toggle follows the last name in the flow rather
-  // than being laid out as a separate flex item: with a long author list the names
-  // filled the row and pushed "Show less" onto a line of its own.
-  return (
-    <span className="expandable-author-buttons">
-      {visibleAuthors.map((author, index) => (
-        <span key={author.id}><button type="button" onClick={() => onOpenAuthor(author.displayName)}>{author.displayName}</button>{index < visibleAuthors.length - 1 ? ", " : ""}</span>
-      ))}
-      {hiddenCount ? <> <button type="button" className="author-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Show fewer authors" : `${hiddenCount} more ${hiddenCount === 1 ? "author" : "authors"}`}</button></> : null}
-    </span>
-  );
-}
-
 function venueLine(paper: Paper): string {
   return paper.venueAcronym || paper.venueName || "Unassigned venue";
+}
+
+function doiHref(value: string): string {
+  const identifier = value
+    .trim()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "");
+  return `https://doi.org/${identifier}`;
 }
 
 /**
@@ -701,7 +665,7 @@ function acquisitionPayload(data: Record<string, unknown>, preferred: "auto" | "
     title: paperValue(data, "title"),
     sourceUrl: paperValue(data, "url"),
     pdfUrl: /^https?:\/\//i.test(pdfUrl) ? pdfUrl : "",
-    preprintId: paperValue(data, "preprintId") || paperValue(data, "arxivId"),
+    preprintId: paperValue(data, "preprintId"),
     localPath: paperValue(data, "localPath"),
     htmlSnapshotPath: paperValue(data, "htmlSnapshotPath"),
   };
@@ -1066,7 +1030,7 @@ function StacksWorkspace() {
   const currentViewLabel = navigation.find((item) => item.id === view)?.label ?? "Overview";
 
   return (
-    <div className="stacks-shell workspace-enter">
+    <div className="stacks-shell workspace-enter app-interaction-scope">
       <a className="skip-link" href="#main-content" tabIndex={mobileNav ? -1 : 0}>Skip to content</a>
       <aside className={`sidebar ${mobileNav ? "is-open" : ""}`} aria-label="Primary navigation">
         <div className="brand-row">
@@ -1419,9 +1383,9 @@ function Dashboard({
             <h2>{currentPaper.title}</h2>
             <ExpandableAbstract abstract={currentPaper.abstract} />
             <div className="paper-byline">
-              {/* Capped with an expander, like every other author line: a paper with
-                  26 authors otherwise pushed the card's actions off the bottom. */}
-              <ExpandableAuthorNames paper={currentPaper} limit={3} />
+              {/* The available width—not a fixed author count—decides how many
+                  names precede the expansion control. */}
+              <AdaptiveAuthors authors={currentPaper.authors} />
               <span className="paper-byline-venue">{venueLine(currentPaper)}{currentPaper.year ? ` · ${currentPaper.year}` : ""}</span>
             </div>
             <div className="continue-actions">
@@ -1476,7 +1440,7 @@ function Dashboard({
               <span className={`type-tile type-${paper.paperType}`}><FileText size={18} /></span>
               <span className="recent-copy">
                 <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
-                <span className="recent-meta"><ExpandableAuthorNames paper={paper} /><span>{venueLine(paper)} {paper.year}</span></span>
+                <span className="recent-meta"><AdaptiveAuthors authors={paper.authors} /><span>{venueLine(paper)} {paper.year}</span></span>
               </span>
               <StatusPill className="recent-row-status" status={paper.readingStatus} />
             </article>
@@ -1825,7 +1789,7 @@ function LibraryView({
                             name, the show-more toggle, a chip) is kept from
                             reaching the row. */}
                         <span className="paper-secondary-line" onClick={stopIfInteractive}>
-                          <ExpandableAuthorButtons paper={paper} onOpenAuthor={(authorName) => { const author = paper.authors.find((candidate) => candidate.displayName === authorName); if (author) onOpenAuthor(author.id, author.displayName); }} />
+                          <AdaptiveAuthors authors={paper.authors} onOpenAuthor={(authorName) => { const author = paper.authors.find((candidate) => candidate.displayName === authorName); if (author) onOpenAuthor(author.id, author.displayName); }} />
                         </span>
                         {paper.collections.length ? (
                           <span className="paper-collection-line" aria-label="Collections" onClick={stopIfInteractive}>
@@ -2139,7 +2103,7 @@ function VenuesView({
                 </td>
                 <td>
                   <button className="entity-primary-button" onClick={() => onOpenPapers(venue)}>
-                    <span className="venue-monogram">{(venue.acronym || venue.name).slice(0, 4)}</span>
+                    <span className="venue-monogram">{venueMonogram(venue)}</span>
                     <span><strong>{venue.name}</strong><small>{venue.acronym || "No acronym"}</small></span>
                   </button>
                 </td>
@@ -2776,12 +2740,37 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
 }) {
   const hasViewer = Boolean(paper.pdfViewUrl || paper.htmlUrl);
   const detailPanelRef = useRef<HTMLElement>(null);
+  const detailTitleId = useId();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const appShellRef = useRef<HTMLElement | null>(null);
+  const appShellWasInertRef = useRef(false);
+  const detailTabListRef = useRef<HTMLDivElement>(null);
   const { runTask, tasks } = useBackgroundTasks();
   const [summarizing, setSummarizing] = useState(false);
   const [notesDraft, setNotesDraft] = useState(paper.notes);
+  const [activeDetailTab, setActiveDetailTab] = useState<"summary" | "abstract" | "notes">("summary");
+  const detailTabsId = useId();
   const summaryTaskKey = `summary:${paper.id}`;
   const summaryRunning = summarizing || tasks.some((task) => task.key === summaryTaskKey && task.status === "running");
   useEffect(() => { setNotesDraft(paper.notes); }, [paper.id, paper.notes]);
+
+  const detailTabs = ["summary", "abstract", "notes"] as const;
+
+  function handleDetailTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = detailTabs.indexOf(activeDetailTab);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? detailTabs.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + detailTabs.length) % detailTabs.length;
+    const nextTab = detailTabs[nextIndex];
+    setActiveDetailTab(nextTab);
+    requestAnimationFrame(() => {
+      detailTabListRef.current?.querySelector<HTMLElement>(`#${CSS.escape(`${detailTabsId}-${nextTab}-tab`)}`)?.focus();
+    });
+  }
 
   async function generateSummary() {
     if (summaryRunning) return;
@@ -2820,35 +2809,55 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
   }
 
   useEffect(() => {
-    if (suspendAutoClose) {
-      return;
-    }
-    function closeWhenInteractionLeavesPanel(event: PointerEvent | FocusEvent) {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      // Ignore interactions inside the drawer itself, and inside any dialog the
-      // drawer spawned (edit/export modals). Otherwise opening the Edit modal —
-      // whether by click or the E shortcut — would auto-close the drawer as the
-      // modal steals focus, before suspendAutoClose can take effect.
-      if (detailPanelRef.current?.contains(target)) return;
-      if (target.closest(".modal-layer, [role='dialog']")) return;
-      onClose();
-    }
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    appShellRef.current = document.querySelector<HTMLElement>(".stacks-shell");
+    appShellWasInertRef.current = appShellRef.current?.inert ?? false;
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
 
-    document.addEventListener("pointerdown", closeWhenInteractionLeavesPanel, true);
-    document.addEventListener("focusin", closeWhenInteractionLeavesPanel, true);
     return () => {
-      document.removeEventListener("pointerdown", closeWhenInteractionLeavesPanel, true);
-      document.removeEventListener("focusin", closeWhenInteractionLeavesPanel, true);
+      if (appShellRef.current) appShellRef.current.inert = appShellWasInertRef.current;
+      document.body.style.overflow = oldOverflow;
+      if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus();
     };
-  }, [onClose, suspendAutoClose]);
+  }, []);
 
-  // Single-key shortcuts for the drawer actions, matching the badges on each
+  useEffect(() => {
+    if (appShellRef.current) appShellRef.current.inert = !suspendAutoClose;
+    if (detailPanelRef.current) detailPanelRef.current.inert = suspendAutoClose;
+    if (!suspendAutoClose) {
+      const frame = requestAnimationFrame(() => detailPanelRef.current?.focus({ preventScroll: true }));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [suspendAutoClose]);
+
+  // Single-key shortcuts for the modal actions, matching the badges on each
   // button: R Read, S Source, F Feed, E Edit, X Export. Ignored while a modal is
   // open (suspendAutoClose) or while typing in a field, and never with modifiers.
   useEffect(() => {
     if (suspendAutoClose) return;
     function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusable = [...(detailPanelRef.current?.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+        ) ?? [])].filter((element) => element.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
@@ -2864,30 +2873,44 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [suspendAutoClose, hasViewer, paper.url, onRead, onChat, onEdit, onExport]);
+  }, [suspendAutoClose, hasViewer, paper.url, onClose, onRead, onChat, onEdit, onExport]);
 
-  return (
+  const dialog = (
     <div className="drawer-layer">
-      <button className="drawer-scrim" onClick={onClose} aria-label="Close paper details" />
-      <aside ref={detailPanelRef} className="detail-drawer" aria-label="Paper details">
+      <Scrim onClick={onClose} label="Close paper details" />
+      <section
+        ref={detailPanelRef}
+        className="detail-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={detailTitleId}
+        tabIndex={-1}
+      >
         <div className="drawer-fixed-head">
           <div className="detail-actions-top">
-            <button className={`star-button ${paper.favorite ? "is-starred" : ""}`} onClick={() => void onUpdate(paper, { favorite: !paper.favorite }, paper.favorite ? "Removed from starred papers." : "Paper starred.")} aria-label={paper.favorite ? "Remove from starred papers" : "Star this paper"}>
+            <button className={`star-button star-button-large ${paper.favorite ? "is-starred" : ""}`} onClick={() => void onUpdate(paper, { favorite: !paper.favorite }, paper.favorite ? "Removed from starred papers." : "Paper starred.")} aria-label={paper.favorite ? "Remove from starred papers" : "Star this paper"}>
               <Star size={16} fill={paper.favorite ? "currentColor" : "none"} />
             </button>
-            <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<PanelRightClose />} />
+            <ActionButton variant="ghost" size="icon" onClick={onClose} aria-label="Close" icon={<X />} />
           </div>
-          <h2>{paper.title}</h2>
+          <h2 id={detailTitleId}>{paper.title}</h2>
           <div className="detail-authors" aria-label="Paper authors">
-            <ExpandableAuthorButtons paper={paper} onOpenAuthor={onOpenAuthor} />
+            <AdaptiveAuthors authors={paper.authors} onOpenAuthor={onOpenAuthor} showAll />
+          </div>
+          <div className="paper-detail-toolbar" aria-label="Paper actions">
+            {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />} kbd="↵">Read</ActionButton> : null}
+            {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />} kbd="S">Source</ActionLink> : null}
+            <ActionButton variant="brand-ghost" onClick={onChat} icon={<Sparkles />} kbd="F">Feed</ActionButton>
+            <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />} kbd="E">Edit</ActionButton>
+            <ActionButton variant="secondary" onClick={onExport} icon={<Download />} kbd="X">Export</ActionButton>
           </div>
         </div>
         <div className="drawer-content">
-          <div className="paper-meta">
-            <dl className="paper-facts">
+          <aside className="paper-detail-record" aria-label="Paper record">
+            <dl className="paper-facts paper-detail-facts">
               <div className="paper-fact">
                 <dt>Venue</dt>
-                <dd><TextButton link className="max-w-full truncate capitalize text-[var(--ink)]" title={venueFullNameHint(paper)} onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></dd>
+                <dd><TextButton link className="max-w-full truncate text-[var(--ink)]" title={venueFullNameHint(paper)} onClick={onOpenVenue} disabled={!paper.venueId && !paper.venueName && !paper.venueAcronym}>{venueLine(paper)}</TextButton></dd>
               </div>
               <div className="paper-fact">
                 <dt>Year</dt>
@@ -2898,7 +2921,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                 <dd className="capitalize">{paper.paperType}</dd>
               </div>
             </dl>
-            <div className="paper-field">
+            <section className="paper-detail-record-section">
               <span className="paper-field-label">Reading status</span>
               <div className="reading-status-toggle" role="radiogroup" aria-label="Reading status">
                 {["inbox", "reading", "complete"].map((status) => (
@@ -2910,73 +2933,93 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                     className={`reading-status-option status-${status} ${paper.readingStatus === status ? "is-active" : ""}`}
                     onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}
                   >
-                    <StatusIcon status={status} />
-                    <span>{statusLabel(status)}</span>
+                    <span className="reading-status-icon" aria-hidden="true"><StatusIcon status={status} /></span>
+                    <span className="reading-status-label">{statusLabel(status)}</span>
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="paper-field">
+            </section>
+            <section className="paper-detail-record-section">
               <span className="paper-field-label">Collections</span>
               <div className="collection-chips">{paper.collections.length ? paper.collections.map((collection) => <CollectionChip key={collection.id} name={collection.name} color={collection.color} onClick={() => onOpenCollection(collection.id, collection.name)} />) : <span className="row-muted paper-field-empty">No collections yet</span>}</div>
-            </div>
-          </div>
-          {hasViewer || paper.url ? (
-            <div className="drawer-cta-primary">
-              {hasViewer ? <ActionButton variant="primary" onClick={onRead} icon={<BookOpen />} kbd="↵">Read</ActionButton> : null}
-              {paper.url ? <ActionLink variant="secondary" href={paper.url} target="_blank" rel="noreferrer" icon={<ExternalLink />} kbd="S">Source</ActionLink> : null}
-            </div>
-          ) : null}
-          <div className="drawer-cta-row">
-            <ActionButton variant="brand-ghost" onClick={onChat} icon={<Sparkles />} kbd="F">Feed</ActionButton>
-            <ActionButton variant="secondary" onClick={onEdit} icon={<Pencil />} kbd="E">Edit</ActionButton>
-            <ActionButton variant="secondary" onClick={onExport} icon={<Download />} kbd="X">Export</ActionButton>
-          </div>
-          <div className="detail-section summary-section">
-            <p className="eyebrow eyebrow-action">
-              <span>Summary</span>
-              <button type="button" className="eyebrow-generate" onClick={() => void generateSummary()} disabled={summaryRunning} aria-busy={summaryRunning}>
-                {summaryRunning ? <LoaderCircle className="spin" size={13} /> : <WandSparkles size={13} />}
-                {paper.summary ? "Regenerate" : "Generate"}
-              </button>
-            </p>
-            {paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet.</p>}
-          </div>
-          <div className="detail-section">
-            <p className="eyebrow">Abstract</p>
-            <MarkdownContent content={paper.abstract || "No abstract is recorded for this paper."} className="abstract-copy" />
-          </div>
-          <div className="detail-section">
-            <p className="eyebrow">Research notes</p>
-            <MarkdownCodeEditor
-              value={notesDraft}
-              onChange={setNotesDraft}
-              onBlur={() => { if (notesDraft !== paper.notes) void onUpdate(paper, { notes: notesDraft }, "Notes saved."); }}
-              rows={4}
-              ariaLabel="Research notes"
-              placeholder="Add an observation, question, or connection…"
-            />
-          </div>
-          {paper.volume || paper.issue || paper.pages || paper.category || paper.doi || paper.preprintId || paper.arxivId || paper.localPath || paper.htmlSnapshotPath ? (
-            <div className="detail-section">
-              <p className="eyebrow">Publication details</p>
-              <div className="identifier-list publication-detail-list">
-                {paper.volume ? <span><b>Volume</b>{paper.volume}</span> : null}
-                {paper.issue ? <span><b>Issue</b>{paper.issue}</span> : null}
-                {paper.pages ? <span><b>Pages</b>{paper.pages}</span> : null}
-                {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
-                {paper.doi ? <span><b>DOI</b>{paper.doi}</span> : null}
-                {paper.preprintId || paper.arxivId ? <span><b>Preprint</b>{paper.preprintId || paper.arxivId}</span> : null}
-                {paper.localPath ? <span className="publication-file-row"><b>File</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("pdf", paper.localPath!)} title={paper.localFilePath ?? paper.localPath}>{paper.localPath}</TextButton></span> : null}
-                {paper.htmlSnapshotPath ? <span className="publication-file-row"><b>HTML</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("html", paper.htmlSnapshotPath!)} title={paper.htmlFilePath ?? paper.htmlSnapshotPath}>{paper.htmlSnapshotPath}</TextButton></span> : null}
+            </section>
+            {paper.volume || paper.issue || paper.pages || paper.category || paper.doi || paper.preprintId || paper.semanticScholarId || paper.url || paper.pdfUrl || paper.localPath || paper.htmlSnapshotPath ? (
+              <section className="paper-detail-record-section">
+                <p className="eyebrow">Publication</p>
+                <div className="identifier-list publication-detail-list">
+                  {paper.volume ? <span><b>Volume</b>{paper.volume}</span> : null}
+                  {paper.issue ? <span><b>Issue</b>{paper.issue}</span> : null}
+                  {paper.pages ? <span><b>Pages</b>{paper.pages}</span> : null}
+                  {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
+                  {paper.doi ? <span><b>DOI</b><a className="publication-link" href={doiHref(paper.doi)} target="_blank" rel="noreferrer" title={doiHref(paper.doi)}>{paper.doi}</a></span> : null}
+                  {paper.preprintId ? <span><b>Preprint</b>{paper.preprintId}</span> : null}
+                  {paper.semanticScholarId ? <span><b>S2 ID</b>{paper.semanticScholarId}</span> : null}
+                  {paper.url ? <span className="publication-file-row"><b>Source</b><a className="publication-link" href={paper.url} target="_blank" rel="noreferrer" title={paper.url}>{paper.url}</a></span> : null}
+                  {paper.pdfUrl && paper.pdfUrl !== paper.url ? <span className="publication-file-row"><b>PDF URL</b><a className="publication-link" href={paper.pdfUrl} target="_blank" rel="noreferrer" title={paper.pdfUrl}>{paper.pdfUrl}</a></span> : null}
+                  {paper.localPath ? <span className="publication-file-row"><b>File</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("pdf", paper.localPath!)} title={paper.localFilePath ?? paper.localPath}>{paper.localPath}</TextButton></span> : null}
+                  {paper.htmlSnapshotPath ? <span className="publication-file-row"><b>HTML</b><TextButton link className="publication-file-link" onClick={() => void onRevealFile("html", paper.htmlSnapshotPath!)} title={paper.htmlFilePath ?? paper.htmlSnapshotPath}>{paper.htmlSnapshotPath}</TextButton></span> : null}
+                </div>
+              </section>
+            ) : null}
+          </aside>
+          <div className="paper-detail-reading">
+            <div className="paper-detail-tabs-header">
+              <div ref={detailTabListRef} className="paper-detail-tabs" role="tablist" aria-label="Paper content">
+                {detailTabs.map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    id={`${detailTabsId}-${tab}-tab`}
+                    className={`paper-detail-tab ${activeDetailTab === tab ? "is-active" : ""}`}
+                    role="tab"
+                    aria-selected={activeDetailTab === tab}
+                    aria-controls={`${detailTabsId}-${tab}-panel`}
+                    tabIndex={activeDetailTab === tab ? 0 : -1}
+                    onClick={() => setActiveDetailTab(tab)}
+                    onKeyDown={handleDetailTabKeyDown}
+                  >
+                    {tab === "summary" ? <FileText aria-hidden="true" /> : tab === "abstract" ? <AlignLeft aria-hidden="true" /> : <NotebookPen aria-hidden="true" />}
+                    <span>{tab === "notes" ? "Notes" : tab[0].toUpperCase() + tab.slice(1)}</span>
+                  </button>
+                ))}
               </div>
+              {activeDetailTab === "summary" ? (
+                <button type="button" className="eyebrow-generate" onClick={() => void generateSummary()} disabled={summaryRunning} aria-busy={summaryRunning}>
+                  {summaryRunning ? <LoaderCircle className="spin" size={13} /> : <WandSparkles size={13} />}
+                  {paper.summary ? "Regenerate" : "Generate"}
+                </button>
+              ) : null}
             </div>
-          ) : null}
+            <section
+              id={`${detailTabsId}-${activeDetailTab}-panel`}
+              className={`paper-detail-tab-panel is-${activeDetailTab}`}
+              role="tabpanel"
+              aria-labelledby={`${detailTabsId}-${activeDetailTab}-tab`}
+              tabIndex={0}
+            >
+              {activeDetailTab === "summary" ? (
+                paper.summary ? <MarkdownContent content={paper.summary} className="summary-copy" /> : <p className="summary-empty">No summary yet.</p>
+              ) : activeDetailTab === "abstract" ? (
+                <MarkdownContent content={paper.abstract || "No abstract is recorded for this paper."} className="abstract-copy" />
+              ) : (
+                <MarkdownCodeEditor
+                  value={notesDraft}
+                  onChange={setNotesDraft}
+                  onBlur={() => { if (notesDraft !== paper.notes) void onUpdate(paper, { notes: notesDraft }, "Notes saved."); }}
+                  rows={14}
+                  ariaLabel="Research notes"
+                  placeholder="Add an observation, question, or connection…"
+                />
+              )}
+            </section>
+          </div>
         </div>
         <div className="drawer-footer"><span>Added {formatDate(paper.addedAt)}</span><TextButton tone="danger" onClick={onDelete} icon={<Trash2 />}>Delete paper</TextButton></div>
-      </aside>
+      </section>
     </div>
   );
+
+  return createPortal(dialog, document.body);
 }
 
 function ModalFrame({ title, subtitle, onClose, children, className = "" }: {
@@ -2986,7 +3029,8 @@ function ModalFrame({ title, subtitle, onClose, children, className = "" }: {
   children: ReactNode;
   className?: string;
 }) {
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal((
     <div className="modal-layer">
       <Scrim onClick={onClose} label="Close dialog" />
       <section className={`modal-card ${className}`} role="dialog" aria-modal="true" aria-label={title}>
@@ -2994,7 +3038,7 @@ function ModalFrame({ title, subtitle, onClose, children, className = "" }: {
         {children}
       </section>
     </div>
-  );
+  ), document.body);
 }
 
 function ExportReferencesModal({ papers, onClose }: {
@@ -3583,7 +3627,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
       {visible.volumeIssue ? <label><span>Issue</span><input name="issue" defaultValue={paper?.issue ?? ""} placeholder="3" /></label> : null}
       {visible.pages ? <label><span>Pages</span><input name="pages" defaultValue={paper?.pages ?? ""} placeholder="101-118" /></label> : null}
       {visible.preprint ? <label><span>Category</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
-      {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? paper?.arxivId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
+      {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
       {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div></label> : null}
       {/* Always both: a record can hold a PDF and an HTML snapshot at once, and
@@ -4275,7 +4319,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
       ...(visible.venueAcronym ? { venueAcronym: form.get("venueAcronym") } : {}),
       ...(visible.volumeIssue ? { volume: form.get("volume"), issue: form.get("issue") } : {}),
       ...(visible.pages ? { pages: form.get("pages") } : {}),
-      ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId"), arxivId: paper.arxivId } : {}),
+      ...(visible.preprint ? { category: form.get("category"), preprintId: form.get("preprintId") } : {}),
       ...(visible.doi ? { doi: form.get("doi") } : {}),
       ...(visible.url ? { url: form.get("url"), pdfUrl: paper.pdfUrl } : {}),
       localPath: form.get("localPath"),
@@ -4619,7 +4663,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
             <div className="transfer-paper-details">
               {/* The same expandable author line as the paper detail panel, so the
                   hidden names are reachable here instead of being a dead "+5". */}
-              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><ExpandableAuthorNames paper={selectedTransferPaper} limit={3} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to inspect it before moving.</small>}
+              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><AdaptiveAuthors authors={selectedTransferPaper.authors} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to inspect it before moving.</small>}
             </div>
           </section>
         </>}

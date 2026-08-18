@@ -1,4 +1,5 @@
 import type { DiscoveryResult, DiscoveryProvider, IdentifierSource } from "@/app/lib/types";
+import { canonicalPreprintId } from "@/app/lib/preprint-id";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -161,7 +162,7 @@ function result(overrides: Partial<DiscoveryResult>): DiscoveryResult {
     venueAcronym: "",
     paperType: "article",
     doi: null,
-    arxivId: null,
+    preprintId: null,
     semanticScholarId: null,
     url: null,
     pdfUrl: null,
@@ -215,7 +216,7 @@ async function searchSemanticScholar(query: string, apiKeyOverride?: string): Pr
     venueName: paper.venue || "",
     paperType: paper.publicationTypes?.[0]?.toLowerCase() ?? "article",
     doi: paper.externalIds?.DOI ?? null,
-    arxivId: paper.externalIds?.ArXiv ?? null,
+    preprintId: canonicalPreprintId(paper.externalIds?.ArXiv ?? null),
     semanticScholarId: paper.paperId ?? null,
     url: paper.url ?? null,
     pdfUrl: paper.openAccessPdf?.url ?? null,
@@ -283,7 +284,7 @@ function parseArxivFeed(xml: string): DiscoveryResult[] {
       venueAcronym: "arXiv",
       paperType: "preprint",
       doi: doi ? stripMarkup(doi[1]) : null,
-      arxivId: rawId || null,
+      preprintId: canonicalPreprintId(rawId || null),
       url: idUrl || (rawId ? `https://arxiv.org/abs/${rawId}` : null),
       pdfUrl: pdfMatch?.[1] ?? (rawId ? `https://arxiv.org/pdf/${rawId}` : null),
     });
@@ -594,7 +595,7 @@ async function importArxivId(identifier: string): Promise<DiscoveryResult> {
     ...viaDoi,
     source: "arXiv",
     sourceId: id,
-    arxivId: id,
+    preprintId: canonicalPreprintId(id),
     venueName: "arXiv",
     venueAcronym: "arXiv",
     paperType: "preprint",

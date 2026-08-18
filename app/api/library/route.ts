@@ -3,6 +3,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import type { LibraryQuerier } from "@/db/client";
 import { removeStoredFile, resolveStoredFile } from "@/app/lib/local-files";
 import { normalizeAbstract, normalizeAuthorNames, normalizePages, normalizeTitle } from "@/app/lib/metadata-normalize";
+import { canonicalPreprintId } from "@/app/lib/preprint-id";
 import { scheduleAutoSync } from "@/app/lib/local-settings";
 import { idList, LibraryMutationSchema } from "@/app/lib/schemas/library";
 import { parseRequest } from "@/app/lib/schemas/parse";
@@ -30,7 +31,7 @@ function jsonError(message: string, status = 400): Response {
 /** Turn raw SQLite errors into user-facing messages, hiding internal detail. */
 /** Thrown when a paper create is a duplicate of an existing library record. The
  *  check runs inside the insert transaction (so it can't race a concurrent
- *  create), and the unique indexes on doi/arxiv_id/semantic_scholar_id are the
+ *  create), and the unique indexes on doi/preprint_id/semantic_scholar_id are the
  *  final backstop if two transactions still interleave. */
 class DuplicatePaperError extends Error {
   constructor() {
@@ -43,7 +44,7 @@ function describeDbError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   if (/UNIQUE constraint failed/i.test(raw)) {
     if (/papers\.doi/i.test(raw)) return "A paper with this DOI is already in your library.";
-    if (/papers\.arxiv_id/i.test(raw)) return "A paper with this arXiv id is already in your library.";
+    if (/papers\.preprint_id/i.test(raw)) return "A paper with this preprint ID is already in your library.";
     if (/papers\.semantic_scholar_id/i.test(raw)) return "A paper with this Semantic Scholar id is already in your library.";
     return "This record already exists in your library.";
   }
@@ -212,7 +213,6 @@ async function readSnapshot() {
       pages: paper.pages,
       category: paper.category,
       doi: paper.doi,
-      arxivId: paper.arxivId,
       preprintId: paper.preprintId,
       semanticScholarId: paper.semanticScholarId,
       url: paper.url,
@@ -420,31 +420,9 @@ function resolveCollectionIdsByName(querier: LibraryQuerier, collectionNames: un
 
 /**
  * Return the id of an existing paper that matches this record by a strong
- * identifier (DOI, arXiv id, or Semantic Scholar id), used to skip duplicates on
+ * identifier (DOI, preprint id, or Semantic Scholar id), used to skip duplicates on
  * import. Title is intentionally not matched here — it is too noisy for dedup.
  */
-/**
- * Canonical form of an arXiv id: the bare identifier, lowercased.
- *
- * The app's own producers disagree: the seed data writes "arXiv:2605.09104", the
- * scholarly providers write the bare id, and a BibTeX import can carry either
- * plus a full URL. Since dedup compares this column exactly, the same paper
- * imported from two sources produced two rows (and the unique index never fired).
- */
-function canonicalArxivId(value: unknown): string | null {
-  const raw = cleanString(value);
-  if (!raw) {
-    return null;
-  }
-  const stripped = raw
-    .replace(/^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\//i, "")
-    .replace(/^arxiv[:\s]*/i, "")
-    .replace(/v\d+$/i, "")
-    .replace(/\.pdf$/i, "")
-    .trim();
-  return stripped.toLowerCase() || null;
-}
-
 /**
  * Canonical form of a DOI: lowercased, with any resolver prefix removed. DOIs are
  * case-insensitive by spec, so comparing them raw let "10.1000/ABC" and
@@ -464,11 +442,11 @@ function canonicalDoi(value: unknown): string | null {
 
 function findDuplicatePaper(querier: LibraryQuerier, data: Record<string, unknown>): string | null {
   const doi = canonicalDoi(data.doi);
-  const arxivId = canonicalArxivId(data.arxivId);
+  const preprintId = canonicalPreprintId(data.preprintId);
   const semanticScholarId = cleanString(data.semanticScholarId);
   const checks: Array<ReturnType<typeof eq>> = [];
   if (doi) checks.push(eq(papers.doi, doi));
-  if (arxivId) checks.push(eq(papers.arxivId, arxivId));
+  if (preprintId) checks.push(eq(papers.preprintId, preprintId));
   if (semanticScholarId) checks.push(eq(papers.semanticScholarId, semanticScholarId));
   for (const condition of checks) {
     const existing = querier.select({ id: papers.id }).from(papers).where(condition).limit(1).get();
@@ -519,8 +497,7 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       pages: normalizedPages,
       category: cleanString(data.category),
       doi: canonicalDoi(data.doi),
-      arxivId: canonicalArxivId(data.arxivId),
-      preprintId: cleanString(data.preprintId),
+      preprintId: canonicalPreprintId(data.preprintId),
       semanticScholarId: cleanString(data.semanticScholarId),
       url: cleanString(data.url),
       pdfUrl: cleanString(data.pdfUrl),
@@ -742,7 +719,6 @@ const paperTextFields = {
   pages: papers.pages,
   category: papers.category,
   doi: papers.doi,
-  arxivId: papers.arxivId,
   preprintId: papers.preprintId,
   url: papers.url,
   pdfUrl: papers.pdfUrl,
@@ -780,7 +756,11 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
   for (const key of Object.keys(paperTextFields) as Array<keyof typeof paperTextFields>) {
     if (key in data) {
       const value = textValue(data[key]);
-      assignments[key] = key === "pages" && value ? normalizePages(value) : value;
+      assignments[key] = key === "pages" && value
+        ? normalizePages(value)
+        : key === "preprintId"
+          ? canonicalPreprintId(value)
+          : value;
     }
   }
 

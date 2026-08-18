@@ -8,11 +8,13 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
+import { AdaptiveAuthors } from "@/app/components/ui/AdaptiveAuthors";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { ActionButton, ActionLink, StatusPill } from "@/app/components/ui/controls";
 import { readError } from "@/app/lib/http";
+import { beginPointerResize } from "@/app/lib/pointer-resize";
 import type { LibrarySnapshot, Paper } from "@/app/lib/types";
 
 function venueLabel(paper: Paper): string {
@@ -75,23 +77,10 @@ function documentIdentity(paper: Paper): { kind: string; value: string; url: str
 }
 
 
-function ReaderAuthors({ paper }: { paper: Paper }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? paper.authors : paper.authors.slice(0, 5);
-  const hiddenCount = Math.max(0, paper.authors.length - visible.length);
-
-  return (
-    <span className="reader-author-line">
-      {visible.map((author) => author.displayName).join(", ") || "Authors unavailable"}
-      {hiddenCount > 0 ? ", " : " "}
-      {hiddenCount > 0 ? (
-        <button type="button" onClick={() => setExpanded(true)}>{hiddenCount} more {hiddenCount === 1 ? "author" : "authors"}</button>
-      ) : paper.authors.length > 5 ? (
-        <button type="button" onClick={() => setExpanded(false)}>Show fewer</button>
-      ) : null}
-    </span>
-  );
-}
+const READER_SIDEBAR_KEY = "stacks-reader-sidebar-width";
+const READER_SIDEBAR_DEFAULT = 330;
+const READER_SIDEBAR_MIN = 280;
+const READER_SIDEBAR_MAX = 720;
 
 export default function ReaderWorkspace() {
   const [paper, setPaper] = useState<Paper | null>(null);
@@ -99,6 +88,51 @@ export default function ReaderWorkspace() {
   const [error, setError] = useState("");
   const [noteState, setNoteState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [notesDraft, setNotesDraft] = useState("");
+  const [sidebarWidth, setSidebarWidth] = useState(READER_SIDEBAR_DEFAULT);
+
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem(READER_SIDEBAR_KEY));
+    if (saved < READER_SIDEBAR_MIN || saved > READER_SIDEBAR_MAX) return;
+    const frame = window.requestAnimationFrame(() => setSidebarWidth(saved));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  function storeSidebarWidth(width: number) {
+    const next = Math.min(READER_SIDEBAR_MAX, Math.max(READER_SIDEBAR_MIN, width));
+    setSidebarWidth(next);
+    window.localStorage.setItem(READER_SIDEBAR_KEY, String(next));
+  }
+
+  function startSidebarResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    beginPointerResize(event.pointerId, (clientX) => {
+      setSidebarWidth(Math.min(READER_SIDEBAR_MAX, Math.max(READER_SIDEBAR_MIN, startWidth + startX - clientX)));
+    }, () => {
+      setSidebarWidth((width) => {
+        window.localStorage.setItem(READER_SIDEBAR_KEY, String(width));
+        return width;
+      });
+    });
+  }
+
+  function resizeSidebarWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      storeSidebarWidth(sidebarWidth + 16);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      storeSidebarWidth(sidebarWidth - 16);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      storeSidebarWidth(READER_SIDEBAR_MIN);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      storeSidebarWidth(READER_SIDEBAR_MAX);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -168,7 +202,7 @@ export default function ReaderWorkspace() {
 
   if (loading) {
     return (
-      <main className="reader-layer reader-page reader-page-state">
+      <main className="reader-layer reader-page reader-page-state workspace-enter app-interaction-scope">
         <LoaderCircle className="spin" size={28} />
         <p>Opening document…</p>
       </main>
@@ -177,7 +211,7 @@ export default function ReaderWorkspace() {
 
   if (!paper || !documentSource) {
     return (
-      <main className="reader-layer reader-page reader-page-state">
+      <main className="reader-layer reader-page reader-page-state workspace-enter app-interaction-scope">
         <FileText size={28} />
         <h1>Reader unavailable</h1>
         <p>{error || "The document could not be opened."}</p>
@@ -187,7 +221,7 @@ export default function ReaderWorkspace() {
   }
 
   return (
-    <main className="reader-layer reader-page">
+    <main className="reader-layer reader-page workspace-enter app-interaction-scope">
       <header className="reader-header">
         <div className="reader-brand">
           <Link className="brand-logo-link" href="/" aria-label="Return to Stacks"><img src="/favicon.svg" alt="" className="brand-logo compact" width={30} height={30} /></Link>
@@ -203,8 +237,12 @@ export default function ReaderWorkspace() {
           <ActionLink variant="on-dark" size="small" href="/" icon={<Library />}>Library</ActionLink>
         </div>
       </header>
-      <div className="reader-workspace">
-        <section className="reader-document" aria-label={`${documentSource.kind}: ${documentSource.value}`}>
+      <div className="reader-workspace" style={{ "--reader-sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
+        <section
+          className="reader-document"
+          aria-label={`${documentSource.kind}: ${documentSource.value}`}
+          data-tooltip-disabled
+        >
           {documentSource.url ? (
             documentSource.isHtml ? (
               <iframe src={documentSource.url} title={`${documentSource.kind}: ${documentSource.value}`} sandbox="" />
@@ -219,6 +257,19 @@ export default function ReaderWorkspace() {
             </div>
           )}
         </section>
+        <div
+          className="reader-sidebar-resize"
+          role="separator"
+          aria-label="Resize paper information sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={READER_SIDEBAR_MIN}
+          aria-valuemax={READER_SIDEBAR_MAX}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onPointerDown={startSidebarResize}
+          onKeyDown={resizeSidebarWithKeyboard}
+          onDoubleClick={() => storeSidebarWidth(READER_SIDEBAR_DEFAULT)}
+        />
         <aside className="reader-notes">
           <div className="reader-paper-meta">
             <StatusPill className="reader-paper-status" status={paper.readingStatus} />
@@ -226,7 +277,7 @@ export default function ReaderWorkspace() {
             <span>{paper.year ?? "n.d."}</span>
           </div>
           <h2>{paper.title}</h2>
-          <p className="reader-authors"><ReaderAuthors paper={paper} /></p>
+          <p className="reader-authors"><AdaptiveAuthors authors={paper.authors} emptyLabel="Authors unavailable" /></p>
           <section className="reader-summary reader-summary-scroll">
             <p className="eyebrow">Summary</p>
             <MarkdownContent content={paper.summary || paper.abstract || "No summary yet."} />

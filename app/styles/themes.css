@@ -568,27 +568,65 @@ textarea::placeholder {
   white-space: pre;
 }
 
-.markdown-content table {
-  border-collapse: collapse;
-  display: block;
+.markdown-media {
   margin: 0.9em auto;
   max-width: 100%;
-  overflow-x: auto;
-  width: max-content;
+  width: fit-content;
 }
 
-.markdown-content th,
-.markdown-content td {
+.markdown-table-scroll {
   border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+
+/* Automatic table layout, not max-content: a table that fits keeps its natural
+   column widths, and one that does not wraps its cells and grows taller instead
+   of pushing every row onto a single scrolling line. Columns still cannot go
+   below their minimum content width, so a genuinely too-wide table (many
+   columns) keeps the scroll of .markdown-table-scroll as the last resort. */
+.markdown-content .markdown-table-scroll table {
+  border-collapse: separate;
+  border-spacing: 0;
+  display: table;
+  margin: 0;
+  max-width: 100%;
+  overflow: visible;
+  width: auto;
+}
+
+.markdown-content .markdown-table-scroll :is(th, td) {
+  border: 0;
+  border-block-end: 1px solid var(--line-strong);
+  border-inline-end: 1px solid var(--line-strong);
   min-width: 90px;
   padding: 0.48em 0.65em;
   text-align: left;
 }
 
-.markdown-content th {
+.markdown-content .markdown-table-scroll tr > :last-child {
+  border-inline-end: 0;
+}
+
+.markdown-content .markdown-table-scroll tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+.markdown-content .markdown-table-scroll th {
   background: color-mix(in srgb, var(--brand-blue) 10%, transparent);
   color: var(--ink);
   font-weight: 600;
+}
+
+.markdown-image {
+  display: block;
+}
+
+.markdown-image > img {
+  border-radius: var(--radius-md);
+  display: block;
+  height: auto;
+  max-width: 100%;
 }
 
 .markdown-content hr {
@@ -889,14 +927,6 @@ textarea::placeholder {
   margin-top: 3px;
 }
 
-.star-button {
-  align-items: center;
-  display: inline-flex;
-  height: 28px;
-  justify-content: center;
-  width: 24px;
-}
-
 .collection-icon svg,
 .stat-icon svg,
 .type-tile svg {
@@ -1043,6 +1073,8 @@ textarea::placeholder {
      bright --cyan/--amber accents defined in foundation.css). */
   --status-reading: #0f7b88;
   --status-inbox: #9a6816;
+  --favorite: #b77f12;
+  --favorite-soft: rgba(183, 127, 18, 0.1);
   --shadow-sm: 0 1px 2px rgba(28, 32, 44, 0.04), 0 12px 30px rgba(28, 32, 44, 0.06);
   --shadow-md: 0 28px 80px rgba(28, 32, 44, 0.18), 0 3px 14px rgba(28, 32, 44, 0.08);
   --shadow-1: 0 1px 2px rgba(28, 32, 44, 0.05), 0 8px 24px rgba(28, 32, 44, 0.07);
@@ -1173,7 +1205,6 @@ textarea::placeholder {
   background: #ffffff;
 }
 
-[data-theme="light"] .summary-section,
 [data-theme="light"] .sync-caution {
   background: rgba(22, 141, 236, 0.065);
 }
@@ -1217,12 +1248,6 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 }
-
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes shimmer { to { background-position: -200% 0; } }
-@keyframes pulse-dot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
-@keyframes import-ring { 0% { opacity: 0.8; transform: scale(0.9); } 100% { opacity: 0; transform: scale(1.25); } }
-@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 
 @media (max-width: 1180px) {
   .paper-table th:nth-child(3),

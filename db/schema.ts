@@ -37,7 +37,6 @@ export const papers = sqliteTable(
     pages: text("pages"),
     category: text("category"),
     doi: text("doi"),
-    arxivId: text("arxiv_id"),
     preprintId: text("preprint_id"),
     semanticScholarId: text("semantic_scholar_id"),
     url: text("url"),
@@ -60,7 +59,7 @@ export const papers = sqliteTable(
     // enforced by the DB, not just a check-then-insert. All three are nullable
     // and stored as NULL when absent, so SQLite allows many rows without one.
     uniqueIndex("papers_doi_unique").on(table.doi),
-    uniqueIndex("papers_arxiv_id_unique").on(table.arxivId),
+    uniqueIndex("papers_preprint_id_unique").on(table.preprintId),
     uniqueIndex("papers_semantic_scholar_id_unique").on(table.semanticScholarId),
     index("papers_title_idx").on(table.title),
     index("papers_year_idx").on(table.year),
@@ -219,6 +218,13 @@ export const feedMessages = sqliteTable(
     // (posted with links, or backfilled into an older comment). Lets sync skip
     // the per-message backfill probe instead of re-fetching the comment forever.
     attachmentsSynced: integer("attachments_synced").notNull().default(0),
+    // The usage of the agent turn this message concludes, as reported by the CLI's
+    // result event: prompt tokens (including cache reads), generated tokens, and
+    // wall-clock milliseconds. 0 on every other message, so the thread can show
+    // each reply's own token count and speed rather than only feed-wide totals.
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    durationMs: integer("duration_ms").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("feed_messages_snippet_idx").on(table.snippetId, table.createdAt)],

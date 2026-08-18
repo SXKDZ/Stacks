@@ -73,10 +73,45 @@
 }
 
 .reader-workspace {
+  --reader-sidebar-width: 330px;
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
+  grid-template-columns: minmax(0, 1fr) var(--reader-sidebar-width);
   min-height: 0;
+  position: relative;
+}
+
+.reader-sidebar-resize {
+  cursor: col-resize;
+  height: 100%;
+  position: absolute;
+  right: var(--reader-sidebar-width);
+  top: 0;
+  touch-action: none;
+  transform: translateX(50%);
+  width: 10px;
+  z-index: 3;
+}
+
+.reader-sidebar-resize::before {
+  background: transparent;
+  content: "";
+  height: 100%;
+  left: 4px;
+  position: absolute;
+  top: 0;
+  transition: background var(--motion-fast);
+  width: 2px;
+}
+
+.reader-sidebar-resize:hover::before,
+.reader-sidebar-resize:focus-visible::before,
+.is-resizing-column .reader-sidebar-resize::before {
+  background: var(--brand-blue);
+}
+
+.reader-sidebar-resize:focus-visible {
+  outline: none;
 }
 
 .reader-document {
@@ -97,6 +132,7 @@
 
 .reader-notes {
   background: #fbfbfd;
+  border-left: 1px solid var(--line);
   color: var(--ink);
   display: flex;
   flex-direction: column;
@@ -223,17 +259,24 @@
   padding-left: 8px;
 }
 
-.reader-author-line button {
-  background: transparent;
-  border: 0;
-  color: var(--brand-blue-strong);
-  cursor: pointer;
-  display: inline;
-  font: inherit;
-  font-weight: 700;
-  padding: 0;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+@media (max-width: 850px) {
+  .reader-workspace {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .reader-sidebar-resize {
+    display: none;
+  }
+
+  .reader-document {
+    min-height: 58vh;
+  }
+
+  .reader-notes {
+    border-left: 0;
+    overflow: visible;
+  }
 }
 
 .reader-section-heading {
@@ -278,21 +321,6 @@
   margin-top: 8px;
   padding: 9px 12px;
   text-decoration: none;
-}
-
-.reader-page :where(button, .reader-actions a, .reader-page-state a) {
-  transition-duration: 140ms;
-  transition-property: background-color, border-color, box-shadow, color, opacity, transform;
-  transition-timing-function: ease;
-}
-
-.reader-page :where(button, .reader-actions a, .reader-page-state a):not(:disabled):hover {
-  transform: translateY(-1px);
-}
-
-.reader-page :where(button, .reader-actions a, .reader-page-state a):not(:disabled):active {
-  transform: translateY(0) scale(var(--motion-press-scale));
-  transition-duration: 70ms;
 }
 
 /* --- chat.css --- */

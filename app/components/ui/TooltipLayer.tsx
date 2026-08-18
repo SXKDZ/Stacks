@@ -121,11 +121,19 @@ export function TooltipLayer() {
       setTooltip(null);
     };
 
-    /** The nearest ancestor carrying a non-empty `title`. */
+    /**
+     * The nearest ancestor carrying a non-empty `title`.
+     *
+     * Some elements need a title for accessibility but should not turn that
+     * name into visible hover help. Embedded documents are the main example:
+     * an iframe title lets assistive technology identify the PDF, while a
+     * tooltip containing its generated filename only obscures the document.
+     */
     const findTarget = (node: EventTarget | null): HTMLElement | null => {
       if (!(node instanceof Element)) return null;
       const element = node.closest<HTMLElement>("[title]");
-      return element && element.getAttribute("title")?.trim() ? element : null;
+      if (!element || element.closest("[data-tooltip-disabled]")) return null;
+      return element.getAttribute("title")?.trim() ? element : null;
     };
 
     const show = (element: HTMLElement, immediate: boolean, pointer?: { x: number; y: number }) => {
