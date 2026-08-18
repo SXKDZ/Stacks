@@ -334,6 +334,13 @@ function initials(value: string): string {
     .join("");
 }
 
+// A venue monogram: the leading letters of the acronym. Four uppercase glyphs
+// are what makes the chip recognizable (COLM, AAAI), so the chip sets its own
+// type size to fit them whole rather than clipping the widest labels.
+function venueMonogram(venue: { acronym: string | null; name: string }): string {
+  return (venue.acronym || venue.name).slice(0, 4);
+}
+
 function authorLine(paper: Paper): string {
   const names = paper.authors.map((author) => author.displayName);
   if (names.length <= 3) {
@@ -2096,7 +2103,7 @@ function VenuesView({
                 </td>
                 <td>
                   <button className="entity-primary-button" onClick={() => onOpenPapers(venue)}>
-                    <span className="venue-monogram">{(venue.acronym || venue.name).slice(0, 4)}</span>
+                    <span className="venue-monogram">{venueMonogram(venue)}</span>
                     <span><strong>{venue.name}</strong><small>{venue.acronym || "No acronym"}</small></span>
                   </button>
                 </td>

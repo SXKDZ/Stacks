@@ -109,8 +109,11 @@
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
   /* One coherent type ramp with clear, distinguishable steps (no near-duplicate
      0.5px gaps). Every font-size in the app resolves to one of these. */
-  /* 11px is the absolute floor (micro: eyebrows, badges, counts); body and chat
-     text sit at 12px and up. One coherent ramp, no near-duplicate steps. */
+  /* 11px is the floor for text (micro: eyebrows, badges, counts); body and chat
+     text sit at 12px and up. One coherent ramp, no near-duplicate steps.
+     --type-nano is not text: it exists for the fixed-size monogram chips, whose
+     four uppercase glyphs must fit the chip whole. */
+  --type-nano: 10px;
   --type-micro: 11px;
   --type-caption: 12px;
   --type-label: 12px;

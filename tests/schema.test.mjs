@@ -1031,6 +1031,26 @@ test("paper details open as an accessible modal instead of a side drawer", async
   assert.doesNotMatch(styles, /\.drawer-layer > \.drawer-scrim \{[\s\S]*?display: none/);
 });
 
+test("venue monograms fit their chip and stay centred in it", async () => {
+  const [application, styles] = await Promise.all([
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Four uppercase glyphs are what makes a venue chip recognizable (COLM, AAAI),
+  // so the chip drops a type step instead of dropping a letter. Tracking stays
+  // at normal because letter-spacing trails the last glyph too, which pulls the
+  // centred acronym off centre, and 1.3 is this font's ascent plus descent, so
+  // the line box has no leading left to round the caps off the chip's middle.
+  assert.match(application, /function venueMonogram[\s\S]*?\.slice\(0, 4\)/);
+  assert.match(styles, /--type-nano: 10px/);
+  assert.match(styles, /\.entity-research-grid \.venue-monogram \{[^}]*font-size: var\(--type-nano\)/);
+  assert.match(styles, /\.entity-research-grid \.venue-monogram \{[^}]*line-height: 1\.3/);
+  assert.doesNotMatch(styles, /\.entity-research-grid \.venue-monogram \{[^}]*letter-spacing: -/);
+  assert.match(styles, /\.entity-research-grid \.venue-monogram \{[\s\S]*?align-items: center[\s\S]*?justify-content: center/);
+
+});
+
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
   // The stylesheets accumulated selectors defined three and four times across
   // files, where the later copy silently won: a value was set in one file and
