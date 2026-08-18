@@ -580,13 +580,19 @@ textarea::placeholder {
   overflow: auto;
 }
 
+/* Automatic table layout, not max-content: a table that fits keeps its natural
+   column widths, and one that does not wraps its cells and grows taller instead
+   of pushing every row onto a single scrolling line. Columns still cannot go
+   below their minimum content width, so a genuinely too-wide table (many
+   columns) keeps the scroll of .markdown-table-scroll as the last resort. */
 .markdown-content .markdown-table-scroll table {
   border-collapse: separate;
   border-spacing: 0;
   display: table;
   margin: 0;
+  max-width: 100%;
   overflow: visible;
-  width: max-content;
+  width: auto;
 }
 
 .markdown-content .markdown-table-scroll :is(th, td) {

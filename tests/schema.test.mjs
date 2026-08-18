@@ -1051,6 +1051,41 @@ test("venue monograms fit their chip and stay centred in it", async () => {
 
 });
 
+test("feed figures and tables size to their content and stay centred", async () => {
+  const [mermaid, styles] = await Promise.all([
+    readFile(new URL("../app/components/MermaidDiagram.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Feed figures size to their content, not to a fraction of the message. Mermaid
+  // writes width="100%" on its SVG, which contributes nothing to a shrink-to-fit
+  // box (every diagram then rendered at the 300px default of a replaced element),
+  // so the viewBox becomes the SVG's intrinsic size: the block hugs a small
+  // diagram and a large one scales down to the measure.
+  assert.match(mermaid, /function withIntrinsicSize/);
+  assert.match(mermaid, /viewBox="\(\[\^"\]\+\)"/);
+  assert.match(mermaid, /<svg width="\$\{width\}" height="\$\{height\}"/);
+  assert.match(mermaid, /"--diagram-natural-width": `\$\{state\.diagram\.width\}px`/);
+  assert.match(styles, /\.mermaid-diagram-canvas > svg \{[^}]*margin-inline: auto/);
+  assert.match(styles, /\.mermaid-diagram-canvas > svg \{[^}]*height: auto/);
+  assert.doesNotMatch(styles, /\.mermaid-diagram \{[^}]*width: 100%/);
+
+  // Scaling a diagram to fit shrinks its 16px labels with it, so the floor is
+  // 0.7 (11px, the app's smallest text) and a wider diagram scrolls inside the
+  // canvas. The scroll must stay off the block, which is what the own-window
+  // action is positioned against.
+  assert.match(styles, /\.mermaid-diagram-canvas > svg \{[^}]*min-width: calc\(var\(--diagram-natural-width, 0px\) \* 0\.7\)/);
+  assert.match(styles, /\.mermaid-diagram-canvas \{[^}]*max-height: 70vh[^}]*overflow: auto/);
+  assert.doesNotMatch(styles, /\.mermaid-diagram \{[^}]*overflow: auto/);
+
+  // Tables wrap into more rows rather than pushing every row onto one scrolling
+  // line, and a table narrower than the message stays centred in it.
+  assert.match(styles, /\.markdown-content \.markdown-table-scroll table \{[^}]*width: auto/);
+  assert.doesNotMatch(styles, /\.markdown-content \.markdown-table-scroll table \{[^}]*width: max-content/);
+  assert.match(styles, /\.feed-rich-table \{[^}]*margin-inline: auto[^}]*width: fit-content/);
+  assert.match(styles, /\.markdown-media \{[^}]*margin: 0\.9em auto[^}]*width: fit-content/);
+});
+
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {
   // The stylesheets accumulated selectors defined three and four times across
   // files, where the later copy silently won: a value was set in one file and

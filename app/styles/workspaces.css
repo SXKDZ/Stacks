@@ -1825,30 +1825,51 @@
   padding-inline-end: 88px;
 }
 
+/* A narrow table keeps its own width and sits centred in the message; a wide one
+   grows to the full measure and scrolls inside .markdown-table-scroll. */
 .feed-rich-table {
+  margin-inline: auto;
   max-width: 100%;
   width: fit-content;
 }
 
 /* Mermaid fences render as diagrams only in feed message bubbles. The neutral
    surface keeps both Mermaid themes legible, including inside a blue user
-   bubble, while overflow remains local to unusually wide diagrams. */
+   bubble, while overflow remains local to unusually wide diagrams. The block
+   sizes to the diagram (.markdown-media): a diagram that is narrower than the
+   message keeps its own width and stays centred, and a wider one scales down to
+   the full measure, with the aspect ratio carrying the height. */
 .mermaid-diagram {
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   color: var(--ink);
-  overflow: auto;
   padding: 14px;
   position: relative;
   text-align: center;
 }
 
+/* The scroll lives on the canvas, not on the block: the block is what the
+   own-window action is positioned against, and an absolutely positioned control
+   inside a scroll container travels with the content instead of staying in the
+   corner. A diagram held at readable type can also be taller than the window, so
+   the canvas stays a pane inside the message rather than a page-long block. */
+.mermaid-diagram-canvas {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+/* Legibility floor. Mermaid draws its labels at 16px in the diagram's own units,
+   so scaling the SVG below 0.7 puts them under the app's 11px text floor: a wide
+   diagram scales down only that far and then scrolls inside the block, where the
+   toolbar's own-window view shows it whole, instead of shrinking into type no one
+   can read. */
 .mermaid-diagram-canvas > svg {
   display: block;
   height: auto;
   margin-inline: auto;
   max-width: 100%;
+  min-width: calc(var(--diagram-natural-width, 0px) * 0.7);
 }
 
 @media (hover: none) {
