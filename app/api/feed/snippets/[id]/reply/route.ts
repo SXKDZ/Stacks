@@ -1,9 +1,10 @@
 import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
+import { feedMessages, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, runFeedAgent, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { buildFollowUpPrompt, buildForkPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
+import { markOutcomesReported, unreportedOutcomes } from "@/app/lib/feed-outcomes";
 import { parseWith } from "@/app/lib/schemas/parse";
 import { effortSetting } from "@/app/lib/effort";
 import { FeedReplyRequestSchema } from "@/app/lib/schemas/requests";
@@ -11,14 +12,6 @@ import { buildFeedTranscript } from "@/app/lib/feed-history";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function proposalSummary(operation: string): string {
-  try {
-    return (JSON.parse(operation) as { summary?: string }).summary ?? "a change";
-  } catch {
-    return "a change";
-  }
-}
 
 export async function POST(
   request: Request,
@@ -110,11 +103,11 @@ export async function POST(
     }
   }
 
-  // Report the outcomes of proposals the user resolved since the last turn so
-  // the agent knows what was applied or rejected, then continue the thread.
-  const proposals = database.select().from(feedProposals).where(eq(feedProposals.snippetId, id)).all();
-  const appliedSummaries = proposals.filter((p) => p.status === "applied").map((p) => proposalSummary(p.operation));
-  const rejectedSummaries = proposals.filter((p) => p.status === "rejected").map((p) => proposalSummary(p.operation));
+  // Carry the decisions the agent has not been told about yet, and only those:
+  // reporting every applied/rejected proposal in the thread repeated the same
+  // list on every turn. Marked as reported here so the follow-up turn owns them.
+  const outcomes = await unreportedOutcomes(id);
+  await markOutcomesReported(outcomes.ids);
 
   // A fork has no native Claude session. Capture its copied history BEFORE the
   // current reply is inserted, otherwise the fresh-session prompt includes the
@@ -140,7 +133,7 @@ export async function POST(
 
   if (snippet.sessionId) {
     // Existing session: resume it with the follow-up.
-    const prompt = buildFollowUpPrompt({ reply, appliedSummaries, rejectedSummaries, attachments });
+    const prompt = buildFollowUpPrompt({ reply, outcomes, attachments });
     void runFeedAgent({ snippetId: id, sessionId: snippet.sessionId, prompt, resume: true }).catch(() => {});
   } else {
     // No session yet (a forked thread): start a fresh session seeded with the

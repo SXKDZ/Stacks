@@ -1162,6 +1162,39 @@ test("a proposal can rename a collection and edit its membership", async () => {
 
 });
 
+test("the user's decisions reach the agent exactly once", async () => {
+  const [outcomes, resolveRoute, replyRoute, syncRoute, agent, bootstrap, schema] = await Promise.all([
+    readFile(new URL("../app/lib/feed-outcomes.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/proposals/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/reply/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  // A decision is recorded in the thread and handed to the agent: once, promptly,
+  // and coalesced, so approving a batch is one turn rather than one turn each.
+  assert.match(schema, /reportedAt: text\("reported_at"\)/);
+  assert.match(bootstrap, /ADD COLUMN reported_at TEXT/);
+  assert.match(bootstrap, /UPDATE feed_proposals SET reported_at = COALESCE\(resolved_at, CURRENT_TIMESTAMP\) WHERE status <> 'pending'/);
+  assert.match(resolveRoute, /async function recordDecision/);
+  assert.match(resolveRoute, /scheduleOutcomeReport\(snippetId\)/);
+  assert.match(resolveRoute, /Approved and applied: \$\{summary\}/);
+  assert.match(resolveRoute, /Rejected: \$\{proposalNote\(proposal\.operation\)\}/);
+  assert.match(outcomes, /const COALESCE_MS = 1500/);
+  assert.match(outcomes, /if \(isFeedRunning\(snippetId\)\) return/);
+  assert.match(outcomes, /isNull\(feedProposals\.reportedAt\)/);
+  // A turn that was running when the decision was taken reports it when it ends.
+  assert.match(agent, /import\("@\/app\/lib\/feed-outcomes"\)[\s\S]*?scheduleOutcomeReport\(snippetId\)/);
+  // Reply and inbox-comment turns carry only what has not been reported yet, so
+  // the same approvals stop being repeated in every later prompt.
+  assert.match(replyRoute, /const outcomes = await unreportedOutcomes\(id\)/);
+  assert.match(replyRoute, /await markOutcomesReported\(outcomes\.ids\)/);
+  assert.match(syncRoute, /const outcomes = await unreportedOutcomes\(feed\.id\)/);
+  assert.doesNotMatch(replyRoute, /status === "applied"\)\.map/);
+});
+
 test("a user's Markdown stays legible on the blue bubble", async () => {
   const styles = await readApplicationStyles();
   // Headings, quotes, tables, and math each declare an ink-dark colour, which the

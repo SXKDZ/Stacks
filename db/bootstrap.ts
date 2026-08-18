@@ -116,6 +116,7 @@ const schemaStatements = [
     result_summary TEXT,
     github_comment_id INTEGER,
     github_status_synced TEXT,
+    reported_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at TEXT
   )`,
@@ -332,6 +333,17 @@ async function initializeDatabase(): Promise<void> {
   }
 
   normalizeLegacyIds(raw);
+
+  const feedProposalColumns = tableColumns(raw, "feed_proposals");
+  if (!feedProposalColumns.has("reported_at")) {
+    raw.prepare("ALTER TABLE feed_proposals ADD COLUMN reported_at TEXT").run();
+    // Decisions taken before this column existed count as already told: they were
+    // carried by the reply prompts of the day, and dumping a library's whole
+    // approval history into the next turn would be worse than saying nothing.
+    raw
+      .prepare("UPDATE feed_proposals SET reported_at = COALESCE(resolved_at, CURRENT_TIMESTAMP) WHERE status <> 'pending'")
+      .run();
+  }
 
   // Per-turn usage. Existing threads keep 0, so their replies simply show no
   // token or speed chip instead of a fabricated one.

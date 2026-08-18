@@ -21,6 +21,7 @@ import {
   type GitHubConfig,
 } from "@/app/lib/github-sync";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
+import { markOutcomesReported, unreportedOutcomes } from "@/app/lib/feed-outcomes";
 import { flushGithubOutbox } from "@/app/lib/feed-github-outbox";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { SnippetAttachmentListSchema } from "@/app/lib/schemas/attachments";
@@ -353,8 +354,12 @@ export async function POST(): Promise<Response> {
 
       // Kick off one reply turn covering the new comments.
       const reply = fresh.map((comment) => comment.body.trim()).join("\n\n");
+      // A turn started from an inbox comment carries the same undelivered approval
+      // decisions a reply from the app would, so a decision made here is not lost.
+      const outcomes = await unreportedOutcomes(feed.id);
+      await markOutcomesReported(outcomes.ids);
       if (feed.sessionId) {
-        const prompt = buildFollowUpPrompt({ reply, appliedSummaries: [], rejectedSummaries: [], attachments: [] });
+        const prompt = buildFollowUpPrompt({ reply, outcomes, attachments: [] });
         void runFeedAgent({ snippetId: feed.id, sessionId: feed.sessionId, prompt, resume: true }).catch(() => {});
       } else {
         const history = database
