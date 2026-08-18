@@ -1168,12 +1168,21 @@ test("the feed composer reads as one control, with a visible placeholder", async
   assert.match(styles, /\.feed-attach-tray \{[^}]*border-bottom: 1px solid var\(--line\)/);
   assert.doesNotMatch(styles, /\.feed-attach-tray \{[^}]*background:/);
 
-  // The keyboard shortcut is the send button's tooltip, not a standing label that
-  // spends the action row's best space on what the ↵ badge already implies.
+  // The newline reminder stays on the row (it is the one shortcut that is not
+  // guessable from the ↵ badge), and the button repeats both in its tooltip.
+  assert.match(attachBox, /\{hint \? <span className="feed-dock-hint">\{hint\}<\/span> : null\}/);
+  assert.match(styles, /\.feed-dock-hint \{[^}]*font-size: var\(--type-caption\)/);
+  assert.equal([...feed.matchAll(/hint=\{<><kbd>⌥↵<\/kbd> newline<\/>\}/g)].length, 2);
   assert.match(attachBox, /title="Enter sends, Option Enter starts a newline"/);
-  assert.doesNotMatch(attachBox, /feed-dock-hint/);
-  assert.doesNotMatch(styles, /\.feed-dock-hint/);
-  assert.doesNotMatch(feed, /newline<\/>/);
+
+  // The composer is resizable by pointer and keyboard, and the grip fades in with
+  // the composer instead of waiting for the pointer to find a pill on its edge.
+  // Its floor has to match the CSS floor, or a drag cannot reach the resting size.
+  assert.match(attachBox, /const minimumPanelHeight = compact \? 128 : 210/);
+  assert.match(styles, /\.feed-dock-input\.is-panel-resizable \{[^}]*min-height: 128px/);
+  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,\s*\.feed-dock-input:focus-within \.feed-panel-resize-handle \{[^}]*opacity: 0\.7/);
+  assert.match(attachBox, /if \(event\.key === "Home"\) setPanelHeight\(null\)/);
+  assert.match(attachBox, /role="separator"[\s\S]*?aria-valuenow=/);
   // Attach controls and truncated chips say what they are on hover (one shared
   // TooltipLayer picks up every title).
   assert.match(attachBox, /title="Attach files"/);

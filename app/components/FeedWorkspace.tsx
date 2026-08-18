@@ -1841,6 +1841,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
           compact
+          hint={<><kbd>⌥↵</kbd> newline</>}
           onSubmit={sendReply}
           leadingAction={running ? (
             // Labelled and in the danger colour: a bare grey square beside the
@@ -2493,7 +2494,8 @@ export default function FeedWorkspace() {
               autoFocus
               initialText={initialText}
               initialPapers={initialPapers}
-                  onSubmit={createSnippet}
+              hint={<><kbd>⌥↵</kbd> newline</>}
+              onSubmit={createSnippet}
             />
             </div>
           </>

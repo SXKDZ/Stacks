@@ -83,6 +83,7 @@ export function AttachBox({
   compact = false,
   initialText = "",
   initialPapers = [],
+  hint,
   leadingAction,
   models = [],
   initialModel = "",
@@ -100,6 +101,8 @@ export function AttachBox({
   initialText?: string;
   initialPapers?: LibraryPaper[];
   /** Optional control shown beside the submit button (e.g. Stop while running). */
+  /** A short keyboard reminder shown beside the submit button. */
+  hint?: ReactNode;
   leadingAction?: ReactNode;
   /** Selectable agent models; empty hides the picker. */
   models?: FeedModelOption[];
@@ -140,7 +143,7 @@ export function AttachBox({
   const panelResizeDrag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const [panelHeight, setPanelHeight] = useState<number | null>(null);
 
-  const minimumPanelHeight = compact ? 150 : 210;
+  const minimumPanelHeight = compact ? 128 : 210;
 
   function clampPanelHeight(nextHeight: number): number {
     const viewportMaximum = typeof window === "undefined" ? 680 : Math.min(680, window.innerHeight * 0.72);
@@ -460,9 +463,8 @@ export function AttachBox({
             />
           </div>
           <div className="feed-dock-send">
+            {hint ? <span className="feed-dock-hint">{hint}</span> : null}
             {leadingAction}
-            {/* The shortcut lives in the button's own tooltip: as a standing label it
-                spent the row's best space on something the badge already implies. */}
             <ActionButton
               type="submit"
               variant="primary"

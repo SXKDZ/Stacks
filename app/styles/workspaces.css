@@ -822,6 +822,13 @@
   z-index: 2;
 }
 
+/* Discoverability: the grip is a small pill straddling the panel's top edge, so
+   hovering anywhere in the composer fades it in before the pointer has to find it. */
+.feed-dock-input:hover .feed-panel-resize-handle,
+.feed-dock-input:focus-within .feed-panel-resize-handle {
+  opacity: 0.7;
+}
+
 .feed-panel-resize-handle:hover {
   border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
   color: var(--brand-blue-strong);
@@ -996,6 +1003,28 @@
   color: var(--brand-blue-strong);
 }
 
+.feed-dock-hint {
+  align-items: center;
+  color: var(--soft);
+  display: flex;
+  font-size: var(--type-caption);
+  gap: 4px;
+  line-height: 1;
+  user-select: none;
+}
+
+.feed-dock-hint kbd {
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  padding: 1px 4px;
+}
+
+/* The ↵ badge inside the submit button, matching the main-page "Add paper [N]"
+   key badge (white-on-translucent on the brand button). */
 .feed-send-kbd {
   align-items: center;
   background: var(--kbd-badge-bg);
