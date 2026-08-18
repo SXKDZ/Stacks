@@ -396,11 +396,11 @@ test("enforces paper identifier uniqueness and atomic proposal/seed handling", a
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/proposals/[id]/route.ts", import.meta.url), "utf8"),
   ]);
-  // arXiv / Semantic Scholar ids are unique (import dedup relies on it), and the
+  // Preprint / Semantic Scholar ids are unique (import dedup relies on it), and the
   // bootstrap creates the indexes after unlinking any pre-existing duplicates.
-  assert.match(schema, /uniqueIndex\("papers_arxiv_id_unique"\)/);
+  assert.match(schema, /uniqueIndex\("papers_preprint_id_unique"\)/);
   assert.match(schema, /uniqueIndex\("papers_semantic_scholar_id_unique"\)/);
-  assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_arxiv_id_unique/);
+  assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_preprint_id_unique/);
   assert.match(bootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS papers_semantic_scholar_id_unique/);
   assert.match(bootstrap, /ROW_NUMBER\(\) OVER \(PARTITION BY \$\{column\}/);
   // The duplicate check runs inside the insert transaction (not check-then-insert

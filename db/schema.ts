@@ -37,7 +37,6 @@ export const papers = sqliteTable(
     pages: text("pages"),
     category: text("category"),
     doi: text("doi"),
-    arxivId: text("arxiv_id"),
     preprintId: text("preprint_id"),
     semanticScholarId: text("semantic_scholar_id"),
     url: text("url"),
@@ -60,7 +59,7 @@ export const papers = sqliteTable(
     // enforced by the DB, not just a check-then-insert. All three are nullable
     // and stored as NULL when absent, so SQLite allows many rows without one.
     uniqueIndex("papers_doi_unique").on(table.doi),
-    uniqueIndex("papers_arxiv_id_unique").on(table.arxivId),
+    uniqueIndex("papers_preprint_id_unique").on(table.preprintId),
     uniqueIndex("papers_semantic_scholar_id_unique").on(table.semanticScholarId),
     index("papers_title_idx").on(table.title),
     index("papers_year_idx").on(table.year),

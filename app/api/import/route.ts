@@ -1,6 +1,7 @@
 import { captureWebpageSnapshot } from "@/app/lib/webpage-snapshot";
 import { parseRequest } from "@/app/lib/schemas/parse";
 import { ImportUrlRequestSchema } from "@/app/lib/schemas/requests";
+import { canonicalPreprintId } from "@/app/lib/preprint-id";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
         abstract: "",
         url: parsed.toString(),
         pdfUrl: parsed.toString(),
-        arxivId: arxivMatch?.[1]?.replace(/\.pdf$/i, "") ?? null,
+        preprintId: canonicalPreprintId(arxivMatch?.[1]?.replace(/\.pdf$/i, "") ?? null),
         readerContent: "",
       });
     }
@@ -70,7 +71,7 @@ export async function POST(request: Request): Promise<Response> {
       abstract: snapshot.text.slice(0, 1200),
       url: snapshot.finalUrl || sourceUrl,
       pdfUrl: isPdfPath ? resolved.toString() : null,
-      arxivId: arxivMatch?.[1]?.replace(/\.pdf$/i, "") ?? null,
+      preprintId: canonicalPreprintId(arxivMatch?.[1]?.replace(/\.pdf$/i, "") ?? null),
       readerContent: snapshot.text.slice(0, 14000),
     });
   } catch (error) {

@@ -42,7 +42,7 @@ library-wide state, such as cross-library comparison, discovery, counts,
 collection-wide analysis, or a duplicate check before proposing a change):
   curl -s -H "Authorization: Bearer $STACKS_FEED_TOKEN" "$STACKS_FEED_BASE_URL/api/feed/library"
 Returns JSON: { papers[], authors[], venues[], collections[], stats }. Each
-paper has id, title, doi, arxivId, year, authors[], collections[], etc.
+paper has id, title, doi, preprintId, year, authors[], collections[], etc.
 
 WRITE (does NOT apply immediately: it QUEUES a proposal the user must approve):
   curl -s -X POST -H "Authorization: Bearer $STACKS_FEED_TOKEN" \\
@@ -57,7 +57,7 @@ Or send several at once: {"proposals":[{...},{...}]}. Each operation:
     "summary": "<one short human-readable line describing the change>" }
 For a paper create, data MUST include title, paperType, and the complete verified
 authors array in the source's listed order. Include every other verified field:
-abstract, year, venueName, doi, arxivId, preprintId, semanticScholarId, url,
+abstract, year, venueName, doi, preprintId, semanticScholarId, url,
 pdfUrl, collectionNames (array), and notes. Never silently omit known metadata.
 - paperType is REQUIRED on every create and MUST be one of: "conference",
   "journal", "workshop", "preprint", or "other". Never omit it. Choose the most

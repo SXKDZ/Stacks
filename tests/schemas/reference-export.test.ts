@@ -15,7 +15,6 @@ const paper: Paper = {
   pages: "1-12",
   category: null,
   doi: null,
-  arxivId: null,
   preprintId: null,
   semanticScholarId: null,
   url: null,

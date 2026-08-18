@@ -35,7 +35,7 @@ function citationKey(paper: Paper): string {
 
 function bibtexEntry(paper: Paper): string {
   const venue = clean(paper.venueAcronym) || clean(paper.venueName);
-  const preprint = paper.paperType.toLowerCase().includes("preprint") || Boolean(paper.arxivId || paper.preprintId);
+  const preprint = paper.paperType.toLowerCase().includes("preprint") || Boolean(paper.preprintId);
   const journal = paper.paperType.toLowerCase().includes("journal");
   const entryType = journal || preprint ? "article" : "inproceedings";
   const fields: Array<[string, string]> = [
@@ -45,7 +45,7 @@ function bibtexEntry(paper: Paper): string {
   ];
   if (preprint) {
     fields.push(["journal", venue || "arXiv.org"]);
-    const eprint = clean(paper.arxivId) || clean(paper.preprintId).replace(/^arxiv:\s*/i, "");
+    const eprint = clean(paper.preprintId).replace(/^arxiv:\s*/i, "");
     if (eprint) {
       fields.push(["eprint", eprint], ["eprinttype", "arxiv"]);
     }
@@ -125,7 +125,7 @@ export function exportReferences(papers: Paper[], format: ReferenceExportFormat)
     venueAcronym: paper.venueAcronym,
     type: paper.paperType,
     doi: paper.doi,
-    arxivId: paper.arxivId || paper.preprintId,
+    preprintId: paper.preprintId,
     url: paper.url,
     abstract: paper.abstract,
   })), null, 2);

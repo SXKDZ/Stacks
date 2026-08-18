@@ -373,21 +373,21 @@ test("a payload of only prototype keys writes no column", async () => {
 });
 
 test("identifier dedup catches the format variants the app's own sources emit", async () => {
-  // The seed data writes "arXiv:2605.09104", the providers write the bare id, and a
+  // Stored data can use an arXiv prefix, providers write the bare id, and a
   // BibTeX import can carry a full URL with a version suffix. Dedup compared the
   // column exactly, so the same paper from two sources became two rows.
   const before = (await snapshot()).papers.length;
   const first = await mutate({
     entity: "paper",
     action: "create",
-    data: { title: "dedup target", paperType: "preprint", arxivId: "arXiv:2605.09104" },
+    data: { title: "dedup target", paperType: "preprint", preprintId: "arXiv:2605.19104" },
   });
   assert.equal(first.status, 200);
-  for (const variant of ["2605.09104", "https://arxiv.org/abs/2605.09104v2", "ARXIV:2605.09104"]) {
+  for (const variant of ["2605.19104", "https://arxiv.org/abs/2605.19104v2", "ARXIV:2605.19104"]) {
     const duplicate = await mutate({
       entity: "paper",
       action: "create",
-      data: { title: `dedup variant ${variant}`, paperType: "preprint", arxivId: variant },
+      data: { title: `dedup variant ${variant}`, paperType: "preprint", preprintId: variant },
     });
     assert.equal(duplicate.status, 409, `${variant} is the same paper`);
   }

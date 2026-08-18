@@ -1,5 +1,6 @@
 import { databasePath, ensureLibraryDirectories } from "./library-paths";
 import { getLibraryDb, type LibraryDb } from "./client";
+import { canonicalPreprintId } from "../app/lib/preprint-id";
 
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS venues (
@@ -24,7 +25,6 @@ const schemaStatements = [
     pages TEXT,
     category TEXT,
     doi TEXT UNIQUE,
-    arxiv_id TEXT,
     preprint_id TEXT,
     semantic_scholar_id TEXT,
     url TEXT,
@@ -182,7 +182,7 @@ const seedStatements = [
     ["paper-sensemaking", "Interfaces for Human–AI Literature Sensemaking", "A mixed-methods study of interface patterns that help researchers synthesize unfamiliar literatures with generative AI while preserving provenance and agency.", 2025, "conference", "10.1145/pa.2025.014", "s2-sensemaking", "https://dl.acm.org/doi/10.1145/pa.2025.014", null, "Useful taxonomy for the related-work workspace.", "complete", 1, "venue-chi", "2026-07-09T09:15:00Z"],
   ],
   [
-    `INSERT OR IGNORE INTO papers (id, title, abstract, year, paper_type, arxiv_id, semantic_scholar_id, url, pdf_url, notes, reading_status, favorite, venue_id, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO papers (id, title, abstract, year, paper_type, preprint_id, semantic_scholar_id, url, pdf_url, notes, reading_status, favorite, venue_id, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ["paper-agents", "Reliable Tool Use in Autonomous Research Agents", "We study failure recovery, verification, and cost-aware planning in autonomous agents that operate over scholarly search and document tools.", 2026, "preprint", "arXiv:2605.09104", "s2-agents", "https://arxiv.org/abs/2605.09104", "https://arxiv.org/pdf/2605.09104", "Read sections 4 and 6 next.", "inbox", 0, "venue-arxiv", "2026-07-07T16:48:00Z"],
   ],
   [
@@ -190,7 +190,7 @@ const seedStatements = [
     ["paper-memory", "Memory Architectures for Continual Scientific Discovery", "A perspective on episodic, semantic, and procedural memory for systems that support multi-month research programs.", 2025, "journal", "10.1038/pa.2025.812", "s2-memory", "https://www.nature.com/articles/pa-2025-812", "Connect to the lab notebook export design.", "reading", 0, "venue-nature", "2026-07-03T11:20:00Z"],
   ],
   [
-    `INSERT OR IGNORE INTO papers (id, title, abstract, year, paper_type, arxiv_id, semantic_scholar_id, url, pdf_url, notes, reading_status, favorite, venue_id, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO papers (id, title, abstract, year, paper_type, preprint_id, semantic_scholar_id, url, pdf_url, notes, reading_status, favorite, venue_id, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ["paper-graphs", "Scholarly Graphs as Navigable Research Context", "This work combines citation graphs, author entities, and venue priors into an interactive substrate for exploratory literature review.", 2024, "preprint", "arXiv:2409.11880", "s2-graphs", "https://arxiv.org/abs/2409.11880", "https://arxiv.org/pdf/2409.11880", "Potential foundation for author and venue views.", "complete", 0, "venue-arxiv", "2026-06-27T13:05:00Z"],
   ],
   ["INSERT OR IGNORE INTO paper_authors (paper_id, author_id, author_order, corresponding) VALUES (?, ?, ?, ?)", ["paper-retrieval", "author-amina", 0, 1]],
@@ -277,11 +277,47 @@ async function initializeDatabase(): Promise<void> {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
   }
 
-  // Enforce arXiv / Semantic Scholar id uniqueness (import dedup relies on it).
+  // Consolidate the retired provider-specific arxiv_id into the one editable
+  // preprint_id field, then remove the legacy column and index. Existing values
+  // are never discarded when preprint_id is empty.
+  const paperColumns = tableColumns(raw, "papers");
+  if (!paperColumns.has("preprint_id")) {
+    raw.prepare("ALTER TABLE papers ADD COLUMN preprint_id TEXT").run();
+  }
+  if (paperColumns.has("arxiv_id")) {
+    raw.prepare(
+      `UPDATE papers
+       SET preprint_id = arxiv_id
+       WHERE (preprint_id IS NULL OR TRIM(preprint_id) = '')
+         AND arxiv_id IS NOT NULL AND TRIM(arxiv_id) != ''`,
+    ).run();
+    raw.prepare("DROP INDEX IF EXISTS papers_arxiv_id_unique").run();
+    raw.prepare("ALTER TABLE papers DROP COLUMN arxiv_id").run();
+  }
+
+  // Canonicalize stored preprint identifiers (including historical arXiv URL,
+  // prefix, and version variants) before adding the unique deduplication index.
+  const preprintRows = raw.prepare(
+    "SELECT id, preprint_id AS preprintId FROM papers WHERE preprint_id IS NOT NULL AND TRIM(preprint_id) != '' ORDER BY added_at, id",
+  ).all() as Array<{ id: string; preprintId: string }>;
+  const seenPreprintIds = new Set<string>();
+  const writePreprintId = raw.prepare("UPDATE papers SET preprint_id = ? WHERE id = ?");
+  for (const row of preprintRows) {
+    const canonical = canonicalPreprintId(row.preprintId);
+    const dedupKey = canonical?.toLowerCase() ?? null;
+    if (!canonical || (dedupKey && seenPreprintIds.has(dedupKey))) {
+      writePreprintId.run(null, row.id);
+      continue;
+    }
+    seenPreprintIds.add(dedupKey!);
+    if (canonical !== row.preprintId) writePreprintId.run(canonical, row.id);
+  }
+
+  // Enforce Preprint / Semantic Scholar id uniqueness (import dedup relies on it).
   // Created here, not in schemaStatements, because on an upgraded database the
   // CREATE UNIQUE INDEX fails if pre-existing rows already collide — so first
   // null out the duplicates (keep the earliest-added row for each id).
-  for (const column of ["arxiv_id", "semantic_scholar_id"] as const) {
+  for (const column of ["semantic_scholar_id"] as const) {
     raw.prepare(
       `UPDATE papers SET ${column} = NULL WHERE id IN (
          SELECT id FROM (
@@ -291,7 +327,7 @@ async function initializeDatabase(): Promise<void> {
        )`,
     ).run();
   }
-  raw.prepare("CREATE UNIQUE INDEX IF NOT EXISTS papers_arxiv_id_unique ON papers(arxiv_id)").run();
+  raw.prepare("CREATE UNIQUE INDEX IF NOT EXISTS papers_preprint_id_unique ON papers(preprint_id)").run();
   raw.prepare("CREATE UNIQUE INDEX IF NOT EXISTS papers_semantic_scholar_id_unique ON papers(semantic_scholar_id)").run();
 
   // One feed per GitHub issue. Unlink duplicate issue links (keep the earliest

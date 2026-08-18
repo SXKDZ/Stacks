@@ -32,7 +32,6 @@ export interface Paper {
   pages: string | null;
   category: string | null;
   doi: string | null;
-  arxivId: string | null;
   preprintId: string | null;
   semanticScholarId: string | null;
   url: string | null;
@@ -132,7 +131,7 @@ export interface DiscoveryResult {
   venueAcronym: string;
   paperType: string;
   doi: string | null;
-  arxivId: string | null;
+  preprintId: string | null;
   semanticScholarId: string | null;
   url: string | null;
   pdfUrl: string | null;
