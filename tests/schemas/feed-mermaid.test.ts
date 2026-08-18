@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("AI feed rich content opens in focused viewers with safe Mermaid rendering", async () => {
-  const [markdown, diagram, richContent, storage, visualization, sharedTable, feed, styles, packageJson] = await Promise.all([
+  const [markdown, diagram, richContent, storage, visualization, sharedTable, feed, workspaceStyles, markdownStyles, packageJson] = await Promise.all([
     readFile(new URL("../../app/components/MarkdownContent.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/MermaidDiagram.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/FeedRichContent.tsx", import.meta.url), "utf8"),
@@ -12,8 +12,10 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
     readFile(new URL("../../app/components/ui/ResizableTable.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/styles/workspaces.css", import.meta.url), "utf8"),
+    readFile(new URL("../../app/styles/themes.css", import.meta.url), "utf8"),
     readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ]);
+  const styles = `${markdownStyles}\n${workspaceStyles}`;
 
   assert.match(packageJson, /"mermaid":/);
   assert.match(markdown, /language-mermaid/);
@@ -99,12 +101,12 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
   assert.match(styles, /tr\.is-row-resize-highlight::after\s*\{[^}]*left:\s*-1px[^}]*right:\s*-1px/s);
   assert.match(styles, /\.mermaid-visualization-svg,[^}]*\.feed-image-visualization\s*\{[^}]*transition-property:\s*width, height/s);
   assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*overflow-x:\s*clip/s);
-  assert.match(styles, /\.feed-rich-table-scroll\s*\{[^}]*border:\s*1px solid var\(--line-strong\)[^}]*border-radius:\s*var\(--radius-md\)/s);
+  assert.match(styles, /\.markdown-table-scroll\s*\{[^}]*border:\s*1px solid var\(--line-strong\)[^}]*border-radius:\s*var\(--radius-md\)/s);
   assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*border:\s*1px solid var\(--line-strong\)[^}]*border-radius:\s*var\(--radius-md\)/s);
   assert.match(styles, /\.feed-table-visualization-scroll\s*\{[^}]*flex:\s*0 1 auto/s);
   assert.match(styles, /\.feed-table-visualization-scroll:has\(\.feed-table-row:last-child\.is-row-resize-highlight\)\s*\{[^}]*border-block-end-color:\s*var\(--brand-blue\)/s);
   assert.match(styles, /\.feed-visualization-table tbody tr:last-child > td\.is-column-resize-highlight::after\s*\{[^}]*block-size:\s*calc\(100% \+ 1px\)/s);
-  assert.match(styles, /\.markdown-content \.feed-rich-table :is\(th, td\)\s*\{[^}]*border-block-end:\s*1px solid var\(--line-strong\)[^}]*border-inline-end:\s*1px solid var\(--line-strong\)/s);
+  assert.match(styles, /\.markdown-content \.markdown-table-scroll :is\(th, td\)\s*\{[^}]*border-block-end:\s*1px solid var\(--line-strong\)[^}]*border-inline-end:\s*1px solid var\(--line-strong\)/s);
   assert.match(styles, /\.feed-visualization-table tbody tr:last-child > \*\s*\{[^}]*border-block-end:\s*0/s);
   assert.match(visualization, /<span>Line numbers<\/span>/);
   assert.match(visualization, /<span>Wrap lines<\/span>/);

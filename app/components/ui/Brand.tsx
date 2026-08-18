@@ -1,3 +1,5 @@
+import packageMetadata from "@/package.json";
+
 /**
  * The Stacks brand lockup: the tiled favicon mark + wordmark + a subtitle.
  * Shared so every surface (sidebar, feed, …) renders it identically instead of
@@ -8,7 +10,7 @@ export function Brand({ subtitle }: { subtitle: string }) {
     <>
       <img src="/favicon.svg" alt="" className="brand-logo" width={34} height={34} />
       <span className="brand-copy">
-        <strong>Stacks</strong>
+        <span className="brand-name-row"><strong>Stacks</strong><span className="brand-version">v{packageMetadata.version}</span></span>
         <span className="brand-slogan">{subtitle}</span>
       </span>
     </>

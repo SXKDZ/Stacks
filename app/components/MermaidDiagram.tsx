@@ -56,12 +56,12 @@ export function MermaidDiagram({ source, feedId, feedName }: { source: string; f
   }, [diagramId, requestKey, source, theme]);
 
   if (state.status === "loading" || state.requestKey !== requestKey) {
-    return <div className="mermaid-diagram is-loading" role="status">Rendering diagram…</div>;
+    return <div className="markdown-media mermaid-diagram is-loading" role="status">Rendering diagram…</div>;
   }
 
   if (state.status === "error") {
     return (
-      <div className="mermaid-diagram is-error" role="group" aria-label="Mermaid diagram rendering error">
+      <div className="markdown-media mermaid-diagram is-error" role="group" aria-label="Mermaid diagram rendering error">
         <p>Could not render this Mermaid diagram. Check the diagram syntax.</p>
         <pre className="mermaid-diagram-source"><code>{source}</code></pre>
       </div>
@@ -69,7 +69,7 @@ export function MermaidDiagram({ source, feedId, feedName }: { source: string; f
   }
 
   return (
-    <div className="mermaid-diagram feed-rich-content">
+    <div className="markdown-media mermaid-diagram feed-rich-content">
       <div className="feed-rich-actions mermaid-diagram-toolbar">
         <a
           href={`/feed/visualization?id=${encodeURIComponent(visualizationId)}`}

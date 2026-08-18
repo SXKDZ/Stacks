@@ -116,24 +116,9 @@
   color: var(--brand-blue);
 }
 
-.summary-section,
 .sync-caution {
   background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
   border-color: color-mix(in srgb, var(--brand-blue) 16%, transparent);
-}
-
-/* Paper details behaves as a persistent third panel, never a modal scrim. */
-.drawer-layer {
-  pointer-events: none;
-}
-
-.drawer-layer > .drawer-scrim {
-  display: none;
-}
-
-.detail-drawer {
-  box-shadow: -12px 0 34px rgba(0, 0, 0, 0.15);
-  pointer-events: auto;
 }
 
 /* Prompt chips wrap naturally instead of forcing a horizontal scrollbar. */
@@ -198,12 +183,18 @@
   min-height: 18px;
 }
 
-.expandable-author-list > button {
+.expandable-author-list .author-toggle {
   display: inline;
   font: inherit;
   line-height: inherit;
-  margin-left: 5px;
+  margin-inline-start: 0.35em;
   vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.expandable-author-list .author-toggle,
+.expandable-author-buttons > .author-toggle {
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 
@@ -226,6 +217,103 @@
 
 .detail-authors .expandable-author-buttons > .author-toggle {
   margin-left: 5px;
+}
+
+/* Punctuation belongs to the preceding author. Keep each name and its comma in
+   one inline unit, while allowing a long full-author list to wrap between
+   authors. This prevents an orphan comma from starting a new line. */
+.expandable-author-buttons > span:not(.author-adaptive-measure) {
+  white-space: nowrap;
+}
+
+/* Fill the live Paper-column width rather than stopping at the title's
+   intrinsic line width. Adaptive author disclosure measures this flexible
+   child, so it must grow as well as shrink with the column. */
+.paper-table.research-grid .paper-title-cell > span {
+  flex: 1 1 0;
+  width: auto;
+}
+
+/* Every paper byline uses the same responsive disclosure rule: keep the
+   collapsed names and "N more authors" control on one line, and determine the
+   visible count from the container's measured width. */
+.expandable-author-list.is-adaptive-single-line {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.expandable-author-list.is-adaptive-single-line > span:not(.author-adaptive-measure) {
+  display: inline;
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.expandable-author-list .adaptive-author-name-run {
+  column-gap: 0;
+  display: flex;
+  min-width: 0;
+}
+
+.expandable-author-list .adaptive-author-name-run > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.expandable-author-list.is-adaptive-single-line.is-expanded {
+  flex-wrap: wrap;
+  overflow: visible;
+  white-space: normal;
+}
+
+.expandable-author-list.is-adaptive-single-line.is-expanded > span:not(.author-adaptive-measure) {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.expandable-author-buttons.is-adaptive-single-line,
+.detail-authors .expandable-author-buttons.is-adaptive-single-line {
+  display: block;
+  overflow: hidden;
+  position: relative;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.expandable-author-buttons.is-adaptive-single-line.is-expanded,
+.detail-authors .expandable-author-buttons.is-adaptive-single-line.is-expanded,
+.paper-secondary-line .expandable-author-buttons.is-adaptive-single-line.is-expanded {
+  column-gap: 0.25em;
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.reader-authors .expandable-author-list.is-adaptive-single-line.is-expanded {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* The detail header deliberately shows the complete author list. Unlike compact
+   bylines it wraps, but only between author units so punctuation cannot orphan. */
+.detail-authors .expandable-author-buttons.shows-all {
+  column-gap: 0.25em;
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 0;
 }
 
 /* Year and status are fixed utility columns; only Paper and Venue expose handles. */
@@ -409,10 +497,6 @@
   to { opacity: 1; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .app-tooltip { animation: none; }
-}
-
 /* Prompt templates use one bordered Markdown editor with a synchronized syntax layer. */
 .prompt-code-editor {
   background: color-mix(in srgb, var(--panel) 90%, var(--canvas));
@@ -561,6 +645,7 @@
 .page-size-menu {
   background: var(--panel-strong);
   border: 1px solid var(--line-strong);
+  bottom: auto;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   display: grid;
@@ -569,7 +654,8 @@
   min-width: 100%;
   padding: 5px;
   position: absolute;
-  top: calc(100% + 6px);
+  top: 0;
+  transform: translateY(calc(-100% - 6px));
   z-index: 90;
 }
 

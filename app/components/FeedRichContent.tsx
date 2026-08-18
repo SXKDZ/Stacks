@@ -88,7 +88,7 @@ export function FeedImage({ feedId, feedName, alt = "", src = "", ...props }: Co
   const source = typeof src === "string" ? src : "";
   const id = useMemo(() => feedVisualizationId("image", feedId, source), [feedId, source]);
   return (
-    <span className="feed-rich-content feed-rich-image">
+    <span className="feed-rich-content markdown-media markdown-image">
       <span className="feed-rich-actions">
         <OpenInNewWindow
           id={id}
@@ -123,7 +123,7 @@ export function FeedTable({ feedId, feedName, children, ...props }: ComponentPro
   return (
     <div className="feed-rich-content feed-rich-table">
       <div className="feed-rich-actions"><OpenInNewWindow id={id} prepare={prepare} /></div>
-      <div className="feed-rich-table-scroll">
+      <div className="markdown-media markdown-table-scroll">
         <table ref={tableRef} {...props}>{children}</table>
       </div>
     </div>

@@ -153,11 +153,23 @@ export const MarkdownContent = memo(function MarkdownContent({
           },
           table: ({ children, node, ...props }) => {
             void node;
-            return enableFeedRichContent && feedId ? <FeedTable feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedTable> : <table {...props}>{children}</table>;
+            return enableFeedRichContent && feedId ? (
+              <FeedTable feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedTable>
+            ) : (
+              <div className="markdown-media markdown-table-scroll">
+                <table {...props}>{children}</table>
+              </div>
+            );
           },
           img: ({ node, alt = "", ...props }) => {
             void node;
-            return enableFeedRichContent && feedId ? <FeedImage feedId={feedId} feedName={feedName ?? "AI feed"} alt={alt} {...props} /> : <img alt={alt} {...props} />;
+            return enableFeedRichContent && feedId ? (
+              <FeedImage feedId={feedId} feedName={feedName ?? "AI feed"} alt={alt} {...props} />
+            ) : (
+              <span className="markdown-media markdown-image">
+                <img alt={alt} {...props} />
+              </span>
+            );
           },
         }}
       >

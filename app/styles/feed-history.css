@@ -542,10 +542,3 @@
     flex: 1;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .feed-history-interaction,
-  .feed-history-search {
-    transition: none;
-  }
-}

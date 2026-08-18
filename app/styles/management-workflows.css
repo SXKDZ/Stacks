@@ -1351,20 +1351,6 @@
   white-space: nowrap;
 }
 
-.research-grid .star-button {
-  border-radius: var(--radius-sm);
-  /* A dimmed amber at rest (the star's own hue), not a neutral grey, so it reads
-     as a star affordance; it brightens to full amber on hover/starred. */
-  color: color-mix(in srgb, var(--amber) 60%, var(--muted));
-  height: 28px;
-  width: 28px;
-}
-
-.research-grid .star-button:hover {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
 .research-grid .paper-secondary-line {
   align-items: center;
   display: flex;
@@ -2000,33 +1986,6 @@
   margin-top: 3px;
 }
 
-/* Paper detail Markdown is scrollable and starts at its first block. */
-.summary-copy.markdown-content,
-.abstract-copy.markdown-content {
-  margin-top: var(--space-eyebrow-gap);
-  max-height: 280px;
-  overflow-y: auto;
-  padding: 1px 9px 5px 0;
-  scroll-padding-top: 8px;
-  scrollbar-gutter: stable;
-  white-space: normal;
-}
-
-.summary-copy.markdown-content p,
-.abstract-copy.markdown-content p {
-  white-space: normal;
-}
-
-.summary-copy.markdown-content h1,
-.summary-copy.markdown-content h2,
-.summary-copy.markdown-content h3,
-.abstract-copy.markdown-content h1,
-.abstract-copy.markdown-content h2,
-.abstract-copy.markdown-content h3 {
-  font-size: 1.02em;
-  margin-top: 1em;
-}
-
 @media (max-width: 760px) {
   .table-pagination {
     align-items: flex-start;
@@ -2188,29 +2147,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-:where(.stacks-shell button, .stacks-shell a, .stacks-shell [role="button"]) {
-  transition-duration: 140ms;
-  transition-property: background-color, border-color, box-shadow, color, opacity, transform;
-  transition-timing-function: ease;
-}
-
-:where(.stacks-shell button, .stacks-shell a, .stacks-shell [role="button"]):active:not(:disabled) {
-  transform: translateY(1px) scale(var(--motion-press-scale));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :where(.stacks-shell button, .stacks-shell a, .stacks-shell [role="button"]) {
-    transition: none;
-  }
-}
-
-/* The feed page renders outside .stacks-shell, so give its controls the same
-   eased hover/disabled treatment. Kept before workspaces.css in the cascade so
-   the feed's deliberate per-control timings still win. */
-.feed-page :where(button, a, [role="button"]) {
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast), color var(--motion-fast), opacity var(--motion-fast), transform var(--motion-fast);
 }
 
 /* Final accent and density pass: blue branding, stable rows, and connected collection paging. */

@@ -2226,7 +2226,7 @@ export default function FeedWorkspace() {
 
   const showDetail = Boolean(selected) && !composing;
   return (
-    <main className={`feed-page workspace-enter ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
+    <main className={`feed-page workspace-enter app-interaction-scope ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
       <div className="feed-theme-toggle">
         <ThemeToggle />
       </div>

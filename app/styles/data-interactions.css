@@ -316,18 +316,6 @@
   min-width: 0;
 }
 
-/* Summary and abstract share one unboxed, scrollable detail treatment. */
-.detail-section.summary-section,
-[data-theme="light"] .detail-section.summary-section {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  border-top: 1px solid var(--line);
-  box-shadow: none;
-  margin-top: var(--space-section-gap);
-  padding: var(--space-section-pad) 0 0;
-}
-
 .summary-copy,
 .abstract-copy {
   color: var(--ink);
@@ -475,7 +463,7 @@
   text-decoration-color: currentColor;
 }
 
-.expandable-author-list > button {
+.expandable-author-list .author-toggle {
   background: transparent;
   color: var(--brand-blue-strong);
   flex: 0 0 auto;
@@ -487,22 +475,41 @@
   text-underline-offset: 2px;
 }
 
-.expandable-author-list > button:hover {
+.expandable-author-list .author-toggle:hover {
   color: var(--brand-blue);
 }/* Clickable authors in the paper-row secondary line: each name is a link to its
    author filter, so the byline reads as muted text with the names as accents. */
-/* Inline, not flex: the names and the show-more toggle are one run of text, so the
-   toggle wraps after the last name instead of being placed on its own flex line. */
 .paper-secondary-line .expandable-author-buttons {
   color: var(--muted);
-  display: inline;
   font-size: var(--type-label);
   line-height: 1.35;
-  min-width: 0;
 }
 
-.paper-secondary-line .expandable-author-buttons > span {
-  display: inline;
+.expandable-author-buttons .author-toggle,
+.author-adaptive-measure .author-toggle-measure {
+  margin-inline-start: 5px;
+}
+
+.author-adaptive-measure {
+  align-items: baseline;
+  display: inline-flex;
+  inset: 0 auto auto -10000px;
+  pointer-events: none;
+  position: fixed;
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.author-adaptive-measure > span {
+  flex: 0 0 auto;
+}
+
+.author-adaptive-measure .author-toggle-measure {
+  font-family: inherit;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  line-height: inherit;
+  white-space: nowrap;
 }
 
 .paper-secondary-line .expandable-author-buttons > span > button,
@@ -529,6 +536,7 @@
   white-space: nowrap;
   color: var(--brand-blue-strong);
   cursor: pointer;
+  flex: 0 0 auto;
   font-size: var(--type-micro);
   font-weight: 700;
   padding: 0;
@@ -853,7 +861,6 @@
   .provider-switch { flex-wrap: wrap; }
   .discovery-result { grid-template-columns: auto 1fr; }
   .discovery-result > button { grid-column: 2; width: max-content; }
-  .drawer-cta-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .modal-card { max-height: 94vh; }
   .modal-body { max-height: calc(94vh - 130px); padding: 16px; }
   .modal-search-row { flex-direction: column; }
@@ -873,17 +880,6 @@
   .reader-brand strong { max-width: 42vw; }
   .reader-actions button,
   .reader-actions a { font-size: 0; gap: 0; padding: 7px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-  }
 }
 
 /* --- interactions.css --- */
@@ -1153,7 +1149,7 @@
   box-shadow: var(--shadow-md);
   max-height: 220px;
   overflow-y: auto;
-  z-index: 80;
+  z-index: 1200;
 }
 
 .metadata-autocomplete-options > button {

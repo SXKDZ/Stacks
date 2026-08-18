@@ -2,6 +2,7 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState, type AriaAttributes, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { beginPointerResize } from "@/app/lib/pointer-resize";
 
 export interface TableSort<Key extends string> {
   key: Key;
@@ -63,8 +64,8 @@ export function useResizableColumns<Key extends string>(
     const neighbourFloor = others.reduce((total, candidate) => total + minimums[candidate], 0);
     const ceiling = Math.max(minimums[key], resizableWidth - neighbourFloor);
 
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const targetWidth = Math.min(ceiling, Math.max(minimums[key], startWidth + moveEvent.clientX - startX));
+    beginPointerResize(event.pointerId, (clientX) => {
+      const targetWidth = Math.min(ceiling, Math.max(minimums[key], startWidth + clientX - startX));
       setWidths((current) => {
         const pool = resizableKeys.reduce((total, candidate) => total + current[candidate], 0);
         if (pool <= 0) return current;
@@ -85,15 +86,7 @@ export function useResizableColumns<Key extends string>(
         window.localStorage.setItem(storageKey, JSON.stringify(next));
         return next;
       });
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      document.body.classList.remove("is-resizing-column");
-    };
-    document.body.classList.add("is-resizing-column");
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
+    });
   }
 
   function resetColumnWidth(event: ReactMouseEvent<HTMLElement>, key: Key) {

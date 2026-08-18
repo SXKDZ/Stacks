@@ -154,18 +154,21 @@ test("pressing controls uses one shared restrained 99% scale token", async () =>
   const interactiveStyles = [controls, designSystem, foundation, workflows, reader].join("\n");
   assert.match(foundation, /--motion-press-scale:\s*0\.99;/);
   assert.equal(interactiveStyles.match(/--motion-press-scale:\s*0\.99;/g)?.length, 1);
+  assert.match(controls, /app-control-motion/);
   assert.match(controls, /active:scale-\[var\(--motion-press-scale\)\]/);
   assert.match(designSystem, /\.app-select-option:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
-  assert.match(workflows, /:active:not\(:disabled\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.match(foundation, /\.app-interaction-scope :is\(button, a, \[role="button"\]\)[\s\S]*?:active:not\(:disabled\):not\(\[aria-disabled="true"\]\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
-  assert.match(reader, /:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  assert.doesNotMatch(workflows, /\.stacks-shell[^{}]*:active/);
+  assert.doesNotMatch(reader, /\.reader-page[^{}]*:active/);
   assert.doesNotMatch(interactiveStyles, /scale\(0\.(?:96|97|98|985|99)\)|scale-\[0\.(?:96|97|98|985|99)\]/);
 });
 
 test("PDF metadata extraction preserves authors and reviews every conflicting field", async () => {
-  const [application, extraction, styles] = await Promise.all([
+  const [application, adaptiveAuthors, extraction, styles] = await Promise.all([
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ui/AdaptiveAuthors.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
     readApplicationStyles(),
   ]);
@@ -204,7 +207,7 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   assert.match(styles, /\.metadata-review-row:has\(> input:focus-visible\)/);
 
   // The no-author line now enters the same type scale as ordinary author names.
-  assert.match(application, /className="expandable-author-buttons is-empty">No authors recorded/);
+  assert.match(adaptiveAuthors, /className="expandable-author-buttons is-empty">No authors recorded/);
   assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
 });
 
@@ -953,8 +956,9 @@ test("the GitHub sync recovers linked comments that fell behind its cursor", asy
 });
 
 test("tooltips are drawn by the app, not the browser", async () => {
-  const [layer, styles, layout] = await Promise.all([
+  const [layer, reader, styles, layout] = await Promise.all([
     readFile(new URL("../app/components/ui/TooltipLayer.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ReaderWorkspace.tsx", import.meta.url), "utf8"),
     readApplicationStyles(),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
@@ -973,11 +977,38 @@ test("tooltips are drawn by the app, not the browser", async () => {
   // Keyboard focus shows it too, not just the pointer.
   assert.match(layer, /addEventListener\("focusin"/);
   assert.match(layer, /role="tooltip"/);
+  // Accessibility-only titles can explicitly opt out of visual hover help. The
+  // PDF iframe keeps its required accessible name without covering the page in
+  // a tooltip containing its generated local filename.
+  assert.match(layer, /closest\("\[data-tooltip-disabled\]"\)/);
+  assert.match(reader, /className="reader-document"[\s\S]*?data-tooltip-disabled/);
   // Styled from the theme tokens, so it inverts with light/dark instead of looking
   // like the operating system.
   assert.match(styles, /\.app-tooltip \{/);
   assert.match(styles, /background: var\(--ink\)/);
   assert.match(styles, /max-width: 320px/);
+});
+
+test("paper details open as an accessible modal instead of a side drawer", async () => {
+  const [application, styles] = await Promise.all([
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+  assert.match(application, /className="detail-drawer"[\s\S]*?role="dialog"[\s\S]*?aria-modal="true"[\s\S]*?aria-labelledby=\{detailTitleId\}/);
+  assert.match(application, /return createPortal\(dialog, document\.body\)/);
+  assert.match(application, /function ModalFrame[\s\S]*?return createPortal\(\([\s\S]*?document\.body\)/);
+  assert.match(application, /appShellRef\.current\.inert = !suspendAutoClose/);
+  assert.match(application, /event\.key === "Escape"/);
+  assert.match(application, /event\.key === "Tab"/);
+  assert.match(application, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
+  assert.match(application, /role="tablist"/);
+  assert.match(application, /role="tabpanel"/);
+  assert.match(styles, /\.detail-drawer \{[\s\S]*?left: 50%;[\s\S]*?top: 50%;[\s\S]*?transform: translate\(-50%, -50%\)/);
+  assert.match(styles, /\.modal-layer \{[\s\S]*?z-index: 90/);
+  assert.match(styles, /\.paper-detail-tab-panel \{[\s\S]*?max-height:[\s\S]*?overflow-y: auto/);
+  assert.match(styles, /\.paper-detail-tab-panel\.is-notes \{[\s\S]*?flex: 1;[\s\S]*?max-height: none/);
+  assert.match(styles, /\.paper-detail-tab-panel\.is-notes \.prompt-code-editor \{[\s\S]*?flex: 1;[\s\S]*?height: auto/);
+  assert.doesNotMatch(styles, /\.drawer-layer > \.drawer-scrim \{[\s\S]*?display: none/);
 });
 
 test("no CSS rule is fully superseded by a later copy of the same selector", async () => {

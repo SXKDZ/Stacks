@@ -4,7 +4,7 @@ import test from "node:test";
 import { readApplicationStyles } from "./read-application-styles.mjs";
 
 test("ships the Stacks application shell and product metadata", async () => {
-  const [page, layout, application, reader, settings, markdown, controls, styles] = await Promise.all([
+  const [page, layout, application, reader, authors, settings, markdown, controls, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(
@@ -13,6 +13,10 @@ test("ships the Stacks application shell and product metadata", async () => {
     ),
     readFile(
       new URL("../app/components/ReaderWorkspace.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/components/ui/AdaptiveAuthors.tsx", import.meta.url),
       "utf8",
     ),
     readFile(
@@ -39,7 +43,7 @@ test("ships the Stacks application shell and product metadata", async () => {
   assert.doesNotMatch(application, /Your research, in motion/);
   assert.doesNotMatch(application, /Research OS/);
   assert.match(application, /paper\.authors\.map\(\(author\) => author\.displayName\)\.join\(", "\)/);
-  assert.match(application, /\$\{hiddenCount\} more \$\{hiddenCount === 1/);
+  assert.match(authors, /\$\{hiddenCount\} more \$\{hiddenCount === 1/);
   assert.match(application, /Show less/);
   assert.match(application, /aria-expanded=\{expanded\}/);
   assert.match(application, /AuthorsView/);
@@ -72,7 +76,16 @@ test("ships the Stacks application shell and product metadata", async () => {
   assert.match(application, /aria-pressed=\{filterBuilderOpen\}/);
   assert.doesNotMatch(application, /onSummarize/);
   assert.match(application, /field-label-action/);
-  assert.ok(application.indexOf("Research notes") < application.indexOf("Publication details"));
+  assert.match(application, /className="paper-detail-toolbar"/);
+  assert.match(application, /className="paper-detail-record"/);
+  assert.match(application, /className="paper-detail-reading"/);
+  assert.match(application, /className="paper-detail-tabs" role="tablist"/);
+  assert.match(application, /role="tabpanel"/);
+  assert.ok(application.indexOf("Publication") < application.indexOf("Research notes"));
+  for (const publicationField of ["Volume", "Issue", "Pages", "Category", "DOI", "Preprint", "S2 ID", "Source", "PDF URL", "File", "HTML"]) {
+    assert.match(application, new RegExp(`<b>${publicationField}<\\/b>`), `paper details omit ${publicationField}`);
+  }
+  assert.match(application, /href=\{doiHref\(paper\.doi\)\}/);
   assert.match(markdown, /react-markdown/);
   assert.match(markdown, /remark-gfm/);
   assert.match(markdown, /remark-math/);

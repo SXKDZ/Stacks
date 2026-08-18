@@ -1173,7 +1173,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                         <div><dt>Venue or repository</dt><dd>{paperVenueLabel(paper)}</dd></div>
                         <div><dt>DOI</dt><dd>{recordedValue(paper.doi)}</dd></div>
                         <div><dt>Preprint ID</dt><dd>{recordedValue(paper.preprintId)}</dd></div>
-                        <div><dt>arXiv ID</dt><dd>{recordedValue(paper.arxivId)}</dd></div>
                         <div><dt>Semantic Scholar ID</dt><dd>{recordedValue(paper.semanticScholarId)}</dd></div>
                         <div className="doctor-paper-detail-wide"><dt>Paper URL</dt><dd>{recordedValue(paper.url)}</dd></div>
                         <div className="doctor-paper-detail-wide"><dt>PDF URL</dt><dd>{recordedValue(paper.pdfUrl)}</dd></div>

@@ -39,13 +39,6 @@
   gap: 6px;
 }
 
-@media (max-width: 900px) {
-  .page-size-menu {
-    bottom: calc(100% + 6px);
-    top: auto;
-  }
-}
-
 /* --- detail-final.css --- */
 /* Compact paper facts, status, and collection controls share one visual rhythm. */
 /* Paper detail meta: publication facts + reading status + collections. A calm
@@ -128,9 +121,24 @@
   transition: background var(--motion-control), color var(--motion-control);
 }
 
-.reading-status-option [class*="lucide"] {
-  height: 15px;
-  width: 15px;
+.reading-status-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 18px;
+  height: 18px;
+  justify-content: center;
+  width: 18px;
+}
+
+.reading-status-icon [class*="lucide"] {
+  height: 16px;
+  stroke-width: 2;
+  width: 16px;
+}
+
+.reading-status-label {
+  font: inherit;
+  line-height: 1;
 }
 
 .reading-status-option:hover:not(.is-active) {
@@ -189,6 +197,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.publication-detail-list .publication-link {
+  color: var(--brand-blue-strong);
+  display: block;
+  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-decoration-color: transparent;
+  text-overflow: ellipsis;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.publication-detail-list .publication-link:hover {
+  color: var(--brand-blue);
+  text-decoration-color: currentColor;
 }
 
 
@@ -1800,52 +1825,9 @@
   padding-inline-end: 88px;
 }
 
-.feed-rich-image {
-  display: block;
-  margin: 0.9em 0;
-  max-width: 100%;
-}
-
-.feed-rich-image > img {
-  border-radius: var(--radius-md);
-  display: block;
-  height: auto;
-  max-width: 100%;
-}
-
 .feed-rich-table {
-  margin: 0.9em 0;
-}
-
-.feed-rich-table-scroll {
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
   max-width: 100%;
-  overflow: auto;
-}
-
-.markdown-content .feed-rich-table table {
-  border-collapse: separate;
-  border-spacing: 0;
-  display: table;
-  margin: 0;
-  min-width: 100%;
-  overflow: visible;
-  width: max-content;
-}
-
-.markdown-content .feed-rich-table :is(th, td) {
-  border: 0;
-  border-block-end: 1px solid var(--line-strong);
-  border-inline-end: 1px solid var(--line-strong);
-}
-
-.markdown-content .feed-rich-table tr > :last-child {
-  border-inline-end: 0;
-}
-
-.markdown-content .feed-rich-table tbody tr:last-child > * {
-  border-block-end: 0;
+  width: fit-content;
 }
 
 /* Mermaid fences render as diagrams only in feed message bubbles. The neutral
@@ -1856,8 +1838,6 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   color: var(--ink);
-  margin: 0.9em 0;
-  max-width: 100%;
   overflow: auto;
   padding: 14px;
   position: relative;
@@ -1875,12 +1855,6 @@
   .feed-rich-actions {
     opacity: 1;
     pointer-events: auto;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .feed-rich-actions {
-    transition: none;
   }
 }
 
@@ -2404,13 +2378,6 @@
   .feed-table-filter input {
     min-width: 0;
     width: 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mermaid-visualization-svg,
-  .feed-image-visualization {
-    transition: none;
   }
 }
 
