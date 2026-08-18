@@ -209,6 +209,12 @@ test("PDF metadata extraction preserves authors and reviews every conflicting fi
   // The no-author line now enters the same type scale as ordinary author names.
   assert.match(adaptiveAuthors, /className="expandable-author-buttons is-empty">No authors recorded/);
   assert.match(styles, /\.paper-secondary-line \.expandable-author-buttons\s*\{[\s\S]*?font-size: var\(--type-label\)/);
+  // Disclosure fitting must use the byline's visible box, not the wider table
+  // cell behind it. It also revalidates after rendering so "authors" can never
+  // be clipped to an incomplete word at an intermediate column width.
+  assert.match(adaptiveAuthors, /container\.clientWidth - AUTHOR_DISCLOSURE_INLINE_RESERVE/);
+  assert.match(adaptiveAuthors, /scheduleFitValidation\(attempt \+ 1\)/);
+  assert.doesNotMatch(adaptiveAuthors, /cellRect\.right[^\n]*containerRect\.left/);
 });
 
 test("agent scopes one-paper reads and proposes complete paper metadata", async () => {

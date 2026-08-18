@@ -5,6 +5,10 @@ import type { Author } from "@/app/lib/types";
 
 type AuthorEntry = Pick<Author, "id" | "displayName">;
 
+// Keep a small optical buffer so glyph anti-aliasing, underlines, and fractional
+// table pixels never put the last letters directly against the clipping edge.
+const AUTHOR_DISCLOSURE_INLINE_RESERVE = 4;
+
 function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
   containerRef: RefObject<HTMLSpanElement | null>;
   measurementRef: RefObject<HTMLSpanElement | null>;
@@ -22,8 +26,7 @@ function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
 
     let active = true;
     let fitValidationFrame = 0;
-    const commitVisibleCount = (nextVisibleCount: number) => {
-      setVisibleCount(nextVisibleCount);
+    const scheduleFitValidation = (attempt = 0) => {
       window.cancelAnimationFrame(fitValidationFrame);
       fitValidationFrame = window.requestAnimationFrame(() => {
         if (!active || document.body.classList.contains("is-resizing-column")) return;
@@ -33,25 +36,24 @@ function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
         const disclosureRect = disclosure.getBoundingClientRect();
         // Hidden measurement is intentionally fast, but font shaping and table
         // sub-pixels can still leave the real control a fraction wider. Never
-        // solve that mismatch by clipping a word: yield one author instead.
-        if (disclosureRect.right > containerRect.right + 0.5) {
+        // solve that mismatch by clipping a word: yield one author and validate
+        // the newly rendered line again until the complete label fits.
+        if (disclosureRect.right > containerRect.right - AUTHOR_DISCLOSURE_INLINE_RESERVE) {
           setVisibleCount((current) => Math.max(1, current - 1));
+          if (attempt < authors.length - 1) scheduleFitValidation(attempt + 1);
         }
       });
     };
+    const commitVisibleCount = (nextVisibleCount: number) => {
+      setVisibleCount(nextVisibleCount);
+      scheduleFitValidation();
+    };
     const measure = () => {
       if (!active || document.body.classList.contains("is-resizing-column")) return;
-      const cell = container.closest("td");
-      const containerRect = container.getBoundingClientRect();
-      const cellRect = cell?.getBoundingClientRect();
-      const cellStyle = cell ? window.getComputedStyle(cell) : null;
-      const cellInlineEndPadding = Number.parseFloat(cellStyle?.paddingInlineEnd || "0");
-      // The inline author element can retain an intrinsic content width while
-      // its table column grows. Measure to the cell's actual content edge so a
-      // wider Paper column immediately makes more author names eligible.
-      const availableWidth = cellRect
-        ? Math.max(0, cellRect.right - cellInlineEndPadding - containerRect.left)
-        : container.clientWidth;
+      // Fit against the actual visible author line. The table cell can extend
+      // behind a neighboring fixed column, which previously let the algorithm
+      // select a disclosure whose final word was then clipped by this element.
+      const availableWidth = Math.max(0, container.clientWidth - AUTHOR_DISCLOSURE_INLINE_RESERVE);
       const nameWidths = Array.from(
         measurement.querySelectorAll<HTMLElement>("[data-author-measure-name]"),
         (node) => node.getBoundingClientRect().width,
@@ -87,9 +89,9 @@ function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
     const animationFrame = window.requestAnimationFrame(measure);
     const resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(container);
-    // In table layouts the column can change before the inline author box has
-    // reported its own new geometry. Observing the containing cell/line as
-    // well makes the disclosure update continuously during a column drag.
+    // In table layouts the column can change before the author line reports its
+    // own geometry. Observe the containing cell as well; measurement is frozen
+    // during a drag and runs once from the final geometry on resize end.
     if (container.parentElement) resizeObserver.observe(container.parentElement);
     const cell = container.closest("td");
     if (cell) resizeObserver.observe(cell);
@@ -102,7 +104,7 @@ function useAdaptiveAuthorLine(authors: AuthorEntry[]): {
       resizeObserver.disconnect();
       window.removeEventListener("stacks:resize-end", measure);
     };
-  }, [authorSignature]);
+  }, [authorSignature, authors.length]);
 
   return { containerRef, measurementRef, visibleCount };
 }
