@@ -223,6 +223,57 @@ function getDatabase(): LibraryDb {
   return getLibraryDb(databasePath());
 }
 
+/**
+ * Retire the ids inherited from the papercli import.
+ *
+ * "legacy-paper-85" looks like it means something and does not: it surfaces as a
+ * proposal's target in the feed and inside the prompts the agent reads, where a
+ * misleading name is worse than an opaque one. Rename those rows to the same
+ * "<entity>-<uuid>" shape every record created since uses. The junction tables and
+ * papers.venue_id all declare ON UPDATE CASCADE, so their references follow the
+ * rename; the ids embedded in JSON columns (a queued proposal's operation, a
+ * turn's attachments) are rewritten here, longest id first so "legacy-paper-1"
+ * cannot eat the prefix of "legacy-paper-10".
+ */
+export function normalizeLegacyIds(raw: import("better-sqlite3").Database): void {
+  const renames = new Map<string, string>();
+  for (const [table, prefix] of [["papers", "paper"], ["authors", "author"], ["venues", "venue"], ["collections", "collection"]] as const) {
+    const rows = raw.prepare(`SELECT id FROM ${table} WHERE id LIKE 'legacy-%'`).all() as Array<{ id: string }>;
+    for (const row of rows) {
+      renames.set(row.id, `${prefix}-${crypto.randomUUID()}`);
+    }
+  }
+  if (!renames.size) {
+    return;
+  }
+  const ordered = [...renames.entries()].sort(([left], [right]) => right.length - left.length);
+  const rewrite = (value: string): string => {
+    let next = value;
+    for (const [from, to] of ordered) {
+      if (next.includes(from)) next = next.split(from).join(to);
+    }
+    return next;
+  };
+  raw.transaction(() => {
+    for (const [table, prefix] of [["papers", "paper"], ["authors", "author"], ["venues", "venue"], ["collections", "collection"]] as const) {
+      const rows = raw.prepare(`SELECT id FROM ${table} WHERE id LIKE 'legacy-%'`).all() as Array<{ id: string }>;
+      for (const row of rows) {
+        const next = renames.get(row.id) ?? `${prefix}-${crypto.randomUUID()}`;
+        raw.prepare(`UPDATE ${table} SET id = ? WHERE id = ?`).run(next, row.id);
+      }
+    }
+    for (const [table, column] of [["feed_proposals", "operation"], ["feed_snippets", "attachments"], ["feed_messages", "attachments"]] as const) {
+      const rows = raw
+        .prepare(`SELECT rowid AS row, ${column} AS value FROM ${table} WHERE ${column} LIKE '%legacy-%'`)
+        .all() as Array<{ row: number; value: string | null }>;
+      for (const row of rows) {
+        if (!row.value) continue;
+        raw.prepare(`UPDATE ${table} SET ${column} = ? WHERE rowid = ?`).run(rewrite(row.value), row.row);
+      }
+    }
+  })();
+}
+
 function tableColumns(raw: import("better-sqlite3").Database, table: string): Set<string> {
   const rows = raw.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   return new Set(rows.map((column) => column.name));
@@ -279,6 +330,8 @@ async function initializeDatabase(): Promise<void> {
   if (!feedMessageColumns.has("attachments_synced")) {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
   }
+
+  normalizeLegacyIds(raw);
 
   // Per-turn usage. Existing threads keep 0, so their replies simply show no
   // token or speed chip instead of a fabricated one.
