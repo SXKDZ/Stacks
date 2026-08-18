@@ -1195,6 +1195,38 @@ test("the user's decisions reach the agent exactly once", async () => {
   assert.doesNotMatch(replyRoute, /status === "applied"\)\.map/);
 });
 
+test("the approval block reads like a tool call and names what it targets", async () => {
+  const [feed, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Proposals take their place in the thread by time. A proposal the agent posted
+  // through the API is anchored to a tool_use message, which renders inside a
+  // collapsed tool group, so those used to sink to a trailing block: a resolved
+  // change then sat below newer pending ones.
+  assert.match(feed, /const floatingProposals = proposals/);
+  assert.match(feed, /flushFloatingProposals\(message\.createdAt\)/);
+  assert.match(feed, /flushFloatingProposals\(null\)/);
+  assert.doesNotMatch(feed, /props-unanchored/);
+
+  // The block folds like a tool call, open while a decision is outstanding. The
+  // open state is React state because the thread re-renders on every poll, which
+  // would otherwise snap a block the reader just opened shut again.
+  assert.match(feed, /<details\s+className="feed-proposals"[\s\S]*?open=\{proposalBlockOpen\[key\] \?\? pendingHere > 0\}/);
+  assert.match(feed, /setProposalBlockOpen/);
+  assert.match(styles, /\.feed-proposals \{[^}]*box-shadow: var\(--edge-highlight\)/);
+  assert.match(styles, /\.feed-proposals\[open\] \.feed-proposals-head \{[^}]*border-bottom/);
+
+  // A stored id names nothing, so the target and any id-valued field resolve to
+  // the record's own name, with the id kept as secondary text.
+  assert.match(feed, /function describeProposalTarget/);
+  assert.match(feed, /const collectionsById = new Map/);
+  assert.match(feed, /const ID_FIELDS = new Set\(\["paperIds", "addPaperIds", "removePaperIds", "collectionIds"\]\)/);
+  assert.match(feed, /fieldValue\(value, ID_FIELDS\.has\(key\) \? describeTarget : undefined\)/);
+  assert.match(styles, /\.feed-proposal-target-meta/);
+});
+
 test("a user's Markdown stays legible on the blue bubble", async () => {
   const styles = await readApplicationStyles();
   // Headings, quotes, tables, and math each declare an ink-dark colour, which the
