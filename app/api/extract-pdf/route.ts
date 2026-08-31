@@ -155,6 +155,15 @@ export async function POST(request: Request): Promise<Response> {
   let document: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
   try {
     const bytes = new Uint8Array(await request.arrayBuffer());
+    // A body cut short still starts with %PDF- and pdf.js will happily read the
+    // pages that survived, so metadata would be extracted from a mutilated
+    // document and look validated. Content-Length describes the whole file.
+    if (declaredLength > 0 && bytes.length !== declaredLength) {
+      return Response.json(
+        { error: `The upload is incomplete: ${bytes.length} of ${declaredLength} bytes arrived.` },
+        { status: 400 },
+      );
+    }
     if (!bytes.length || bytes.length > 50 * 1024 * 1024) {
       return Response.json({ error: bytes.length ? "The PDF exceeds the 50 MB extraction limit." : "The PDF is empty." }, { status: 400 });
     }

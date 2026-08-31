@@ -3225,7 +3225,11 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
         if (!response.ok) {
           throw new Error(await readError(response));
         }
-        return response.json() as Promise<{ storedPath: string }>;
+        const stored = await response.json() as { storedPath: string; bytes?: number };
+        if (typeof stored.bytes === "number" && stored.bytes !== file.size) {
+          throw new Error(`Only ${stored.bytes} of ${file.size} bytes were stored, so the copy was stopped.`);
+        }
+        return stored;
       });
       if (pathInput.current) {
         pathInput.current.value = payload.storedPath;
@@ -3900,8 +3904,13 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
       if (!upload.ok) {
         throw new Error(await readError(upload));
       }
-      const { storedPath } = await upload.json() as { storedPath: string };
-      log.step(`Stored as ${storedPath}.`);
+      const { storedPath, bytes } = await upload.json() as { storedPath: string; bytes?: number };
+      // The server holds the body to its Content-Length, so this is belt and
+      // braces: never tell the user a file was copied when fewer bytes landed.
+      if (typeof bytes === "number" && bytes !== file.size) {
+        throw new Error(`Only ${bytes} of ${file.size} bytes were stored, so the import was stopped.`);
+      }
+      log.step(`Stored as ${storedPath} (${bytes ?? file.size} bytes).`);
       log.step("Extracting metadata from the PDF…");
       const extraction = await extractPdfMetadata(file, file.name);
       log.step(`Extracted: ${extraction.metadata.title || "no title found"}`);

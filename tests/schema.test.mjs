@@ -1144,6 +1144,37 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /message\.id === usage\.messageId/);
 });
 
+test("no ingest path can store a body that stopped early", async () => {
+  const [localFiles, extractRoute, application, config, pdfText] = await Promise.all([
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/pdf-text.ts", import.meta.url), "utf8"),
+  ]);
+
+  // The cut came from the framework: proxy.ts matches /api/:path*, so Next clones
+  // each API body and caps it at experimental.proxyClientMaxBodySize, which
+  // defaults to 10 MiB and ends the stream cleanly rather than erroring. A 41 MB
+  // PDF was stored as 10,470,576 bytes with a 200 response.
+  assert.match(config, /proxyClientMaxBodySize: "150mb"/);
+  assert.match(config, /cuts it at this limit/);
+
+  // And the routes no longer trust a clean end of stream, whatever the cause.
+  assert.match(localFiles, /if \(declaredLength > 0 && received !== declaredLength\) \{/);
+  assert.match(localFiles, /The upload stopped early/);
+  assert.match(localFiles, /!response\.headers\.get\("content-encoding"\) && received !== declaredLength/);
+  assert.match(localFiles, /the download stopped early/);
+  assert.match(extractRoute, /bytes\.length !== declaredLength/);
+  // The reported success cannot outrun the bytes: the route returns what it wrote.
+  assert.match(localFiles, /bytes: contents\.length/);
+  assert.equal([...application.matchAll(/bytes were stored, so the (?:import|copy) was stopped/g)].length, 2);
+  // A stored asset means bytes on disk, not just an inode.
+  assert.match(localFiles, /info\?\.isFile\(\) && info\.size > 0/);
+  // One malformed page still costs only that page.
+  assert.match(pdfText, /skippedPages\.push\(pageNumber\)/);
+});
+
 test("a summary says what it was written from, and quotes read as one shape", async () => {
   const [summarizeRoute, application, prompts, styles] = await Promise.all([
     readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
