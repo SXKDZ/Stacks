@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedProposals } from "@/db/schema";
+import { feedMessages, feedProposals } from "@/db/schema";
+import { scheduleOutcomeReport } from "@/app/lib/feed-outcomes";
 import { applyLibraryMutation } from "@/app/lib/library-mutations";
 import { parseJsonWith, parseWith } from "@/app/lib/schemas/parse";
-import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
+import { ProposalOperationSchema, proposalSummary } from "@/app/lib/schemas/proposals";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,36 @@ export const runtime = "nodejs";
 const ResolveRequestSchema = z.object({
   decision: z.enum(["approve", "reject"]).optional(),
 });
+
+/** The stored operation's own summary, for the thread note. */
+function proposalNote(operation: string): string {
+  const parsed = parseJsonWith(ProposalOperationSchema, operation);
+  return parsed.ok ? proposalSummary(parsed.data) : "a change";
+}
+
+/**
+ * Put the decision in the thread and hand it to the agent.
+ *
+ * The thread note is what the user (and the mirrored GitHub issue) sees; the
+ * report is what the agent is told, coalesced so a run of approvals is one turn.
+ * Both matter: a decision the agent never hears about leaves it believing its
+ * proposal is still outstanding.
+ */
+async function recordDecision(snippetId: string, note: string): Promise<void> {
+  const database = await ensureDatabase();
+  database
+    .insert(feedMessages)
+    .values({
+      id: `msg-${crypto.randomUUID()}`,
+      snippetId,
+      role: "system",
+      kind: "text",
+      content: note,
+      createdAt: new Date().toISOString(),
+    })
+    .run();
+  scheduleOutcomeReport(snippetId);
+}
 
 export async function POST(
   request: Request,
@@ -49,6 +80,7 @@ export async function POST(
   }
 
   if (decision === "reject") {
+    await recordDecision(proposal.snippetId, `Rejected: ${proposalNote(proposal.operation)}`);
     return Response.json({ status: "rejected" });
   }
 
@@ -63,6 +95,7 @@ export async function POST(
   const parsed = parseJsonWith(ProposalOperationSchema, proposal.operation);
   if (!parsed.ok) {
     const reason = `The proposal could not be parsed: ${parsed.error}`;
+    await recordDecision(proposal.snippetId, `Could not apply: ${reason}`);
     database
       .update(feedProposals)
       .set({ status: "failed", resultSummary: reason, resolvedAt: new Date().toISOString() })
@@ -74,6 +107,7 @@ export async function POST(
 
   try {
     const summary = await applyLibraryMutation(operation);
+    await recordDecision(proposal.snippetId, `Approved and applied: ${summary}`);
     database
       .update(feedProposals)
       .set({ status: "applied", resultSummary: summary, resolvedAt: new Date().toISOString() })
@@ -82,6 +116,7 @@ export async function POST(
     return Response.json({ status: "applied", summary });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The change could not be applied.";
+    await recordDecision(proposal.snippetId, `Could not apply ${proposalNote(proposal.operation)}: ${message}`);
     database
       .update(feedProposals)
       .set({ status: "failed", resultSummary: message, resolvedAt: new Date().toISOString() })

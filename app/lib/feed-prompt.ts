@@ -71,6 +71,19 @@ pdfUrl, collectionNames (array), and notes. Never silently omit known metadata.
 - Leave venueName empty only for genuinely un-venued items such as standalone
   reports or personal blog posts.
 
+DATA FIELDS PER ENTITY (only these are read; ids come from the library read):
+- paper: title, paperType, authors[], year, abstract, summary, notes, venueName,
+  doi, preprintId, url, pdfUrl, volume, issue, pages, category, readingStatus
+  ("inbox"|"reading"|"complete"), favorite, collectionNames[] or collectionIds[]
+  (either one REPLACES the paper's collections).
+- author: displayName, givenName, familyName, orcid, notes.
+- venue: name, acronym, type, publisher, url, notes.
+- collection: name (this is how you RENAME a collection), color, and membership:
+    addPaperIds[] / removePaperIds[]: add or remove those papers only, leaving the
+      rest of the collection untouched. Prefer these.
+    paperIds[]: the complete membership, REPLACING it. Every paper you leave out
+      is removed from the collection, so only use it when you intend that.
+
 RULES:
 ${PAPER_SCOPE_RULES}
 - Never claim a change was applied: writes only queue a proposal for approval.
@@ -140,19 +153,21 @@ export function buildSnippetPrompt(input: {
 /** Prompt for a follow-up turn that reports the outcome of approved proposals. */
 export function buildFollowUpPrompt(input: {
   reply: string;
-  appliedSummaries?: string[];
-  rejectedSummaries?: string[];
+  outcomes?: { applied: string[]; rejected: string[]; failed: string[] };
   attachments?: SnippetAttachment[];
 }): string {
   const parts: string[] = [
     "Current rules for this turn:",
     PAPER_SCOPE_RULES,
   ];
-  if (input.appliedSummaries?.length) {
-    parts.push(`The user APPROVED and applied these changes:\n- ${input.appliedSummaries.join("\n- ")}`);
+  if (input.outcomes?.applied.length) {
+    parts.push(`The user APPROVED and applied these changes:\n- ${input.outcomes.applied.join("\n- ")}`);
   }
-  if (input.rejectedSummaries?.length) {
-    parts.push(`The user REJECTED these proposals (do not retry them unless asked):\n- ${input.rejectedSummaries.join("\n- ")}`);
+  if (input.outcomes?.rejected.length) {
+    parts.push(`The user REJECTED these proposals (do not retry them unless asked):\n- ${input.outcomes.rejected.join("\n- ")}`);
+  }
+  if (input.outcomes?.failed.length) {
+    parts.push(`These proposals FAILED to apply (reason in parentheses):\n- ${input.outcomes.failed.join("\n- ")}`);
   }
   if (input.reply.trim()) {
     parts.push(`\n${input.reply.trim()}`);
@@ -161,6 +176,36 @@ export function buildFollowUpPrompt(input: {
     parts.push(`\n${describeAttachments(input.attachments)}`);
   }
   parts.push("\nContinue. Use the same stacks-proposals block format for any new changes.");
+  return parts.join("\n");
+}
+
+/**
+ * The turn that carries the user's approval decisions when nothing else does.
+ * Kept deliberately narrow: report what happened, act only on what follows from
+ * it, and do not restate the work or re-propose a rejected change.
+ */
+export function buildOutcomePrompt(input: {
+  applied: string[];
+  rejected: string[];
+  failed: string[];
+}): string {
+  const parts: string[] = ["The user has just resolved your proposed library changes."];
+  if (input.applied.length) {
+    parts.push(`APPLIED (these are now in the library):\n- ${input.applied.join("\n- ")}`);
+  }
+  if (input.rejected.length) {
+    parts.push(`REJECTED (do not retry these unless the user asks):\n- ${input.rejected.join("\n- ")}`);
+  }
+  if (input.failed.length) {
+    parts.push(`FAILED to apply (the reason is in parentheses):\n- ${input.failed.join("\n- ")}`);
+  }
+  parts.push(
+    "",
+    "Acknowledge this briefly. Carry out only the work that the decisions leave",
+    "outstanding: a rejected proposal is a decision, not an error to correct, and a",
+    "failed one may be worth proposing again in a corrected form. If nothing is",
+    "outstanding, say so in one line and stop.",
+  );
   return parts.join("\n");
 }
 

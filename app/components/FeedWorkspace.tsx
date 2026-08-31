@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Clock, Code2, Coins, Download, FolderOpen, Gauge, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Timer, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -95,17 +95,26 @@ function fieldLabel(key: string): string {
 }
 
 /** Render a proposal data value as a readable line (arrays joined, objects as JSON). */
-function fieldValue(value: unknown): string {
-  if (typeof value === "string") return value;
+function fieldValue(value: unknown, describe?: (id: string) => { label: string }): string {
+  const name = (item: string) => describe?.(item).label ?? item;
+  if (typeof value === "string") return name(value);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(", ");
+  if (Array.isArray(value)) return value.map((item) => (typeof item === "string" ? name(item) : JSON.stringify(item))).join(", ");
   return JSON.stringify(value);
 }
+
+/** Fields whose values are record ids, so they read as names in the details. */
+const ID_FIELDS = new Set(["paperIds", "addPaperIds", "removePaperIds", "collectionIds"]);
 
 /** The expanded view of a proposal card: the operation's fields as labeled rows,
  *  with the raw JSON tucked in a collapsible block underneath (this replaces the
  *  separate "Proposed changes (raw)" dump that used to sit next to the cards). */
-function ProposalDetails({ operation, feedId, feedName }: { operation: string; feedId: string; feedName: string }) {
+function ProposalDetails({ operation, feedId, feedName, describeTarget }: {
+  operation: string;
+  feedId: string;
+  feedName: string;
+  describeTarget?: (id: string) => { label: string; meta?: string };
+}) {
   // Validated against the shared proposal schema rather than a local interface
   // plus a cast, so this renders only shapes the approval path would accept.
   const parsed = parseJsonWith(ProposalOperationSchema, operation);
@@ -120,10 +129,24 @@ function ProposalDetails({ operation, feedId, feedName }: { operation: string; f
     <div className="feed-proposal-detail">
       {op ? (
         <div className="feed-proposal-fields">
-          <div className="feed-proposal-field"><span>Action</span><strong>{[op.action, op.entity].filter(Boolean).join(" ") || "unknown"}</strong></div>
-          {"id" in op ? <div className="feed-proposal-field"><span>Target</span><strong>{op.id}</strong></div> : null}
+          <div className="feed-proposal-field">
+            <span>Action</span>
+            <strong><span className="feed-proposal-tag feed-proposal-tag-action">{`${op.action} ${op.entity}`}</span></strong>
+          </div>
+          {"id" in op ? (() => {
+            const target = describeTarget?.(op.id) ?? { label: op.id };
+            return (
+              <div className="feed-proposal-field">
+                <span>Target</span>
+                <strong>{target.label}{target.meta ? <small className="feed-proposal-target-meta">{target.meta}</small> : null}</strong>
+              </div>
+            );
+          })() : null}
           {fields.map(([key, value]) => (
-            <div key={key} className="feed-proposal-field"><span>{fieldLabel(key)}</span><strong>{fieldValue(value)}</strong></div>
+            <div key={key} className="feed-proposal-field">
+              <span>{fieldLabel(key)}</span>
+              <strong>{fieldValue(value, ID_FIELDS.has(key) ? describeTarget : undefined)}</strong>
+            </div>
           ))}
         </div>
       ) : null}
@@ -576,9 +599,10 @@ function formatSpeed(tokensPerSecond: number): string {
 
 /**
  * The footer of a turn: when it was written, and for an agent reply the usage the
- * CLI reported for that turn. The stored stamp is UTC and toLocaleString renders
- * it in the reader's own zone. A reply recorded before per-turn usage was stored
- * simply shows its time.
+ * CLI reported for that turn. Set as quiet text rather than chips, since it is
+ * provenance for the reply above it, not content. The stored stamp is UTC and
+ * toLocaleString renders it in the reader's own zone. A reply recorded before
+ * per-turn usage was stored shows its time alone.
  */
 function TurnMeta({ iso, message }: { iso: string; message?: FeedMessage }) {
   const inputTokens = message?.inputTokens ?? 0;
@@ -587,18 +611,14 @@ function TurnMeta({ iso, message }: { iso: string; message?: FeedMessage }) {
   const speed = outputTokens && durationMs ? outputTokens / (durationMs / 1000) : 0;
   return (
     <div className="feed-turn-meta">
-      <time className="feed-turn-metric" dateTime={iso}><Clock aria-hidden="true" />{fullTime(iso)}</time>
-      {speed ? <span className="feed-turn-metric"><Gauge aria-hidden="true" />{formatSpeed(speed)} tok/sec</span> : null}
+      <time className="feed-turn-metric" dateTime={iso}>{fullTime(iso)}</time>
+      {speed ? <span className="feed-turn-metric">{formatSpeed(speed)} tok/sec</span> : null}
       {outputTokens ? (
-        <span
-          className="feed-turn-metric feed-time-tip"
-          tabIndex={0}
-          data-tip={`${inputTokens.toLocaleString("en")} prompt tokens, ${outputTokens.toLocaleString("en")} generated`}
-        >
-          <Coins aria-hidden="true" />{compactTokens(outputTokens)} tokens
+        <span className="feed-turn-metric" title={`${inputTokens.toLocaleString("en")} prompt tokens, ${outputTokens.toLocaleString("en")} generated`}>
+          {compactTokens(outputTokens)} tokens
         </span>
       ) : null}
-      {durationMs ? <span className="feed-turn-metric"><Timer aria-hidden="true" />{formatDuration(durationMs)}</span> : null}
+      {durationMs ? <span className="feed-turn-metric">{formatDuration(durationMs)}</span> : null}
     </div>
   );
 }
@@ -1087,9 +1107,10 @@ function FeedHistorySelectionModal({
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated }: {
+function FeedDetail({ snippet, library, collections, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
+  collections: Array<{ id: string; name: string }>;
   models: FeedModelOption[];
   defaultModelLabel: string;
   defaultEffort: EffortSetting;
@@ -1101,6 +1122,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
 }) {
   const feedName = snippet.title || snippet.instruction || "Untitled";
   const [messages, setMessages] = useState<FeedMessage[]>([]);
+  const [proposalBlockOpen, setProposalBlockOpen] = useState<Record<string, boolean>>({});
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
@@ -1287,6 +1309,16 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     source.addEventListener("message", (event) => {
       const message = JSON.parse((event as MessageEvent).data) as FeedMessage;
       setMessages((current) => (current.some((m) => m.id === message.id) ? current : [...current, message]));
+    });
+    source.addEventListener("usage", (event) => {
+      // Usage is known only when the turn ends, after its message was streamed, so
+      // the running thread patches that message instead of waiting for a reload.
+      const usage = JSON.parse((event as MessageEvent).data) as { messageId: string; inputTokens: number; outputTokens: number; durationMs: number };
+      setMessages((current) => current.map((message) => (
+        message.id === usage.messageId
+          ? { ...message, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, durationMs: usage.durationMs }
+          : message
+      )));
     });
     source.addEventListener("snapshot", (event) => {
       const snapshot = JSON.parse((event as MessageEvent).data) as FeedSnapshot;
@@ -1542,6 +1574,21 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     }
   }
 
+  // A stored id says nothing about which record a change would hit, so name it from
+  // the snapshot the composer already loads, and keep the id as secondary text.
+  const papersById = new Map(library.map((paper) => [paper.id, paper]));
+  const collectionsById = new Map(collections.map((collection) => [collection.id, collection]));
+  function describeProposalTarget(id: string): { label: string; meta?: string } {
+    const paper = papersById.get(id);
+    if (paper) {
+      const meta = [paper.venueAcronym || paper.venueName, paper.year].filter(Boolean).join(" · ");
+      return { label: paper.title, meta: meta ? `${meta} · ${id}` : id };
+    }
+    const collection = collectionsById.get(id);
+    if (collection) return { label: collection.name, meta: id };
+    return { label: id };
+  }
+
   // Anchor each proposal to the assistant message that produced it, so it renders
   // inline in the thread instead of always pinned to the bottom. Only assistant
   // text/result messages render proposals inline; tool_use, tool_result, and
@@ -1558,23 +1605,43 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
     group.push(proposal);
     proposalsByMessage.set(proposal.messageId, group);
   }
-  const unanchoredProposals = proposals.filter((proposal) => !proposal.messageId || !inlineAnchorIds.has(proposal.messageId));
+  // Everything else takes its place in the thread by time, not at the end. A
+  // proposal the agent posted through the API is anchored to a tool_use message,
+  // which renders inside a collapsed tool group rather than as a turn, so it used
+  // to sink to a trailing block: an older resolved change then sat below newer
+  // pending ones and the thread read out of order.
+  const floatingProposals = proposals
+    .filter((proposal) => !proposal.messageId || !inlineAnchorIds.has(proposal.messageId))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
   function renderProposals(list: FeedProposal[], key: string): ReactNode {
     if (!list.length) return null;
     const pendingHere = list.filter((proposal) => proposal.status === "pending").length;
     const busy = resolvingAll !== null || resolving !== null;
     return (
-      <div className="feed-proposals" key={key}>
-        <div className="feed-proposals-head">
-          <h2><Check size={13} /> Proposed library changes</h2>
-          {pendingHere > 1 ? (
-            <div className="feed-proposals-bulk">
-              <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveAll("reject")} icon={resolvingAll === "reject" ? <LoaderCircle className="spin" size={13} /> : <X size={13} />}>Reject all</ActionButton>
-              <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveAll("approve")} icon={resolvingAll === "approve" ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve all</ActionButton>
-            </div>
-          ) : null}
-        </div>
+      // Open while anything still needs a decision, foldable once resolved: a long
+      // thread accumulates decided blocks that no longer need to be read. The state
+      // is held here because the thread re-renders on every poll and stream event,
+      // which would otherwise snap a block the reader just opened back shut.
+      <details
+        className="feed-proposals"
+        key={key}
+        open={proposalBlockOpen[key] ?? pendingHere > 0}
+        onToggle={(event) => {
+          const open = event.currentTarget.open;
+          setProposalBlockOpen((current) => (current[key] === open ? current : { ...current, [key]: open }));
+        }}
+      >
+        <summary className="feed-proposals-head">
+          <span className="feed-proposals-title"><Check size={13} /> Proposed library changes</span>
+          <span className="feed-proposals-count">{pendingHere ? `${pendingHere} pending` : `${list.length} resolved`}</span>
+        </summary>
+        {pendingHere > 1 ? (
+          <div className="feed-proposals-bulk">
+            <ActionButton variant="secondary" size="small" disabled={busy} onClick={() => void resolveAll("reject")} icon={resolvingAll === "reject" ? <LoaderCircle className="spin" size={13} /> : <X size={13} />}>Reject all</ActionButton>
+            <ActionButton variant="primary" size="small" disabled={busy} onClick={() => void resolveAll("approve")} icon={resolvingAll === "approve" ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}>Approve all</ActionButton>
+          </div>
+        ) : null}
         {list.map((proposal) => {
           const expanded = expandedProposal === proposal.id;
           return (
@@ -1586,15 +1653,13 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                   onClick={() => setExpandedProposal(expanded ? null : proposal.id)}
                   aria-expanded={expanded}
                 >
-                  <span className="feed-proposal-summary">
-                    {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    <span className="feed-proposal-summary-text">{proposal.summary}</span>
-                  </span>
+                  {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                  <span className="feed-proposal-summary-text">{proposal.summary}</span>
                   <span className="feed-proposal-meta">
-                    <span className={`feed-proposal-status feed-proposal-status-${proposal.status}`}>{proposal.status}</span>
                     {proposalTags(proposal.operation).map((tag) => (
                       <span key={tag.label} className={`feed-proposal-tag feed-proposal-tag-${tag.kind}`}>{tag.label}</span>
                     ))}
+                    <span className={`feed-proposal-status feed-proposal-status-${proposal.status}`}>{proposal.status}</span>
                   </span>
                 </button>
                 {proposal.status === "pending" ? (
@@ -1604,11 +1669,11 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                   </div>
                 ) : null}
               </div>
-              {expanded ? <ProposalDetails operation={proposal.operation} feedId={snippet.id} feedName={feedName} /> : null}
+              {expanded ? <ProposalDetails operation={proposal.operation} feedId={snippet.id} feedName={feedName} describeTarget={describeProposalTarget} /> : null}
             </div>
           );
         })}
-      </div>
+      </details>
     );
   }
 
@@ -1705,6 +1770,20 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
             const addToolOperation = (operation: FeedToolOperation) => {
               pendingToolOperations.push(operation);
             };
+            // Proposals with no rendered anchor are emitted in their own place in the
+            // thread: everything created up to the message about to render, and the
+            // remainder after the last one.
+            let floatingIndex = 0;
+            const flushFloatingProposals = (until: string | null) => {
+              const due: FeedProposal[] = [];
+              while (floatingIndex < floatingProposals.length) {
+                const next = floatingProposals[floatingIndex];
+                if (until !== null && next.createdAt.localeCompare(until) > 0) break;
+                due.push(next);
+                floatingIndex += 1;
+              }
+              if (due.length) nodes.push(renderProposals(due, `props-floating-${due[0].id}`));
+            };
             const flushToolOperations = () => {
               if (!pendingToolOperations.length) return;
               if (pendingToolOperations.length === 1) {
@@ -1753,6 +1832,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
                 continue;
               }
               flushToolOperations();
+              flushFloatingProposals(message.createdAt);
               if (message.kind === "error") {
                 nodes.push(
                   <div key={message.id} className="feed-message feed-message-error">
@@ -1799,6 +1879,7 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
               }
             }
             flushToolOperations();
+            flushFloatingProposals(null);
             return nodes;
           })()}
           {historyReady && running ? (
@@ -1810,8 +1891,6 @@ function FeedDetail({ snippet, library, models, defaultModelLabel, defaultEffort
             </div>
           ) : null}
         </div>
-
-        {historyReady ? renderProposals(unanchoredProposals, "props-unanchored") : null}
 
         {error ? <div className="feed-error-banner"><FeedErrorMessage content={error} announce /></div> : null}
         </div>
@@ -1905,6 +1984,7 @@ export default function FeedWorkspace() {
     window.addEventListener("pointerup", onUp, { once: true });
   }
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
+  const [collections, setCollections] = useState<Array<{ id: string; name: string }>>([]);
   const [models, setModels] = useState<FeedModelOption[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
   const [defaultEffort, setDefaultEffort] = useState<EffortSetting>("");
@@ -2104,9 +2184,10 @@ export default function FeedWorkspace() {
     const load = () => {
       void fetch("/api/library", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : null))
-        .then((data: { papers?: LibraryPaper[] } | null) => {
+        .then((data: { papers?: LibraryPaper[]; collections?: Array<{ id: string; name: string }> } | null) => {
           if (cancelled || !data?.papers) return;
           setLibrary(data.papers);
+          setCollections(data.collections ?? []);
           if (!first) return;
           first = false;
           const params = new URLSearchParams(window.location.search);
@@ -2438,6 +2519,7 @@ export default function FeedWorkspace() {
             key={selected.id}
             snippet={selected}
             library={library}
+            collections={collections}
             models={models}
             defaultModelLabel={defaultModelLabel}
             defaultEffort={defaultEffort}

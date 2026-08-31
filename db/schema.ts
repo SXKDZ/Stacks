@@ -248,6 +248,10 @@ export const feedProposals = sqliteTable(
     githubCommentId: integer("github_comment_id"),
     // The status last reflected in that comment, so sync only edits on change.
     githubStatusSynced: text("github_status_synced"),
+    // When the agent was told this proposal's outcome. Null until it is reported,
+    // so a decision reaches the agent exactly once instead of being repeated in
+    // every later turn's prompt (or, when the user never replies, not at all).
+    reportedAt: text("reported_at"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     resolvedAt: text("resolved_at"),
   },

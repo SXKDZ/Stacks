@@ -597,14 +597,43 @@ async function createEntity(
   return id;
 }
 
+/** The distinct, non-blank ids in a client-supplied list. */
+function idArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? Array.from(new Set(value.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))))
+    : [];
+}
+
+/**
+ * Add and remove named papers without restating the rest of the membership.
+ *
+ * `paperIds` reconciles to an exact set, which a caller that only knows the papers
+ * it wants to add cannot use safely: every paper it omits is removed. An agent
+ * proposing "add these two to Interpretability" or "drop this one" needs a delta.
+ */
+function editCollectionPapers(
+  querier: LibraryQuerier,
+  collectionId: string,
+  addPaperIds: unknown,
+  removePaperIds: unknown,
+): void {
+  for (const paperId of idArray(addPaperIds)) {
+    querier.insert(paperCollections).values({ paperId, collectionId }).onConflictDoNothing().run();
+  }
+  for (const paperId of idArray(removePaperIds)) {
+    querier
+      .delete(paperCollections)
+      .where(and(eq(paperCollections.paperId, paperId), eq(paperCollections.collectionId, collectionId)))
+      .run();
+  }
+}
+
 /** Reconcile a collection's paper membership to exactly `paperIds`. */
 function syncCollectionPapers(querier: LibraryQuerier, collectionId: string, paperIds: unknown): void {
   if (!Array.isArray(paperIds)) {
     return;
   }
-  const normalizedIds = Array.from(new Set(
-    paperIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim())),
-  ));
+  const normalizedIds = idArray(paperIds);
   const existingIds = new Set(
     querier
       .select({ paperId: paperCollections.paperId })
@@ -705,15 +734,22 @@ async function updateEntities(
       const updateSet = "updatedAt" in table ? { ...assignments, updatedAt: sql`CURRENT_TIMESTAMP` } : assignments;
       tx.update(table).set(updateSet as never).where(inArray(table.id, ids)).run();
     }
-    if (entity === "collection" && "paperIds" in data) {
+    if (entity === "collection") {
       for (const id of ids) {
-        syncCollectionPapers(tx, id, data.paperIds);
+        if ("paperIds" in data) {
+          syncCollectionPapers(tx, id, data.paperIds);
+        }
+        editCollectionPapers(tx, id, data.addPaperIds, data.removePaperIds);
       }
     }
   });
 }
 
 const paperTextFields = {
+  // Writable on an update as well as a create: an approved proposal that carried a
+  // Semantic Scholar id used to have it silently dropped here, even though the
+  // create path stores it and the prompt asks the agent to include it.
+  semanticScholarId: papers.semanticScholarId,
   volume: papers.volume,
   issue: papers.issue,
   pages: papers.pages,

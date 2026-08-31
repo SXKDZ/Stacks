@@ -539,6 +539,14 @@
   -webkit-text-fill-color: transparent;
 }
 
+/* The overlay hides the textarea's own glyphs behind the highlighted <pre>, and
+   -webkit-text-fill-color hides its placeholder with them: every prompt and the
+   feed composer had a placeholder that never appeared. Paint it back. */
+.prompt-code-editor textarea::placeholder {
+  color: var(--soft);
+  -webkit-text-fill-color: var(--soft);
+}
+
 .prompt-code-editor textarea::selection {
   background: rgba(22, 141, 236, 0.24);
 }
