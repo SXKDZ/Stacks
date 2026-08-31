@@ -4,6 +4,7 @@ import { asc, eq, isNotNull } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { buildFeedTranscript } from "@/app/lib/feed-history";
 import { storedProposalSummary } from "@/app/lib/schemas/proposals";
 import { readGithubLastSyncedAt, readGithubLinkedRepo, writeGithubLastSyncedAt, writeGithubLinkedRepo } from "@/app/lib/local-settings";
 import {
@@ -357,15 +358,19 @@ export async function POST(): Promise<Response> {
         const prompt = buildFollowUpPrompt({ reply, outcomes, attachments: [] });
         void runFeedAgent({ snippetId: feed.id, sessionId: feed.sessionId, prompt, resume: true }).catch(() => {});
       } else {
-        const history = database
-          .select()
-          .from(feedMessages)
-          .where(eq(feedMessages.snippetId, feed.id))
-          .orderBy(asc(feedMessages.createdAt))
-          .all()
-          .filter((message) => MIRRORED_KINDS.has(message.kind))
-          .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
-          .join("\n\n");
+        // The same transcript a fork started from the app is seeded with, so a
+        // branch resumed from the inbox keeps its opening instruction and drops
+        // the system notes this used to hand the agent as its own words.
+        const history = buildFeedTranscript(
+          feed.instruction,
+          database
+            .select()
+            .from(feedMessages)
+            .where(eq(feedMessages.snippetId, feed.id))
+            .orderBy(asc(feedMessages.createdAt))
+            .all(),
+          feed.historyMode === "tools",
+        );
         const prompt = buildForkPrompt({ reply, transcript: history, attachments: [] });
         void runFeedAgent({ snippetId: feed.id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
       }
