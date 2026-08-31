@@ -82,7 +82,10 @@ test("ships the Stacks application shell and product metadata", async () => {
   assert.match(application, /className="paper-detail-tabs" role="tablist"/);
   assert.match(application, /role="tabpanel"/);
   assert.ok(application.indexOf("Publication") < application.indexOf("Research notes"));
-  for (const publicationField of ["Volume", "Issue", "Pages", "Category", "DOI", "Preprint", "S2 ID", "Source", "PDF URL", "File", "HTML"]) {
+  // "Subject class" rather than "Category": the field is the source's own class
+  // (arXiv's cs.LG, exported as the BibTeX eprintclass), and the vaguer label had
+  // the extractor filling it with invented topics.
+  for (const publicationField of ["Volume", "Issue", "Pages", "Subject class", "DOI", "Preprint", "S2 ID", "Source", "PDF URL", "File", "HTML"]) {
     assert.match(application, new RegExp(`<b>${publicationField}<\\/b>`), `paper details omit ${publicationField}`);
   }
   assert.match(application, /href=\{doiHref\(paper\.doi\)\}/);

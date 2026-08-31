@@ -1144,6 +1144,42 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /message\.id === usage\.messageId/);
 });
 
+test("a summary says what it was written from, and quotes read as one shape", async () => {
+  const [summarizeRoute, application, prompts, styles] = await Promise.all([
+    readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/ai-prompts.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The route already knew whether it had the paper's text; nothing reported it, so
+  // a review written from the abstract alone looked like one written from the paper.
+  assert.match(summarizeRoute, /interface PaperGrounding/);
+  assert.match(summarizeRoute, /source: "pdf" \| "webpage" \| "none"/);
+  assert.match(summarizeRoute, /groundedWithReader: grounding\.source === "pdf"/);
+  assert.match(summarizeRoute, /pagesSkipped/);
+  assert.match(application, /function groundingNote/);
+  assert.match(application, /could not be parsed/);
+  assert.match(application, /log\.step\(groundingNote\(payload\.grounding\)\)/);
+  assert.match(application, /log\.step\(groundingNote\(generated\.grounding\)\)/);
+  assert.match(application, /summarySavedMessage\(payload\.grounding\)/);
+  assert.match(application, /written from the record's metadata/);
+
+  // The field the extractor kept filling with invented topic labels is the source's
+  // own subject class, which is what the BibTeX export writes as eprintclass.
+  assert.match(prompts, /"category" is the subject class the source itself assigns/);
+  assert.match(prompts, /never invent a topic label of your own/);
+  assert.match(application, /label: "Subject class"/);
+  assert.doesNotMatch(application, /<b>Category<\/b>/);
+
+  // A quote rounded on one side only read as a rendering fault; the accent is an
+  // inset rule now, so it follows the curve on all four corners.
+  assert.match(styles, /\.markdown-content blockquote \{[^}]*border-radius: var\(--radius-md\)/);
+  assert.match(styles, /\.markdown-content blockquote \{[^}]*box-shadow: inset 3px 0 0 var\(--brand-blue\)/);
+  assert.doesNotMatch(styles, /border-radius: 0 var\(--radius-md\) var\(--radius-md\) 0/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow: inset 3px 0 0 rgba\(255, 255, 255/);
+});
+
 test("every button is one family: capsule, gradient to the edge, one shadow", async () => {
   const [controls, application, styles] = await Promise.all([
     readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
@@ -1273,7 +1309,7 @@ test("a user's Markdown stays legible on the blue bubble", async () => {
   // text on the gradient. A line of "=" under any line makes a heading, so this is
   // easy to hit by accident in a pasted request.
   assert.match(styles, /\.feed-turn-user \.feed-bubble :is\(h1, h2, h3, h4, h5, h6, blockquote, th, td, \.katex\) \{[^}]*color: inherit/);
-  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*border-left-color: rgba\(255, 255, 255/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow: inset 3px 0 0 rgba\(255, 255, 255/);
   assert.match(styles, /\.feed-turn-user \.feed-bubble \.markdown-table-scroll th \{[^}]*background: rgba\(255, 255, 255/);
   // The dark declarations these override are the shared Markdown rules.
   assert.match(styles, /\.markdown-content h1,[\s\S]*?color: var\(--ink\)/);

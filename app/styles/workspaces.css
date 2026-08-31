@@ -1791,7 +1791,7 @@
 
 .feed-turn-user .feed-bubble blockquote {
   background: rgba(255, 255, 255, 0.14);
-  border-left-color: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.45);
 }
 
 .feed-turn-user .feed-bubble :is(.markdown-table-scroll, .markdown-table-scroll :is(th, td)) {

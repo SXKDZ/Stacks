@@ -524,10 +524,13 @@ textarea::placeholder {
   text-decoration-color: currentColor;
 }
 
+/* Rounded on all four corners: rounding only the right-hand pair left the accent
+   edge square against a curved body, which read as a rendering fault rather than a
+   style. The accent stays an inset rule so it follows the curve. */
 .markdown-content blockquote {
   background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
-  border-left: 3px solid var(--brand-blue);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-md);
+  box-shadow: inset 3px 0 0 var(--brand-blue);
   color: #c3cad8;
   margin: 0.85em 0;
   padding: 0.65em 0.85em;

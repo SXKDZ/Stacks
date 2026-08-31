@@ -21,6 +21,7 @@ export const DEFAULT_EXTRACTION_SYSTEM_PROMPT = [
   '"title", "authors", "abstract", "year", "venueName", "venueAcronym", "paperType", "doi", "url", "category", and "preprintId".',
   '"authors" must be the COMPLETE ordered list of author names from the title page (every listed author, first-name-first, no "et al." or truncation); "year" must be an integer or null;',
   '"paperType" must be one of "conference", "journal", "workshop", "preprint", or "other".',
+  '"category" is the subject class the source itself assigns, copied verbatim (an arXiv class such as "cs.LG", an ACM or MSC class). It is exported as the BibTeX eprintclass, so never invent a topic label of your own: use null when the paper states none.',
   "Use null for unavailable scalar values, and an empty array for authors ONLY when the paper truly lists none.",
   "For conferences, remove proceedings and ordinal wording from venueName and use the common conference acronym.",
   "For journals, use the full journal name and a conventional abbreviated venueAcronym when present.",

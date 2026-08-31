@@ -161,7 +161,7 @@ const extractedMetadataFields: Array<{ field: ExtractedMetadataField; label: str
   { field: "paperType", label: "Paper type" },
   { field: "venueName", label: "Venue" },
   { field: "venueAcronym", label: "Venue acronym" },
-  { field: "category", label: "Category" },
+  { field: "category", label: "Subject class" },
   { field: "preprintId", label: "Preprint ID" },
   { field: "doi", label: "DOI" },
   { field: "url", label: "Source URL" },
@@ -337,6 +337,35 @@ function initials(value: string): string {
 // A venue monogram: the leading letters of the acronym. Four uppercase glyphs
 // are what makes the chip recognizable (COLM, AAAI), so the chip sets its own
 // type size to fit them whole rather than clipping the widest labels.
+interface SummaryGrounding {
+  source: "pdf" | "webpage" | "none";
+  pagesRead?: number;
+  pagesSkipped?: number;
+}
+
+/**
+ * One line for the activity log: what a generated summary was actually written
+ * from. A review drawn from the abstract alone reads exactly like one drawn from
+ * the paper, and that difference is what a reader needs before trusting it.
+ */
+function groundingNote(grounding?: SummaryGrounding): string {
+  if (grounding?.source === "pdf") {
+    const pages = grounding.pagesRead ? `${grounding.pagesRead} page${grounding.pagesRead === 1 ? "" : "s"}` : "the stored PDF";
+    return grounding.pagesSkipped
+      ? `Read ${pages} of the stored PDF; ${grounding.pagesSkipped} could not be parsed.`
+      : `Read ${pages} of the stored PDF.`;
+  }
+  if (grounding?.source === "webpage") return "Read a snapshot of the paper's page.";
+  return "No paper text could be read: writing from the record's metadata only.";
+}
+
+/** The toast for a saved summary, which names a metadata-only review as such. */
+function summarySavedMessage(grounding?: SummaryGrounding): string {
+  return grounding?.source === "pdf" || grounding?.source === "webpage"
+    ? "Summary generated and saved."
+    : "Summary saved. It was written from the record's metadata: the paper's text could not be read.";
+}
+
 function venueMonogram(venue: { acronym: string | null; name: string }): string {
   return (venue.acronym || venue.name).slice(0, 4);
 }
@@ -2806,9 +2835,10 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             }),
           });
           if (!response.ok) throw new Error(await readError(response));
-          const payload = await response.json() as { summary: string };
+          const payload = await response.json() as { summary: string; grounding?: SummaryGrounding };
+          log.step(groundingNote(payload.grounding));
           log.step("Saving the generated summary.");
-          await onUpdate(paper, { summary: payload.summary }, "Summary generated and saved.");
+          await onUpdate(paper, { summary: payload.summary }, summarySavedMessage(payload.grounding));
         }, () => log.step("Waiting for an available summary slot."));
       }, { key: summaryTaskKey });
     } catch {
@@ -2960,7 +2990,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                   {paper.volume ? <span><b>Volume</b>{paper.volume}</span> : null}
                   {paper.issue ? <span><b>Issue</b>{paper.issue}</span> : null}
                   {paper.pages ? <span><b>Pages</b>{paper.pages}</span> : null}
-                  {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
+                  {paper.category ? <span><b>Subject class</b>{paper.category}</span> : null}
                   {paper.doi ? <span><b>DOI</b><a className="publication-link" href={doiHref(paper.doi)} target="_blank" rel="noreferrer" title={doiHref(paper.doi)}>{paper.doi}</a></span> : null}
                   {paper.preprintId ? <span><b>Preprint</b>{paper.preprintId}</span> : null}
                   {paper.semanticScholarId ? <span><b>S2 ID</b>{paper.semanticScholarId}</span> : null}
@@ -3636,7 +3666,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
       {visible.volumeIssue ? <label><span>Volume</span><input name="volume" defaultValue={paper?.volume ?? ""} placeholder="42" /></label> : null}
       {visible.volumeIssue ? <label><span>Issue</span><input name="issue" defaultValue={paper?.issue ?? ""} placeholder="3" /></label> : null}
       {visible.pages ? <label><span>Pages</span><input name="pages" defaultValue={paper?.pages ?? ""} placeholder="101-118" /></label> : null}
-      {visible.preprint ? <label><span>Category</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
+      {visible.preprint ? <label><span>Subject class</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
       {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
       {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div></label> : null}
@@ -4139,11 +4169,12 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
           if (!response.ok) {
             throw new Error(await readError(response));
           }
-          const generated = await response.json() as { summary: string };
+          const generated = await response.json() as { summary: string; grounding?: SummaryGrounding };
+          log.step(groundingNote(generated.grounding));
           log.step("Saving the generated summary.");
           await mutateLibrary(
             { entity: "paper", action: "update", id: paper.id, data: { summary: generated.summary } },
-            "Summary generated and saved.",
+            summarySavedMessage(generated.grounding),
           );
           return generated;
         }, () => log.step("Waiting for an available summary slot."));
