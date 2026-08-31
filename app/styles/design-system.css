@@ -701,7 +701,7 @@
    open, so either pagination-edge placement remains visible. */
 .paper-grid-shell:has(.page-size-picker[open]),
 .data-grid-shell:has(.page-size-picker[open]) {
-  overflow: visible !important;
+  overflow: visible;
   position: relative;
   z-index: 45;
 }

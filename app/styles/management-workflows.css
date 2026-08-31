@@ -1005,13 +1005,7 @@
   box-shadow: 0 7px 22px rgba(12, 15, 28, 0.07);
 }
 
-.entity-research-grid {
-  min-width: 820px;
-}
-
-.venue-grid {
-  min-width: 940px;
-}.entity-research-grid tbody tr {
+.entity-research-grid tbody tr {
   cursor: default;
 }
 
@@ -1210,11 +1204,6 @@
   isolation: isolate;
   position: relative;
 }@media (max-width: 760px) {
-  .entity-research-grid,
-  .venue-grid {
-    min-width: 760px;
-  }
-
   .collection-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1232,14 +1221,11 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 
 .research-grid {
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 760px;
   table-layout: fixed;
   width: 100%;
 }
@@ -1446,10 +1432,6 @@
 }
 
 @media (max-width: 760px) {
-  .research-grid {
-    min-width: 620px;
-  }
-
   .research-grid th:nth-child(4),
   .research-grid td:nth-child(4) {
     display: none;
@@ -1457,10 +1439,6 @@
 }
 
 @media (max-width: 560px) {
-  .research-grid {
-    min-width: 520px;
-  }
-
   .research-grid th:nth-child(5),
   .research-grid td:nth-child(5) {
     display: none;
@@ -1513,14 +1491,6 @@
   min-height: 16px;
   overflow: visible;
   padding-bottom: 0;
-}
-
-.paper-table.entity-research-grid {
-  min-width: 820px;
-}
-
-.paper-table.venue-grid {
-  min-width: 940px;
 }
 
 .paper-table.entity-research-grid tbody tr {
@@ -2023,12 +1993,13 @@
 }
 
 /* --- detail-collections.css --- */
-/* Final cascade guard: these constraints must win over legacy table/detail rules. */
+/* Every data table fits its pane: columns divide a fixed span rather than pushing
+   the grid wider, and the shell clips. This is the only place either is decided. */
 .paper-grid-shell,
 .data-grid-shell {
   max-width: 100%;
   min-width: 0;
-  overflow: hidden !important;
+  overflow: hidden;
 }
 
 .paper-table.research-grid,
@@ -2037,7 +2008,7 @@
 .research-grid,
 .entity-research-grid,
 .venue-grid {
-  min-width: 0 !important;
+  min-width: 0;
   table-layout: fixed;
   width: 100%;
 }

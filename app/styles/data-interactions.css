@@ -1271,20 +1271,8 @@
 }
 
 /* --- tables-pagination.css --- */
-/* Final table sizing: data columns resize; selection/action columns never do. */
-.paper-grid-shell,
-.data-grid-shell {
-  overflow-x: clip;
-}
-
-.paper-table.research-grid,
-.paper-table.entity-research-grid,
-.paper-table.venue-grid {
-  min-width: 0;
-  table-layout: fixed;
-  width: 100%;
-}
-
+/* Column sizing: data columns resize; selection/action columns never do. The
+   table's own fit-the-pane sizing lives at the end of management-workflows.css. */
 .paper-table col.paper-column-check {
   max-width: 52px;
   min-width: 52px;
