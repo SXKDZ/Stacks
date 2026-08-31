@@ -1233,6 +1233,62 @@ test("a summary says what it was written from, and quotes read as one shape", as
   assert.doesNotMatch(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow/);
 });
 
+test("a reply that hit the token ceiling is not presented as finished", async () => {
+  const [bedrock, schemas, summarizeRoute, extractRoute] = await Promise.all([
+    readFile(new URL("../app/lib/bedrock.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/schemas/bedrock.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Every endpoint says why it stopped; the schemas simply never read it, so a review
+  // cut off at the max-tokens ceiling was saved exactly like a finished one.
+  assert.match(schemas, /stop_reason: z\.string\(\)\.nullish\(\)/);
+  assert.match(schemas, /stopReason: z\.string\(\)\.nullish\(\)/);
+  assert.match(schemas, /incomplete_details: z\.object\(\{ reason/);
+  assert.match(bedrock, /truncated: boolean/);
+  assert.match(bedrock, /truncated: payload\.data\.stop_reason === "max_tokens"/);
+  assert.match(bedrock, /truncated: payload\.data\.stopReason === "max_tokens"/);
+  assert.match(bedrock, /incomplete_details\?\.reason === "max_output_tokens"/);
+
+  // The summary is refused rather than stored half-written, and it names the ceiling
+  // and where to raise it.
+  assert.match(summarizeRoute, /if \(result\.truncated\) \{/);
+  assert.match(summarizeRoute, /token ceiling and stopped mid-answer, so it was not saved/);
+  assert.match(summarizeRoute, /Raise "Max tokens" in Settings/);
+  // Extraction says the reply was cut off instead of blaming the JSON it produced.
+  assert.equal([...extractRoute.matchAll(/if \(result\.truncated\)/g)].length, 2);
+  assert.match(extractRoute, /token ceiling for this step and was cut off/);
+});
+
+test("colour means reading status, and nothing else", async () => {
+  const [styles, application] = await Promise.all([
+    readApplicationStyles(),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+  ]);
+  // The recent-papers tile was painted by paper type with the very tokens the status
+  // pills use (--amber is --status-inbox, --cyan is --status-reading), so an amber
+  // tile meaning "preprint" sat beside an amber pill meaning "to read".
+  assert.doesNotMatch(styles, /\.type-journal|\.type-preprint/);
+  assert.doesNotMatch(application, /type-\$\{paper\.paperType\}/);
+  assert.match(application, /className="type-tile"/);
+  assert.match(styles, /\.type-tile \{[^}]*background: var\(--brand-blue-soft\)/);
+});
+
+test("both managed directories number duplicate filenames the same way", async () => {
+  const [localFiles, attachments] = await Promise.all([
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-attachments.ts", import.meta.url), "utf8"),
+  ]);
+  // The library numbered from -2 and the feed's attachment staging from -1, so the
+  // same collision produced a different name depending on the path that stored it.
+  assert.match(localFiles, /export function nextFreeName/);
+  assert.match(localFiles, /return nextFreeName\(targetDirectory, stem, extension\)/);
+  assert.match(attachments, /import \{ nextFreeName \} from "@\/app\/lib\/local-files"/);
+  assert.match(attachments, /return nextFreeName\(dir, stem, ext\)/);
+  assert.doesNotMatch(attachments, /let counter = 1/);
+});
+
 test("a Doctor repair button performs the repair it names", async () => {
   const settings = await readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8");
 

@@ -110,6 +110,11 @@ async function recoverAuthors(input: {
     effort: input.effort,
     temperature: temperatureOption(input.sendTemperature, 0),
   });
+  // A very long author list can reach the ceiling. Saying so beats reporting the
+  // resulting invalid JSON, which reads like the model misbehaved.
+  if (result.truncated) {
+    throw new Error("The author list reached the 1,200 token ceiling for this step and was cut off.");
+  }
   const parsed = parseJsonWith(ExtractedMetadataSchema, stripJsonFence(result.content));
   return parsed.ok ? authorNamesFrom(parsed.data.authors) : [];
 }
@@ -213,6 +218,9 @@ export async function POST(request: Request): Promise<Response> {
         effort,
         temperature: temperatureOption(sendTemperature, 0),
       });
+      if (result.truncated) {
+        throw new Error("The metadata reply reached the 1,800 token ceiling for this step and was cut off.");
+      }
       // The model's JSON: validated as an object before normalizeMetadata reads
       // fields off it, so a non-object reply (a bare string, an array, prose)
       // falls into the catch below and returns the heuristic fallback.

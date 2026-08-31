@@ -18,6 +18,9 @@ const TextBlockSchema = z.object({ text: z.string().optional() }).loose();
 /** The Mantle (Anthropic-compatible) messages response. */
 export const MantleResponseSchema = z.object({
   content: z.array(TextBlockSchema).optional(),
+  // "max_tokens" here means the answer was cut off at the ceiling we sent. Without
+  // reading it a truncated review looks exactly like a finished one.
+  stop_reason: z.string().nullish(),
   usage: z.record(z.string(), z.unknown()).optional(),
 }).loose();
 
@@ -33,6 +36,9 @@ export const OpenAIResponsesResponseSchema = z.object({
       text: z.string().optional(),
     }).loose()).optional(),
   }).loose()).optional(),
+  // The Responses API reports an incomplete answer here, with "max_output_tokens".
+  status: z.string().nullish(),
+  incomplete_details: z.object({ reason: z.string().nullish() }).loose().nullish(),
   usage: z.record(z.string(), z.unknown()).optional(),
 }).loose();
 
@@ -43,6 +49,8 @@ export const RuntimeResponseSchema = z.object({
       content: z.array(TextBlockSchema).optional(),
     }).loose().optional(),
   }).loose().optional(),
+  // Converse spells the same thing "max_tokens" in stopReason.
+  stopReason: z.string().nullish(),
   usage: z.record(z.string(), z.unknown()).optional(),
 }).loose();
 

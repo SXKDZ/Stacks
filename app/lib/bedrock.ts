@@ -113,6 +113,9 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
   content: string;
   endpoint: "mantle" | "runtime";
   region: string;
+  /** True when the model stopped because it reached the max-tokens ceiling, so the
+   *  answer is cut off. Callers must not present such a reply as complete. */
+  truncated: boolean;
 }> {
   const model = invocationModel(options.model);
   if (isOpenAIResponsesModel(model)) {
@@ -155,7 +158,13 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
       if (!content) {
         throw new BedrockInvocationError("The OpenAI Responses API returned no answer text.", 502);
       }
-      return { content, endpoint: "mantle", region };
+      return {
+        content,
+        endpoint: "mantle",
+        region,
+        truncated: payload.data.status === "incomplete"
+          || payload.data.incomplete_details?.reason === "max_output_tokens",
+      };
     }
     throw lastError ?? new BedrockInvocationError("No compatible Bedrock region was available.", 503);
   }
@@ -189,7 +198,12 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
     if (!payload.ok) {
       throw new BedrockInvocationError(`Unexpected Bedrock response: ${payload.error}`, 502);
     }
-    return { content: joinTextBlocks(payload.data.content), endpoint: "mantle", region: options.region };
+    return {
+      content: joinTextBlocks(payload.data.content),
+      endpoint: "mantle",
+      region: options.region,
+      truncated: payload.data.stop_reason === "max_tokens",
+    };
   }
 
   let lastError: BedrockInvocationError | null = null;
@@ -235,7 +249,12 @@ export async function invokeBedrockMessages(options: BedrockInvocationOptions): 
     if (!payload.ok) {
       throw new BedrockInvocationError(`Unexpected Bedrock response: ${payload.error}`, 502);
     }
-    return { content: joinTextBlocks(payload.data.output?.message?.content), endpoint: "runtime", region };
+    return {
+      content: joinTextBlocks(payload.data.output?.message?.content),
+      endpoint: "runtime",
+      region,
+      truncated: payload.data.stopReason === "max_tokens",
+    };
   }
   throw lastError ?? new BedrockInvocationError("No compatible Bedrock region was available.", 503);
 }

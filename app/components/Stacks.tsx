@@ -1467,7 +1467,7 @@ function Dashboard({
         <div className="recent-list">
           {recentPapers.map((paper) => (
             <article className="recent-row" key={paper.id}>
-              <span className={`type-tile type-${paper.paperType}`}><FileText size={18} /></span>
+              <span className="type-tile"><FileText size={18} /></span>
               <span className="recent-copy">
                 <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
                 <span className="recent-meta"><AdaptiveAuthors authors={paper.authors} /><span>{venueLine(paper)} {paper.year}</span></span>

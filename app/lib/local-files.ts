@@ -187,6 +187,22 @@ export function portableStoredName(value: string | undefined, kind: AcquisitionK
   return name;
 }
 
+/**
+ * The next free name for `stem + extension` in a directory: the original, then
+ * "-2", "-3", and so on. Exported so the feed's attachment staging numbers
+ * duplicates the same way; the two directories used to disagree, one starting at
+ * -1 and the other at -2.
+ */
+export function nextFreeName(directory: string, stem: string, extension: string): string {
+  let candidate = `${stem}${extension}`;
+  let copy = 2;
+  while (existsSync(join(directory, candidate))) {
+    candidate = `${stem}-${copy}${extension}`;
+    copy += 1;
+  }
+  return candidate;
+}
+
 function safeStoredName(originalName: string, targetDirectory: string, allowedExtensions: Set<string>): string {
   const extension = extname(originalName).toLowerCase();
   if (!allowedExtensions.has(extension)) {
@@ -194,13 +210,7 @@ function safeStoredName(originalName: string, targetDirectory: string, allowedEx
   }
   const rawStem = basename(originalName, extension);
   const stem = rawStem.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+|\.+$/g, "") || "paper";
-  let candidate = `${stem}${extension}`;
-  let copy = 2;
-  while (existsSync(join(targetDirectory, candidate))) {
-    candidate = `${stem}-${copy}${extension}`;
-    copy += 1;
-  }
-  return candidate;
+  return nextFreeName(targetDirectory, stem, extension);
 }
 
 async function readRequestBytes(request: Request, maxBytes: number): Promise<Buffer> {

@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { inArray } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { papers } from "@/db/schema";
+import { nextFreeName } from "@/app/lib/local-files";
 import type { SnippetAttachment } from "@/app/lib/schemas/attachments";
 
 /**
@@ -28,19 +29,13 @@ function safeName(name: string): string {
   return base || "file";
 }
 
-/** Avoid clobbering: file.pdf, file-1.pdf, file-2.pdf … */
+/** Avoid clobbering: file.pdf, file-2.pdf, file-3.pdf … The rule lives with the
+ *  library's own asset naming so the two managed directories agree. */
 function uniqueName(dir: string, name: string): string {
-  if (!existsSync(join(dir, name))) {
-    return name;
-  }
   const dot = name.lastIndexOf(".");
   const stem = dot === -1 ? name : name.slice(0, dot);
   const ext = dot === -1 ? "" : name.slice(dot);
-  let counter = 1;
-  while (existsSync(join(dir, `${stem}-${counter}${ext}`))) {
-    counter += 1;
-  }
-  return `${stem}-${counter}${ext}`;
+  return nextFreeName(dir, stem, ext);
 }
 
 /**

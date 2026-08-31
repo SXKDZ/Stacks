@@ -116,8 +116,11 @@
   width: 34px;
 }
 
-.type-journal { background: var(--cyan-soft); color: var(--cyan); }
-.type-preprint { background: var(--amber-soft); color: var(--amber); }
+/* No per-type colour: these two rules painted the tile with the same amber and cyan
+   the reading-status pills use (--amber is --status-inbox, --cyan is
+   --status-reading), so one hue meant "preprint" beside a pill where it meant "to
+   read". Colour belongs to the reading status; the row already names the venue and
+   year, and the detail view states the type. */
 
 .recent-copy {
   display: flex;

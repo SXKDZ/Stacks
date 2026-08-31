@@ -129,6 +129,18 @@ export async function POST(request: Request): Promise<Response> {
     if (!summary) {
       return Response.json({ error: "No summary was generated." }, { status: 502 });
     }
+    // A reply that hit the max-tokens ceiling is cut off mid-sentence. It used to be
+    // saved exactly like a finished one, so the paper kept a review that stopped
+    // halfway through with nothing to say so.
+    if (result.truncated) {
+      const ceiling = Math.max(128, Number(runtimeValue(runtime, "STACKS_MAX_TOKENS", "10000")));
+      return Response.json(
+        {
+          error: `The summary reached the ${ceiling.toLocaleString("en")} token ceiling and stopped mid-answer, so it was not saved. Raise "Max tokens" in Settings, or shorten the summary prompt.`,
+        },
+        { status: 502 },
+      );
+    }
     // The receipt travels with the summary: a review written from the abstract alone
     // reads exactly like one written from the paper, and only the caller can say so.
     return Response.json({
