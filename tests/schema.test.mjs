@@ -1176,10 +1176,12 @@ test("no ingest path can store a body that stopped early", async () => {
 });
 
 test("a summary says what it was written from, and quotes read as one shape", async () => {
-  const [summarizeRoute, application, prompts, styles] = await Promise.all([
+  const [summarizeRoute, application, prompts, extractRoute, review, styles] = await Promise.all([
     readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/ai-prompts.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/metadata-review.ts", import.meta.url), "utf8"),
     readApplicationStyles(),
   ]);
 
@@ -1198,10 +1200,15 @@ test("a summary says what it was written from, and quotes read as one shape", as
 
   // The field the extractor kept filling with invented topic labels is the source's
   // own subject class, which is what the BibTeX export writes as eprintclass.
-  assert.match(prompts, /"category" is the subject class the source itself assigns/);
-  assert.match(prompts, /never invent a topic label of your own/);
-  assert.match(application, /label: "Subject class"/);
-  assert.doesNotMatch(application, /<b>Category<\/b>/);
+  // The extractor is not asked for a subject class at all: it has no source for one
+  // (no provider ingest path carries it, not even arXiv's feed parser), so the field
+  // it was asked to fill came out as invented topics.
+  assert.doesNotMatch(prompts, /"category"/);
+  assert.doesNotMatch(extractRoute, /category/);
+  assert.doesNotMatch(review, /"category"/);
+  // The field itself stays: a person can still type a real class on a preprint.
+  assert.match(application, /<b>Category<\/b>/);
+  assert.match(application, /<input name="category"[^>]*placeholder="cs\.CL"/);
 
   // A quote rounded on one side only read as a rendering fault; the accent is an
   // inset rule now, so it follows the curve on all four corners.

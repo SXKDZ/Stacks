@@ -161,7 +161,6 @@ const extractedMetadataFields: Array<{ field: ExtractedMetadataField; label: str
   { field: "paperType", label: "Paper type" },
   { field: "venueName", label: "Venue" },
   { field: "venueAcronym", label: "Venue acronym" },
-  { field: "category", label: "Subject class" },
   { field: "preprintId", label: "Preprint ID" },
   { field: "doi", label: "DOI" },
   { field: "url", label: "Source URL" },
@@ -2990,7 +2989,7 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                   {paper.volume ? <span><b>Volume</b>{paper.volume}</span> : null}
                   {paper.issue ? <span><b>Issue</b>{paper.issue}</span> : null}
                   {paper.pages ? <span><b>Pages</b>{paper.pages}</span> : null}
-                  {paper.category ? <span><b>Subject class</b>{paper.category}</span> : null}
+                  {paper.category ? <span><b>Category</b>{paper.category}</span> : null}
                   {paper.doi ? <span><b>DOI</b><a className="publication-link" href={doiHref(paper.doi)} target="_blank" rel="noreferrer" title={doiHref(paper.doi)}>{paper.doi}</a></span> : null}
                   {paper.preprintId ? <span><b>Preprint</b>{paper.preprintId}</span> : null}
                   {paper.semanticScholarId ? <span><b>S2 ID</b>{paper.semanticScholarId}</span> : null}
@@ -3670,7 +3669,7 @@ function PaperMetadataFields({ paperType, paper, venues, notify }: {
       {visible.volumeIssue ? <label><span>Volume</span><input name="volume" defaultValue={paper?.volume ?? ""} placeholder="42" /></label> : null}
       {visible.volumeIssue ? <label><span>Issue</span><input name="issue" defaultValue={paper?.issue ?? ""} placeholder="3" /></label> : null}
       {visible.pages ? <label><span>Pages</span><input name="pages" defaultValue={paper?.pages ?? ""} placeholder="101-118" /></label> : null}
-      {visible.preprint ? <label><span>Subject class</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
+      {visible.preprint ? <label><span>Category</span><input name="category" defaultValue={paper?.category ?? ""} placeholder="cs.CL" /></label> : null}
       {visible.preprint ? <label><span>Preprint ID</span><input name="preprintId" defaultValue={paper?.preprintId ?? ""} placeholder="arXiv:2607.01234" /></label> : null}
       {visible.doi ? <label><span>DOI</span><input name="doi" defaultValue={paper?.doi ?? ""} placeholder="10.1000/xyz123" /></label> : null}
       {visible.url ? <label className="field-span-2 source-url-field"><span>Source URL</span><div className="source-url-control"><input name="url" type="url" defaultValue={paper?.url ?? ""} placeholder="https://…" /><ActionButton variant="secondary" size="icon" className="h-auto min-w-[44px] self-stretch" onClick={(event) => void downloadSource(event)} disabled={downloading} title="Download PDF or save an HTML snapshot" aria-label={downloading ? "Downloading source" : "Download PDF or save an HTML snapshot"} icon={downloading ? <LoaderCircle className="spin" /> : <Download />} /></div></label> : null}
@@ -4234,7 +4233,6 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         year: metadata.year,
         venueName: metadata.venueName,
         venueAcronym: metadata.venueAcronym,
-        category: metadata.category,
         preprintId: metadata.preprintId,
         doi: metadata.doi,
         url: metadata.url,
@@ -4315,7 +4313,6 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         paperType,
         venueName: String(currentForm.get("venueName") ?? ""),
         venueAcronym: String(currentForm.get("venueAcronym") ?? ""),
-        category: String(currentForm.get("category") ?? ""),
         preprintId: String(currentForm.get("preprintId") ?? ""),
         doi: String(currentForm.get("doi") ?? ""),
         url: String(currentForm.get("url") ?? ""),

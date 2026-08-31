@@ -28,7 +28,6 @@ interface ExtractedMetadata {
   paperType: "conference" | "journal" | "workshop" | "preprint" | "other";
   doi: string | null;
   url: string | null;
-  category: string | null;
   preprintId: string | null;
 }
 
@@ -73,7 +72,6 @@ function normalizeMetadata(value: Record<string, unknown>, fallback: ExtractedMe
     paperType: allowedPaperTypes.has(paperType) ? paperType : fallback.paperType,
     doi: cleanNullable(value.doi) ?? fallback.doi,
     url: cleanNullable(value.url) ?? fallback.url,
-    category: cleanNullable(value.category) ?? fallback.category,
     preprintId: cleanNullable(value.preprintId || value.preprint_id) ?? fallback.preprintId,
   };
 }
@@ -140,7 +138,6 @@ function fallbackMetadata(text: string, info: Record<string, unknown>, filename:
     paperType: arxivMatch ? "preprint" : "other",
     doi: null,
     url: null,
-    category: null,
     preprintId: arxivMatch ? `arXiv ${arxivMatch[1]}` : null,
   };
 }

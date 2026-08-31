@@ -7,7 +7,6 @@ export type ExtractedMetadataField =
   | "paperType"
   | "venueName"
   | "venueAcronym"
-  | "category"
   | "preprintId"
   | "doi"
   | "url"
@@ -29,7 +28,6 @@ export function isExtractedMetadataFieldApplicable(
       return visible.venueName;
     case "venueAcronym":
       return visible.venueAcronym;
-    case "category":
     case "preprintId":
       return visible.preprint;
     case "doi":
