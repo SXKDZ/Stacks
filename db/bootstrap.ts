@@ -332,6 +332,24 @@ async function initializeDatabase(): Promise<void> {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
   }
 
+  // The subject class belongs to arXiv records only: it is the one source in this
+  // app that assigns one. Anything else either has no such concept or names its own
+  // scheme, and the AI extractor used to fill the field with topic labels of its own
+  // making ("AI for science"). Idempotent, so it also repairs a row an older build
+  // wrote.
+  raw
+    .prepare(`UPDATE papers SET category = NULL WHERE category IS NOT NULL AND id NOT IN (
+      SELECT p.id FROM papers p LEFT JOIN venues v ON v.id = p.venue_id
+      WHERE lower(COALESCE(v.acronym, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(v.name, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(p.preprint_id, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(p.url, '')) LIKE '%//arxiv.org/%'
+         OR lower(COALESCE(p.url, '')) LIKE '%.arxiv.org/%'
+         OR lower(COALESCE(p.pdf_url, '')) LIKE '%//arxiv.org/%'
+         OR lower(COALESCE(p.pdf_url, '')) LIKE '%.arxiv.org/%'
+    )`)
+    .run();
+
   normalizeLegacyIds(raw);
 
   const feedProposalColumns = tableColumns(raw, "feed_proposals");

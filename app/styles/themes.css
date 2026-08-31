@@ -524,22 +524,21 @@ textarea::placeholder {
   text-decoration-color: currentColor;
 }
 
-/* A quotation is a quieter passage of the same prose, not a callout. It takes the
-   well treatment the other Markdown blocks use (a step off the surface plus a
-   hairline, as in pre and .katex-display) with the accent as an inset rule so it
-   follows the corner instead of squaring it off. The brand-blue fill and 3px brand
-   bar it replaces made the quietest content on the page the loudest, and the text
-   colour was a fixed literal that ignored the theme. */
+/* A quotation is a quieter passage of the same prose, not a callout: the same well
+   the app's other Markdown blocks use, and nothing else. There is no accent edge,
+   because a straight bar down one side of a rounded box reads as a fault however it
+   is drawn (a border squares the corners, an inset rule floats inside them). The
+   step off the surface is what marks the quotation, and the text sits one notch
+   back from the prose around it. */
 .markdown-content blockquote {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  box-shadow: inset 3px 0 0 var(--brand-blue-strong);
-  /* A step back from body prose, but mixed toward --ink so the quotation clears
-     4.5:1 on the light theme's lighter well as well as on the dark one. */
+  /* Mixed toward --ink so the quotation clears 4.5:1 on the light theme's lighter
+     well as well as on the dark one, rather than taking a fixed literal. */
   color: color-mix(in srgb, var(--muted) 78%, var(--ink));
   margin: 0.9em 0;
-  padding: 0.7em 0.95em 0.7em 1.05em;
+  padding: 0.75em 1em;
 }
 
 /* Paragraphs inside a quotation keep their own rhythm: the blanket `margin: 0`
