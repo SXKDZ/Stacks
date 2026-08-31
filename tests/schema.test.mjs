@@ -474,6 +474,51 @@ test("surfaces failed agent launches and keeps filters/selection consistent", as
   assert.match(application, /const visible = new Set\(filtered\.map/);
 });
 
+test("a message that interrupts a turn carries that turn's request with it", async () => {
+  const replyRoute = await readFile(new URL("../app/api/feed/snippets/[id]/reply/route.ts", import.meta.url), "utf8");
+  // The interrupted turn is stopped before it answers, so both prompt builders are
+  // told to cover its request: without this the earlier message got no reply ever.
+  assert.match(replyRoute, /const interrupted = isFeedRunning\(id\)/);
+  assert.match(replyRoute, /buildFollowUpPrompt\(\{ reply, outcomes, attachments, interrupted \}\)/);
+  assert.match(replyRoute, /buildForkPrompt\(\{ reply, transcript: forkTranscript, attachments, interrupted \}\)/);
+  // And the gap is recorded, so the thread explains the question with no answer.
+  assert.match(replyRoute, /Stopped this turn to send the next message/);
+  // An empty submission is refused before anything is stopped: killing a turn for
+  // a message the route then rejects loses that turn's work for nothing.
+  assert.ok(
+    replyRoute.indexOf("Enter a follow-up message or attach a file.") < replyRoute.indexOf("await stopFeedAndWait(id)"),
+    "the empty-submission guard must run before the interrupt",
+  );
+});
+
+test("fork and rewind act on the same interaction boundaries", async () => {
+  const [feed, rewindRoute, forkRoute, history] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/rewind/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/fork/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-history.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Three features, one notion of where a turn begins and ends: the selection
+  // modal, a fork (which copies the selection into a new feed), and a rewind
+  // (which truncates this one in place).
+  assert.match(history, /export function messagesFromInteraction/);
+  assert.match(history, /export function interactionsBefore/);
+  assert.match(rewindRoute, /groupFeedInteractions\(\s*snippet\.instruction/);
+  assert.match(rewindRoute, /messagesFromInteraction\(interactions\(\), parsed\.data\.interactionId\)/);
+  assert.match(forkRoute, /selectFeedHistory\(\{/);
+  // One client call posts a selection to the fork route; the modal and a turn's own
+  // Fork are two entry points into it, and the turn's uses the shared helper.
+  assert.match(feed, /async function createForkFromHistory\(interactionIds: string\[\], toolDetails: boolean\)/);
+  assert.match(feed, /createForkFromHistory\(\[\.\.\.selectedInteractions\], includeToolDetails\)/);
+  assert.match(feed, /createForkFromHistory\(interactionsBefore\(interactions, message\.id\), includeToolDetails\)/);
+  assert.match(feed, /interactions\.length - interactionsBefore\(interactions, message\.id\)\.length - 1/);
+  assert.match(feed, /body: JSON\.stringify\(\{ interactionId: message\.id \}\)/);
+  // The session is dropped so the next reply reseeds from what is left, and the
+  // agent is not resumed onto a transcript holding the removed turns.
+  assert.match(rewindRoute, /sessionId: "",/);
+});
+
 test("uses integrated sortable table headers without a detached sort control", async () => {
   const [component, sharedTable, styles] = await Promise.all([
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
@@ -1128,7 +1173,7 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /\{speed \? <span className="feed-turn-metric">\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
   assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
   assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
-  assert.match(feed, /<TurnMeta iso=\{message\.createdAt\} message=\{message\} \/>/);
+  assert.match(feed, /<TurnMeta\s+iso=\{message\.createdAt\}\s+message=\{message\}/);
   // Provenance, not content: dot-separated text with no chip chrome around it.
   assert.match(styles, /\.feed-turn-meta \{[^}]*font-variant-numeric: tabular-nums/);
   assert.match(styles, /\.feed-turn-metric \+ \.feed-turn-metric::before \{[^}]*content: "·"/);

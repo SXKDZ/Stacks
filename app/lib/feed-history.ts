@@ -69,6 +69,32 @@ export function groupFeedInteractions<TMessage extends FeedHistoryMessage>(
   return groups;
 }
 
+/**
+ * The stored messages an interaction and every later one own.
+ *
+ * This is what a rewind to that point removes, and the complement of the history a
+ * fork from that point keeps, so both are expressed against the same interaction
+ * boundaries the selection UI shows. Empty for an id that is not a boundary, which
+ * the route turns into a 404.
+ */
+export function messagesFromInteraction<TMessage extends FeedHistoryMessage>(
+  groups: FeedInteraction<TMessage>[],
+  interactionId: string,
+): TMessage[] {
+  const index = groups.findIndex((group) => group.id === interactionId);
+  return index < 0 ? [] : groups.slice(index).flatMap((group) => group.messages);
+}
+
+/** The interactions before `interactionId`: the history that survives a rewind to
+ *  that point, and the selection a fork from that point copies. */
+export function interactionsBefore<TMessage extends FeedHistoryMessage>(
+  groups: FeedInteraction<TMessage>[],
+  interactionId: string,
+): string[] {
+  const index = groups.findIndex((group) => group.id === interactionId);
+  return index <= 0 ? [] : groups.slice(0, index).map((group) => group.id);
+}
+
 const CONVERSATION_KINDS = new Set(["text", "result"]);
 const TOOL_DETAIL_KINDS = new Set(["text", "result", "tool_use", "tool_result"]);
 
