@@ -1,6 +1,7 @@
 /**
- * Rewinding a feed to one of the user's messages, exercised against a real
- * database: the route handler, the real schema, real deletes.
+ * Cutting a feed thread short, against a real database: the rewind route end to end,
+ * and the truncation a retry performs (its route then relaunches the agent, which a
+ * test must not do, so that half is asserted on the shared function it calls).
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -160,6 +161,32 @@ test("rewinding to the opening interaction clears the replies and keeps the ques
   assert.equal(snippet.instruction, "explain the dockerfile");
   assert.equal(snippet.turns, 0);
   assert.equal(proposals, 0);
+});
+
+test("a retry keeps the turn's own message and removes only what it produced", async () => {
+  const feed = await seedFeed("feed-retry-1");
+  const { truncateFeedAt } = await import("../../app/lib/feed-truncate.ts");
+  const { ensureDatabase } = await import("../../db/bootstrap.ts");
+  const { feedSnippets } = await import("../../db/schema.ts");
+  const { eq } = await import("drizzle-orm");
+  const database = await ensureDatabase();
+  const snippet = database.select().from(feedSnippets).where(eq(feedSnippets.id, "feed-retry-1")).get()!;
+
+  const truncation = await truncateFeedAt(snippet, "feed-retry-1-u2", { keepStarter: true });
+
+  assert.ok(truncation);
+  // The question stays; its tool call and its answer go, so the retry asks the same
+  // thing again instead of the user retyping it.
+  assert.deepEqual(truncation.removed.map((message) => message.id), ["feed-retry-1-t2", "feed-retry-1-a2"]);
+  const { messages, snippet: after, proposals } = await feed.read();
+  assert.deepEqual(messages.map((message) => message.id), ["feed-retry-1-a1", "feed-retry-1-u2"]);
+  assert.equal(after.sessionId, "");
+  // Only the removed turn's usage leaves the totals.
+  assert.equal(after.outputTokens, 100);
+  assert.equal(proposals, 1);
+  // What the fresh session is seeded with excludes the turn being retried, which the
+  // route passes as the prompt instead.
+  assert.deepEqual(truncation.kept.map((message) => message.id), ["feed-retry-1-a1", "feed-retry-1-u2"]);
 });
 
 test("a rewind unlinks a feed mirrored to a GitHub issue", async () => {

@@ -605,11 +605,12 @@ function formatSpeed(tokensPerSecond: number): string {
  * toLocaleString renders it in the reader's own zone. A reply recorded before
  * per-turn usage was stored shows its time alone.
  */
-function TurnMeta({ iso, message, onFork, onRewind, busy = false }: {
+function TurnMeta({ iso, message, onRetry, onFork, onRewind, busy = false }: {
   iso: string;
   message?: FeedMessage;
-  /** Both are present on the user's own turns, for the point just before it: fork
-   *  continues from there in a copy, rewind takes this thread back to there. */
+  /** All three act on this turn: retry asks it again, fork continues from just
+   *  before it in a copy, and rewind takes this thread back to before it. */
+  onRetry?: () => void;
   onFork?: () => void;
   onRewind?: () => void;
   busy?: boolean;
@@ -620,6 +621,18 @@ function TurnMeta({ iso, message, onFork, onRewind, busy = false }: {
   const speed = outputTokens && durationMs ? outputTokens / (durationMs / 1000) : 0;
   return (
     <div className="feed-turn-meta">
+      {onRetry ? (
+        <button
+          type="button"
+          className="feed-turn-action"
+          onClick={onRetry}
+          disabled={busy}
+          title="Ask this again and replace the answer below it"
+        >
+          {busy ? <LoaderCircle className="spin" size={11} aria-hidden="true" /> : <RefreshCw size={11} aria-hidden="true" />}
+          Retry
+        </button>
+      ) : null}
       {onFork ? (
         <button
           type="button"
@@ -640,7 +653,7 @@ function TurnMeta({ iso, message, onFork, onRewind, busy = false }: {
           disabled={busy}
           title="Take this thread back to before this message"
         >
-          {busy ? <LoaderCircle className="spin" size={11} aria-hidden="true" /> : <Undo2 size={11} aria-hidden="true" />}
+          <Undo2 size={11} aria-hidden="true" />
           Rewind
         </button>
       ) : null}
@@ -1158,9 +1171,9 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   const [proposalBlockOpen, setProposalBlockOpen] = useState<Record<string, boolean>>({});
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
-  // A rewind in flight (the message it targets), the text it recovered, and the
+  // The turn a retry or rewind is working on, the text a rewind recovered, and the
   // key that remounts the composer around that text.
-  const [rewindingId, setRewindingId] = useState<string | null>(null);
+  const [busyTurnId, setBusyTurnId] = useState<string | null>(null);
   const [forkingFromId, setForkingFromId] = useState<string | null>(null);
   const [restoredReply, setRestoredReply] = useState("");
   const [composerNonce, setComposerNonce] = useState(0);
@@ -1615,6 +1628,39 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     }
   }
 
+  /**
+   * Ask one of the turns again: its question stays, and what it produced (plus every
+   * turn after it) is replaced by a new attempt. This is the way back from a turn
+   * that was interrupted or failed, where only the answer is missing. Confirmed only
+   * when later turns would go with it, since retrying the last turn discards nothing
+   * the user has not already seen fail.
+   */
+  async function retryTurn(interactionId: string) {
+    const later = interactions.length - interactionsBefore(interactions, interactionId).length - 1;
+    if (later > 0 && !window.confirm(`Ask this turn again? Stacks removes its answer and the ${later} turn${later === 1 ? "" : "s"} after it, then runs it again. This cannot be undone.`)) {
+      return;
+    }
+    setBusyTurnId(interactionId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippet.id}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interactionId }),
+      });
+      if (!response.ok) {
+        setError(await readError(response));
+        return;
+      }
+      setStreamNonce((nonce) => nonce + 1);
+      onChanged();
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "The turn could not be retried.");
+    } finally {
+      setBusyTurnId(null);
+    }
+  }
+
   /** Continue from before one of the user's turns in a new feed, leaving this one
    *  as it is: the copy holds the history a rewind to that point would keep. */
   async function forkBefore(message: FeedMessage) {
@@ -1642,7 +1688,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     if (!window.confirm(`Rewind to before this message? Stacks removes ${scope} from this thread and puts the text back in the reply box. This cannot be undone.`)) {
       return;
     }
-    setRewindingId(message.id);
+    setBusyTurnId(message.id);
     setError(null);
     try {
       const response = await fetch(`/api/feed/snippets/${snippet.id}/rewind`, {
@@ -1664,7 +1710,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "The thread could not be rewound.");
     } finally {
-      setRewindingId(null);
+      setBusyTurnId(null);
     }
   }
 
@@ -1840,7 +1886,11 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
               <span className="feed-turn-label">You</span>
               {openingText ? <MarkdownContent content={openingText} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
-              <TurnMeta iso={snippet.createdAt} />
+              <TurnMeta
+                iso={snippet.createdAt}
+                onRetry={() => void retryTurn(OPENING_INTERACTION_ID)}
+                busy={busyTurnId === OPENING_INTERACTION_ID}
+              />
             </div>
           );
         })()}
@@ -1955,9 +2005,10 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
                     <TurnMeta
                       iso={message.createdAt}
                       message={message}
+                      onRetry={message.role === "user" ? () => void retryTurn(message.id) : undefined}
                       onFork={message.role === "user" ? () => void forkBefore(message) : undefined}
                       onRewind={message.role === "user" ? () => void rewindTo(message) : undefined}
-                      busy={rewindingId === message.id || (creatingFromHistory && forkingFromId === message.id)}
+                      busy={busyTurnId === message.id || (creatingFromHistory && forkingFromId === message.id)}
                     />
                   </div>,
                 );

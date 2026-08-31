@@ -491,12 +491,14 @@ test("a message that interrupts a turn carries that turn's request with it", asy
   );
 });
 
-test("fork and rewind act on the same interaction boundaries", async () => {
-  const [feed, rewindRoute, forkRoute, history] = await Promise.all([
+test("retry, fork and rewind act on the same interaction boundaries", async () => {
+  const [feed, rewindRoute, retryRoute, forkRoute, history, truncate] = await Promise.all([
     readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/rewind/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/retry/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/fork/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-history.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-truncate.ts", import.meta.url), "utf8"),
   ]);
 
   // Three features, one notion of where a turn begins and ends: the selection
@@ -504,9 +506,15 @@ test("fork and rewind act on the same interaction boundaries", async () => {
   // (which truncates this one in place).
   assert.match(history, /export function messagesFromInteraction/);
   assert.match(history, /export function interactionsBefore/);
-  assert.match(rewindRoute, /groupFeedInteractions\(\s*snippet\.instruction/);
-  assert.match(rewindRoute, /messagesFromInteraction\(interactions\(\), parsed\.data\.interactionId\)/);
+  assert.match(truncate, /messagesFromInteraction\(interactions, interactionId\)/);
   assert.match(forkRoute, /selectFeedHistory\(\{/);
+  // A rewind and a retry are one truncation, differing only in whether the turn's own
+  // message survives it, so neither route re-implements the deletion.
+  assert.match(rewindRoute, /truncateFeedAt\(snippet, parsed\.data\.interactionId, \{ keepStarter: false \}\)/);
+  assert.match(retryRoute, /truncateFeedAt\(snippet, parsed\.data\.interactionId, \{ keepStarter: true \}\)/);
+  // The retried turn is the prompt, so it is not also in the seeded history.
+  assert.match(retryRoute, /kept\.filter\(\(message\) => message\.id !== starter\.id\)/);
+  assert.match(retryRoute, /resume: false/);
   // One client call posts a selection to the fork route; the modal and a turn's own
   // Fork are two entry points into it, and the turn's uses the shared helper.
   assert.match(feed, /async function createForkFromHistory\(interactionIds: string\[\], toolDetails: boolean\)/);
@@ -514,9 +522,17 @@ test("fork and rewind act on the same interaction boundaries", async () => {
   assert.match(feed, /createForkFromHistory\(interactionsBefore\(interactions, message\.id\), includeToolDetails\)/);
   assert.match(feed, /interactions\.length - interactionsBefore\(interactions, message\.id\)\.length - 1/);
   assert.match(feed, /body: JSON\.stringify\(\{ interactionId: message\.id \}\)/);
+  assert.match(feed, /onRetry=\{message\.role === "user" \? \(\) => void retryTurn\(message\.id\) : undefined\}/);
+  // The opening turn can be retried too: an interrupted first turn has no other way
+  // back, since there is no earlier turn to rewind to.
+  assert.match(feed, /onRetry=\{\(\) => void retryTurn\(OPENING_INTERACTION_ID\)\}/);
   // The session is dropped so the next reply reseeds from what is left, and the
   // agent is not resumed onto a transcript holding the removed turns.
-  assert.match(rewindRoute, /sessionId: "",/);
+  assert.match(truncate, /sessionId: "",/);
+  // A thread can outgrow the model's window; the seeded history is therefore bounded,
+  // and the failure that happens without it is explained rather than dumped raw.
+  assert.match(history, /const TRANSCRIPT_BUDGET_CHARS = 120_000/);
+  assert.match(history, /omitted: this thread is longer than one prompt can carry/);
 });
 
 test("uses integrated sortable table headers without a detached sort control", async () => {
@@ -1172,7 +1188,7 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}>\{fullTime\(iso\)\}<\/time>/);
   assert.match(feed, /\{speed \? <span className="feed-turn-metric">\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
   assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
-  assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
+  assert.match(feed, /<TurnMeta\s+iso=\{snippet\.createdAt\}/);
   assert.match(feed, /<TurnMeta\s+iso=\{message\.createdAt\}\s+message=\{message\}/);
   // Provenance, not content: dot-separated text with no chip chrome around it.
   assert.match(styles, /\.feed-turn-meta \{[^}]*font-variant-numeric: tabular-nums/);

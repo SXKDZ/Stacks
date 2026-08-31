@@ -38,6 +38,22 @@ test("max-turn failures explain how to resume", () => {
   assert.match(parts.details, /error_max_turns/);
 });
 
+test("a thread that outgrew the context window says how to get out of it", () => {
+  // What the CLI reports is a one-line result and an 81ms turn: the API refused the
+  // prompt before any work. The raw event alone read as an unexplained failure.
+  const parts = splitFeedError(`Agent turn failed.\n\nAgent result event:\n${JSON.stringify({
+    is_error: true,
+    subtype: "success",
+    result: "Prompt is too long",
+    duration_ms: 81,
+    num_turns: 1,
+  }, null, 2)}`);
+
+  assert.match(parts.summary, /no longer fits the model's context window/);
+  assert.match(parts.summary, /Fork it from an earlier turn, or rewind it/);
+  assert.match(parts.details, /Prompt is too long/);
+});
+
 test("legacy result and exit rows render as one failure", () => {
   const messages = [
     { id: "reported", kind: "error", content: "The agent reported an error.", createdAt: "2026-08-09T06:31:19.259Z" },

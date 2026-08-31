@@ -17,6 +17,13 @@ function actionableSummary(summary: string, details: string): string {
   ) {
     return "This run reached its turn limit before finishing. Send “continue” to resume.";
   }
+  // The conversation itself outgrew the model's context window: resuming sends the
+  // whole session, so every further turn fails the same way in a fraction of a
+  // second. Forking or rewinding starts a fresh session from a bounded slice of the
+  // history, which is the only way out of it from here.
+  if (summary === "Agent turn failed." && /prompt is too long/i.test(details)) {
+    return "This thread's conversation no longer fits the model's context window. Fork it from an earlier turn, or rewind it, to continue with a shorter history.";
+  }
   return summary;
 }
 

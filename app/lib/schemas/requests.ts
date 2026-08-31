@@ -102,9 +102,10 @@ export const FeedForkRequestSchema = z.object({
   includeToolDetails: z.boolean().prefault(false),
 });
 
-/** The interaction a rewind returns the thread to, from the same boundaries the
- *  history selection uses. That interaction is removed along with every later one. */
-export const FeedRewindRequestSchema = z.object({
+/** The interaction a rewind or a retry addresses, from the same boundaries the
+ *  history selection uses. Everything from it onward is removed; a retry keeps its
+ *  user turn and runs it again. */
+export const FeedInteractionCutSchema = z.object({
   interactionId: z.string().trim().min(1),
 });
 
