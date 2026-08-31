@@ -102,6 +102,17 @@ test("fresh-session transcript includes the opening and excludes tool noise", ()
   );
 });
 
+test("fresh-session transcript leaves the app's own thread notes out", () => {
+  // Approval decisions and effort switches are stored as system rows. A fork or a
+  // resume fallback seeded with them would read them back as the agent's own words.
+  const transcript = buildFeedTranscript("Opening question", [
+    ...history,
+    message("s1", "system", "text", "Rejected: update paper"),
+  ]);
+  assert.ok(!transcript.includes("Rejected: update paper"));
+  assert.ok(transcript.endsWith("Assistant: Third answer"));
+});
+
 test("fresh-session transcript includes paired tool details when the feed requests them", () => {
   const transcript = buildFeedTranscript("Opening question", history, true);
   assert.match(transcript, /Assistant tool request: Read file/);
