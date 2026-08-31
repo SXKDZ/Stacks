@@ -5,12 +5,12 @@ nobody asked for explicitly: what each one decides, how it could be changed toda
 and what a wrong value would look like. Produced by a sweep of the whole repo, so
 it includes framework defaults the app merely restates.
 
-710 values across 102 files. By how they can be changed:
+708 values across 102 files. By how they can be changed:
 
 - 67 through settings.json
 - 54 through a control in the interface
 - 8 through an environment variable
-- 581 through only by editing the code
+- 579 through only by editing the code
 
 ## Files, downloads and limits
 
@@ -27,7 +27,7 @@ it includes framework defaults the app merely restates.
 | **stored-file non-empty threshold** = `info.size > 0` | `app/lib/local-files.ts`:59 | A stored PDF/HTML asset counts as present only if it has at least 1 byte. | hardcoded | A zero-byte file left by a failed acquisition reports as missing so the UI re-fetches instead of showing an empty PDF; without it pdfExists answered true for nothing. |
 | **dotfile skip in asset inspection** = `entry.name.startsWith(".")` | `app/lib/local-files.ts`:105 | Files whose name starts with a dot are excluded from stored counts, byte totals, and orphan detection. | hardcoded | A stray .DS_Store or a `.partial` temp write is never counted or deleted by Doctor's orphan clean, so storage totals under-report by those bytes. |
 | **allowed extensions per asset kind** = `kind === "pdf" ? new Set([".pdf"]) : new Set([".html", ".htm"])` | `app/lib/local-files.ts`:183 | Which file extensions are accepted as a stored PDF path or HTML snapshot path (repeated at line 258 for the import path). | hardcoded | Saving a paper whose local path ends in e.g. .PDF.bak or .xhtml fails with "The local PDF path must end in .pdf." |
-| **duplicate-name counter start** = `let copy = 2` | `app/lib/local-files.ts`:198 | Suffix numbering when an uploaded filename already exists (file.pdf, file-2.pdf, ...). | hardcoded | Import naming differs from the feed attachment path, which starts at -1 (app/lib/feed-attachments.ts:39), so the two directories number duplicates inconsistently. |
+| **duplicate-name counter start** = `let copy = 2` | `app/lib/local-files.ts`:198 | Suffix numbering when an uploaded filename already exists (file.pdf, file-2.pdf, ...). | hardcoded | Both the import and the feed-attachment paths now number through this one helper, so a wrong start would rename duplicates inconsistently in both directories at once. |
 | **duplicate-name suffix start** = `2` | `app/lib/local-files.ts`:198 | The first numeric suffix tried when an uploaded filename already exists in the target directory. | hardcoded | A second upload of paper.pdf is stored as paper-2.pdf rather than overwriting or being rejected. |
 | **upload Content-Length strict match** = `received !== declaredLength` | `app/lib/local-files.ts`:245 | An upload is rejected unless the streamed byte count equals the declared Content-Length exactly. | hardcoded | A body truncated by the proxy layer (10 MiB cut of a 41 MB PDF) errors out with "The upload stopped early: N of M bytes arrived" instead of storing a partial PDF and answering 200. |
 | **PDF magic-byte check** = `contents.subarray(0, 5).equals(Buffer.from("%PDF-"))` | `app/lib/local-files.ts`:263 | Whether an uploaded or downloaded file is accepted as a PDF. | hardcoded | A PDF whose header is preceded by junk bytes (legal for some producers) is rejected as "not a valid PDF". |
@@ -505,7 +505,7 @@ it includes framework defaults the app merely restates.
 
 ## Interface behaviour
 
-233 values.
+231 values.
 
 | Value | Where | What it decides | Changeable | If it is wrong |
 | --- | --- | --- | --- | --- |
@@ -577,8 +577,6 @@ it includes framework defaults the app merely restates.
 | **default discovery provider** = `"semantic-scholar"` | `app/api/discover/route.ts`:20 | Which provider a search uses when the request omits one. | hardcoded | A search with no provider goes to Semantic Scholar, which throws "SEMANTIC_SCHOLAR_API_KEY is not configured." if no key is saved, so discovery appears broken until a key is entered even though arXiv/DBLP/Crossref need none. |
 | **non-provider error status** = `502` | `app/api/discover/route.ts`:28 | The status for a discovery failure that is not a ScholarlyProviderError (a provider error passes its own status through). | hardcoded | A local bug in result mapping is reported to the user as an upstream provider failure, hiding the real cause; import-identifier does the same at :18. |
 | **directory picker default target** = `"remote"` | `app/api/local-directory-picker/route.ts`:14 | Which folder prompt opens when the request's target is absent or unrecognised. | hardcoded | A typo'd target opens the OneDrive backup-folder chooser, so a user picking a library location can be shown the wrong dialog copy. |
-| **local-source probe filename** = `join(path, "papers.db")` | `app/api/local-directory-picker/route.ts`:18 | The file whose presence marks a chosen folder as an existing local library. | hardcoded | The live database is named library.db everywhere else (db/library-paths.ts:50), so this probe reports sourceExists: false for a real Stacks library folder. |
-| **source-library probe filename** = `"papers.db"` | `app/api/local-directory-picker/route.ts`:18 | Which filename marks a chosen folder as an existing library to import from. | hardcoded | The live database is now called library.db (db/library-paths.ts:50), so a current library folder is never detected as a source and sourceExists stays false. |
 | **RELEASES_ENDPOINT** = `"https://api.github.com/repos/SXKDZ/Stacks/releases/latest"` | `app/api/version/route.ts`:5 | The repository the update check queries. | hardcoded | A fork checks upstream releases and tells its users they are out of date; the response URL is only accepted if it starts with https://github.com/ (line 52). |
 | **update check opt-in** = `searchParams.get("check") === "1"` | `app/api/version/route.ts`:24 | Whether a version request contacts GitHub at all; without ?check=1 it only reports the local version. | hardcoded | No network call happens on page load, so an outdated install is never flagged unless the user opens the panel that adds the flag. |
 | **update check has no timeout** = `await fetch(RELEASES_ENDPOINT, { headers: { Accept: "application/vnd.github+json", "User-Agent": `Stacks/${currentVersion}` } })` | `app/api/version/route.ts`:29 | The unauthenticated GitHub call runs with no AbortSignal and no cache directive. | hardcoded | A slow or hanging api.github.com leaves the Settings "Check for updates" request open indefinitely. |

@@ -14,6 +14,7 @@
 import { z } from "zod";
 
 import { LibraryEntitySchema, PaperDataSchema } from "./library";
+import { describeZodError } from "./parse";
 
 /** Fields every proposal carries, whatever its action. */
 const proposalBase = {
@@ -114,7 +115,7 @@ export function parseProposalBatch(value: unknown): {
     const single = AgentProposalOperationSchema.safeParse(value);
     return single.success
       ? { operations: [single.data], errors: [] }
-      : { operations: [], errors: [describeIssues(single.error)] };
+      : { operations: [], errors: [describeZodError(single.error)] };
   }
   const operations: ProposalOperation[] = [];
   const errors: string[] = [];
@@ -123,19 +124,10 @@ export function parseProposalBatch(value: unknown): {
     if (result.success) {
       operations.push(result.data);
     } else {
-      errors.push(`proposal ${index + 1}: ${describeIssues(result.error)}`);
+      errors.push(`proposal ${index + 1}: ${describeZodError(result.error)}`);
     }
   });
   return { operations, errors };
-}
-
-function describeIssues(error: z.ZodError): string {
-  return error.issues
-    .map((issue) => {
-      const path = issue.path.join(".");
-      return path ? `${path}: ${issue.message}` : issue.message;
-    })
-    .join("; ");
 }
 
 /**
