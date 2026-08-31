@@ -57,8 +57,7 @@ body {
 .nav-count,
 .sync-card strong,
 .result-authors,
-.identifier-list > span,
-.detail-section > p:last-child:not(.eyebrow) {
+.identifier-list > span {
   color: var(--muted);
 }
 
@@ -95,8 +94,7 @@ body {
 .entity-form textarea,
 .settings-form-grid label:not(.settings-toggle) input,
 .settings-form-grid textarea,
-.integration-row input,
-.detail-section textarea {
+.integration-row input {
   background-color: rgba(0, 0, 0, 0.26);
   border-color: var(--line-strong);
   color: var(--ink);
@@ -319,7 +317,6 @@ textarea::placeholder {
 }
 
 .detail-authors,
-.detail-section > p:last-child:not(.eyebrow),
 .summary-copy,
 .summary-empty,
 .abstract-copy,
@@ -842,8 +839,7 @@ textarea::placeholder {
 .entity-form textarea,
 .settings-form-grid label:not(.settings-toggle) input,
 .settings-form-grid textarea,
-.integration-row input,
-.detail-section textarea {
+.integration-row input {
   font-size: var(--type-control);
 }
 
@@ -1141,8 +1137,7 @@ textarea::placeholder {
 [data-theme="light"] .entity-form textarea,
 [data-theme="light"] .settings-form-grid label:not(.settings-toggle) input,
 [data-theme="light"] .settings-form-grid textarea,
-[data-theme="light"] .integration-row input,
-[data-theme="light"] .detail-section textarea {
+[data-theme="light"] .integration-row input {
   background-color: rgba(255, 255, 255, 0.9);
   color: var(--ink);
 }

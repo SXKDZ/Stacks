@@ -168,8 +168,6 @@
   white-space: normal;
 }
 
-/* Reader intentionally runs a tighter divider rhythm than .detail-section's
-   --space-section-* (denser reading surface). */
 .reader-summary {
   border-top: 1px solid var(--line);
   color: #5d5562;

@@ -537,10 +537,8 @@ test("code editor overlay layers stay metric-identical under form skins", async 
   const guard = ":not(:where(.prompt-code-editor *))";
   for (const selector of [
     `.entity-form textarea${guard}`,
-    `.detail-section textarea${guard}`,
     `.settings-form-grid textarea${guard}`,
     `.entity-form textarea:focus${guard}`,
-    `.detail-section textarea:focus${guard}`,
     `.settings-form-grid textarea:focus${guard}`,
   ]) {
     assert.ok(styles.includes(selector), `missing editor guard on: ${selector}`);
@@ -1512,10 +1510,7 @@ test("no CSS rule is fully superseded by a later copy of the same selector", asy
   // overridden in another, so editing the obvious one did nothing. Whenever a
   // block's every property is re-declared by a later block with the identical
   // selector, that block is dead weight and hides where the real value lives.
-  const { execFile } = await import("node:child_process");
-  const { promisify } = await import("node:util");
-  const run = promisify(execFile);
-  const { stdout } = await run("python3", ["scripts/find-dead-css.py"], {
+  const { stdout } = await execFile("python3", ["scripts/find-dead-css.py"], {
     cwd: fileURLToPath(new URL("..", import.meta.url)),
   });
   const count = Number(/superseded by a later same-selector block: (\d+)/.exec(stdout)?.[1] ?? "-1");

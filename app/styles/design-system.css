@@ -720,7 +720,6 @@
    line-height, border; see .prompt-code-editor above) or the caret and
    selection drift off the rendered glyphs. */
 .entity-form textarea:not(:where(.prompt-code-editor *)),
-.detail-section textarea:not(:where(.prompt-code-editor *)),
 .settings-form-grid textarea:not(:where(.prompt-code-editor *)) {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
@@ -742,8 +741,7 @@
 .settings-form-grid textarea:focus:not(:where(.prompt-code-editor *)),
 .integration-row input:focus,
 .entity-form input:focus:not(:where(.inline-search, .feed-search, .large-field, .discover-search-box) *),
-.entity-form textarea:focus:not(:where(.prompt-code-editor *)),
-.detail-section textarea:focus:not(:where(.prompt-code-editor *)) {
+.entity-form textarea:focus:not(:where(.prompt-code-editor *)) {
   border-color: color-mix(in srgb, var(--brand-blue) 72%, var(--line-strong));
   box-shadow: 0 0 0 3px var(--brand-blue-soft);
 }

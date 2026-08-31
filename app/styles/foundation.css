@@ -139,9 +139,6 @@
   --motion-press-scale: 0.99;
   /* Gap between an eyebrow section label and the content below it. */
   --space-eyebrow-gap: 10px;
-  /* Bordered section-divider rhythm (gap above + padding below the rule). */
-  --space-section-gap: 23px;
-  --space-section-pad: 20px;
 }
 
 * {

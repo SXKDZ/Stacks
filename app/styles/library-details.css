@@ -1369,35 +1369,6 @@ td.number-cell {
   width: 100%;
 }
 
-.detail-section {
-  border-top: 1px solid var(--line);
-  margin-top: var(--space-section-gap);
-  padding-top: var(--space-section-pad);
-}
-
-/* The notes editor sits directly under its eyebrow label; give it the same
-   breathing room the summary/abstract copy gets after the eyebrow. */
-.detail-section .eyebrow + .prompt-code-editor {
-  margin-top: var(--space-eyebrow-gap);
-}
-
-.detail-section > p:last-child:not(.eyebrow) {
-  color: #5e5664;
-  font-family: var(--font-display);
-  font-size: var(--type-label);
-  line-height: 1.58;
-  margin: var(--space-eyebrow-gap) 0 0;
-}
-
-/* An eyebrow label with a trailing action button (e.g. Summary + Generate),
-   matching the edit window's field-label-action row. */
-.eyebrow-action {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-}
-
 .eyebrow-generate {
   align-items: center;
   background: var(--brand-blue-soft);
@@ -1423,13 +1394,6 @@ td.number-cell {
 .eyebrow-generate:disabled {
   cursor: default;
   opacity: 0.6;
-}
-
-/* Excludes the code editor's inner textarea: a margin/min-height on it would
-   shift it off the highlight <pre> it must mirror exactly. */
-.detail-section textarea:not(:where(.prompt-code-editor *)) {
-  margin-top: var(--space-eyebrow-gap);
-  min-height: 105px;
 }
 
 .summary-copy,
