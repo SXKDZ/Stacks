@@ -162,7 +162,9 @@ test("pressing controls uses one shared restrained 99% scale token", async () =>
   assert.match(designSystem, /\.app-select-menu\s*\{[\s\S]*?animation: popover-enter var\(--motion-fast\)/);
   assert.match(controls, /data-placement=\{pos\.bottom !== undefined \? "top" : "bottom"\}/);
   assert.match(foundation, /\.app-interaction-scope :is\(button, a, \[role="button"\]\)[\s\S]*?:active:not\(:disabled\):not\(\[aria-disabled="true"\]\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
-  assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  // The sidebar CTA is the shared action now, so it inherits the press scale with
+  // everything else rather than re-declaring it.
+  assert.doesNotMatch(foundation, /\.new-paper-button:active/);
   assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.doesNotMatch(workflows, /\.stacks-shell[^{}]*:active/);
   assert.doesNotMatch(reader, /\.reader-page[^{}]*:active/);
@@ -1142,6 +1144,43 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /message\.id === usage\.messageId/);
 });
 
+test("every button is one family: capsule, gradient to the edge, one shadow", async () => {
+  const [controls, application, styles] = await Promise.all([
+    readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // A fixed 16px corner reads as a pill on a 34px button and as a rounded rectangle
+  // on a 48px one, so two buttons side by side looked like different families. Text
+  // buttons are capsules at every height; icon buttons stay squircles.
+  assert.match(controls, /large: "h-11 rounded-full/);
+  assert.match(controls, /medium: "h-10 rounded-full/);
+  assert.match(controls, /small: "h-\[34px\] rounded-full/);
+  assert.match(controls, /icon: "size-10 rounded-\[var\(--radius-lg\)\]/);
+  assert.doesNotMatch(controls, /"app-control-motion[\s\S]{0,120}rounded-\[var\(--radius-lg\)\] border/);
+
+  // The brand gradient runs edge to edge: a flat white border sat over blue at one
+  // end and violet at the other, which read as a mismatched outline.
+  assert.match(controls, /primary: \[\s*"border-transparent bg-\[image:var\(--brand-gradient\)\]/);
+  assert.doesNotMatch(controls, /hover:border-white\/20/);
+
+  // The hand-rolled copies of the primary button are gone: the sidebar CTA and the
+  // Discover search button are the shared action, so neither can drift to its own
+  // height, shadow, or shape again.
+  assert.match(application, /className="new-paper-button"[\s\S]*?kbd="N"/);
+  assert.doesNotMatch(styles, /\.new-paper-button \{[^}]*background-image/);
+  assert.doesNotMatch(styles, /\.new-paper-button \{[^}]*box-shadow/);
+  assert.doesNotMatch(styles, /\.discover-search-box > button \{[^}]*height: 48px/);
+  assert.doesNotMatch(styles, /\.discover-search-box > button,\s*\.modal-results/);
+  assert.match(styles, /\.discover-search-box > button \{[^}]*min-width: 118px/);
+
+  // The composer's grip sits on the panel's own border, so a partial alpha let the
+  // border show straight through the pill.
+  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,[\s\S]*?opacity: 1/);
+  assert.match(styles, /\.feed-panel-resize-handle:hover \{[^}]*background: color-mix\(in srgb, var\(--brand-blue\) 10%/);
+});
+
 test("a proposal can rename a collection and edit its membership", async () => {
   const [libraryRoute, prompt] = await Promise.all([
     readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
@@ -1265,7 +1304,7 @@ test("the feed composer reads as one control, with a visible placeholder", async
   // Its floor has to match the CSS floor, or a drag cannot reach the resting size.
   assert.match(attachBox, /const minimumPanelHeight = compact \? 128 : 210/);
   assert.match(styles, /\.feed-dock-input\.is-panel-resizable \{[^}]*min-height: 128px/);
-  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,\s*\.feed-dock-input:focus-within \.feed-panel-resize-handle \{[^}]*opacity: 0\.7/);
+  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,\s*\.feed-dock-input:focus-within \.feed-panel-resize-handle \{[^}]*opacity: 1/);
   assert.match(attachBox, /if \(event\.key === "Home"\) setPanelHeight\(null\)/);
   assert.match(attachBox, /role="separator"[\s\S]*?aria-valuenow=/);
   // Attach controls and truncated chips say what they are on hover (one shared

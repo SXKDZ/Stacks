@@ -816,22 +816,27 @@
   touch-action: none;
   transform: translate(-50%, -50%);
   transition-duration: 120ms;
-  transition-property: opacity, border-color, color;
+  transition-property: opacity, background, border-color, color;
   transition-timing-function: ease-out;
   width: 48px;
   z-index: 2;
 }
 
 /* Discoverability: the grip is a small pill straddling the panel's top edge, so
-   hovering anywhere in the composer fades it in before the pointer has to find it. */
+   hovering anywhere in the composer fades it in before the pointer has to find it.
+   It fades to fully opaque rather than to a partial alpha: the grip sits on the
+   composer's own border, which showed straight through a translucent pill. */
 .feed-dock-input:hover .feed-panel-resize-handle,
 .feed-dock-input:focus-within .feed-panel-resize-handle {
-  opacity: 0.7;
+  opacity: 1;
 }
 
 .feed-panel-resize-handle:hover {
+  background: color-mix(in srgb, var(--brand-blue) 10%, var(--surface-1));
   border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
   color: var(--brand-blue-strong);
+  /* Stated locally as well as on the composer: hovering the grip must never leave
+     it translucent, whatever the reveal rule above does. */
   opacity: 1;
 }
 

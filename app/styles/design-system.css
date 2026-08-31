@@ -21,7 +21,6 @@
   padding: 3px 5px;
 }
 
-.discover-search-box > button,
 .modal-results article > button,
 .assistant-orb {
   background-image: var(--brand-gradient);

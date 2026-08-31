@@ -836,7 +836,7 @@
   .filter-tabs { order: 3; width: 100%; }
   .discover-search-box { align-items: stretch; flex-wrap: wrap; }
   .discover-search-box input { min-width: calc(100% - 38px); }
-  .discover-search-box button { justify-content: center; width: 100%; }
+  .discover-search-box > button { width: 100%; }
   .provider-switch { flex-wrap: wrap; }
   .discovery-result { grid-template-columns: auto 1fr; }
   .discovery-result > button { grid-column: 2; width: max-content; }
@@ -1093,18 +1093,7 @@
   justify-content: flex-end;
 }
 
-.discover-search-box > button {
-  align-items: center;
-  display: inline-flex;
-  gap: 5px;
-  justify-content: center;
-  width: auto;
-}
-
-.discover-search-box > button span {
-  font-size: var(--type-body);
-  font-weight: 700;
-}.autocomplete-field {
+.autocomplete-field {
   position: relative;
 }
 

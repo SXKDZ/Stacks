@@ -2170,13 +2170,11 @@
   min-width: 0;
 }
 
+/* Layout only: the width floor keeps "Search" from jumping when the label becomes
+   a spinner. Height, padding, and shape belong to the shared action. */
 .discover-search-box > button {
-  box-sizing: border-box;
   flex: 0 0 auto;
-  height: 48px;
   min-width: 118px;
-  overflow: hidden;
-  padding: 0 20px;
   white-space: nowrap;
 }
 

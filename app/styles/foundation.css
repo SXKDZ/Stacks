@@ -462,42 +462,8 @@ h3 {
 /* Sidebar "Add paper" CTA. Shares the one --brand-gradient with the primary
    buttons and the user chat bubble so every primary-blue surface matches. */
 .new-paper-button {
-  align-items: center;
-  background-image: var(--brand-gradient);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 7px 18px var(--brand-cta-shadow);
-  color: var(--white);
-  display: flex;
-  font-size: var(--type-control);
-  font-weight: 700;
-  gap: 8px;
-  justify-content: center;
   margin: 0 1px 18px;
-  min-height: 39px;
-  padding: 10px 11px;
-  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), filter var(--motion-fast), transform var(--motion-fast);
-}
-
-.new-paper-button:hover,
-.new-paper-button:focus-visible {
-  border-color: rgba(255, 255, 255, 0.2);
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-}
-
-.new-paper-button:active {
-  transform: translateY(0) scale(var(--motion-press-scale));
-}
-
-.new-paper-button kbd {
-  background: var(--kbd-badge-bg);
-  border: 1px solid var(--kbd-badge-border);
-  border-radius: var(--radius-sm);
-  color: var(--white);
-  font-size: var(--type-label);
-  margin-left: auto;
-  padding: 2px 5px;
+  width: calc(100% - 2px);
 }
 
 .main-nav {

@@ -753,18 +753,6 @@ td.number-cell {
   padding: 8px 0;
 }
 
-.discover-search-box button {
-  align-items: center;
-  background-image: var(--brand-gradient);
-  border-radius: var(--radius-lg);
-  color: white;
-  display: flex;
-  font-size: var(--type-micro);
-  font-weight: 700;
-  gap: 6px;
-  padding: 10px 13px;
-}
-
 .provider-switch {
   align-items: center;
   display: flex;

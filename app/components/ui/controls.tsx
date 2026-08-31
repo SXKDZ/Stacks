@@ -17,7 +17,7 @@ export function cx(...values: Array<string | false | null | undefined>) {
 const actionVariants = cva(
   [
     "app-control-motion inline-flex shrink-0 select-none items-center justify-center gap-2",
-    "rounded-[var(--radius-lg)] border font-semibold leading-[1.25] no-underline",
+    "border font-semibold leading-[1.25] no-underline",
     "hover:-translate-y-px active:translate-y-0 active:scale-[var(--motion-press-scale)]",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
     "disabled:pointer-events-none disabled:opacity-50 disabled:transform-none",
@@ -26,8 +26,8 @@ const actionVariants = cva(
     variants: {
       variant: {
         primary: [
-          "border-white/10 bg-[image:var(--brand-gradient)] text-white shadow-[0_10px_24px_rgba(37,126,222,0.24),inset_0_1px_0_rgba(255,255,255,0.18)]",
-          "hover:border-white/20 hover:brightness-110 hover:shadow-[0_14px_30px_rgba(37,126,222,0.32),inset_0_1px_0_rgba(255,255,255,0.22)]",
+          "border-transparent bg-[image:var(--brand-gradient)] text-white shadow-[0_10px_24px_rgba(37,126,222,0.24),inset_0_1px_0_rgba(255,255,255,0.18)]",
+          "hover:brightness-110 hover:shadow-[0_14px_30px_rgba(37,126,222,0.32),inset_0_1px_0_rgba(255,255,255,0.22)]",
         ],
         secondary: [
           "border-[var(--line-strong)] bg-[var(--surface-1)] text-[var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
@@ -58,12 +58,15 @@ const actionVariants = cva(
         ],
       },
       size: {
-        large: "h-11 px-[18px] text-[length:var(--type-body)]",
-        medium: "h-10 px-3.5 text-[length:var(--type-control)]",
-        small: "h-[34px] px-2.5 text-[length:var(--type-control)]",
-        icon: "size-10 p-0",
-        "icon-small": "size-8 p-0",
-        "icon-large": "size-11 p-0",
+        // A capsule, not a fixed 16px corner: the same radius reads as a pill on a
+        // 34px button and as a rounded rectangle on a 48px one, which is what made
+        // two buttons side by side look like different families.
+        large: "h-11 rounded-full px-[18px] text-[length:var(--type-body)]",
+        medium: "h-10 rounded-full px-3.5 text-[length:var(--type-control)]",
+        small: "h-[34px] rounded-full px-2.5 text-[length:var(--type-control)]",
+        icon: "size-10 rounded-[var(--radius-lg)] p-0",
+        "icon-small": "size-8 rounded-[var(--radius-md)] p-0",
+        "icon-large": "size-11 rounded-[var(--radius-lg)] p-0",
       },
     },
     defaultVariants: {

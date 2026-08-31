@@ -1040,11 +1040,13 @@ function StacksWorkspace() {
           <ActionButton variant="ghost" size="icon" className="mobile-close" onClick={closeMobileNavigation} aria-label="Close navigation" icon={<X />} />
         </div>
 
-        <button className="new-paper-button" onClick={() => setModal({ kind: "add-paper" })}>
-          <Plus size={17} strokeWidth={2.4} />
-          Add paper
-          <kbd>N</kbd>
-        </button>
+        <ActionButton
+          variant="primary"
+          className="new-paper-button"
+          onClick={() => setModal({ kind: "add-paper" })}
+          icon={<Plus strokeWidth={2.4} />}
+          kbd="N"
+        >Add paper</ActionButton>
 
         <nav className="main-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
@@ -2654,7 +2656,15 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
         <div className="discover-search-box">
           <Search size={21} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a topic, title, DOI, or researcher" autoFocus />
-          <button type="submit" disabled={loading || !query.trim()}>{loading ? <LoaderCircle size={17} className="spin" /> : <Search size={17} />}<span>Search</span></button>
+          {/* The shared action, not a hand-rolled copy of it: the bespoke button had
+              drifted to its own height, so the same 16px radius read as a rounded
+              rectangle here and as a capsule on every button beside it. */}
+          <ActionButton
+            type="submit"
+            variant="primary"
+            disabled={loading || !query.trim()}
+            icon={loading ? <LoaderCircle size={16} className="spin" /> : <Search size={16} />}
+          >Search</ActionButton>
         </div>
       </form>
 
