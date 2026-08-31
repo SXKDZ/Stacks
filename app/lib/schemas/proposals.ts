@@ -57,28 +57,46 @@ export type ProposalOperation = z.infer<typeof ProposalOperationSchema>;
  * Derived from the canonical schemas rather than written out again, so the two
  * cannot drift apart.
  */
+const [createOperation, updateOperation, deleteOperation] = ProposalOperationSchema.options;
+
 export const AgentProposalOperationSchema = z.discriminatedUnion("action", [
-  z.strictObject({
-    ...proposalBase,
-    action: z.literal("create"),
-    data: PaperDataSchema.prefault({}),
-  }),
-  z.strictObject({
-    ...proposalBase,
-    action: z.literal("update"),
-    id: z.string().trim().min(1),
-    data: PaperDataSchema.prefault({}),
-  }),
-  z.strictObject({
-    ...proposalBase,
-    action: z.literal("delete"),
-    id: z.string().trim().min(1),
-  }),
+  createOperation.extend({ data: PaperDataSchema.prefault({}) }),
+  updateOperation.extend({ data: PaperDataSchema.prefault({}) }),
+  deleteOperation,
 ]);
 
 /** A human-readable label for a proposal, used when the agent omits one. */
 export function proposalSummary(operation: ProposalOperation): string {
   return operation.summary ?? `${operation.action} ${operation.entity}`;
+}
+
+/** Just the fields a label needs, read out of a stored operation. */
+const ProposalLabelSchema = z.object({
+  summary: z.string().trim().min(1).optional(),
+  action: z.string().trim().optional(),
+  entity: z.string().trim().optional(),
+}).loose();
+
+/**
+ * The same label, for an operation already serialized into the database. Parsed
+ * loosely on purpose: a label is all these callers want, and a row written by an
+ * older version with a since-removed field would fail the strict schema and lose
+ * a perfectly good summary. `fallback` is what to say when even that much is
+ * unreadable, since the wording differs by where it is shown.
+ */
+export function storedProposalSummary(operation: string, fallback: string): string {
+  const parsed = ProposalLabelSchema.safeParse(safeJson(operation));
+  if (!parsed.success) return fallback;
+  if (parsed.data.summary) return parsed.data.summary;
+  return [parsed.data.action, parsed.data.entity].filter(Boolean).join(" ") || fallback;
+}
+
+function safeJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 /**

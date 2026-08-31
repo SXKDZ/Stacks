@@ -3,6 +3,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { isFeedRunning, subscribeFeed } from "@/app/lib/feed-agent";
 import { effectiveFeedStatus } from "@/app/lib/feed-status";
+import { storedProposalSummary } from "@/app/lib/schemas/proposals";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,18 +35,12 @@ export async function GET(
     .where(eq(feedProposals.snippetId, id))
     .all()
     .map((proposal) => {
-      let summary = "Proposed change";
-      try {
-        summary = (JSON.parse(proposal.operation) as { summary?: string }).summary ?? summary;
-      } catch {
-        // Keep the default summary if the stored operation isn't parseable.
-      }
       return {
         id: proposal.id,
         messageId: proposal.messageId,
         operation: proposal.operation,
         status: proposal.status,
-        summary,
+        summary: storedProposalSummary(proposal.operation, "Proposed change"),
         createdAt: proposal.createdAt,
       };
     });

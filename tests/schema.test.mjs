@@ -1397,7 +1397,7 @@ test("the user's decisions reach the agent exactly once", async () => {
   assert.match(resolveRoute, /async function recordDecision/);
   assert.match(resolveRoute, /scheduleOutcomeReport\(snippetId\)/);
   assert.match(resolveRoute, /Approved and applied: \$\{summary\}/);
-  assert.match(resolveRoute, /Rejected: \$\{proposalNote\(proposal\.operation\)\}/);
+  assert.match(resolveRoute, /Rejected: \$\{storedProposalSummary\(proposal\.operation, "a change"\)\}/);
   assert.match(outcomes, /const COALESCE_MS = 1500/);
   assert.match(outcomes, /if \(isFeedRunning\(snippetId\)\) return/);
   assert.match(outcomes, /isNull\(feedProposals\.reportedAt\)/);

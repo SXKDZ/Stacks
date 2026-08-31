@@ -4,6 +4,7 @@ import { asc, eq, isNotNull } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { storedProposalSummary } from "@/app/lib/schemas/proposals";
 import { readGithubLastSyncedAt, readGithubLinkedRepo, writeGithubLastSyncedAt, writeGithubLinkedRepo } from "@/app/lib/local-settings";
 import {
   createIssue,
@@ -58,13 +59,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 /** A GitHub comment body summarizing a proposed library change + its status. */
 function proposalCommentBody(operation: string, status: string): string {
-  let summary = "Proposed change";
-  try {
-    const parsed = JSON.parse(operation) as { summary?: string; action?: string; entity?: string };
-    summary = parsed.summary ?? ([parsed.action, parsed.entity].filter(Boolean).join(" ") || summary);
-  } catch {
-    // Keep the default summary if the stored operation isn't parseable.
-  }
+  const summary = storedProposalSummary(operation, "Proposed change");
   return `**Proposed library change** · ${STATUS_LABEL[status] ?? status}\n\n${summary}\n\n_Approve or reject in Stacks; this reflects the current status._`;
 }
 
