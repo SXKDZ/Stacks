@@ -247,7 +247,6 @@ async function readSnapshot() {
     givenName: cleanString(author.givenName),
     familyName: cleanString(author.familyName),
     orcid: cleanString(author.orcid),
-    semanticScholarId: cleanString(author.semanticScholarId),
     notes: cleanString(author.notes),
     paperCount: Number(paperCount ?? 0),
     latestYear: cleanNumber(latestYear),

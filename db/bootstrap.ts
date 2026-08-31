@@ -45,7 +45,6 @@ const schemaStatements = [
     given_name TEXT,
     family_name TEXT,
     orcid TEXT UNIQUE,
-    semantic_scholar_id TEXT,
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -158,24 +157,24 @@ const seedStatements = [
     ["venue-arxiv", "arXiv", "arXiv", "preprint", "Cornell Tech", "https://arxiv.org"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-amina", "Amina Rahman", "Amina", "Rahman", "0000-0002-3141-5926", "s2-amina"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-amina", "Amina Rahman", "Amina", "Rahman", "0000-0002-3141-5926"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-theo", "Theo Martins", "Theo", "Martins", "0000-0001-7462-9012", "s2-theo"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-theo", "Theo Martins", "Theo", "Martins", "0000-0001-7462-9012"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-yuki", "Yuki Tanaka", "Yuki", "Tanaka", "0000-0003-8420-1187", "s2-yuki"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-yuki", "Yuki Tanaka", "Yuki", "Tanaka", "0000-0003-8420-1187"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-lena", "Lena Ortiz", "Lena", "Ortiz", "0000-0002-5579-2401", "s2-lena"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-lena", "Lena Ortiz", "Lena", "Ortiz", "0000-0002-5579-2401"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-sam", "Samir Patel", "Samir", "Patel", "0000-0001-6034-8752", "s2-samir"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-sam", "Samir Patel", "Samir", "Patel", "0000-0001-6034-8752"],
   ],
   [
     `INSERT OR IGNORE INTO papers (id, title, abstract, year, paper_type, doi, semantic_scholar_id, url, pdf_url, notes, reading_status, favorite, venue_id, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

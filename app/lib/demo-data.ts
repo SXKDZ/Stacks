@@ -242,11 +242,11 @@ export const demoSnapshot: LibrarySnapshot = {
     },
   ],
   authors: [
-    { id: "author-amina", displayName: "Amina Rahman", givenName: "Amina", familyName: "Rahman", orcid: "0000-0002-3141-5926", semanticScholarId: "s2-amina", notes: null, paperCount: 2, latestYear: 2026 },
-    { id: "author-lena", displayName: "Lena Ortiz", givenName: "Lena", familyName: "Ortiz", orcid: "0000-0002-5579-2401", semanticScholarId: "s2-lena", notes: null, paperCount: 2, latestYear: 2025 },
-    { id: "author-sam", displayName: "Samir Patel", givenName: "Samir", familyName: "Patel", orcid: "0000-0001-6034-8752", semanticScholarId: "s2-samir", notes: null, paperCount: 2, latestYear: 2026 },
-    { id: "author-theo", displayName: "Theo Martins", givenName: "Theo", familyName: "Martins", orcid: "0000-0001-7462-9012", semanticScholarId: "s2-theo", notes: null, paperCount: 2, latestYear: 2026 },
-    { id: "author-yuki", displayName: "Yuki Tanaka", givenName: "Yuki", familyName: "Tanaka", orcid: "0000-0003-8420-1187", semanticScholarId: "s2-yuki", notes: null, paperCount: 2, latestYear: 2026 },
+    { id: "author-amina", displayName: "Amina Rahman", givenName: "Amina", familyName: "Rahman", orcid: "0000-0002-3141-5926", notes: null, paperCount: 2, latestYear: 2026 },
+    { id: "author-lena", displayName: "Lena Ortiz", givenName: "Lena", familyName: "Ortiz", orcid: "0000-0002-5579-2401", notes: null, paperCount: 2, latestYear: 2025 },
+    { id: "author-sam", displayName: "Samir Patel", givenName: "Samir", familyName: "Patel", orcid: "0000-0001-6034-8752", notes: null, paperCount: 2, latestYear: 2026 },
+    { id: "author-theo", displayName: "Theo Martins", givenName: "Theo", familyName: "Martins", orcid: "0000-0001-7462-9012", notes: null, paperCount: 2, latestYear: 2026 },
+    { id: "author-yuki", displayName: "Yuki Tanaka", givenName: "Yuki", familyName: "Tanaka", orcid: "0000-0003-8420-1187", notes: null, paperCount: 2, latestYear: 2026 },
   ],
   venues: [
     { id: "venue-neurips", name: "Conference on Neural Information Processing Systems", acronym: "NeurIPS", type: "conference", publisher: "NeurIPS Foundation", url: "https://neurips.cc", notes: null, paperCount: 1, latestYear: 2026 },
