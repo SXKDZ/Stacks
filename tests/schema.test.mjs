@@ -1210,12 +1210,15 @@ test("a summary says what it was written from, and quotes read as one shape", as
   assert.match(application, /<b>Category<\/b>/);
   assert.match(application, /<input name="category"[^>]*placeholder="cs\.CL"/);
 
-  // A quote rounded on one side only read as a rendering fault; the accent is an
-  // inset rule now, so it follows the curve on all four corners.
+  // The quote block is a well like the app's other Markdown blocks, with the accent
+  // as an inset rule so it follows the corner, and no fixed colour literals.
   assert.match(styles, /\.markdown-content blockquote \{[^}]*border-radius: var\(--radius-md\)/);
-  assert.match(styles, /\.markdown-content blockquote \{[^}]*box-shadow: inset 3px 0 0 var\(--brand-blue\)/);
+  assert.match(styles, /\.markdown-content blockquote \{[^}]*box-shadow: inset 3px 0 0 var\(--brand-blue-strong\)/);
+  assert.match(styles, /\.markdown-content blockquote \{[^}]*color: color-mix\(in srgb, var\(--muted\) 78%, var\(--ink\)\)/);
   assert.doesNotMatch(styles, /border-radius: 0 var\(--radius-md\) var\(--radius-md\) 0/);
-  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow: inset 3px 0 0 rgba\(255, 255, 255/);
+  assert.doesNotMatch(styles, /\[data-theme="light"\] \.markdown-content blockquote/);
+  assert.match(styles, /\.markdown-content blockquote > :first-child \{[^}]*margin-top: 0/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*border-color: rgba\(255, 255, 255/);
 });
 
 test("every button is one family: capsule, gradient to the edge, one shadow", async () => {
@@ -1347,7 +1350,7 @@ test("a user's Markdown stays legible on the blue bubble", async () => {
   // text on the gradient. A line of "=" under any line makes a heading, so this is
   // easy to hit by accident in a pasted request.
   assert.match(styles, /\.feed-turn-user \.feed-bubble :is\(h1, h2, h3, h4, h5, h6, blockquote, th, td, \.katex\) \{[^}]*color: inherit/);
-  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow: inset 3px 0 0 rgba\(255, 255, 255/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow: inset 3px 0 0 rgba\(255, 255, 255, 0\.55\)/);
   assert.match(styles, /\.feed-turn-user \.feed-bubble \.markdown-table-scroll th \{[^}]*background: rgba\(255, 255, 255/);
   // The dark declarations these override are the shared Markdown rules.
   assert.match(styles, /\.markdown-content h1,[\s\S]*?color: var\(--ink\)/);

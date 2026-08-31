@@ -524,20 +524,33 @@ textarea::placeholder {
   text-decoration-color: currentColor;
 }
 
-/* Rounded on all four corners: rounding only the right-hand pair left the accent
-   edge square against a curved body, which read as a rendering fault rather than a
-   style. The accent stays an inset rule so it follows the curve. */
+/* A quotation is a quieter passage of the same prose, not a callout. It takes the
+   well treatment the other Markdown blocks use (a step off the surface plus a
+   hairline, as in pre and .katex-display) with the accent as an inset rule so it
+   follows the corner instead of squaring it off. The brand-blue fill and 3px brand
+   bar it replaces made the quietest content on the page the loudest, and the text
+   colour was a fixed literal that ignored the theme. */
 .markdown-content blockquote {
-  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  box-shadow: inset 3px 0 0 var(--brand-blue);
-  color: #c3cad8;
-  margin: 0.85em 0;
-  padding: 0.65em 0.85em;
+  box-shadow: inset 3px 0 0 var(--brand-blue-strong);
+  /* A step back from body prose, but mixed toward --ink so the quotation clears
+     4.5:1 on the light theme's lighter well as well as on the dark one. */
+  color: color-mix(in srgb, var(--muted) 78%, var(--ink));
+  margin: 0.9em 0;
+  padding: 0.7em 0.95em 0.7em 1.05em;
 }
 
-.markdown-content blockquote p {
-  margin: 0;
+/* Paragraphs inside a quotation keep their own rhythm: the blanket `margin: 0`
+   this replaces ran a multi-paragraph quotation together as one block. Only the
+   outer edges collapse, so the padding above and below stays tight. */
+.markdown-content blockquote > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown-content code {
@@ -1213,7 +1226,6 @@ textarea::placeholder {
 }
 
 [data-theme="light"] .markdown-content em,
-[data-theme="light"] .markdown-content blockquote,
 [data-theme="light"] .reader-summary > .markdown-content {
   color: #4e5667;
 }
