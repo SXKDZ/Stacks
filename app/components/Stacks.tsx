@@ -306,7 +306,7 @@ function createLibraryFilter(kind: LibraryFilterKind, valueId: string, label: st
 
 interface MutationBody {
   entity: "paper" | "author" | "venue" | "collection";
-  action: "create" | "bulk-create" | "update" | "delete" | "bulk-update" | "bulk-delete";
+  action: "create" | "bulk-create" | "update" | "delete";
   id?: string;
   ids?: string[];
   data?: Record<string, unknown>;
@@ -1020,7 +1020,7 @@ function StacksWorkspace() {
       return;
     }
     const succeeded = await mutateLibrary(
-      { entity, action: ids.length === 1 ? "delete" : "bulk-delete", ids },
+      { entity, action: "delete", ids },
       `${ids.length} ${label} deleted.`,
     );
     if (succeeded) {
@@ -4766,7 +4766,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
         data[key] = value;
       }
     }
-    const succeeded = await mutateLibrary({ entity, action: "bulk-update", ids, data }, `${ids.length} ${entity} records updated.`);
+    const succeeded = await mutateLibrary({ entity, action: "update", ids, data }, `${ids.length} ${entity} records updated.`);
     if (succeeded) {
       onComplete();
       onClose();

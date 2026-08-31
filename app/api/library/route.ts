@@ -1012,14 +1012,14 @@ export async function POST(request: Request): Promise<Response> {
       }
       if (added) scheduleAutoSync();
       return Response.json({ ...(await readSnapshot()), importSummary: { added, skipped, failed } });
-    } else if (body.action === "update" || body.action === "bulk-update") {
+    } else if (body.action === "update") {
       const data = body.data ?? {};
       if (body.entity === "paper") {
         if (!ids[0]) {
           return jsonError("A paper id is required for updates.");
         }
-        // Every addressed paper, not just the first: a bulk-update of N ids used
-        // to write ids[0] alone and still answer 200, so the other N-1 rows were
+        // Every addressed paper, not just the first: an update of N ids used to
+        // write ids[0] alone and still answer 200, so the other N-1 rows were
         // silently untouched. (The author/venue/collection branch below already
         // applied to all of them.)
         for (const paperId of ids) {
@@ -1028,7 +1028,7 @@ export async function POST(request: Request): Promise<Response> {
       } else {
         await updateEntities(body.entity, ids, data);
       }
-    } else if (body.action === "delete" || body.action === "bulk-delete") {
+    } else if (body.action === "delete") {
       await deleteEntities(body.entity, ids);
     }
 
