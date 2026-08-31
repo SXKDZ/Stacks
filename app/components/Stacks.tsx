@@ -3965,7 +3965,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
             {results.map((result) => {
               const key = result.sourceId || result.title;
               const isAdded = added.includes(key);
-              return <article key={key}><div><small>{result.source} · {result.year ?? "n.d."}</small><h3>{result.title}</h3><p>{result.authors.join(", ") || "Authors unavailable"}</p><span>{result.venueName || "Venue unknown"}</span></div><button disabled={isAdded} onClick={() => void addResult(result)}>{isAdded ? <><Check size={15} /> Added</> : <><Plus size={15} /> Add</>}</button></article>;
+              return <article key={key}><div><small>{result.source} · {result.year ?? "n.d."}</small><h3>{result.title}</h3><p>{result.authors.join(", ") || "Authors unavailable"}</p><span>{result.venueName || "Venue unknown"}</span></div><ActionButton variant={isAdded ? "success" : "primary"} size="small" disabled={isAdded} onClick={() => void addResult(result)} icon={isAdded ? <Check /> : <Plus />}>{isAdded ? "Added" : "Add"}</ActionButton></article>;
             })}
           </div>
         </div>

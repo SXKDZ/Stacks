@@ -21,7 +21,6 @@
   padding: 3px 5px;
 }
 
-.modal-results article > button,
 .assistant-orb {
   background-image: var(--brand-gradient);
   border-color: var(--brand-cta-border);
