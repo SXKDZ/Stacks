@@ -46,19 +46,33 @@ export async function POST(
   if (!snippet) {
     return Response.json({ error: "Snippet not found." }, { status: 404 });
   }
-  // Interrupt-then-send: if the agent is mid-run, stop it and wait for the
-  // process to fully exit before starting the new turn, so two `claude -p
-  // --resume` processes never write the same session transcript at once.
-  if (isFeedRunning(id)) {
-    await stopFeedAndWait(id);
-  }
-
   let attachments: SnippetAttachment[] = [];
   if (files.length || paperIds.length) {
     attachments = await collectSnippetAttachments(feedWorkingDir(id), files, paperIds);
   }
   if (!reply && !attachments.length) {
     return Response.json({ error: "Enter a follow-up message or attach a file." }, { status: 400 });
+  }
+
+  // Interrupt-then-send: if the agent is mid-run, stop it and wait for the
+  // process to fully exit before starting the new turn, so two `claude -p
+  // --resume` processes never write the same session transcript at once.
+  // The interrupted turn never answered what it was asked, so the new turn is
+  // told to cover that request too and the thread records the gap.
+  const interrupted = isFeedRunning(id);
+  if (interrupted) {
+    await stopFeedAndWait(id);
+    database
+      .insert(feedMessages)
+      .values({
+        id: `msg-${crypto.randomUUID()}`,
+        snippetId: id,
+        role: "system",
+        kind: "text",
+        content: "Stopped this turn to send the next message; its request carries into the next turn.",
+        createdAt: new Date().toISOString(),
+      })
+      .run();
   }
 
   // The reply can switch the feed's model; the change persists so every later
@@ -133,12 +147,12 @@ export async function POST(
 
   if (snippet.sessionId) {
     // Existing session: resume it with the follow-up.
-    const prompt = buildFollowUpPrompt({ reply, outcomes, attachments });
+    const prompt = buildFollowUpPrompt({ reply, outcomes, attachments, interrupted });
     void runFeedAgent({ snippetId: id, sessionId: snippet.sessionId, prompt, resume: true }).catch(() => {});
   } else {
     // No session yet (a forked thread): start a fresh session seeded with the
     // copied conversation as a transcript so the branch keeps its context.
-    const prompt = buildForkPrompt({ reply, transcript: forkTranscript, attachments });
+    const prompt = buildForkPrompt({ reply, transcript: forkTranscript, attachments, interrupted });
     void runFeedAgent({ snippetId: id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
   }
 

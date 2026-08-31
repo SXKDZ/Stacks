@@ -127,6 +127,18 @@ function describeAttachments(attachments: SnippetAttachment[]): string {
   return lines.join("\n");
 }
 
+/*
+ * Sending a message while a turn is running stops that turn, so its request was
+ * never answered. Without this the agent only ever answers the message that
+ * interrupted it, and the earlier one silently gets no reply at all.
+ */
+const INTERRUPTED_TURN_RULE = [
+  "\nThe user sent their next message while you were still working, which stopped",
+  "that turn before you replied to it. Its request is the last thing they asked",
+  "before the message below. Answer that request as well, and answer it first,",
+  "unless the message below replaces it.",
+].join("\n");
+
 export function buildSnippetPrompt(input: {
   instruction: string;
   freeText: string;
@@ -150,11 +162,15 @@ export function buildSnippetPrompt(input: {
   return parts.join("\n");
 }
 
-/** Prompt for a follow-up turn that reports the outcome of approved proposals. */
+/**
+ * Prompt for a follow-up turn: the user's message, the outcome of any proposals
+ * they resolved, and whether this turn interrupted the previous one.
+ */
 export function buildFollowUpPrompt(input: {
   reply: string;
   outcomes?: { applied: string[]; rejected: string[]; failed: string[] };
   attachments?: SnippetAttachment[];
+  interrupted?: boolean;
 }): string {
   const parts: string[] = [
     "Current rules for this turn:",
@@ -168,6 +184,9 @@ export function buildFollowUpPrompt(input: {
   }
   if (input.outcomes?.failed.length) {
     parts.push(`These proposals FAILED to apply (reason in parentheses):\n- ${input.outcomes.failed.join("\n- ")}`);
+  }
+  if (input.interrupted) {
+    parts.push(INTERRUPTED_TURN_RULE);
   }
   if (input.reply.trim()) {
     parts.push(`\n${input.reply.trim()}`);
@@ -218,6 +237,7 @@ export function buildForkPrompt(input: {
   reply: string;
   transcript: string;
   attachments?: SnippetAttachment[];
+  interrupted?: boolean;
 }): string {
   const parts: string[] = [
     "You are the Stacks AI feed agent. This is a forked continuation of an earlier",
@@ -227,8 +247,11 @@ export function buildForkPrompt(input: {
     "",
     PROPOSAL_INSTRUCTIONS,
     "",
-    "The user now continues the conversation:",
   ];
+  if (input.interrupted) {
+    parts.push(INTERRUPTED_TURN_RULE, "");
+  }
+  parts.push("The user now continues the conversation:");
   if (input.reply.trim()) {
     parts.push(input.reply.trim());
   }

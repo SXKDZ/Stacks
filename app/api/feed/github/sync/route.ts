@@ -46,8 +46,12 @@ const MIRRORED_KINDS = new Set(["text", "result"]);
 // Contents API); larger files stay local-only rather than bloating the repo.
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/** Who said it, for a mirrored comment. Stacks's own thread notes (a model switch,
+ *  an approval decision, an interrupted turn) are system rows: labelling them as
+ *  the agent read as if it had said them. */
 function mirrorLabel(role: string): string {
-  return role === "user" ? "**You:**" : "**Agent:**";
+  if (role === "user") return "**You:**";
+  return role === "system" ? "**Stacks:**" : "**Agent:**";
 }
 
 const STATUS_LABEL: Record<string, string> = {
