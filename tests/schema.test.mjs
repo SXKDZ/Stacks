@@ -60,7 +60,7 @@ test("persists local settings atomically and backs up the normalized library", a
   assert.match(routePicker, /chooseDirectory/);
   assert.match(settings, /settingsPath\(\)/);
   assert.match(settings, /databasePath\(\)/);
-  assert.match(settings, /"local" \| "remote" \| "storage"/);
+  assert.match(settings, /"remote" \| "storage"/);
   // Atomic write: temp file + rename.
   assert.match(settings, /settings\.json\.tmp/);
   assert.match(settings, /renameSync\(temporaryPath, path\)/);
@@ -307,7 +307,6 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   // Moving the library is implemented (consistent backup + repoint), not stubbed.
   assert.match(doctor, /async function moveLibrary/);
   assert.match(doctor, /setLibraryRoot\(target\)/);
-  assert.match(doctor, /folderMove: true/);
   assert.doesNotMatch(doctor, /Move the library folder from the filesystem/);
   // SSRF guards live in the shared url-safety module and are used on every
   // server-side fetch of a user-supplied URL (source acquisition + snapshots).

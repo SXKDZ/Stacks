@@ -206,12 +206,10 @@ function commandOutput(command: string, args: string[]): Promise<string | null> 
   });
 }
 
-export async function chooseDirectory(target: "local" | "remote" | "storage"): Promise<string | null> {
+export async function chooseDirectory(target: "remote" | "storage"): Promise<string | null> {
   const prompt = target === "remote"
     ? "Choose the OneDrive folder for Stacks sync"
-    : target === "storage"
-      ? "Choose the destination folder for the Stacks library"
-      : "Choose the local Stacks data folder containing papers.db";
+    : "Choose the destination folder for the Stacks library";
   let selected: string | null;
   if (process.platform === "darwin") {
     selected = await commandOutput("osascript", ["-e", `POSIX path of (choose folder with prompt ${JSON.stringify(prompt)})`]);
@@ -411,7 +409,6 @@ function detectOneDrivePaths(): string[] {
 
 export function currentSettings() {
   return {
-    local: true,
     libraryName: readStructuredSettings()?.libraryName?.trim() || "My Paper Library",
     ai: {
       provider: "bedrock",

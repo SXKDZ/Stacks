@@ -63,7 +63,6 @@ interface SyncResult {
 }
 
 interface SettingsSnapshot {
-  local: boolean;
   ai: {
     provider: string;
     modelId: string;
@@ -88,8 +87,6 @@ interface SettingsSnapshot {
     lastSyncAt: string | null;
     lastResult: SyncResult | null;
     sourceExists: boolean;
-    available?: boolean;
-    unavailableReason?: string;
   };
   github?: {
     repo: string;
@@ -124,13 +121,6 @@ interface VersionInfo {
 }
 
 interface StorageReport {
-  mode?: "local" | "hosted";
-  capabilities?: {
-    databaseChecks: boolean;
-    fileChecks: boolean;
-    repairs: string[];
-    folderMove: boolean;
-  };
   libraryRoot: string;
   libraryExists: boolean;
   databasePresent: boolean;
@@ -209,7 +199,6 @@ interface PromptVariableDefinition {
 type PromptKey = "summarySystem" | "extractionSystem";
 
 const defaultSettings: SettingsSnapshot = {
-  local: true,
   ai: {
     provider: "bedrock",
     modelId: "us.anthropic.claude-sonnet-4-6",
@@ -233,8 +222,7 @@ const defaultSettings: SettingsSnapshot = {
     running: false,
     lastSyncAt: null,
     lastResult: null,
-      sourceExists: false,
-      available: true,
+    sourceExists: false,
   },
   github: { repo: "", connected: false },
 };
@@ -314,14 +302,12 @@ function timeLabel(value: string | null): string {
  *  reflects that configured state rather than whether a backup ran this session
  *  (the last-run time resets on restart). */
 function syncStatusTitle(settings: SettingsSnapshot): string {
-  if (!settings.local) return "Local companion required";
   if (settings.sync.lastResult?.summary) return settings.sync.lastResult.summary;
   if (!settings.sync.remotePath.trim()) return "Choose a OneDrive backup folder";
   return settings.sync.autoSync ? "Backing up automatically" : "Backup folder ready";
 }
 
 function syncStatusDetail(settings: SettingsSnapshot): string {
-  if (!settings.local) return settings.sync.unavailableReason ?? "Backups need Stacks running on this computer.";
   if (settings.sync.lastSyncAt) return `Last backed up ${timeLabel(settings.sync.lastSyncAt)}`;
   if (!settings.sync.remotePath.trim()) return "No backup folder set yet";
   return settings.sync.autoSync
@@ -523,10 +509,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function chooseDirectory() {
-    if (!settings.local) {
-      notify(settings.sync.unavailableReason ?? "OneDrive folder sync is available only in local mode.", "info");
-      return;
-    }
     setSelectingDirectory(true);
     try {
       const response = await fetch("/api/local-directory-picker", {
@@ -549,10 +531,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function chooseStorageDirectory() {
-    if (storageReport?.capabilities?.folderMove === false) {
-      notify("You can only move the library folder when Stacks runs on this computer.", "info");
-      return;
-    }
     setSelectingStorageDirectory(true);
     try {
       const response = await fetch("/api/local-directory-picker", {
@@ -626,10 +604,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function syncNow() {
-    if (!settings.local || settings.sync.available === false) {
-      notify(settings.sync.unavailableReason ?? "OneDrive folder sync is available only in local mode.", "info");
-      return;
-    }
     if (!settings.sync.remotePath.trim()) {
       notify("Choose a OneDrive backup folder first.", "error");
       return;
@@ -999,9 +973,9 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
               <label className="storage-move-field">
                 <span>Move library to</span>
                 <div className="path-picker-control">
-                  <input disabled={storageReport?.capabilities?.folderMove === false} value={storageTarget} onChange={(event) => setStorageTarget(event.target.value)} placeholder="/Users/…/Stacks" />
-                  <ActionButton variant="secondary" onClick={() => void chooseStorageDirectory()} disabled={storageReport?.capabilities?.folderMove === false || selectingStorageDirectory || movingStorage} icon={selectingStorageDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Browse</ActionButton>
-                  <ActionButton variant="secondary" onClick={() => void moveLibrary()} disabled={storageReport?.capabilities?.folderMove === false || movingStorage || !storageTarget.trim()} icon={movingStorage ? <LoaderCircle className="spin" size={15} /> : <ArrowRightLeft size={15} />}>Move</ActionButton>
+                  <input value={storageTarget} onChange={(event) => setStorageTarget(event.target.value)} placeholder="/Users/…/Stacks" />
+                  <ActionButton variant="secondary" onClick={() => void chooseStorageDirectory()} disabled={selectingStorageDirectory || movingStorage} icon={selectingStorageDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Browse</ActionButton>
+                  <ActionButton variant="secondary" onClick={() => void moveLibrary()} disabled={movingStorage || !storageTarget.trim()} icon={movingStorage ? <LoaderCircle className="spin" size={15} /> : <ArrowRightLeft size={15} />}>Move</ActionButton>
                 </div>
                 <small>Copies your files to the new folder, then removes the old one. Asks twice first.</small>
               </label>
@@ -1027,7 +1001,6 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                             ...h.orphanRecords.collections.map((item) => ({ ...item, kind: "collection" })),
                           ]
                         : [];
-                      const fileChecks = storageReport.capabilities?.fileChecks !== false;
                       return (
                         <>
                           <DoctorMetric icon={<DatabaseBackup size={17} />} label="Library database" value={h ? h.integrityOk && !h.foreignKeyViolations ? "Healthy" : "Needs attention" : storageReport.databasePresent ? "Available" : "Missing"} detail={`${storageReport.paperRecords} papers · ${h?.foreignKeyViolations ?? 0} FK violations`} tone={h ? h.integrityOk && !h.foreignKeyViolations ? "good" : "bad" : storageReport.databasePresent ? "good" : "bad"} onClick={() => setDoctorModal({ label: "Library database", detail: `SQLite integrity check: ${h?.integrityOk ? "OK" : "problems found"}. ${h?.foreignKeyViolations ?? 0} foreign-key violations across ${storageReport.paperRecords} papers.${h?.integrityMessages?.length ? ` Messages: ${h.integrityMessages.join("; ")}.` : ""}` })} />
@@ -1035,8 +1008,8 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                           {entities ? (
                             <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${orphanTotal} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={orphanTotal ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Orphaned records", detail: "Authors, venues, and collections with no papers. Removing them deletes only these empty records; no paper is affected.", records: orphanList, repair: "orphaned-records" })} />
                           ) : null}
-                          <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={fileChecks ? `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked` : `${storageReport.referencedPdfFiles} referenced`} detail={fileChecks ? `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingPdfFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "PDFs", detail: `${storageReport.presentPdfFiles} of ${storageReport.referencedPdfFiles} referenced PDFs are present on disk (${storageReport.missingPdfFiles} missing). ${storageReport.storedPdfFiles} physical files total, ${byteLabel(storageReport.storedPdfBytes)}.`, paths: storageReport.missingPdfPaths })} />
-                          <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={fileChecks ? `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked` : `${storageReport.referencedHtmlFiles} referenced`} detail={fileChecks ? `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingHtmlFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "HTML snapshots", detail: `${storageReport.presentHtmlFiles} of ${storageReport.referencedHtmlFiles} referenced snapshots are present on disk (${storageReport.missingHtmlFiles} missing). ${storageReport.storedHtmlFiles} physical files total, ${byteLabel(storageReport.storedHtmlBytes)}.`, paths: storageReport.missingHtmlPaths })} />
+                          <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={`${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked`} detail={`${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}`} tone={storageReport.missingPdfFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "PDFs", detail: `${storageReport.presentPdfFiles} of ${storageReport.referencedPdfFiles} referenced PDFs are present on disk (${storageReport.missingPdfFiles} missing). ${storageReport.storedPdfFiles} physical files total, ${byteLabel(storageReport.storedPdfBytes)}.`, paths: storageReport.missingPdfPaths })} />
+                          <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={`${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked`} detail={`${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}`} tone={storageReport.missingHtmlFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "HTML snapshots", detail: `${storageReport.presentHtmlFiles} of ${storageReport.referencedHtmlFiles} referenced snapshots are present on disk (${storageReport.missingHtmlFiles} missing). ${storageReport.storedHtmlFiles} physical files total, ${byteLabel(storageReport.storedHtmlBytes)}.`, paths: storageReport.missingHtmlPaths })} />
                           <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} ${storageReport.papersWithoutLocalAsset === 1 ? "paper" : "papers"}`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Papers without a local source", detail: `${storageReport.papersWithoutLocalAsset} paper${storageReport.papersWithoutLocalAsset === 1 ? " has" : "s have"} neither a local PDF nor an HTML snapshot. Review every affected record below, then edit its source information or attach a file.`, paperIds: storageReport.paperIdsWithoutLocalAsset })} />
                           <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="File paths saved in a form Stacks can’t use" tone={storageReport.invalidReferences ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Invalid references", detail: "Stored file paths that are absolute or otherwise break Stacks’s portable-path rules. Repair library rewrites these to portable names.", paths: [...storageReport.invalidPdfPaths, ...storageReport.invalidHtmlPaths] })} />
                           <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} ${storageReport.orphanedFiles === 1 ? "file" : "files"}`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Unlinked assets", detail: `${storageReport.orphanedFiles} file${storageReport.orphanedFiles === 1 ? "" : "s"} in the managed pdfs/ and html_snapshots/ folders are not referenced by any paper (${byteLabel(storageReport.orphanedBytes)} reclaimable of ${byteLabel(storageReport.totalBytes)} managed).`, records: (storageReport.orphanedNames ?? []).map((file) => ({ id: file.name, kind: file.kind.toUpperCase(), label: file.name })), repair: "unlinked-files" })} />
@@ -1054,7 +1027,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                   <div className="storage-doctor-actions">
                     <p>Cleanup deletes only files no paper uses. It asks twice and never removes files still in use.</p>
                     <div className="storage-doctor-action-buttons">
-                      <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage || !storageReport.capabilities?.repairs.length} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>{storageReport.mode === "hosted" ? "Repair database" : "Repair library"}</ActionButton>
+                      <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>Repair library</ActionButton>
                       <ActionButton variant="danger" onClick={() => void cleanStorage()} disabled={cleaningStorage || !storageReport.orphanedFiles} icon={cleaningStorage ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}>Clean unlinked assets</ActionButton>
                     </div>
                   </div>
@@ -1070,14 +1043,14 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card sync-status-card">
               <span className="sync-status-icon"><FolderSync size={16} /></span>
               <div><strong>{syncStatusTitle(settings)}</strong><small>{syncStatusDetail(settings)}</small></div>
-              <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.local || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.local ? settings.sync.unavailableReason : !settings.sync.sourceExists ? "Stacks’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up Stacks now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
+              <ActionButton variant="primary" onClick={() => void syncNow()} disabled={syncing || !settings.sync.sourceExists || !settings.sync.remotePath.trim()} title={!settings.sync.sourceExists ? "Stacks’s local library database is not available" : !settings.sync.remotePath.trim() ? "Choose a OneDrive folder first" : "Back up Stacks now"} icon={syncing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>{syncing ? "Backing up…" : "Back up now"}</ActionButton>
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input disabled={!settings.local} list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={!settings.local || selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>{settings.local ? "Stacks backs up your database, PDFs, and saved web pages here, creating the folder if needed. It only adds files, never deletes them. Pick a folder outside your library." : "Backups need Stacks running on this computer."}</small></label>
-                <label><span>Auto-back up delay</span><div className="unit-input"><input disabled={!settings.local || !settings.sync.autoSync} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
+                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>Stacks backs up your database, PDFs, and saved web pages here, creating the folder if needed. It only adds files, never deletes them. Pick a folder outside your library.</small></label>
+                <label><span>Auto-back up delay</span><div className="unit-input"><input disabled={!settings.sync.autoSync} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
-              <label className="settings-toggle"><input disabled={!settings.local} type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong></div></label>
+              <label className="settings-toggle"><input type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong></div></label>
               <div className="sync-caution"><ShieldCheck size={16} /><p><strong>Your library on this computer is the real one.</strong> Backups copy it to OneDrive, but nothing is ever copied back. To restore, you copy the files back yourself.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
