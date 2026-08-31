@@ -1,401 +1,261 @@
 # Changelog
 
-All notable changes to Stacks are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Stacks uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to Stacks are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Stacks uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- Every turn in a feed can be retried, forked, or rewound from its own footer. Retry asks that turn again and replaces what it produced; Fork continues from just before it in a new feed and leaves this one alone; Rewind takes the thread back to before it and returns the message to the reply box. All three cut the thread at the same turn boundaries the history selection uses.
+
+### Changed
+
+- The history a fresh session is seeded with is bounded: the most recent turns are carried and what was dropped is stated. A long thread used to be sent whole, and a prompt that large is refused outright.
+
+### Fixed
+
+- Sending a message while the agent is working no longer loses the answer to the message before it. The interrupted request is carried into the new turn, and the interruption is recorded in the thread.
+- A thread that has outgrown the model's context window says so, and says that forking or rewinding it is the way to continue, instead of showing the raw failure.
+- An empty reply is refused before the running turn is stopped, so a rejected message no longer costs that turn its work.
+- Stacks's own notes in a thread (a model switch, an approval decision) are attributed to Stacks in a mirrored GitHub comment rather than to the agent.
 
 ## [0.5.1] - 2026-08-30
 
 ### Added
 
-- The AI feed can propose renaming a collection, and can add or remove individual
-  papers in one without restating the whole membership.
-- Approval decisions are reported back to the agent: approving or rejecting a
-  proposed change now tells the agent what was applied and what it must not retry,
-  in one turn per batch of decisions, instead of waiting for the next reply.
-- A feed reply records its own decisions in the thread, so what was approved,
-  rejected, or failed to apply reads as part of the conversation.
+- The AI feed can propose renaming a collection, and can add or remove individual papers in one without restating the whole membership.
+- Approval decisions are reported back to the agent: approving or rejecting a proposed change now tells the agent what was applied and what it must not retry, in one turn per batch of decisions, instead of waiting for the next reply.
+- A feed reply records its own decisions in the thread, so what was approved, rejected, or failed to apply reads as part of the conversation.
 
 ### Changed
 
-- Record identifiers inherited from the earlier papercli import are renamed to the
-  application's own format. References follow automatically, including the ids
-  inside a queued proposal, so nothing has to be re-approved.
-- The composer is one control: attachments sit inside its frame above the text
-  rather than in a separate panel, and its resize grip appears with the composer
-  instead of only when the pointer finds it.
-- Proposed library changes fold like a tool call, stay in the thread in the order
-  they happened, and name the record each change targets rather than showing a
-  bare identifier.
-- A turn's cost reads as quiet dot-separated text under the reply rather than as
-  chips.
+- Record identifiers inherited from the earlier papercli import are renamed to the application's own format. References follow automatically, including the ids inside a queued proposal, so nothing has to be re-approved.
+- The composer is one control: attachments sit inside its frame above the text rather than in a separate panel, and its resize grip appears with the composer instead of only when the pointer finds it.
+- Proposed library changes fold like a tool call, stay in the thread in the order they happened, and name the record each change targets rather than showing a bare identifier.
+- A turn's cost reads as quiet dot-separated text under the reply rather than as chips.
 
 ### Fixed
 
-- Per-turn tokens and speed appear as soon as the turn ends, instead of only after
-  reopening the feed.
-- A turn's prompt carries only the approval decisions the agent has not been told
-  about, rather than repeating every past decision.
-- Headings, quotes, tables, and math inside your own request stay legible on the
-  blue message bubble.
-- The composer shows its placeholder again, in every prompt field that uses the
-  highlighted editor.
+- Per-turn tokens and speed appear as soon as the turn ends, instead of only after reopening the feed.
+- A turn's prompt carries only the approval decisions the agent has not been told about, rather than repeating every past decision.
+- Headings, quotes, tables, and math inside your own request stay legible on the blue message bubble.
+- The composer shows its placeholder again, in every prompt field that uses the highlighted editor.
 - A Semantic Scholar identifier is kept when an approved proposal updates a paper.
 
 ## [0.5.0] - 2026-08-18
 
 ### Added
 
-- Paper details open as an accessible modal with tabbed panels instead of a side
-  drawer, keeping keyboard focus and Escape handling inside the dialog.
-- Every AI feed turn ends with its own local date and time, plus the tokens,
-  generation speed, and elapsed time that turn reported.
-- Floating menus and pickers animate in from the edge they open on, including the
-  pagination size menu that opens downward into the table.
+- Paper details open as an accessible modal with tabbed panels instead of a side drawer, keeping keyboard focus and Escape handling inside the dialog.
+- Every AI feed turn ends with its own local date and time, plus the tokens, generation speed, and elapsed time that turn reported.
+- Floating menus and pickers animate in from the edge they open on, including the pagination size menu that opens downward into the table.
 
 ### Changed
 
 - Preprint identifiers are consolidated onto one editable field per paper.
-- Long AI feed threads hydrate from a single snapshot and render a bounded window
-  of interactions, with collapsed tool details mounted only when opened: a
-  2,606-message feed opens in about 0.7 seconds.
+- Long AI feed threads hydrate from a single snapshot and render a bounded window of interactions, with collapsed tool details mounted only when opened: a 2,606-message feed opens in about 0.7 seconds.
 - Consecutive tool operations collapse into one readable entry.
-- Feed figures size to their own content. A diagram narrower than the message
-  keeps its width and stays centred, and a wider one scales down only until its
-  labels reach the smallest readable size, then scrolls in place with the
-  open-in-new-window action still in its corner.
-- Wide feed tables wrap into taller rows instead of pushing every row onto one
-  scrolling line, and a table narrower than the message stays centred in it.
-- Every paper byline shares one adaptive component, so the reader, the library
-  rows, and the detail header disclose authors identically.
-- The library toolbar search field resizes between 220 and 390 pixels so the
-  status tabs stay fully readable once the selection actions appear.
+- Feed figures size to their own content. A diagram narrower than the message keeps its width and stays centred, and a wider one scales down only until its labels reach the smallest readable size, then scrolls in place with the open-in-new-window action still in its corner.
+- Wide feed tables wrap into taller rows instead of pushing every row onto one scrolling line, and a table narrower than the message stays centred in it.
+- Every paper byline shares one adaptive component, so the reader, the library rows, and the detail header disclose authors identically.
+- The library toolbar search field resizes between 220 and 390 pixels so the status tabs stay fully readable once the selection actions appear.
 
 ### Fixed
 
-- Author disclosures are measured at the width they actually render at, so
-  "N more authors" can no longer be clipped mid-word.
+- Author disclosures are measured at the width they actually render at, so "N more authors" can no longer be clipped mid-word.
 - "Show fewer authors" now matches the style of "N more authors" everywhere.
 - Venue monogram chips fit all four letters and centre them in the chip.
-- Feed Markdown exports keep the opening request, the complete tool history, and
-  the original order.
+- Feed Markdown exports keep the opening request, the complete tool history, and the original order.
 - Mermaid diagrams zoom past 100% on double-click when they already fit.
 
 ## [0.4.2] - 2026-08-10
 
 ### Fixed
 
-- AI feed composer resize handles stay hidden until hover, keyboard focus, or
-  active interaction, reducing visual clutter without hiding the control.
+- AI feed composer resize handles stay hidden until hover, keyboard focus, or active interaction, reducing visual clutter without hiding the control.
 
 ## [0.4.1] - 2026-08-10
 
 ### Added
 
-- Existing AI feeds can create a new feed from selected request-and-response
-  interactions through a searchable history-selection dialog.
-- Code visualization windows can independently show line numbers and wrap long
-  lines while preserving syntax highlighting.
+- Existing AI feeds can create a new feed from selected request-and-response interactions through a searchable history-selection dialog.
+- Code visualization windows can independently show line numbers and wrap long lines while preserving syntax highlighting.
 
 ### Changed
 
-- GitHub inbox synchronization processes large feed sets in resumable batches,
-  reports progress, and preserves complete technical diagnostics.
-- Feed and standalone visualization tables share continuous rounded frames,
-  content-sized rows, and overflow-safe resize feedback.
+- GitHub inbox synchronization processes large feed sets in resumable batches, reports progress, and preserves complete technical diagnostics.
+- Feed and standalone visualization tables share continuous rounded frames, content-sized rows, and overflow-safe resize feedback.
 
 ### Fixed
 
-- History selection distinguishes the active request from selected requests,
-  exposes complete request and response text, and avoids sidebar jumps while
-  reading details.
-- Final-row table highlights no longer create a scrollbar or leave column
-  dividers short of the rounded outer border.
+- History selection distinguishes the active request from selected requests, exposes complete request and response text, and avoids sidebar jumps while reading details.
+- Final-row table highlights no longer create a scrollbar or leave column dividers short of the rounded outer border.
 
 ## [0.4.0] - 2026-08-09
 
 ### Added
 
-- AI feed messages can render Mermaid diagrams and open diagrams, images,
-  tables, and code blocks in dedicated visualization windows.
-- Visualization windows provide animated zoom and fit controls, pan and text
-  selection modes, code-language switching and copying, plus sortable,
-  filterable, resizable tables.
+- AI feed messages can render Mermaid diagrams and open diagrams, images, tables, and code blocks in dedicated visualization windows.
+- Visualization windows provide animated zoom and fit controls, pan and text selection modes, code-language switching and copying, plus sortable, filterable, resizable tables.
 
 ### Changed
 
-- AI feed and visualization browser titles include the active feed name, while
-  rich-content actions remain unobtrusive until hover or keyboard focus.
-- Library and visualization tables share proportional column-sizing behavior,
-  with adaptive row heights and full-row or full-column resize feedback.
+- AI feed and visualization browser titles include the active feed name, while rich-content actions remain unobtrusive until hover or keyboard focus.
+- Library and visualization tables share proportional column-sizing behavior, with adaptive row heights and full-row or full-column resize feedback.
 
 ### Fixed
 
-- Visualization pages remain within the viewport at responsive widths, avoid
-  unnecessary scrollbars, and keep Mermaid double-click fit behavior reliable.
-- Long existing feeds now finish scrolling to their latest message after
-  persisted history and late-rendering rich content have completed layout.
-- Table resize guides reach every outer edge without clipped endpoints, and
-  row and column resizing remain available from every applicable boundary.
+- Visualization pages remain within the viewport at responsive widths, avoid unnecessary scrollbars, and keep Mermaid double-click fit behavior reliable.
+- Long existing feeds now finish scrolling to their latest message after persisted history and late-rendering rich content have completed layout.
+- Table resize guides reach every outer edge without clipped endpoints, and row and column resizing remain available from every applicable boundary.
 
 ## [0.3.7] - 2026-08-09
 
 ### Added
 
-- AI settings now expose the maximum number of agent turns per feed run. The
-  historical default remains 40, custom limits apply to new and resumed runs,
-  and 0 removes the application-level cap.
+- AI settings now expose the maximum number of agent turns per feed run. The historical default remains 40, custom limits apply to new and resumed runs, and 0 removes the application-level cap.
 
 ### Changed
 
-- Feed failures use a compact, full-width technical-details panel with clearer
-  recovery guidance for runs that reach their configured turn limit.
+- Feed failures use a compact, full-width technical-details panel with clearer recovery guidance for runs that reach their configured turn limit.
 
 ### Fixed
 
-- Numbered and bulleted list markers in user feed messages now inherit the
-  message text color instead of becoming low-contrast blue on the blue bubble.
+- Numbered and bulleted list markers in user feed messages now inherit the message text color instead of becoming low-contrast blue on the blue bubble.
 
 ## [0.3.6] - 2026-08-09
 
 ### Added
 
-- Each AI feed now shows its complete working-directory path and can open that
-  directory directly, making agent-created files easy to find.
+- Each AI feed now shows its complete working-directory path and can open that directory directly, making agent-created files easy to find.
 
 ### Changed
 
-- New-feed and reply composers share Markdown syntax highlighting and resize as
-  complete panels. Feed headers use a compact three-row layout, clearer elapsed
-  time and token labels, and aligned controls in both themes.
-- AI tool requests and results retain their complete content while scrolling in
-  a shorter bounded panel, and file tooltips show the full stored location.
-- PDF prompt placeholders can select the whole paper without an application-level
-  character cap, while BibTeX page ranges use the standard double hyphen.
+- New-feed and reply composers share Markdown syntax highlighting and resize as complete panels. Feed headers use a compact three-row layout, clearer elapsed time and token labels, and aligned controls in both themes.
+- AI tool requests and results retain their complete content while scrolling in a shorter bounded panel, and file tooltips show the full stored location.
+- PDF prompt placeholders can select the whole paper without an application-level character cap, while BibTeX page ranges use the standard double hyphen.
 
 ### Fixed
 
-- Feed runs no longer overlap, report duplicate failures, or show Done while
-  output is still being saved. Detailed structured errors, stderr, exit status,
-  and recovery guidance remain available in one expandable error card.
-- Per-paper summary locking prevents redundant runs without blocking edits or
-  summaries for unrelated papers, and regenerate controls reflect the active
-  paper's run state.
-- Saved AI feed model choices no longer revert when the feed opens, and Markdown
-  emphasis remains visibly highlighted while composing.
-- PDF metadata review is an independent, consistently sized modal; venue
-  suggestions stay anchored to the active field, and URL-import failures retain
-  their complete diagnostics in the activity log.
+- Feed runs no longer overlap, report duplicate failures, or show Done while output is still being saved. Detailed structured errors, stderr, exit status, and recovery guidance remain available in one expandable error card.
+- Per-paper summary locking prevents redundant runs without blocking edits or summaries for unrelated papers, and regenerate controls reflect the active paper's run state.
+- Saved AI feed model choices no longer revert when the feed opens, and Markdown emphasis remains visibly highlighted while composing.
+- PDF metadata review is an independent, consistently sized modal; venue suggestions stay anchored to the active field, and URL-import failures retain their complete diagnostics in the activity log.
 
 ## [0.3.5] - 2026-08-06
 
 ### Added
 
-- OpenAI GPT-5.6 Sol, Terra, and Luna can be discovered and invoked through
-  Amazon Bedrock's OpenAI-compatible Responses API, with regional availability,
-  reasoning-effort, output-limit, privacy, and response validation support.
-- PDF metadata conflicts now open an accessible field-by-field review dialog
-  that shows current and extracted values before any selected changes are
-  applied.
-- Library Doctor now lists every paper without a readable PDF or HTML snapshot,
-  shows its complete bibliographic and source information, and links directly to
-  its source editor.
+- OpenAI GPT-5.6 Sol, Terra, and Luna can be discovered and invoked through Amazon Bedrock's OpenAI-compatible Responses API, with regional availability, reasoning-effort, output-limit, privacy, and response validation support.
+- PDF metadata conflicts now open an accessible field-by-field review dialog that shows current and extracted values before any selected changes are applied.
+- Library Doctor now lists every paper without a readable PDF or HTML snapshot, shows its complete bibliographic and source information, and links directly to its source editor.
 
 ### Changed
 
-- Model access feedback uses restrained semantic success and warning banners,
-  while complete provider messages remain beside the model controls for
-  diagnosis.
-- One-paper reading and analysis requests keep the agent scoped to the named or
-  attached paper. Paper-create proposals require verified ordered authors and
-  complete identifiers, while preprints use their canonical repository name
-  without a redundant venue-acronym field.
-- Press feedback uses one shared motion token with a restrained 99% scale across
-  controls, menus, cards, and the reading workspace.
+- Model access feedback uses restrained semantic success and warning banners, while complete provider messages remain beside the model controls for diagnosis.
+- One-paper reading and analysis requests keep the agent scoped to the named or attached paper. Paper-create proposals require verified ordered authors and complete identifiers, while preprints use their canonical repository name without a redundant venue-acronym field.
+- Press feedback uses one shared motion token with a restrained 99% scale across controls, menus, cards, and the reading workspace.
 
 ### Fixed
 
-- Manual GitHub inbox sync reconciles the full comment history of linked issues,
-  recovering comments missed after the incremental cursor advanced, and refreshes
-  the selected feed stream so recovered user and agent turns appear immediately.
-- PDF extraction performs a focused recovery pass when authors are missing,
-  applies controlled author edits correctly, compares metadata consistently
-  across locales, and disables conflicts that the selected paper type cannot
-  store.
-- Metadata review focus rings are no longer clipped, missing-author text uses the
-  normal author scale, and model-access banners keep their icon, message, and
-  dismiss control vertically aligned in both themes.
+- Manual GitHub inbox sync reconciles the full comment history of linked issues, recovering comments missed after the incremental cursor advanced, and refreshes the selected feed stream so recovered user and agent turns appear immediately.
+- PDF extraction performs a focused recovery pass when authors are missing, applies controlled author edits correctly, compares metadata consistently across locales, and disables conflicts that the selected paper type cannot store.
+- Metadata review focus rings are no longer clipped, missing-author text uses the normal author scale, and model-access banners keep their icon, message, and dismiss control vertically aligned in both themes.
 
 ## [0.3.4] - 2026-08-04
 
 ### Changed
 
-- The library workspace and shared controls have more consistent focus and press
-  states, stronger secondary-text contrast, clearer empty-state actions, and
-  balanced mobile statistics in both themes.
-- The feed composer's model and reasoning-effort selectors now live behind one
-  run-settings menu. The action row stays inside the composer at narrower widths,
-  and long menus scroll within the viewport instead of extending beyond it.
+- The library workspace and shared controls have more consistent focus and press states, stronger secondary-text contrast, clearer empty-state actions, and balanced mobile statistics in both themes.
+- The feed composer's model and reasoning-effort selectors now live behind one run-settings menu. The action row stays inside the composer at narrower widths, and long menus scroll within the viewport instead of extending beyond it.
 
 ### Fixed
 
-- The closed mobile navigation is no longer exposed to assistive technology.
-  Opening it moves focus to the close control, and Escape closes it and returns
-  focus to the menu button.
-- Workspace changes announce their new heading, notifications use the appropriate
-  status behavior, and errors remain available until they are dismissed.
-- Mobile form fields keep a readable 16px text size so focusing them does not
-  trigger iOS page zoom.
+- The closed mobile navigation is no longer exposed to assistive technology. Opening it moves focus to the close control, and Escape closes it and returns focus to the menu button.
+- Workspace changes announce their new heading, notifications use the appropriate status behavior, and errors remain available until they are dismissed.
+- Mobile form fields keep a readable 16px text size so focusing them does not trigger iOS page zoom.
 
 ## [0.3.3] - 2026-07-28
 
 ### Added
 
-- Reasoning effort is settable: once globally, for summaries, PDF extraction and
-  new feeds, and per feed in both the new-feed and reply composers. A feed's own
-  choice wins, and leaving it unset defers to the global one. Left unset there
-  too, Stacks sends no effort at all and the model chooses per request, which is
-  also what keeps models that reject the setting working.
-- The Continue Reading card's abstract has a "Show more" toggle, like its author
-  line. It appears only when the text is actually clipped.
+- Reasoning effort is settable: once globally, for summaries, PDF extraction and new feeds, and per feed in both the new-feed and reply composers. A feed's own choice wins, and leaving it unset defers to the global one. Left unset there too, Stacks sends no effort at all and the model chooses per request, which is also what keeps models that reject the setting working.
+- The Continue Reading card's abstract has a "Show more" toggle, like its author line. It appears only when the text is actually clipped.
 
 ### Changed
 
-- Stopping a feed agent asks it to interrupt rather than killing the process, so
-  the partial answer and the session survive and the next question continues the
-  same thread instead of starting over.
-- Connections, renamed "Keys & services", is its own settings group again: only
-  one of its four credentials is for AI, the rest being paper discovery and the
-  GitHub inbox.
+- Stopping a feed agent asks it to interrupt rather than killing the process, so the partial answer and the session survive and the next question continues the same thread instead of starting over.
+- Connections, renamed "Keys & services", is its own settings group again: only one of its four credentials is for AI, the rest being paper discovery and the GitHub inbox.
 
 ### Fixed
 
-- Stopping a feed agent no longer reports the interrupt as a failure. The CLI
-  traps the signal and exits 143 itself, so a deliberate stop showed "The agent
-  reported an error".
+- Stopping a feed agent no longer reports the interrupt as a failure. The CLI traps the signal and exits 143 itself, so a deliberate stop showed "The agent reported an error".
 - Replies no longer start with a blank line when reasoning is on.
 
 ## [0.3.2] - 2026-07-26
 
 ### Fixed
 
-- Adding a setting no longer requires registering it in three separate lists that
-  could silently disagree. A key present in only some of them saved in the
-  interface while changing nothing about the request it controlled; the lists are
-  now derived from one declaration, and a key without a mapping is a build error.
-- The "Send a temperature value" switch lines up with the fields beside it instead
-  of sitting indented from them.
+- Adding a setting no longer requires registering it in three separate lists that could silently disagree. A key present in only some of them saved in the interface while changing nothing about the request it controlled; the lists are now derived from one declaration, and a key without a mapping is a build error.
+- The "Send a temperature value" switch lines up with the fields beside it instead of sitting indented from them.
 
 ## [0.3.1] - 2026-07-26
 
 ### Added
 
-- The AI model settings have a "Send a temperature value" switch. Newer models
-  reject the parameter outright, and which ones cannot be told from a model id,
-  so this is a setting rather than a built-in list that goes stale with every
-  release.
-- The AI feed shows animated dots as the pending turn for as long as the agent
-  is working, instead of only before its first message.
-- Imports report each stage in the activity log (resolving, downloading,
-  storing, saving), with the failure recorded in order at the end.
+- The AI model settings have a "Send a temperature value" switch. Newer models reject the parameter outright, and which ones cannot be told from a model id, so this is a setting rather than a built-in list that goes stale with every release.
+- The AI feed shows animated dots as the pending turn for as long as the agent is working, instead of only before its first message.
+- Imports report each stage in the activity log (resolving, downloading, storing, saving), with the failure recorded in order at the end.
 
 ### Changed
 
-- The settings sections are grouped (Library, AI, Feed, About) and ordered so a
-  section sits with what it depends on. Integrations, renamed Connections, holds
-  the Bedrock API key and now sits directly above the AI model that uses it
-  rather than three sections below it.
-- Importing a paper no longer blocks the dialog: it closes immediately and the
-  work continues in the activity log.
-- The feed's Stop button sits beside the send button, labelled and in the danger
-  colour, rather than reading as another attachment icon.
-- The feed re-reads settings when its tab regains focus, so changing the default
-  model no longer needs a page reload to take effect there.
+- The settings sections are grouped (Library, AI, Feed, About) and ordered so a section sits with what it depends on. Integrations, renamed Connections, holds the Bedrock API key and now sits directly above the AI model that uses it rather than three sections below it.
+- Importing a paper no longer blocks the dialog: it closes immediately and the work continues in the activity log.
+- The feed's Stop button sits beside the send button, labelled and in the danger colour, rather than reading as another attachment icon.
+- The feed re-reads settings when its tab regains focus, so changing the default model no longer needs a page reload to take effect there.
 
 ### Fixed
 
-- arXiv imports survive arXiv throttling. Its API stalls without replying rather
-  than refusing, which used to hang the import forever; requests now time out and
-  retry, and fall back to the paper's DataCite DOI.
-- DOIs that Crossref does not know, such as every `10.48550/arXiv.*`
-  registration, now resolve through doi.org instead of reporting "no record".
-- Streaming output scrolls continuously instead of jumping a paragraph at a time,
-  and opening a long thread lands at the bottom.
+- arXiv imports survive arXiv throttling. Its API stalls without replying rather than refusing, which used to hang the import forever; requests now time out and retry, and fall back to the paper's DataCite DOI.
+- DOIs that Crossref does not know, such as every `10.48550/arXiv.*` registration, now resolve through doi.org instead of reporting "no record".
+- Streaming output scrolls continuously instead of jumping a paragraph at a time, and opening a long thread lands at the bottom.
 - The Continue Reading card caps its author list, like every other author line.
 - The "N more authors" button no longer shows a tooltip repeating its own label.
-- The URL import screen no longer claims the URL is sent to Jina Reader: pages
-  are captured locally, so nothing is sent to a third-party reader service.
-- A paper's PDF and HTML snapshot are both always editable, whatever its type.
-  Saving a snapshot and then changing the type to a paper used to hide the
-  snapshot field, leaving a file that was still on disk and still listed under
-  publication details with no way to inspect, replace, or clear it.
-- Downloading a source no longer rewrites the paper type: storing an HTML
-  snapshot used to switch the record to "website" and discard the type just
-  chosen.
-- Pressing Escape closes one layer at a time, so leaving the edit window no
-  longer also closes the paper detail panel behind it.
+- The URL import screen no longer claims the URL is sent to Jina Reader: pages are captured locally, so nothing is sent to a third-party reader service.
+- A paper's PDF and HTML snapshot are both always editable, whatever its type. Saving a snapshot and then changing the type to a paper used to hide the snapshot field, leaving a file that was still on disk and still listed under publication details with no way to inspect, replace, or clear it.
+- Downloading a source no longer rewrites the paper type: storing an HTML snapshot used to switch the record to "website" and discard the type just chosen.
+- Pressing Escape closes one layer at a time, so leaving the edit window no longer also closes the paper detail panel behind it.
 
 ## [0.3.0] - 2026-07-25
 
 ### Security
 
-- A workflow script can no longer escape its sandbox. An injected helper's
-  `.constructor` was the host `Function` constructor, so a script could reach the
-  server process, its filesystem, and its shared prototypes. Merely opening a
-  saved workflow was enough to trigger it, because reading a script's `meta` runs
-  its body.
-- The guard against fetching private addresses no longer misses IPv4 addresses
-  mapped into IPv6, the unspecified address, trailing-dot hostnames, the full
-  IPv6 link-local range, or the carrier, benchmark, and multicast blocks. Every
-  redirect hop is now resolved and checked, and headers are dropped when a
-  redirect crosses origins.
-- Feed file paths are confined to the feed's own directory, closing a traversal
-  route out of it.
+- A workflow script can no longer escape its sandbox. An injected helper's `.constructor` was the host `Function` constructor, so a script could reach the server process, its filesystem, and its shared prototypes. Merely opening a saved workflow was enough to trigger it, because reading a script's `meta` runs its body.
+- The guard against fetching private addresses no longer misses IPv4 addresses mapped into IPv6, the unspecified address, trailing-dot hostnames, the full IPv6 link-local range, or the carrier, benchmark, and multicast blocks. Every redirect hop is now resolved and checked, and headers are dropped when a redirect crosses origins.
+- Feed file paths are confined to the feed's own directory, closing a traversal route out of it.
 
 ### Changed
 
-- Every request the browser sends to the app is now validated against a schema
-  before it is acted on, so a malformed body is refused with an explanation
-  instead of being partially applied.
-- Collection cards show what a collection actually contains: the papers in it,
-  each one's authors, venue, and year, and how much of it has been read. Every
-  card is the same height.
-- Tooltips use the app's own styling and appear at the cursor rather than in the
-  browser's default position, and only when they add something: a truncated
-  paper title, or the full name of a venue shown by acronym.
-- The library, author, and venue tables share one sorting and column-resizing
-  model. Sorting can be reset to the original order, resizing tracks the cursor,
-  and columns stay proportional instead of overflowing their neighbours.
+- Every request the browser sends to the app is now validated against a schema before it is acted on, so a malformed body is refused with an explanation instead of being partially applied.
+- Collection cards show what a collection actually contains: the papers in it, each one's authors, venue, and year, and how much of it has been read. Every card is the same height.
+- Tooltips use the app's own styling and appear at the cursor rather than in the browser's default position, and only when they add something: a truncated paper title, or the full name of a venue shown by acronym.
+- The library, author, and venue tables share one sorting and column-resizing model. Sorting can be reset to the original order, resizing tracks the cursor, and columns stay proportional instead of overflowing their neighbours.
 - Author names in the paper form are chips that can be reordered by dragging.
-- The library picker in a feed and the collection editor list papers the same way
-  the rest of the app does, and search there covers authors, venues, and years
-  rather than titles alone.
-- The README now covers what Stacks does; implementation notes, deployment, and
-  the release process moved to `docs/ARCHITECTURE.md`.
-- CI and release workflows run on `actions/checkout@v5` and
-  `actions/setup-node@v5`, which no longer warn about the Node 20 deprecation.
+- The library picker in a feed and the collection editor list papers the same way the rest of the app does, and search there covers authors, venues, and years rather than titles alone.
+- The README now covers what Stacks does; implementation notes, deployment, and the release process moved to `docs/ARCHITECTURE.md`.
+- CI and release workflows run on `actions/checkout@v5` and `actions/setup-node@v5`, which no longer warn about the Node 20 deprecation.
 
 ### Fixed
 
 - Editing a single paper, author, or venue no longer silently does nothing.
-- A malformed save request no longer wipes every saved skill or workflow: it is
-  refused, and an explicitly empty list is still a legitimate save.
-- Bibliography import no longer loses entries or corrupts fields. One unbalanced
-  entry stops swallowing the rest of the file, commented-out entries stay out,
-  corporate authors in braces stay whole, and a tilde survives in a URL.
-- arXiv identifiers and DOIs are canonicalized, so duplicate detection catches
-  the spellings the app itself produces.
-- Imported metadata is derived from the URL that was actually fetched rather than
-  from the raw request text.
+- A malformed save request no longer wipes every saved skill or workflow: it is refused, and an explicitly empty list is still a legitimate save.
+- Bibliography import no longer loses entries or corrupts fields. One unbalanced entry stops swallowing the rest of the file, commented-out entries stay out, corporate authors in braces stay whole, and a tilde survives in a URL.
+- arXiv identifiers and DOIs are canonicalized, so duplicate detection catches the spellings the app itself produces.
+- Imported metadata is derived from the URL that was actually fetched rather than from the raw request text.
 - One unreadable GitHub issue no longer wedges a sync or truncates it silently.
-- Reading a workflow's `meta` cannot crash or stall the server, and a comment or
-  string mentioning the meta export no longer leaves the workflow nameless.
-- Library writes that would store unusable records are rejected rather than
-  saved.
-- The caret and selection in the highlighted Markdown editors stay aligned with
-  the text.
+- Reading a workflow's `meta` cannot crash or stall the server, and a comment or string mentioning the meta export no longer leaves the workflow nameless.
+- Library writes that would store unusable records are rejected rather than saved.
+- The caret and selection in the highlighted Markdown editors stay aligned with the text.
 
 ### Removed
 
@@ -405,115 +265,65 @@ All notable changes to Stacks are documented here. The format follows
 
 ### Changed
 
-- Manually adding a paper now uses the same interface as editing one: the
-  summary, abstract, and notes fields get the highlighted Markdown editor, and
-  papers can be filed into collections at creation.
-- Closing or reopening a feed's GitHub issue from another device now collapses
-  or expands the feed locally, and comments on closed (collapsed) issues still
-  sync. Closed issues that never had a local feed are left alone.
-- Switching the GitHub inbox to a different repository now relinks feeds
-  safely: all stored issue and comment links are reset first (they belong to
-  the old repository), and the next sync mirrors every feed into fresh issues
-  in the new one instead of touching same-numbered strangers.
+- Manually adding a paper now uses the same interface as editing one: the summary, abstract, and notes fields get the highlighted Markdown editor, and papers can be filed into collections at creation.
+- Closing or reopening a feed's GitHub issue from another device now collapses or expands the feed locally, and comments on closed (collapsed) issues still sync. Closed issues that never had a local feed are left alone.
+- Switching the GitHub inbox to a different repository now relinks feeds safely: all stored issue and comment links are reset first (they belong to the old repository), and the next sync mirrors every feed into fresh issues in the new one instead of touching same-numbered strangers.
 
 ### Fixed
 
-- The caret and text selection in the highlighted Markdown editors (summary,
-  abstract, notes) no longer drift off the visible text; shared form styles had
-  been reskinning the editor's input layer out of alignment with its display
-  layer.
-- Browser form-history suggestions no longer stack on top of the app's own
-  autocomplete in the add/edit paper, author, venue, and collection forms.
-- Feed comments posted from a phone while the agent was mid-run are no longer
-  at risk of being skipped permanently: the sync high-water mark only advances
-  once every deferred comment has been ingested.
-- The sync high-water mark is stamped with a clock-skew margin, so a fast local
-  clock can't hide remote changes from incremental pulls.
+- The caret and text selection in the highlighted Markdown editors (summary, abstract, notes) no longer drift off the visible text; shared form styles had been reskinning the editor's input layer out of alignment with its display layer.
+- Browser form-history suggestions no longer stack on top of the app's own autocomplete in the add/edit paper, author, venue, and collection forms.
+- Feed comments posted from a phone while the agent was mid-run are no longer at risk of being skipped permanently: the sync high-water mark only advances once every deferred comment has been ingested.
+- The sync high-water mark is stamped with a clock-skew margin, so a fast local clock can't hide remote changes from incremental pulls.
 - Comments ingested in one batch keep their GitHub order in the transcript.
-- The attachment-link backfill for old mirrored comments now runs once per
-  message instead of re-checking every comment on every sync.
+- The attachment-link backfill for old mirrored comments now runs once per message instead of re-checking every comment on every sync.
 
 ## [0.2.1] - 2026-07-24
 
 ### Changed
 
-- Attaching a library paper to a feed no longer copies its PDF into the feed
-  folder (which duplicated large files on every turn). The agent reads the
-  original through a read-only, token-gated API instead: it fetches the paper's
-  metadata and, when there is a stored file, downloads it to a scratch directory
-  and reads that. GitHub sync mentions attached papers by title rather than
-  re-uploading them.
-- Clicking an attached paper in a feed opens that paper in the library in a new
-  tab (via a `/?paper=<id>` deep link).
-- The theme now stays in sync across open windows: switching light/dark in one
-  updates the others without a reload.
+- Attaching a library paper to a feed no longer copies its PDF into the feed folder (which duplicated large files on every turn). The agent reads the original through a read-only, token-gated API instead: it fetches the paper's metadata and, when there is a stored file, downloads it to a scratch directory and reads that. GitHub sync mentions attached papers by title rather than re-uploading them.
+- Clicking an attached paper in a feed opens that paper in the library in a new tab (via a `/?paper=<id>` deep link).
+- The theme now stays in sync across open windows: switching light/dark in one updates the others without a reload.
 
 ### Fixed
 
-- Deleting a feed that was mirrored to GitHub now closes its issue through a
-  durable, repo-scoped outbox (retried on the next sync and on startup if GitHub
-  is unreachable), so the feed no longer reappears, rebuilt from scratch, on a
-  later sync, even across an app restart or offline delete.
-- A feed created from a GitHub issue no longer shows its instruction twice when
-  the issue body repeats the title.
-- The opening message of a feed keeps showing the text you typed even when a
-  paper is attached.
-- The library-picker search box takes focus when it opens, so typing filters the
-  list instead of landing in the composer behind it.
+- Deleting a feed that was mirrored to GitHub now closes its issue through a durable, repo-scoped outbox (retried on the next sync and on startup if GitHub is unreachable), so the feed no longer reappears, rebuilt from scratch, on a later sync, even across an app restart or offline delete.
+- A feed created from a GitHub issue no longer shows its instruction twice when the issue body repeats the title.
+- The opening message of a feed keeps showing the text you typed even when a paper is attached.
+- The library-picker search box takes focus when it opens, so typing filters the list instead of landing in the composer behind it.
 
 ## [0.2.0] - 2026-07-23
 
 ### Added
 
-- Per-feed agent model picker in the composer and reply box: choose the Bedrock
-  model for a feed, persisted on the feed and passed to the agent, recorded as a
-  system notice in the thread, with the last-used model restored for new feeds.
-- One reusable dropdown control used everywhere a select is needed (feed model
-  picker, AI settings, filter builder, entity forms), replacing native selects
-  so the option list matches the app's own styling.
-- Clickable author names and collection chips in the paper list that filter the
-  library by that author or collection.
-- A one-time OneDrive backup on startup when auto-backup is configured, so
-  changes made while Stacks was closed are protected on the next launch.
-- Continuous integration (lint, typecheck, build, and tests) on every pull
-  request and push, with the main branch protected behind it.
+- Per-feed agent model picker in the composer and reply box: choose the Bedrock model for a feed, persisted on the feed and passed to the agent, recorded as a system notice in the thread, with the last-used model restored for new feeds.
+- One reusable dropdown control used everywhere a select is needed (feed model picker, AI settings, filter builder, entity forms), replacing native selects so the option list matches the app's own styling.
+- Clickable author names and collection chips in the paper list that filter the library by that author or collection.
+- A one-time OneDrive backup on startup when auto-backup is configured, so changes made while Stacks was closed are protected on the next launch.
+- Continuous integration (lint, typecheck, build, and tests) on every pull request and push, with the main branch protected behind it.
 
 ### Changed
 
-- Refreshed the interface: a modern type scale (Geist), a single theme-aware
-  brand gradient, rounder buttons, and consolidated spacing, radii, borders, and
-  colors so surfaces stay consistent across light and dark themes.
-- Proposal cards now show the change action (e.g. "Create paper") alongside the
-  paper type and venue, and expand in place to the structured change details
-  with the raw JSON tucked inside.
-- The OneDrive sync card reports the configured backup state and last backup
-  time instead of always reading as not-yet-connected after a restart.
-- The library view and an open feed now refresh each other's changes on tab
-  focus, retiring the manual refresh button.
+- Refreshed the interface: a modern type scale (Geist), a single theme-aware brand gradient, rounder buttons, and consolidated spacing, radii, borders, and colors so surfaces stay consistent across light and dark themes.
+- Proposal cards now show the change action (e.g. "Create paper") alongside the paper type and venue, and expand in place to the structured change details with the raw JSON tucked inside.
+- The OneDrive sync card reports the configured backup state and last backup time instead of always reading as not-yet-connected after a restart.
+- The library view and an open feed now refresh each other's changes on tab focus, retiring the manual refresh button.
 
 ### Fixed
 
-- Feed HTML/SVG attachments are served as downloads with a strict content
-  policy, so a captured web page's scripts can never run inside the app.
+- Feed HTML/SVG attachments are served as downloads with a strict content policy, so a captured web page's scripts can never run inside the app.
 - The workflow runtime no longer exposes host internals to a workflow script.
-- Enforced unique arXiv and Semantic Scholar identifiers on papers, made
-  proposal approval and GitHub sync safe against overlapping runs, and stopped
-  the demo library from reappearing after every paper is deleted.
-- Feed attachments and agent sessions are cleaned up on delete and carried along
-  when the library folder moves; re-downloading a source now refreshes the file.
-- A failed agent launch now surfaces as an error instead of leaving a feed stuck
-  loading; an empty filter clause no longer hides every paper; and bulk delete or
-  export only ever acts on the papers currently in view.
+- Enforced unique arXiv and Semantic Scholar identifiers on papers, made proposal approval and GitHub sync safe against overlapping runs, and stopped the demo library from reappearing after every paper is deleted.
+- Feed attachments and agent sessions are cleaned up on delete and carried along when the library folder moves; re-downloading a source now refreshes the file.
+- A failed agent launch now surfaces as an error instead of leaving a feed stuck loading; an empty filter clause no longer hides every paper; and bulk delete or export only ever acts on the papers currently in view.
 
 ## [0.1.1] - 2026-07-23
 
 ### Removed
 
-- The unused drizzle-kit migration folder, config, `db:generate` script, and
-  dependency. `db/bootstrap.ts` is the single, self-migrating schema source and
-  Drizzle remains the query layer.
-- The stale OpenGraph social image and its metadata; a local app serves no
-  shared link previews.
+- The unused drizzle-kit migration folder, config, `db:generate` script, and dependency. `db/bootstrap.ts` is the single, self-migrating schema source and Drizzle remains the query layer.
+- The stale OpenGraph social image and its metadata; a local app serves no shared link previews.
 
 ## [0.1.0] - 2026-07-23
 
@@ -521,42 +331,15 @@ Initial public release.
 
 ### Added
 
-- Normalized local SQLite library (better-sqlite3 via Drizzle) with ordered
-  paper authorship, canonical venues, and many-to-many collections, all in a
-  single self-contained library folder.
-- Searchable, sortable, resizable paper grid plus compact author and venue
-  indexes, with full create, edit, delete, and bulk actions.
-- Click-through author, venue, and collection links, and collections that carry
-  a color shown on their cards and paper chips.
-- Embedded PDF and local HTML readers with Markdown, GitHub-flavored Markdown,
-  and LaTeX rendering through KaTeX.
-- Bedrock-powered summaries grounded in the stored PDF, with configurable model
-  and prompt templates.
-- Academic discovery across Semantic Scholar, Google Scholar (via SerpAPI),
-  arXiv, DBLP, and Crossref, plus BibTeX, RIS, and identifier imports.
-- An AI feed that drives headless `claude -p` agents over the library, where
-  every change is an approval-gated proposal, with editable feed skills and
-  Claude Code workflow scripts.
-- Optional GitHub inbox sync that mirrors feeds to a private repo's issues for
-  mobile access.
-- One-way OneDrive backup of the library, database, managed files, and feed
-  transcripts.
+- Normalized local SQLite library (better-sqlite3 via Drizzle) with ordered paper authorship, canonical venues, and many-to-many collections, all in a single self-contained library folder.
+- Searchable, sortable, resizable paper grid plus compact author and venue indexes, with full create, edit, delete, and bulk actions.
+- Click-through author, venue, and collection links, and collections that carry a color shown on their cards and paper chips.
+- Embedded PDF and local HTML readers with Markdown, GitHub-flavored Markdown, and LaTeX rendering through KaTeX.
+- Bedrock-powered summaries grounded in the stored PDF, with configurable model and prompt templates.
+- Academic discovery across Semantic Scholar, Google Scholar (via SerpAPI), arXiv, DBLP, and Crossref, plus BibTeX, RIS, and identifier imports.
+- An AI feed that drives headless `claude -p` agents over the library, where every change is an approval-gated proposal, with editable feed skills and Claude Code workflow scripts.
+- Optional GitHub inbox sync that mirrors feeds to a private repo's issues for mobile access.
+- One-way OneDrive backup of the library, database, managed files, and feed transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.5.1...HEAD
-[0.5.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.1
-[0.5.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.0
-[0.4.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.2
-[0.4.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.1
-[0.3.6]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.6
-[0.3.5]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.5
-[0.3.4]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.4
-[0.3.3]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.3
-[0.3.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.2
-[0.3.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.1
-[0.3.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.0
-[0.2.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.2
-[0.2.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.1
-[0.2.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.0
-[0.1.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.1.1
-[0.1.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.1.0
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.5.1...HEAD [0.5.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.1 [0.5.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.0 [0.4.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.2 [0.4.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.1 [0.3.6]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.6 [0.3.5]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.5 [0.3.4]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.4 [0.3.3]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.3 [0.3.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.2 [0.3.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.1 [0.3.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.3.0 [0.2.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.2 [0.2.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.1 [0.2.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.2.0 [0.1.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.1.1 [0.1.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.1.0
