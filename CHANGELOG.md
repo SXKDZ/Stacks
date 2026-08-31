@@ -6,6 +6,44 @@ All notable changes to Stacks are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-30
+
+### Added
+
+- The AI feed can propose renaming a collection, and can add or remove individual
+  papers in one without restating the whole membership.
+- Approval decisions are reported back to the agent: approving or rejecting a
+  proposed change now tells the agent what was applied and what it must not retry,
+  in one turn per batch of decisions, instead of waiting for the next reply.
+- A feed reply records its own decisions in the thread, so what was approved,
+  rejected, or failed to apply reads as part of the conversation.
+
+### Changed
+
+- Record identifiers inherited from the earlier papercli import are renamed to the
+  application's own format. References follow automatically, including the ids
+  inside a queued proposal, so nothing has to be re-approved.
+- The composer is one control: attachments sit inside its frame above the text
+  rather than in a separate panel, and its resize grip appears with the composer
+  instead of only when the pointer finds it.
+- Proposed library changes fold like a tool call, stay in the thread in the order
+  they happened, and name the record each change targets rather than showing a
+  bare identifier.
+- A turn's cost reads as quiet dot-separated text under the reply rather than as
+  chips.
+
+### Fixed
+
+- Per-turn tokens and speed appear as soon as the turn ends, instead of only after
+  reopening the feed.
+- A turn's prompt carries only the approval decisions the agent has not been told
+  about, rather than repeating every past decision.
+- Headings, quotes, tables, and math inside your own request stay legible on the
+  blue message bubble.
+- The composer shows its placeholder again, in every prompt field that uses the
+  highlighted editor.
+- A Semantic Scholar identifier is kept when an approved proposal updates a paper.
+
 ## [0.5.0] - 2026-08-18
 
 ### Added
@@ -505,7 +543,8 @@ Initial public release.
   transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.1
 [0.5.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.0
 [0.4.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.2
 [0.4.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.4.1
