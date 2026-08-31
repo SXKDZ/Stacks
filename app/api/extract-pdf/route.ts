@@ -180,7 +180,6 @@ export async function POST(request: Request): Promise<Response> {
     // {{source_text[1:2]}}. Default (no slice) reads the first two pages.
     const slice = pageSliceFor(template, "source_text") ?? { start: 1, end: 2 };
     const { text: sourceText, firstPage, lastPage } = await readPdfPagesFromDocument(document, slice);
-    const pageCount = Math.max(0, lastPage - firstPage + 1);
     if (!sourceText) {
       return Response.json({ error: `No selectable text was found in PDF pages ${firstPage}-${lastPage}.` }, { status: 422 });
     }
@@ -192,7 +191,7 @@ export async function POST(request: Request): Promise<Response> {
       const warning = fallback.authors.length
         ? "Bedrock is not configured; Stacks used embedded PDF metadata and text heuristics."
         : "Bedrock is not configured, and the PDF metadata did not contain an author list. Review the authors before saving.";
-      return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning });
+      return Response.json({ metadata: fallback, warning });
     }
 
     const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
@@ -246,10 +245,6 @@ export async function POST(request: Request): Promise<Response> {
       }
       return Response.json({
         metadata,
-        analyzedPages: pageCount,
-        totalPages: document.numPages,
-        usedFallback: false,
-        endpoint: result.endpoint,
         ...(!metadata.authors.length
           ? { warning: "No author list was found in the analyzed PDF pages. Review the authors before saving." }
           : {}),
@@ -260,9 +255,6 @@ export async function POST(request: Request): Promise<Response> {
         : error instanceof Error ? error.message : "Metadata extraction failed.";
       return Response.json({
         metadata: fallback,
-        analyzedPages: pageCount,
-        totalPages: document.numPages,
-        usedFallback: true,
         warning: fallback.authors.length
           ? warning
           : `${warning} No author list was found; review the authors before saving.`,

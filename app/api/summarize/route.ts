@@ -145,9 +145,6 @@ export async function POST(request: Request): Promise<Response> {
     // reads exactly like one written from the paper, and only the caller can say so.
     return Response.json({
       summary,
-      model,
-      endpoint: result.endpoint,
-      groundedWithReader: grounding.source === "pdf",
       grounding: {
         source: grounding.source,
         ...(grounding.pagesRead === undefined ? {} : { pagesRead: grounding.pagesRead }),

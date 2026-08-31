@@ -678,14 +678,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       const response = await fetch("/api/storage-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operation: "inspect",
-          papers: papers.map((paper) => ({
-            id: paper.id,
-            localPath: paper.localPath,
-            htmlSnapshotPath: paper.htmlSnapshotPath,
-          })),
-        }),
+        body: JSON.stringify({ operation: "inspect" }),
       });
       if (!response.ok) {
         throw new Error(await readError(response));
@@ -700,7 +693,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     } finally {
       setCheckingStorage(false);
     }
-  }, [notify, papers]);
+  }, [notify]);
 
   async function cleanStorage(): Promise<boolean> {
     if (!storageReport?.orphanedFiles) {
@@ -719,15 +712,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       const response = await fetch("/api/storage-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operation: "clean",
-          confirmed: true,
-          papers: papers.map((paper) => ({
-            id: paper.id,
-            localPath: paper.localPath,
-            htmlSnapshotPath: paper.htmlSnapshotPath,
-          })),
-        }),
+        body: JSON.stringify({ operation: "clean", confirmed: true }),
       });
       if (!response.ok) {
         throw new Error(await readError(response));
@@ -758,15 +743,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         const response = await fetch("/api/storage-management", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            operation: "repair",
-            confirmed: true,
-            papers: papers.map((paper) => ({
-              id: paper.id,
-              localPath: paper.localPath,
-              htmlSnapshotPath: paper.htmlSnapshotPath,
-            })),
-          }),
+          body: JSON.stringify({ operation: "repair", confirmed: true }),
         });
         if (!response.ok) {
           throw new Error(await readError(response));
@@ -829,16 +806,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       const response = await fetch("/api/storage-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operation: "move",
-          targetDirectory: targetPath,
-          confirmed: true,
-          papers: papers.map((paper) => ({
-            id: paper.id,
-            localPath: paper.localPath,
-            htmlSnapshotPath: paper.htmlSnapshotPath,
-          })),
-        }),
+        body: JSON.stringify({ operation: "move", targetDirectory: targetPath, confirmed: true }),
       });
       if (!response.ok) {
         throw new Error(await readError(response));

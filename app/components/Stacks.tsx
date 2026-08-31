@@ -136,9 +136,6 @@ interface ExtractedPdfMetadata {
 
 interface PdfExtractionResponse {
   metadata: ExtractedPdfMetadata;
-  analyzedPages: number;
-  totalPages: number;
-  usedFallback: boolean;
   warning?: string;
 }
 

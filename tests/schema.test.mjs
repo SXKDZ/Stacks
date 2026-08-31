@@ -1191,7 +1191,7 @@ test("a summary says what it was written from, and quotes read as one shape", as
   // a review written from the abstract alone looked like one written from the paper.
   assert.match(summarizeRoute, /interface PaperGrounding/);
   assert.match(summarizeRoute, /source: "pdf" \| "webpage" \| "none"/);
-  assert.match(summarizeRoute, /groundedWithReader: grounding\.source === "pdf"/);
+  assert.match(summarizeRoute, /source: grounding\.source/);
   assert.match(summarizeRoute, /pagesSkipped/);
   assert.match(application, /function groundingNote/);
   assert.match(application, /could not be parsed/);
