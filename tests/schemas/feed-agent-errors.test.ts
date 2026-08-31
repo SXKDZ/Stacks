@@ -79,7 +79,10 @@ test("separate failures are not coalesced", () => {
 
 test("the result handler defers persistence to the single terminal failure path", async () => {
   const source = await readFile(new URL("../../app/lib/feed-agent.ts", import.meta.url), "utf8");
-  const resultHandler = source.slice(source.indexOf('if (event.type === "result")'), source.indexOf('child.stdout?.on("data"'));
+  // Both offsets are taken relative to the handler, so another function that also
+  // reads a subprocess's stdout cannot silently empty this slice.
+  const start = source.indexOf('if (event.type === "result")');
+  const resultHandler = source.slice(start, source.indexOf('child.stdout?.on("data"', start));
 
   assert.match(resultHandler, /failedResultEvent = event/);
   assert.doesNotMatch(resultHandler, /persistMessage\(snippetId, "system", "error"/);

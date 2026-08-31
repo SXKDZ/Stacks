@@ -674,12 +674,16 @@ function TurnMeta({ iso, message, onRetry, onFork, onRewind, busy = false }: {
  * on one line so the console scales to dozens of interactions, plus an overflow
  * menu (rename / fork / export / delete). Statuses stay fresh via the poll.
  */
-function FeedRow({ snippet, active, onSelect, onRename, onFork, onSelectHistory, onExport, onCollapse, onDelete }: {
+function FeedRow({ snippet, active, compacting, onSelect, onRename, onFork, onSelectHistory, onCompact, onExport, onCollapse, onDelete }: {
   snippet: FeedSnippet;
   active: boolean;
+  /** A compaction of this thread's session is in flight; it can take minutes. */
+  compacting: boolean;
   onSelect: () => void;
   onRename: () => void;
   onFork: () => void;
+  /** Shorten what the agent carries between turns, leaving the thread as it is. */
+  onCompact: () => void;
   onSelectHistory: (returnFocus: HTMLButtonElement | null) => void;
   onExport: () => void;
   onCollapse: () => void;
@@ -743,7 +747,9 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onSelectHistory,
             <span className="feed-row-title">{snippet.title || snippet.instruction || "Untitled"}</span>
           </span>
           <span className="feed-row-meta">
-            <span className={`feed-row-status feed-status-${snippet.status}`}>{statusLabel(snippet.status)}</span>
+            <span className={`feed-row-status feed-status-${compacting ? "running" : snippet.status}`}>
+              {compacting ? "Compacting session…" : statusLabel(snippet.status)}
+            </span>
             <span
               className="feed-row-time"
               aria-label={`Updated ${relativeTime(snippet.updatedAt)}`}
@@ -781,6 +787,14 @@ function FeedRow({ snippet, active, onSelect, onRename, onFork, onSelectHistory,
                   }}
                 >
                   <ListChecks size={14} /> Select history
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={snippet.status === "running" || snippet.status === "queued"}
+                  onClick={run(onCompact)}
+                >
+                  <Wrench size={14} /> Compact session
                 </button>
                 <button type="button" role="menuitem" onClick={run(onExport)}><Download size={14} /> Export</button>
                 <button type="button" role="menuitem" onClick={run(onCollapse)}>{snippet.collapsed ? <><ChevronUp size={14} /> Expand</> : <><ChevronDown size={14} /> Collapse</>}</button>
@@ -2146,6 +2160,7 @@ export default function FeedWorkspace() {
   // The current failure stays visible until dismissed or a later sync succeeds;
   // the activity log below remains the durable history across reloads.
   const [syncAlert, setSyncAlert] = useState<{ summary: string; details: string } | null>(null);
+  const [compactingId, setCompactingId] = useState<string | null>(null);
   const [syncLog, setSyncLog] = useState<SyncLogEntry[]>([]);
 
   useEffect(() => { setSyncLog(readSyncLog()); }, []);
@@ -2533,6 +2548,36 @@ export default function FeedWorkspace() {
     }
   }
 
+  /**
+   * Ask the CLI to summarize the older part of this thread's agent session, so the
+   * next turn carries less. The thread itself is untouched, and the CLI's answer
+   * (including a refusal such as "Not enough messages to compact") is reported as it
+   * came back rather than being restated.
+   */
+  async function compactSnippet(snippet: FeedSnippet) {
+    setCompactingId(snippet.id);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippet.id}/compact`, { method: "POST" });
+      const payload = await response.json().catch(() => null) as { message?: string; error?: string } | null;
+      if (!response.ok) {
+        // The two refusals (no session yet, a turn in flight) never reach the thread,
+        // so they are the only outcomes that need a surface of their own.
+        setSyncAlert({ summary: payload?.error ?? "The session could not be compacted.", details: "" });
+        return;
+      }
+      // Everything else, including the CLI's own refusals, was written into the
+      // thread as a note by the route, so the list reload is all that is left.
+      await loadSnippets();
+    } catch (error) {
+      setSyncAlert({
+        summary: error instanceof Error ? error.message : "The session could not be compacted.",
+        details: "",
+      });
+    } finally {
+      setCompactingId(null);
+    }
+  }
+
   function selectSnippetHistory(snippet: FeedSnippet, returnFocus: HTMLButtonElement | null) {
     if (snippet.status === "running" || snippet.status === "queued") return;
     setComposing(false);
@@ -2605,6 +2650,8 @@ export default function FeedWorkspace() {
                   onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                   onRename={() => void renameSnippet(snippet)}
                   onFork={() => void forkSnippet(snippet)}
+                  compacting={compactingId === snippet.id}
+                  onCompact={() => void compactSnippet(snippet)}
                   onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
                   onExport={() => void exportSnippet(snippet)}
                   onCollapse={() => void toggleCollapse(snippet)}
@@ -2626,6 +2673,8 @@ export default function FeedWorkspace() {
                       onSelect={() => { setHistorySelectionRequest(null); setComposing(false); setSelectedId(snippet.id); }}
                       onRename={() => void renameSnippet(snippet)}
                       onFork={() => void forkSnippet(snippet)}
+                  compacting={compactingId === snippet.id}
+                  onCompact={() => void compactSnippet(snippet)}
                       onSelectHistory={(returnFocus) => selectSnippetHistory(snippet, returnFocus)}
                       onExport={() => void exportSnippet(snippet)}
                       onCollapse={() => void toggleCollapse(snippet)}

@@ -14,6 +14,8 @@ import { buildForkPrompt, parseProposalsResult, type ProposalOperation } from "@
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 import { feedAgentModel } from "@/app/lib/feed-model";
 import { proposalSummary } from "@/app/lib/schemas/proposals";
+import { parseJsonWith } from "@/app/lib/schemas/parse";
+import { CompactResultSchema } from "@/app/lib/schemas/requests";
 
 /**
  * Drives a headless `claude -p` agent for one feed snippet. The agent runs with
@@ -377,6 +379,88 @@ async function agentEnv(feedToken: string): Promise<NodeJS.ProcessEnv> {
     STACKS_FEED_BASE_URL: feedBaseUrl(),
     STACKS_FEED_TOKEN: feedToken,
   };
+}
+
+/** A compaction is one summarization pass over the whole session. Measured at 153
+ *  seconds on a 21 MB transcript of 1,163 turns, so the ceiling is minutes, not
+ *  seconds; it exists to stop a wedged subprocess, not to bound normal work. */
+const COMPACT_TIMEOUT_MS = 300_000;
+
+/**
+ * Compact this feed's agent session in place: the same `/compact` the interactive
+ * client runs, driven headlessly.
+ *
+ * The CLI replaces the older part of its session transcript with a summary, so the
+ * next resumed turn sends far less. Nothing in the Stacks thread changes: the
+ * conversation the user reads is stored separately, and only what the agent carries
+ * between turns gets shorter. That is the difference from a rewind, which shortens
+ * the thread itself and throws the session away.
+ *
+ * Not a rescue for every context-limit failure. Compaction summarizes older groups
+ * of a conversation, so it needs a conversation to work with: a single oversized
+ * message (a fork seeded with a huge transcript, say) leaves it nothing to summarize
+ * and the CLI reports as much.
+ */
+export async function compactFeedSession(snippetId: string): Promise<{ ok: boolean; message: string }> {
+  const database = await ensureDatabase();
+  const row = database
+    .select({ sessionId: feedSnippets.sessionId, model: feedSnippets.model })
+    .from(feedSnippets)
+    .where(eq(feedSnippets.id, snippetId))
+    .get();
+  const sessionId = row?.sessionId?.trim();
+  if (!sessionId) {
+    return { ok: false, message: "This thread has no agent session yet, so there is nothing to compact." };
+  }
+  // The session transcript is a single file the CLI rewrites; a turn writing to it
+  // at the same time would race. The run slot is claimed for the same reason a turn
+  // claims it, so a reply cannot start while this is in flight.
+  if (isFeedRunning(snippetId) || launching.has(snippetId)) {
+    return { ok: false, message: "The agent is working. Stop the current turn, then compact." };
+  }
+  launching.add(snippetId);
+  try {
+    const runtime = await resolveRuntimeValues();
+    const model = feedAgentModel(row?.model, runtimeValue(runtime, "BEDROCK_MODEL_ID"));
+    // No feed token: /compact never calls the library API, so no credential is minted.
+    const env = await agentEnv("");
+    const workingDir = feedWorkingDir(snippetId);
+    const child = spawn(CLAUDE_BIN, [
+      "-p",
+      "/compact",
+      "--output-format",
+      "json",
+      "--resume",
+      sessionId,
+      ...(model ? ["--model", model] : []),
+    ], { cwd: workingDir, env, stdio: ["ignore", "pipe", "pipe"] });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    const timer = setTimeout(() => child.kill("SIGKILL"), COMPACT_TIMEOUT_MS);
+    const code = await new Promise<number | null>((resolve) => {
+      child.on("close", (exitCode) => resolve(exitCode));
+      child.on("error", () => resolve(null));
+    });
+    clearTimeout(timer);
+
+    const parsed = parseJsonWith(CompactResultSchema, stdout.trim());
+    if (code !== 0 || !parsed.ok || parsed.data.is_error) {
+      const detail = (parsed.ok ? parsed.data.result : "") || stderr.trim() || `the CLI exited with code ${code ?? "none"}`;
+      return { ok: false, message: `The session could not be compacted: ${detail}` };
+    }
+    // The CLI says nothing on success and reports its refusals (for instance "Not
+    // enough messages to compact") in the result text, so pass that through.
+    const said = parsed.data.result.trim();
+    const message = said || "Compacted this thread's agent session; its next turn carries a summary of the earlier conversation.";
+    await persistMessage(snippetId, "system", "text", message);
+    emit(snippetId, { type: "status", status: "done" });
+    return { ok: true, message };
+  } finally {
+    launching.delete(snippetId);
+  }
 }
 
 /**

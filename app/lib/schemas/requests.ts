@@ -102,6 +102,16 @@ export const FeedForkRequestSchema = z.object({
   includeToolDetails: z.boolean().prefault(false),
 });
 
+/**
+ * What `claude -p "/compact" --output-format json` answers with. The CLI says
+ * nothing on success and puts its refusals ("Not enough messages to compact") in
+ * `result`, so both fields are read.
+ */
+export const CompactResultSchema = z.object({
+  is_error: z.boolean().prefault(false),
+  result: z.string().prefault(""),
+}).loose();
+
 /** The interaction a rewind or a retry addresses, from the same boundaries the
  *  history selection uses. Everything from it onward is removed; a retry keeps its
  *  user turn and runs it again. */
