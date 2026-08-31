@@ -641,25 +641,9 @@ td.number-cell {
 
 .compact-toolbar {
   justify-content: flex-start;
-}.collection-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  padding: 12px;
-  position: relative;
 }
 
-.collection-card::before {
-  background: var(--brand-blue);
-  content: "";
-  height: 3px;
-  left: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-}.collection-papers {
+.collection-papers {
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;

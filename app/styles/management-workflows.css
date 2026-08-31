@@ -1136,17 +1136,7 @@
   white-space: nowrap;
 }
 
-.collection-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
-  display: grid;
-  grid-template-rows: 32px minmax(0, 1fr) 49px;
-  height: 184px;
-  overflow: hidden;
-  padding: 11px 12px;
-}.collection-icon {
+.collection-icon {
   align-items: center;
   background: color-mix(in srgb, var(--brand-blue-soft) 58%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--brand-blue) 18%, transparent) !important;
@@ -1584,24 +1574,6 @@
   padding-right: 15px;
   text-align: right;
   width: 64px;
-}
-
-/* Collection cards prioritize their paper contents and use one neutral identity. */
-.collection-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
-  display: flex;
-  flex-direction: column;
-  height: 238px;
-  overflow: hidden;
-  padding: 12px;
-}
-
-.collection-card::before {
-  content: none;
-  display: none;
 }
 
 .collection-card-top {
@@ -2058,10 +2030,12 @@
   min-width: 0;
 }
 
+/* Collection cards prioritize their paper contents and use one neutral identity.
+   This is the card's whole skin; its corner radius comes from the shared card
+   consolidation at the end of workspaces.css. */
 .collection-card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
   box-shadow: 0 5px 16px rgba(12, 15, 28, 0.045);
   display: flex;
   flex-direction: column;
