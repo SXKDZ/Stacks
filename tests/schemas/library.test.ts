@@ -27,9 +27,9 @@ test("accepts each action's own shape", () => {
     { entity: "author", action: "create" },
     { entity: "paper", action: "bulk-create", data: { papers: [{ title: "a" }] } },
     { entity: "paper", action: "update", id: "paper-1", data: { title: "y" } },
-    { entity: "venue", action: "bulk-update", ids: ["v1", "v2"], data: { type: "journal" } },
+    { entity: "venue", action: "update", ids: ["v1", "v2"], data: { type: "journal" } },
     { entity: "paper", action: "delete", id: "paper-1" },
-    { entity: "collection", action: "bulk-delete", ids: ["c1"] },
+    { entity: "collection", action: "delete", ids: ["c1"] },
   ]) {
     assert.ok(LibraryMutationSchema.safeParse(input).success, `should accept ${JSON.stringify(input)}`);
   }

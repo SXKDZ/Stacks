@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Undo2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -8,6 +8,7 @@ import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper }
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { readError, readErrorInfo } from "@/app/lib/http";
+import { beginPointerResize } from "@/app/lib/pointer-resize";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
 import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment } from "@/app/lib/schemas/attachments";
@@ -18,7 +19,7 @@ import { isClaudeAgentModel } from "@/app/lib/feed-model";
 import { coalesceLegacyAgentErrors, splitFeedError } from "@/app/lib/feed-errors";
 import { feedMarkdown } from "@/app/lib/feed-export";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-import { groupFeedInteractions, OPENING_INTERACTION_ID, type FeedInteraction } from "@/app/lib/feed-history";
+import { groupFeedInteractions, interactionsBefore, OPENING_INTERACTION_ID, type FeedInteraction } from "@/app/lib/feed-history";
 
 interface FeedMessage {
   id: string;
@@ -604,13 +605,45 @@ function formatSpeed(tokensPerSecond: number): string {
  * toLocaleString renders it in the reader's own zone. A reply recorded before
  * per-turn usage was stored shows its time alone.
  */
-function TurnMeta({ iso, message }: { iso: string; message?: FeedMessage }) {
+function TurnMeta({ iso, message, onFork, onRewind, busy = false }: {
+  iso: string;
+  message?: FeedMessage;
+  /** Both are present on the user's own turns, for the point just before it: fork
+   *  continues from there in a copy, rewind takes this thread back to there. */
+  onFork?: () => void;
+  onRewind?: () => void;
+  busy?: boolean;
+}) {
   const inputTokens = message?.inputTokens ?? 0;
   const outputTokens = message?.outputTokens ?? 0;
   const durationMs = message?.durationMs ?? 0;
   const speed = outputTokens && durationMs ? outputTokens / (durationMs / 1000) : 0;
   return (
     <div className="feed-turn-meta">
+      {onFork ? (
+        <button
+          type="button"
+          className="feed-turn-action"
+          onClick={onFork}
+          disabled={busy}
+          title="Continue from before this message in a new feed"
+        >
+          <GitBranch size={11} aria-hidden="true" />
+          Fork
+        </button>
+      ) : null}
+      {onRewind ? (
+        <button
+          type="button"
+          className="feed-turn-action"
+          onClick={onRewind}
+          disabled={busy}
+          title="Take this thread back to before this message"
+        >
+          {busy ? <LoaderCircle className="spin" size={11} aria-hidden="true" /> : <Undo2 size={11} aria-hidden="true" />}
+          Rewind
+        </button>
+      ) : null}
       <time className="feed-turn-metric" dateTime={iso}>{fullTime(iso)}</time>
       {speed ? <span className="feed-turn-metric">{formatSpeed(speed)} tok/sec</span> : null}
       {outputTokens ? (
@@ -1125,6 +1158,12 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   const [proposalBlockOpen, setProposalBlockOpen] = useState<Record<string, boolean>>({});
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
+  // A rewind in flight (the message it targets), the text it recovered, and the
+  // key that remounts the composer around that text.
+  const [rewindingId, setRewindingId] = useState<string | null>(null);
+  const [forkingFromId, setForkingFromId] = useState<string | null>(null);
+  const [restoredReply, setRestoredReply] = useState("");
+  const [composerNonce, setComposerNonce] = useState(0);
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolvingAll, setResolvingAll] = useState<"approve" | "reject" | null>(null);
   // Which proposal card is expanded to its structured change details.
@@ -1547,18 +1586,20 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     }));
   }
 
-  async function createFromSelectedHistory() {
-    if (!selectedInteractions.size || creatingFromHistory) return;
+  /**
+   * Copy a selection of this thread's interactions into a new feed. The selection
+   * modal passes what the user ticked; a turn's own Fork passes everything before
+   * it, which is the same history its Rewind would keep.
+   */
+  async function createForkFromHistory(interactionIds: string[], toolDetails: boolean) {
+    if (!interactionIds.length || creatingFromHistory) return;
     setCreatingFromHistory(true);
     setError(null);
     try {
       const response = await fetch(`/api/feed/snippets/${snippet.id}/fork`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          interactionIds: [...selectedInteractions],
-          includeToolDetails,
-        }),
+        body: JSON.stringify({ interactionIds, includeToolDetails: toolDetails }),
       });
       if (!response.ok) {
         setError(await readError(response));
@@ -1571,6 +1612,59 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
       setError(fetchError instanceof Error ? fetchError.message : "The new feed could not be created.");
     } finally {
       setCreatingFromHistory(false);
+    }
+  }
+
+  /** Continue from before one of the user's turns in a new feed, leaving this one
+   *  as it is: the copy holds the history a rewind to that point would keep. */
+  async function forkBefore(message: FeedMessage) {
+    setForkingFromId(message.id);
+    try {
+      // The same tool-detail choice the selection modal offers, so one setting
+      // governs how much history any copy of this thread carries.
+      await createForkFromHistory(interactionsBefore(interactions, message.id), includeToolDetails);
+    } finally {
+      setForkingFromId(null);
+    }
+  }
+
+  /**
+   * Take the thread back to just before one of the user's turns: that interaction
+   * and every later one are removed, and its text returns to the composer so it can
+   * be asked differently. Irreversible, hence the confirmation. Forking the same
+   * point keeps this thread and continues in a copy instead.
+   */
+  async function rewindTo(message: FeedMessage) {
+    // Counted in turns, not rows: a single turn can hold dozens of tool messages,
+    // and the thread shows those collapsed rather than as messages of their own.
+    const later = interactions.length - interactionsBefore(interactions, message.id).length - 1;
+    const scope = later > 0 ? `this turn and the ${later} after it` : "this turn";
+    if (!window.confirm(`Rewind to before this message? Stacks removes ${scope} from this thread and puts the text back in the reply box. This cannot be undone.`)) {
+      return;
+    }
+    setRewindingId(message.id);
+    setError(null);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippet.id}/rewind`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interactionId: message.id }),
+      });
+      if (!response.ok) {
+        setError(await readError(response));
+        return;
+      }
+      const payload = await response.json().catch(() => null) as { reply?: string } | null;
+      // A fresh composer carrying the recovered text: remounting is what clears
+      // the previous one's staged files, which belonged to the turn just removed.
+      setRestoredReply(payload?.reply ?? "");
+      setComposerNonce((nonce) => nonce + 1);
+      setStreamNonce((nonce) => nonce + 1);
+      onChanged();
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "The thread could not be rewound.");
+    } finally {
+      setRewindingId(null);
     }
   }
 
@@ -1858,7 +1952,13 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
                     <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
                     {prose ? <MarkdownContent content={prose} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
                     <AttachmentChips snippetId={snippet.id} attachments={messageAttachments} />
-                    <TurnMeta iso={message.createdAt} message={message} />
+                    <TurnMeta
+                      iso={message.createdAt}
+                      message={message}
+                      onFork={message.role === "user" ? () => void forkBefore(message) : undefined}
+                      onRewind={message.role === "user" ? () => void rewindTo(message) : undefined}
+                      busy={rewindingId === message.id || (creatingFromHistory && forkingFromId === message.id)}
+                    />
                   </div>,
                 );
               }
@@ -1903,8 +2003,10 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           </button>
         ) : null}
         <AttachBox
+          key={composerNonce}
           library={library}
           models={models}
+          initialText={restoredReply}
           initialModel={snippet.model ?? ""}
           initialEffort={snippet.effort ?? ""}
           defaultModelLabel={defaultModelLabel}
@@ -1936,7 +2038,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           onSetVisible={setVisibleInteractions}
           onIncludeToolDetails={setIncludeToolDetails}
           onClose={cancelHistorySelection}
-          onCreate={() => void createFromSelectedHistory()}
+          onCreate={() => void createForkFromHistory([...selectedInteractions], includeToolDetails)}
           onJump={jumpToInteraction}
         />,
         document.body,
@@ -1966,22 +2068,18 @@ export default function FeedWorkspace() {
     if (saved >= FEED_SIDEBAR_MIN && saved <= FEED_SIDEBAR_MAX) setSidebarWidth(saved);
   }, []);
 
+  // The shared handler owns the listener lifecycle: it matches the pointer id,
+  // coalesces moves into a frame, and releases on cancel, blur, or a button let
+  // go outside the window, none of which this used to survive.
   function startSidebarResize(event: React.PointerEvent) {
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = sidebarWidth;
-    const onMove = (moveEvent: PointerEvent) => {
-      const next = Math.min(FEED_SIDEBAR_MAX, Math.max(FEED_SIDEBAR_MIN, startWidth + moveEvent.clientX - startX));
-      setSidebarWidth(next);
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      document.body.classList.remove("is-resizing-column");
-      setSidebarWidth((width) => { window.localStorage.setItem(FEED_SIDEBAR_KEY, String(width)); return width; });
-    };
-    document.body.classList.add("is-resizing-column");
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, { once: true });
+    beginPointerResize(
+      event.pointerId,
+      (clientX) => setSidebarWidth(Math.min(FEED_SIDEBAR_MAX, Math.max(FEED_SIDEBAR_MIN, startWidth + clientX - startX))),
+      () => setSidebarWidth((width) => { window.localStorage.setItem(FEED_SIDEBAR_KEY, String(width)); return width; }),
+    );
   }
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
   const [collections, setCollections] = useState<Array<{ id: string; name: string }>>([]);

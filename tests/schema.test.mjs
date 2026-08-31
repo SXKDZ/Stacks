@@ -60,7 +60,7 @@ test("persists local settings atomically and backs up the normalized library", a
   assert.match(routePicker, /chooseDirectory/);
   assert.match(settings, /settingsPath\(\)/);
   assert.match(settings, /databasePath\(\)/);
-  assert.match(settings, /"local" \| "remote" \| "storage"/);
+  assert.match(settings, /"remote" \| "storage"/);
   // Atomic write: temp file + rename.
   assert.match(settings, /settings\.json\.tmp/);
   assert.match(settings, /renameSync\(temporaryPath, path\)/);
@@ -162,7 +162,9 @@ test("pressing controls uses one shared restrained 99% scale token", async () =>
   assert.match(designSystem, /\.app-select-menu\s*\{[\s\S]*?animation: popover-enter var\(--motion-fast\)/);
   assert.match(controls, /data-placement=\{pos\.bottom !== undefined \? "top" : "bottom"\}/);
   assert.match(foundation, /\.app-interaction-scope :is\(button, a, \[role="button"\]\)[\s\S]*?:active:not\(:disabled\):not\(\[aria-disabled="true"\]\)[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
-  assert.match(foundation, /\.new-paper-button:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
+  // The sidebar CTA is the shared action now, so it inherits the press scale with
+  // everything else rather than re-declaring it.
+  assert.doesNotMatch(foundation, /\.new-paper-button:active/);
   assert.match(foundation, /\.assistant-card:active[\s\S]*?scale\(var\(--motion-press-scale\)\)/);
   assert.doesNotMatch(workflows, /\.stacks-shell[^{}]*:active/);
   assert.doesNotMatch(reader, /\.reader-page[^{}]*:active/);
@@ -305,7 +307,6 @@ test("ships deployed settings, database Doctor, PDF grounding, and update checks
   // Moving the library is implemented (consistent backup + repoint), not stubbed.
   assert.match(doctor, /async function moveLibrary/);
   assert.match(doctor, /setLibraryRoot\(target\)/);
-  assert.match(doctor, /folderMove: true/);
   assert.doesNotMatch(doctor, /Move the library folder from the filesystem/);
   // SSRF guards live in the shared url-safety module and are used on every
   // server-side fetch of a user-supplied URL (source acquisition + snapshots).
@@ -473,6 +474,51 @@ test("surfaces failed agent launches and keeps filters/selection consistent", as
   assert.match(application, /const visible = new Set\(filtered\.map/);
 });
 
+test("a message that interrupts a turn carries that turn's request with it", async () => {
+  const replyRoute = await readFile(new URL("../app/api/feed/snippets/[id]/reply/route.ts", import.meta.url), "utf8");
+  // The interrupted turn is stopped before it answers, so both prompt builders are
+  // told to cover its request: without this the earlier message got no reply ever.
+  assert.match(replyRoute, /const interrupted = isFeedRunning\(id\)/);
+  assert.match(replyRoute, /buildFollowUpPrompt\(\{ reply, outcomes, attachments, interrupted \}\)/);
+  assert.match(replyRoute, /buildForkPrompt\(\{ reply, transcript: forkTranscript, attachments, interrupted \}\)/);
+  // And the gap is recorded, so the thread explains the question with no answer.
+  assert.match(replyRoute, /Stopped this turn to send the next message/);
+  // An empty submission is refused before anything is stopped: killing a turn for
+  // a message the route then rejects loses that turn's work for nothing.
+  assert.ok(
+    replyRoute.indexOf("Enter a follow-up message or attach a file.") < replyRoute.indexOf("await stopFeedAndWait(id)"),
+    "the empty-submission guard must run before the interrupt",
+  );
+});
+
+test("fork and rewind act on the same interaction boundaries", async () => {
+  const [feed, rewindRoute, forkRoute, history] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/rewind/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/fork/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-history.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Three features, one notion of where a turn begins and ends: the selection
+  // modal, a fork (which copies the selection into a new feed), and a rewind
+  // (which truncates this one in place).
+  assert.match(history, /export function messagesFromInteraction/);
+  assert.match(history, /export function interactionsBefore/);
+  assert.match(rewindRoute, /groupFeedInteractions\(\s*snippet\.instruction/);
+  assert.match(rewindRoute, /messagesFromInteraction\(interactions\(\), parsed\.data\.interactionId\)/);
+  assert.match(forkRoute, /selectFeedHistory\(\{/);
+  // One client call posts a selection to the fork route; the modal and a turn's own
+  // Fork are two entry points into it, and the turn's uses the shared helper.
+  assert.match(feed, /async function createForkFromHistory\(interactionIds: string\[\], toolDetails: boolean\)/);
+  assert.match(feed, /createForkFromHistory\(\[\.\.\.selectedInteractions\], includeToolDetails\)/);
+  assert.match(feed, /createForkFromHistory\(interactionsBefore\(interactions, message\.id\), includeToolDetails\)/);
+  assert.match(feed, /interactions\.length - interactionsBefore\(interactions, message\.id\)\.length - 1/);
+  assert.match(feed, /body: JSON\.stringify\(\{ interactionId: message\.id \}\)/);
+  // The session is dropped so the next reply reseeds from what is left, and the
+  // agent is not resumed onto a transcript holding the removed turns.
+  assert.match(rewindRoute, /sessionId: "",/);
+});
+
 test("uses integrated sortable table headers without a detached sort control", async () => {
   const [component, sharedTable, styles] = await Promise.all([
     readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
@@ -536,10 +582,8 @@ test("code editor overlay layers stay metric-identical under form skins", async 
   const guard = ":not(:where(.prompt-code-editor *))";
   for (const selector of [
     `.entity-form textarea${guard}`,
-    `.detail-section textarea${guard}`,
     `.settings-form-grid textarea${guard}`,
     `.entity-form textarea:focus${guard}`,
-    `.detail-section textarea:focus${guard}`,
     `.settings-form-grid textarea:focus${guard}`,
   ]) {
     assert.ok(styles.includes(selector), `missing editor guard on: ${selector}`);
@@ -1129,7 +1173,7 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /\{speed \? <span className="feed-turn-metric">\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
   assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
   assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
-  assert.match(feed, /<TurnMeta iso=\{message\.createdAt\} message=\{message\} \/>/);
+  assert.match(feed, /<TurnMeta\s+iso=\{message\.createdAt\}\s+message=\{message\}/);
   // Provenance, not content: dot-separated text with no chip chrome around it.
   assert.match(styles, /\.feed-turn-meta \{[^}]*font-variant-numeric: tabular-nums/);
   assert.match(styles, /\.feed-turn-metric \+ \.feed-turn-metric::before \{[^}]*content: "·"/);
@@ -1140,6 +1184,220 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(agent, /emit\(snippetId, \{\s*type: "usage",\s*messageId: resultMessageId/);
   assert.match(feed, /source\.addEventListener\("usage"/);
   assert.match(feed, /message\.id === usage\.messageId/);
+});
+
+test("no ingest path can store a body that stopped early", async () => {
+  const [localFiles, extractRoute, application, config, pdfText] = await Promise.all([
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/pdf-text.ts", import.meta.url), "utf8"),
+  ]);
+
+  // The cut came from the framework: proxy.ts matches /api/:path*, so Next clones
+  // each API body and caps it at experimental.proxyClientMaxBodySize, which
+  // defaults to 10 MiB and ends the stream cleanly rather than erroring. A 41 MB
+  // PDF was stored as 10,470,576 bytes with a 200 response.
+  assert.match(config, /proxyClientMaxBodySize: "150mb"/);
+  assert.match(config, /cuts it at this limit/);
+
+  // And the routes no longer trust a clean end of stream, whatever the cause.
+  assert.match(localFiles, /if \(declaredLength > 0 && received !== declaredLength\) \{/);
+  assert.match(localFiles, /The upload stopped early/);
+  assert.match(localFiles, /!response\.headers\.get\("content-encoding"\) && received !== declaredLength/);
+  assert.match(localFiles, /the download stopped early/);
+  assert.match(extractRoute, /bytes\.length !== declaredLength/);
+  // The reported success cannot outrun the bytes: the route returns what it wrote.
+  assert.match(localFiles, /bytes: contents\.length/);
+  assert.equal([...application.matchAll(/bytes were stored, so the (?:import|copy) was stopped/g)].length, 2);
+  // A stored asset means bytes on disk, not just an inode.
+  assert.match(localFiles, /info\?\.isFile\(\) && info\.size > 0/);
+  // One malformed page still costs only that page.
+  assert.match(pdfText, /skippedPages\.push\(pageNumber\)/);
+});
+
+test("a summary says what it was written from, and quotes read as one shape", async () => {
+  const [summarizeRoute, application, prompts, extractRoute, review, libraryRoute, bootstrap, styles] = await Promise.all([
+    readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/ai-prompts.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/metadata-review.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The route already knew whether it had the paper's text; nothing reported it, so
+  // a review written from the abstract alone looked like one written from the paper.
+  assert.match(summarizeRoute, /interface PaperGrounding/);
+  assert.match(summarizeRoute, /source: "pdf" \| "webpage" \| "none"/);
+  assert.match(summarizeRoute, /source: grounding\.source/);
+  assert.match(summarizeRoute, /pagesSkipped/);
+  assert.match(application, /function groundingNote/);
+  assert.match(application, /could not be parsed/);
+  assert.match(application, /log\.step\(groundingNote\(payload\.grounding\)\)/);
+  assert.match(application, /log\.step\(groundingNote\(generated\.grounding\)\)/);
+  assert.match(application, /summarySavedMessage\(payload\.grounding\)/);
+  assert.match(application, /written from the record's metadata/);
+
+  // The field the extractor kept filling with invented topic labels is the source's
+  // own subject class, which is what the BibTeX export writes as eprintclass.
+  // The extractor is not asked for a subject class at all: it has no source for one
+  // (no provider ingest path carries it, not even arXiv's feed parser), so the field
+  // it was asked to fill came out as invented topics.
+  assert.doesNotMatch(prompts, /"category"/);
+  assert.doesNotMatch(extractRoute, /category/);
+  assert.doesNotMatch(review, /"category"/);
+  // The field itself stays: a person can still type a real class on an arXiv paper.
+  assert.match(application, /<b>Category<\/b>/);
+  assert.match(application, /<input name="category"[^>]*placeholder="cs\.CL"/);
+  // And it is arXiv-only, enforced on write rather than trusted from the payload.
+  assert.match(libraryRoute, /function isArxivRecord/);
+  assert.match(libraryRoute, /\}\) \? cleanString\(data\.category\) : null/);
+  assert.match(libraryRoute, /if \(!isArxivRecord\(effective\)\) \{\s*assignments\.category = null/);
+  assert.match(bootstrap, /UPDATE papers SET category = NULL WHERE category IS NOT NULL/);
+
+  // The quote block is a well like the app's other Markdown blocks, with the accent
+  // as an inset rule so it follows the corner, and no fixed colour literals.
+  assert.match(styles, /\.markdown-content blockquote \{[^}]*border-radius: var\(--radius-md\)/);
+  // No accent edge at all: a straight bar down one side of a rounded box reads as a
+  // fault whether it is a border (which squares the corners) or an inset rule
+  // (which floats inside them). The well itself marks the quotation.
+  assert.doesNotMatch(styles, /\.markdown-content blockquote \{[^}]*box-shadow/);
+  assert.doesNotMatch(styles, /\.markdown-content blockquote \{[^}]*border-left/);
+  assert.match(styles, /\.markdown-content blockquote \{[^}]*color: color-mix\(in srgb, var\(--muted\) 78%, var\(--ink\)\)/);
+  assert.doesNotMatch(styles, /border-radius: 0 var\(--radius-md\) var\(--radius-md\) 0/);
+  assert.doesNotMatch(styles, /\[data-theme="light"\] \.markdown-content blockquote/);
+  assert.match(styles, /\.markdown-content blockquote > :first-child \{[^}]*margin-top: 0/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*border-color: rgba\(255, 255, 255/);
+  assert.doesNotMatch(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow/);
+});
+
+test("a reply that hit the token ceiling is not presented as finished", async () => {
+  const [bedrock, schemas, summarizeRoute, extractRoute] = await Promise.all([
+    readFile(new URL("../app/lib/bedrock.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/schemas/bedrock.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-pdf/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Every endpoint says why it stopped; the schemas simply never read it, so a review
+  // cut off at the max-tokens ceiling was saved exactly like a finished one.
+  assert.match(schemas, /stop_reason: z\.string\(\)\.nullish\(\)/);
+  assert.match(schemas, /stopReason: z\.string\(\)\.nullish\(\)/);
+  assert.match(schemas, /incomplete_details: z\.object\(\{ reason/);
+  assert.match(bedrock, /truncated: boolean/);
+  assert.match(bedrock, /truncated: payload\.data\.stop_reason === "max_tokens"/);
+  assert.match(bedrock, /truncated: payload\.data\.stopReason === "max_tokens"/);
+  assert.match(bedrock, /incomplete_details\?\.reason === "max_output_tokens"/);
+
+  // The summary is refused rather than stored half-written, and it names the ceiling
+  // and where to raise it.
+  assert.match(summarizeRoute, /if \(result\.truncated\) \{/);
+  assert.match(summarizeRoute, /token ceiling and stopped mid-answer, so it was not saved/);
+  assert.match(summarizeRoute, /Raise "Max tokens" in Settings/);
+  // Extraction says the reply was cut off instead of blaming the JSON it produced.
+  assert.equal([...extractRoute.matchAll(/if \(result\.truncated\)/g)].length, 2);
+  assert.match(extractRoute, /token ceiling for this step and was cut off/);
+});
+
+test("colour means reading status, and nothing else", async () => {
+  const [styles, application] = await Promise.all([
+    readApplicationStyles(),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+  ]);
+  // The recent-papers tile was painted by paper type with the very tokens the status
+  // pills use (--amber is --status-inbox, --cyan is --status-reading), so an amber
+  // tile meaning "preprint" sat beside an amber pill meaning "to read".
+  assert.doesNotMatch(styles, /\.type-journal|\.type-preprint/);
+  assert.doesNotMatch(application, /type-\$\{paper\.paperType\}/);
+  assert.match(application, /className="type-tile"/);
+  assert.match(styles, /\.type-tile \{[^}]*background: var\(--brand-blue-soft\)/);
+});
+
+test("both managed directories number duplicate filenames the same way", async () => {
+  const [localFiles, attachments] = await Promise.all([
+    readFile(new URL("../app/lib/local-files.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-attachments.ts", import.meta.url), "utf8"),
+  ]);
+  // The library numbered from -2 and the feed's attachment staging from -1, so the
+  // same collision produced a different name depending on the path that stored it.
+  assert.match(localFiles, /export function nextFreeName/);
+  assert.match(localFiles, /return nextFreeName\(targetDirectory, stem, extension\)/);
+  assert.match(attachments, /import \{ nextFreeName \} from "@\/app\/lib\/local-files"/);
+  assert.match(attachments, /return nextFreeName\(dir, stem, ext\)/);
+  assert.doesNotMatch(attachments, /let counter = 1/);
+});
+
+test("a Doctor repair button performs the repair it names", async () => {
+  const settings = await readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8");
+
+  // The action button used to render whenever the modal listed records and always
+  // called removeOrphans, so opening it from Unlinked assets ran the database
+  // repair (clean-orphans) and deleted no files, while reporting success.
+  assert.match(settings, /repair\?: "orphaned-records" \| "unlinked-files"/);
+  assert.match(settings, /records: orphanList, repair: "orphaned-records"/);
+  assert.match(settings, /repair: "unlinked-files"/);
+  assert.match(settings, /doctorModal\.repair === "orphaned-records" \?[\s\S]*?removeOrphans\(\)/);
+  assert.match(settings, /doctorModal\.repair === "unlinked-files" \?[\s\S]*?cleanStorage\(\)/);
+  assert.doesNotMatch(settings, /doctorModal\.records \?\s*\(\s*<ActionButton/);
+  // It closes only when files were actually removed, so a cancelled confirmation
+  // leaves the list on screen.
+  assert.match(settings, /async function cleanStorage\(\): Promise<boolean>/);
+  assert.match(settings, /cleanStorage\(\)\.then\(\(cleaned\) => \{ if \(cleaned\) setDoctorModal\(null\)/);
+  // And the modal no longer points at a button somewhere else on the page.
+  assert.doesNotMatch(settings, /Use "Clean unlinked assets" below/);
+});
+
+test("every button is one family: capsule, gradient to the edge, one shadow", async () => {
+  const [controls, application, styles] = await Promise.all([
+    readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Stacks.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // A fixed 16px corner reads as a pill on a 34px button and as a rounded rectangle
+  // on a 48px one, so two buttons side by side looked like different families. Text
+  // buttons are capsules at every height; icon buttons stay squircles.
+  assert.match(controls, /large: "h-11 rounded-full/);
+  assert.match(controls, /medium: "h-10 rounded-full/);
+  assert.match(controls, /small: "h-\[34px\] rounded-full/);
+  assert.match(controls, /icon: "size-10 rounded-\[var\(--radius-lg\)\]/);
+  assert.doesNotMatch(controls, /"app-control-motion[\s\S]{0,120}rounded-\[var\(--radius-lg\)\] border/);
+
+  // The brand gradient runs edge to edge: a flat white border sat over blue at one
+  // end and violet at the other, which read as a mismatched outline.
+  assert.match(controls, /primary: \[\s*"border-transparent bg-\[image:var\(--brand-gradient\)\]/);
+  assert.doesNotMatch(controls, /hover:border-white\/20/);
+
+  // The hand-rolled copies of the primary button are gone: the sidebar CTA and the
+  // Discover search button are the shared action, so neither can drift to its own
+  // height, shadow, or shape again.
+  assert.match(application, /className="new-paper-button"[\s\S]*?kbd="N"/);
+  assert.doesNotMatch(styles, /\.new-paper-button \{[^}]*background-image/);
+  assert.doesNotMatch(styles, /\.new-paper-button \{[^}]*box-shadow/);
+  assert.doesNotMatch(styles, /\.discover-search-box > button \{[^}]*height: 48px/);
+  assert.doesNotMatch(styles, /\.discover-search-box > button,\s*\.modal-results/);
+  assert.match(styles, /\.discover-search-box > button \{[^}]*min-width: 118px/);
+
+  // Text buttons that sit beside the family take its shape too, wherever they are
+  // hand-rolled: the eyebrow Regenerate, the field-label Regenerate, the toolbar
+  // Filters toggle, and the sort reset.
+  for (const selector of [".eyebrow-generate", ".field-label-action > button", ".filter-builder-toggle", ".sort-reset-button"]) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(styles, new RegExp(`${escaped} \\{[^}]*border-radius: var\\(--radius-pill\\)`), `${selector} should be a capsule`);
+  }
+  // A card's own metadata rules must not reach the label inside a button: these
+  // repainted the Add button's label muted 11px text on its gradient.
+  assert.match(styles, /\.modal-results span:not\(:where\(button \*\)\)/);
+  assert.doesNotMatch(styles, /\.modal-results span \{/);
+
+  // The composer's grip sits on the panel's own border, so a partial alpha let the
+  // border show straight through the pill.
+  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,[\s\S]*?opacity: 1/);
+  assert.match(styles, /\.feed-panel-resize-handle:hover \{[^}]*background: color-mix\(in srgb, var\(--brand-blue\) 10%/);
 });
 
 test("a proposal can rename a collection and edit its membership", async () => {
@@ -1181,7 +1439,7 @@ test("the user's decisions reach the agent exactly once", async () => {
   assert.match(resolveRoute, /async function recordDecision/);
   assert.match(resolveRoute, /scheduleOutcomeReport\(snippetId\)/);
   assert.match(resolveRoute, /Approved and applied: \$\{summary\}/);
-  assert.match(resolveRoute, /Rejected: \$\{proposalNote\(proposal\.operation\)\}/);
+  assert.match(resolveRoute, /Rejected: \$\{storedProposalSummary\(proposal\.operation, "a change"\)\}/);
   assert.match(outcomes, /const COALESCE_MS = 1500/);
   assert.match(outcomes, /if \(isFeedRunning\(snippetId\)\) return/);
   assert.match(outcomes, /isNull\(feedProposals\.reportedAt\)/);
@@ -1234,7 +1492,7 @@ test("a user's Markdown stays legible on the blue bubble", async () => {
   // text on the gradient. A line of "=" under any line makes a heading, so this is
   // easy to hit by accident in a pasted request.
   assert.match(styles, /\.feed-turn-user \.feed-bubble :is\(h1, h2, h3, h4, h5, h6, blockquote, th, td, \.katex\) \{[^}]*color: inherit/);
-  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*border-left-color: rgba\(255, 255, 255/);
+  assert.match(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*background: rgba\(255, 255, 255/);
   assert.match(styles, /\.feed-turn-user \.feed-bubble \.markdown-table-scroll th \{[^}]*background: rgba\(255, 255, 255/);
   // The dark declarations these override are the shared Markdown rules.
   assert.match(styles, /\.markdown-content h1,[\s\S]*?color: var\(--ink\)/);
@@ -1265,7 +1523,7 @@ test("the feed composer reads as one control, with a visible placeholder", async
   // Its floor has to match the CSS floor, or a drag cannot reach the resting size.
   assert.match(attachBox, /const minimumPanelHeight = compact \? 128 : 210/);
   assert.match(styles, /\.feed-dock-input\.is-panel-resizable \{[^}]*min-height: 128px/);
-  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,\s*\.feed-dock-input:focus-within \.feed-panel-resize-handle \{[^}]*opacity: 0\.7/);
+  assert.match(styles, /\.feed-dock-input:hover \.feed-panel-resize-handle,\s*\.feed-dock-input:focus-within \.feed-panel-resize-handle \{[^}]*opacity: 1/);
   assert.match(attachBox, /if \(event\.key === "Home"\) setPanelHeight\(null\)/);
   assert.match(attachBox, /role="separator"[\s\S]*?aria-valuenow=/);
   // Attach controls and truncated chips say what they are on hover (one shared
@@ -1297,10 +1555,7 @@ test("no CSS rule is fully superseded by a later copy of the same selector", asy
   // overridden in another, so editing the obvious one did nothing. Whenever a
   // block's every property is re-declared by a later block with the identical
   // selector, that block is dead weight and hides where the real value lives.
-  const { execFile } = await import("node:child_process");
-  const { promisify } = await import("node:util");
-  const run = promisify(execFile);
-  const { stdout } = await run("python3", ["scripts/find-dead-css.py"], {
+  const { stdout } = await execFile("python3", ["scripts/find-dead-css.py"], {
     cwd: fileURLToPath(new URL("..", import.meta.url)),
   });
   const count = Number(/superseded by a later same-selector block: (\d+)/.exec(stdout)?.[1] ?? "-1");

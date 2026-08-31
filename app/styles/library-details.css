@@ -116,8 +116,11 @@
   width: 34px;
 }
 
-.type-journal { background: var(--cyan-soft); color: var(--cyan); }
-.type-preprint { background: var(--amber-soft); color: var(--amber); }
+/* No per-type colour: these two rules painted the tile with the same amber and cyan
+   the reading-status pills use (--amber is --status-inbox, --cyan is
+   --status-reading), so one hue meant "preprint" beside a pill where it meant "to
+   read". Colour belongs to the reading status; the row already names the venue and
+   year, and the detail view states the type. */
 
 .recent-copy {
   display: flex;
@@ -638,25 +641,9 @@ td.number-cell {
 
 .compact-toolbar {
   justify-content: flex-start;
-}.collection-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  padding: 12px;
-  position: relative;
 }
 
-.collection-card::before {
-  background: var(--brand-blue);
-  content: "";
-  height: 3px;
-  left: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-}.collection-papers {
+.collection-papers {
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -751,18 +738,6 @@ td.number-cell {
   font-size: var(--type-body-large);
   outline: 0;
   padding: 8px 0;
-}
-
-.discover-search-box button {
-  align-items: center;
-  background-image: var(--brand-gradient);
-  border-radius: var(--radius-lg);
-  color: white;
-  display: flex;
-  font-size: var(--type-micro);
-  font-weight: 700;
-  gap: 6px;
-  padding: 10px 13px;
 }
 
 .provider-switch {
@@ -1378,40 +1353,11 @@ td.number-cell {
   width: 100%;
 }
 
-.detail-section {
-  border-top: 1px solid var(--line);
-  margin-top: var(--space-section-gap);
-  padding-top: var(--space-section-pad);
-}
-
-/* The notes editor sits directly under its eyebrow label; give it the same
-   breathing room the summary/abstract copy gets after the eyebrow. */
-.detail-section .eyebrow + .prompt-code-editor {
-  margin-top: var(--space-eyebrow-gap);
-}
-
-.detail-section > p:last-child:not(.eyebrow) {
-  color: #5e5664;
-  font-family: var(--font-display);
-  font-size: var(--type-label);
-  line-height: 1.58;
-  margin: var(--space-eyebrow-gap) 0 0;
-}
-
-/* An eyebrow label with a trailing action button (e.g. Summary + Generate),
-   matching the edit window's field-label-action row. */
-.eyebrow-action {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-}
-
 .eyebrow-generate {
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   color: var(--brand-blue-strong);
   cursor: pointer;
   display: inline-flex;
@@ -1432,13 +1378,6 @@ td.number-cell {
 .eyebrow-generate:disabled {
   cursor: default;
   opacity: 0.6;
-}
-
-/* Excludes the code editor's inner textarea: a margin/min-height on it would
-   shift it off the highlight <pre> it must mirror exactly. */
-.detail-section textarea:not(:where(.prompt-code-editor *)) {
-  margin-top: var(--space-eyebrow-gap);
-  min-height: 105px;
 }
 
 .summary-copy,

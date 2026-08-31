@@ -26,17 +26,32 @@ export const runtime = "nodejs";
  * the paper's URL when no local PDF exists. Grounding is best-effort — a missing
  * file or a challenge page just yields no text, and the summary leans on metadata.
  */
+interface PaperGrounding {
+  text: string;
+  /** Where the text came from, for the receipt the client reports. */
+  source: "pdf" | "webpage" | "none";
+  pagesRead?: number;
+  pagesSkipped?: number;
+}
+
 async function readPaperText(
   localPath: string | null | undefined,
   url: string | null | undefined,
   slice: ReturnType<typeof pageSliceFor>,
-): Promise<string> {
+): Promise<PaperGrounding> {
   const stored = localPath ? resolveStoredFile("pdfs", localPath) : null;
   if (stored) {
     try {
       const bytes = new Uint8Array(readFileSync(stored.path));
-      const { text } = await readPdfPages(bytes, slice ?? { start: 1, end: null });
-      if (text) return text;
+      const { text, firstPage, lastPage, skippedPages } = await readPdfPages(bytes, slice ?? { start: 1, end: null });
+      if (text) {
+        return {
+          text,
+          source: "pdf",
+          pagesRead: lastPage - firstPage + 1 - skippedPages.length,
+          pagesSkipped: skippedPages.length,
+        };
+      }
     } catch {
       // Unreadable PDF — fall through to the URL snapshot below.
     }
@@ -44,12 +59,12 @@ async function readPaperText(
   if (url?.startsWith("https")) {
     try {
       const snapshot = await captureWebpageSnapshot(new URL(url));
-      return snapshot.text;
+      if (snapshot.text) return { text: snapshot.text, source: "webpage" };
     } catch {
-      return "";
+      return { text: "", source: "none" };
     }
   }
-  return "";
+  return { text: "", source: "none" };
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -76,7 +91,7 @@ export async function POST(request: Request): Promise<Response> {
     // {{paper}} carries the paper's own text (the stored PDF, page-sliceable via
     // {{paper[a:b]}}, or a web snapshot); {{metadata}} carries the record fields.
     const slice = pageSliceFor(configuredPrompt, "paper");
-    const paperText = await readPaperText(paper.localPath, paper.url, slice);
+    const grounding = await readPaperText(paper.localPath, paper.url, slice);
     const metadata = [
       `Title: ${paper.title}`,
       `Authors: ${(paper.authors ?? []).join(", ") || "Unknown"}`,
@@ -85,7 +100,7 @@ export async function POST(request: Request): Promise<Response> {
       `Abstract: ${paper.abstract ?? "Not available"}`,
     ].join("\n");
     const templatedPrompt = renderPromptTemplate(configuredPrompt, {
-      paper: paperText || "Not available",
+      paper: grounding.text || "Not available",
       metadata,
       title: paper.title,
       authors: (paper.authors ?? []).join(", ") || "Unknown",
@@ -114,7 +129,28 @@ export async function POST(request: Request): Promise<Response> {
     if (!summary) {
       return Response.json({ error: "No summary was generated." }, { status: 502 });
     }
-    return Response.json({ summary, model, endpoint: result.endpoint, groundedWithReader: Boolean(paperText) });
+    // A reply that hit the max-tokens ceiling is cut off mid-sentence. It used to be
+    // saved exactly like a finished one, so the paper kept a review that stopped
+    // halfway through with nothing to say so.
+    if (result.truncated) {
+      const ceiling = Math.max(128, Number(runtimeValue(runtime, "STACKS_MAX_TOKENS", "10000")));
+      return Response.json(
+        {
+          error: `The summary reached the ${ceiling.toLocaleString("en")} token ceiling and stopped mid-answer, so it was not saved. Raise "Max tokens" in Settings, or shorten the summary prompt.`,
+        },
+        { status: 502 },
+      );
+    }
+    // The receipt travels with the summary: a review written from the abstract alone
+    // reads exactly like one written from the paper, and only the caller can say so.
+    return Response.json({
+      summary,
+      grounding: {
+        source: grounding.source,
+        ...(grounding.pagesRead === undefined ? {} : { pagesRead: grounding.pagesRead }),
+        ...(grounding.pagesSkipped ? { pagesSkipped: grounding.pagesSkipped } : {}),
+      },
+    });
   } catch (error) {
     if (error instanceof BedrockInvocationError) {
       return Response.json({ error: `Bedrock returned ${error.status}: ${error.message}` }, { status: 502 });

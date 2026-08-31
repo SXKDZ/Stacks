@@ -12,6 +12,7 @@ is only the ordered import manifest.
 - `management-workflows.css` — add/edit/import/export/storage modals and workflows
 - `reading-assistant.css` — reader and assistant content surfaces
 - `settings.css` — settings navigation and forms
+- `feed-history.css` — the AI feed's history-selection modal
 - `workspaces.css` — standalone chat and reader layouts
 
 ## Rules

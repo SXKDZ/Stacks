@@ -52,7 +52,11 @@ export function storedFileExists(kind: AcquisitionKind, name: string | null): bo
   if (resolve(target) !== target) {
     return false;
   }
-  return existsSync(target);
+  // Presence means bytes. An empty file counted as a stored asset, so a failed
+  // acquisition answered pdfExists: true, nothing re-fetched it, and the summary
+  // route read nothing out of it.
+  const info = statSync(target, { throwIfNoEntry: false });
+  return Boolean(info?.isFile() && info.size > 0);
 }
 
 /**
@@ -183,6 +187,22 @@ export function portableStoredName(value: string | undefined, kind: AcquisitionK
   return name;
 }
 
+/**
+ * The next free name for `stem + extension` in a directory: the original, then
+ * "-2", "-3", and so on. Exported so the feed's attachment staging numbers
+ * duplicates the same way; the two directories used to disagree, one starting at
+ * -1 and the other at -2.
+ */
+export function nextFreeName(directory: string, stem: string, extension: string): string {
+  let candidate = `${stem}${extension}`;
+  let copy = 2;
+  while (existsSync(join(directory, candidate))) {
+    candidate = `${stem}-${copy}${extension}`;
+    copy += 1;
+  }
+  return candidate;
+}
+
 function safeStoredName(originalName: string, targetDirectory: string, allowedExtensions: Set<string>): string {
   const extension = extname(originalName).toLowerCase();
   if (!allowedExtensions.has(extension)) {
@@ -190,13 +210,7 @@ function safeStoredName(originalName: string, targetDirectory: string, allowedEx
   }
   const rawStem = basename(originalName, extension);
   const stem = rawStem.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+|\.+$/g, "") || "paper";
-  let candidate = `${stem}${extension}`;
-  let copy = 2;
-  while (existsSync(join(targetDirectory, candidate))) {
-    candidate = `${stem}-${copy}${extension}`;
-    copy += 1;
-  }
-  return candidate;
+  return nextFreeName(targetDirectory, stem, extension);
 }
 
 async function readRequestBytes(request: Request, maxBytes: number): Promise<Buffer> {
@@ -233,10 +247,18 @@ async function readRequestBytes(request: Request, maxBytes: number): Promise<Buf
   if (!received) {
     throw new Error("The selected file is empty.");
   }
+  // A clean end of stream is not proof of a complete body. Next's proxy layer
+  // clones and caps every matched request at experimental.proxyClientMaxBodySize
+  // (10 MiB by default), which ends the stream normally: a 41 MB PDF arrived as
+  // 10,470,576 bytes, was written, and the route answered 200. Content-Length
+  // still describes the whole file, so it is the contract to hold the body to.
+  if (declaredLength > 0 && received !== declaredLength) {
+    throw new Error(`The upload stopped early: ${received} of ${declaredLength} bytes arrived, so the file was not stored.`);
+  }
   return Buffer.concat(chunks, received);
 }
 
-export async function importLocalFile(request: Request): Promise<{ storedPath: string; fileUrl: string }> {
+export async function importLocalFile(request: Request): Promise<{ storedPath: string; fileUrl: string; bytes: number }> {
   const kind = request.headers.get("x-stacks-file-kind");
   if (kind !== "pdf" && kind !== "html") {
     throw new Error("Choose whether this is a PDF or HTML snapshot.");
@@ -255,6 +277,7 @@ export async function importLocalFile(request: Request): Promise<{ storedPath: s
   return {
     storedPath,
     fileUrl: `/stacks-files/${kind === "pdf" ? "pdfs" : "html"}/${encodeURIComponent(storedPath)}`,
+    bytes: contents.length,
   };
 }
 
@@ -350,6 +373,12 @@ async function fetchWithLimit(
     }
   } finally {
     reader.releaseLock();
+  }
+  // Same rule as the upload path: a clean end of stream is not a complete file.
+  // Content-Length is skipped when the body was transformed in transit, because it
+  // then describes the encoded bytes rather than what the reader assembled.
+  if (declaredLength > 0 && !response.headers.get("content-encoding") && received !== declaredLength) {
+    throw new Error(`the download stopped early (${received} of ${declaredLength} bytes)`);
   }
   const contents = Buffer.concat(chunks, received);
   if (!contents.length) {

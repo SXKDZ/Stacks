@@ -7,6 +7,8 @@ import { copyFeedHistoryAttachments } from "../../app/lib/feed-history-attachmen
 import {
   buildFeedTranscript,
   groupFeedInteractions,
+  interactionsBefore,
+  messagesFromInteraction,
   OPENING_INTERACTION_ID,
   selectFeedHistory,
   type FeedHistoryMessage,
@@ -88,6 +90,29 @@ test("unknown interaction ids are rejected", () => {
   );
 });
 
+test("a point in the thread splits it the same way for a rewind and a fork", () => {
+  const groups = groupFeedInteractions("Opening question", null, history);
+
+  // What a rewind to the second interaction removes: that user turn, its tool
+  // traffic, its answer, and every later interaction.
+  assert.deepEqual(
+    messagesFromInteraction(groups, "u2").map((message) => message.id),
+    ["u2", "t2", "r2", "a2", "u3", "a3"],
+  );
+  // What a fork from the same point copies, and what the rewind leaves behind.
+  assert.deepEqual(interactionsBefore(groups, "u2"), [OPENING_INTERACTION_ID]);
+
+  // The opening interaction is the whole thread on one side and nothing on the
+  // other, so rewinding there clears every stored message and a fork has no
+  // history to copy.
+  assert.equal(messagesFromInteraction(groups, OPENING_INTERACTION_ID).length, history.length);
+  assert.deepEqual(interactionsBefore(groups, OPENING_INTERACTION_ID), []);
+
+  // An id that is not a boundary selects nothing rather than guessing.
+  assert.deepEqual(messagesFromInteraction(groups, "a2"), []);
+  assert.deepEqual(interactionsBefore(groups, "a2"), []);
+});
+
 test("fresh-session transcript includes the opening and excludes tool noise", () => {
   assert.equal(
     buildFeedTranscript("Opening question", history),
@@ -100,6 +125,17 @@ test("fresh-session transcript includes the opening and excludes tool noise", ()
       "Assistant: Third answer",
     ].join("\n\n"),
   );
+});
+
+test("fresh-session transcript leaves the app's own thread notes out", () => {
+  // Approval decisions and effort switches are stored as system rows. A fork or a
+  // resume fallback seeded with them would read them back as the agent's own words.
+  const transcript = buildFeedTranscript("Opening question", [
+    ...history,
+    message("s1", "system", "text", "Rejected: update paper"),
+  ]);
+  assert.ok(!transcript.includes("Rejected: update paper"));
+  assert.ok(transcript.endsWith("Assistant: Third answer"));
 });
 
 test("fresh-session transcript includes paired tool details when the feed requests them", () => {

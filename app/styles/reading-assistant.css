@@ -168,8 +168,6 @@
   white-space: normal;
 }
 
-/* Reader intentionally runs a tighter divider rhythm than .detail-section's
-   --space-section-* (denser reading surface). */
 .reader-summary {
   border-top: 1px solid var(--line);
   color: #5d5562;
@@ -465,8 +463,10 @@
   padding: 12px;
 }
 
+/* The card's own metadata, not every span inside it: this reached the label span of
+   the Add button and repainted it muted 11px text on its gradient. */
 .modal-results small,
-.modal-results span {
+.modal-results span:not(:where(button *)) {
   color: var(--soft);
   font-size: var(--type-micro);
 }
@@ -481,18 +481,6 @@
   color: var(--muted);
   font-size: var(--type-caption);
   margin: 0 0 4px;
-}
-
-.modal-results article > button {
-  align-items: center;
-  background: var(--ink);
-  border-radius: var(--radius-sm);
-  color: white;
-  display: flex;
-  flex: 0 0 auto;
-  font-size: var(--type-caption);
-  gap: 4px;
-  padding: 6px 8px;
 }
 
 .import-form {

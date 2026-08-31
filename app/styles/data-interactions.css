@@ -15,7 +15,7 @@
   align-items: center;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   color: var(--muted);
   display: inline-flex;
   font-size: var(--type-caption);
@@ -334,7 +334,7 @@
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   color: var(--brand-blue-strong);
   display: inline-flex;
   font-size: var(--type-micro);
@@ -836,7 +836,7 @@
   .filter-tabs { order: 3; width: 100%; }
   .discover-search-box { align-items: stretch; flex-wrap: wrap; }
   .discover-search-box input { min-width: calc(100% - 38px); }
-  .discover-search-box button { justify-content: center; width: 100%; }
+  .discover-search-box > button { width: 100%; }
   .provider-switch { flex-wrap: wrap; }
   .discovery-result { grid-template-columns: auto 1fr; }
   .discovery-result > button { grid-column: 2; width: max-content; }
@@ -949,10 +949,6 @@
   padding-bottom: 3px;
   padding-top: 3px;
   vertical-align: middle;
-}/* The grid row height is the card height: the cards hold a fixed number of paper
-   rows, so they are uniform, and the two values have to stay in step. */
-.collection-grid {
-  grid-auto-rows: 336px;
 }
 
 /* Reading progress, shown only once something has been read (a "0 of 21 read"
@@ -1093,18 +1089,7 @@
   justify-content: flex-end;
 }
 
-.discover-search-box > button {
-  align-items: center;
-  display: inline-flex;
-  gap: 5px;
-  justify-content: center;
-  width: auto;
-}
-
-.discover-search-box > button span {
-  font-size: var(--type-body);
-  font-weight: 700;
-}.autocomplete-field {
+.autocomplete-field {
   position: relative;
 }
 
@@ -1282,20 +1267,8 @@
 }
 
 /* --- tables-pagination.css --- */
-/* Final table sizing: data columns resize; selection/action columns never do. */
-.paper-grid-shell,
-.data-grid-shell {
-  overflow-x: clip;
-}
-
-.paper-table.research-grid,
-.paper-table.entity-research-grid,
-.paper-table.venue-grid {
-  min-width: 0;
-  table-layout: fixed;
-  width: 100%;
-}
-
+/* Column sizing: data columns resize; selection/action columns never do. The
+   table's own fit-the-pane sizing lives at the end of management-workflows.css. */
 .paper-table col.paper-column-check {
   max-width: 52px;
   min-width: 52px;

@@ -61,7 +61,9 @@ test("sends GPT-5.6 through Bedrock Mantle with supported-region and privacy def
       store: false,
       reasoning: { effort: "high" },
     });
-    assert.deepEqual(result, { content: "OK", endpoint: "mantle", region: "us-east-1" });
+    // `truncated` reports a reply that stopped at the max-tokens ceiling, so a
+    // caller cannot present a cut-off answer as a finished one.
+    assert.deepEqual(result, { content: "OK", endpoint: "mantle", region: "us-east-1", truncated: false });
   } finally {
     globalThis.fetch = originalFetch;
   }

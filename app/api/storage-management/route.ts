@@ -276,13 +276,6 @@ export async function POST(request: Request): Promise<Response> {
     const storage = inspectStorage(referencedPdf, referencedHtml, clean);
 
     return Response.json({
-      mode: "local",
-      capabilities: {
-        databaseChecks: true,
-        fileChecks: true,
-        repairs: ["orphaned-associations", "orphaned-entities", "orphaned-files"],
-        folderMove: true,
-      },
       libraryRoot: storage.libraryRoot,
       libraryExists: true,
       databasePresent: storage.databaseExists,

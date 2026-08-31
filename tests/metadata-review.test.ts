@@ -28,7 +28,9 @@ test("metadata review always permits fields shared by every paper type", () => {
 test("metadata review disables fields the selected paper type cannot store", () => {
   assert.equal(isExtractedMetadataFieldApplicable("venueAcronym", "preprint"), false);
   assert.equal(isExtractedMetadataFieldApplicable("preprintId", "preprint"), true);
-  assert.equal(isExtractedMetadataFieldApplicable("category", "journal"), false);
+  // "category" is no longer an extracted field: no ingest path supplies a subject
+  // class, so asking a model for one only produced invented topic labels. The
+  // preprint-only gate is still exercised through preprintId above.
   assert.equal(isExtractedMetadataFieldApplicable("venueAcronym", "journal"), true);
   assert.equal(isExtractedMetadataFieldApplicable("doi", "website"), false);
   assert.equal(isExtractedMetadataFieldApplicable("url", "website"), true);

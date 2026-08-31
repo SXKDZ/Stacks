@@ -57,8 +57,7 @@ body {
 .nav-count,
 .sync-card strong,
 .result-authors,
-.identifier-list > span,
-.detail-section > p:last-child:not(.eyebrow) {
+.identifier-list > span {
   color: var(--muted);
 }
 
@@ -95,8 +94,7 @@ body {
 .entity-form textarea,
 .settings-form-grid label:not(.settings-toggle) input,
 .settings-form-grid textarea,
-.integration-row input,
-.detail-section textarea {
+.integration-row input {
   background-color: rgba(0, 0, 0, 0.26);
   border-color: var(--line-strong);
   color: var(--ink);
@@ -319,7 +317,6 @@ textarea::placeholder {
 }
 
 .detail-authors,
-.detail-section > p:last-child:not(.eyebrow),
 .summary-copy,
 .summary-empty,
 .abstract-copy,
@@ -339,7 +336,7 @@ textarea::placeholder {
 }
 
 .modal-results small,
-.modal-results span,
+.modal-results span:not(:where(button *)),
 .settings-card-title small,
 .integration-name small {
   font-size: var(--type-micro);
@@ -524,17 +521,32 @@ textarea::placeholder {
   text-decoration-color: currentColor;
 }
 
+/* A quotation is a quieter passage of the same prose, not a callout: the same well
+   the app's other Markdown blocks use, and nothing else. There is no accent edge,
+   because a straight bar down one side of a rounded box reads as a fault however it
+   is drawn (a border squares the corners, an inset rule floats inside them). The
+   step off the surface is what marks the quotation, and the text sits one notch
+   back from the prose around it. */
 .markdown-content blockquote {
-  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
-  border-left: 3px solid var(--brand-blue);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  color: #c3cad8;
-  margin: 0.85em 0;
-  padding: 0.65em 0.85em;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  /* Mixed toward --ink so the quotation clears 4.5:1 on the light theme's lighter
+     well as well as on the dark one, rather than taking a fixed literal. */
+  color: color-mix(in srgb, var(--muted) 78%, var(--ink));
+  margin: 0.9em 0;
+  padding: 0.75em 1em;
 }
 
-.markdown-content blockquote p {
-  margin: 0;
+/* Paragraphs inside a quotation keep their own rhythm: the blanket `margin: 0`
+   this replaces ran a multi-paragraph quotation together as one block. Only the
+   outer edges collapse, so the padding above and below stays tight. */
+.markdown-content blockquote > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown-content code {
@@ -827,8 +839,7 @@ textarea::placeholder {
 .entity-form textarea,
 .settings-form-grid label:not(.settings-toggle) input,
 .settings-form-grid textarea,
-.integration-row input,
-.detail-section textarea {
+.integration-row input {
   font-size: var(--type-control);
 }
 
@@ -1126,8 +1137,7 @@ textarea::placeholder {
 [data-theme="light"] .entity-form textarea,
 [data-theme="light"] .settings-form-grid label:not(.settings-toggle) input,
 [data-theme="light"] .settings-form-grid textarea,
-[data-theme="light"] .integration-row input,
-[data-theme="light"] .detail-section textarea {
+[data-theme="light"] .integration-row input {
   background-color: rgba(255, 255, 255, 0.9);
   color: var(--ink);
 }
@@ -1210,7 +1220,6 @@ textarea::placeholder {
 }
 
 [data-theme="light"] .markdown-content em,
-[data-theme="light"] .markdown-content blockquote,
 [data-theme="light"] .reader-summary > .markdown-content {
   color: #4e5667;
 }

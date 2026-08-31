@@ -48,9 +48,11 @@ const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
  */
 async function providerFetch(
   url: URL | string,
-  options: { headers?: Record<string, string>; label: string; attempts?: number; allowStatus?: boolean },
+  options: { headers?: Record<string, string>; label: string; allowStatus?: boolean },
 ): Promise<Response> {
-  const { label, headers, attempts = 3 } = options;
+  const { label, headers } = options;
+  // Every provider gets the same retry budget; no caller has ever varied it.
+  const attempts = 3;
   let lastStatus = 0;
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {

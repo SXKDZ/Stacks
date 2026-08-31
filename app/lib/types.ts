@@ -63,7 +63,6 @@ export interface Author {
   givenName: string | null;
   familyName: string | null;
   orcid: string | null;
-  semanticScholarId: string | null;
   notes: string | null;
   paperCount: number;
   latestYear: number | null;

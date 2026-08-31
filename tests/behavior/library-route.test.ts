@@ -221,7 +221,7 @@ test("a bulk delete removes every addressed record", async () => {
   const snap = await snapshot();
   const targets = [findPaper(snap, "Bulk Import Three"), findPaper(snap, "A Second Transformer Paper")].filter(Boolean);
   assert.equal(targets.length, 2);
-  const deleted = await mutate({ entity: "paper", action: "bulk-delete", ids: targets.map((paper) => paper!.id) });
+  const deleted = await mutate({ entity: "paper", action: "delete", ids: targets.map((paper) => paper!.id) });
   assert.equal(deleted.status, 200);
 
   const after = await snapshot();
@@ -230,7 +230,7 @@ test("a bulk delete removes every addressed record", async () => {
 });
 
 test("a bulk update writes every addressed paper, not just the first", async () => {
-  // A bulk-update of N ids used to call updatePaper(ids[0]) once and answer 200,
+  // An update of N ids used to call updatePaper(ids[0]) once and answer 200,
   // so the other N-1 papers were silently left untouched.
   await mutate({ entity: "paper", action: "create", data: { title: "bulk target one", paperType: "article" } });
   await mutate({ entity: "paper", action: "create", data: { title: "bulk target two", paperType: "article" } });
@@ -240,7 +240,7 @@ test("a bulk update writes every addressed paper, not just the first", async () 
 
   const result = await mutate({
     entity: "paper",
-    action: "bulk-update",
+    action: "update",
     ids: targets.map((paper) => paper!.id),
     data: { readingStatus: "complete" },
   });

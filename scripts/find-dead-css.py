@@ -11,8 +11,14 @@ wins anywhere).
 """
 import re, sys, collections, pathlib
 
-ORDER = ["foundation","library-details","reading-assistant","settings","themes",
-         "data-interactions","management-workflows","design-system","workspaces"]
+# The cascade order is whatever app/globals.css imports, so read it from there
+# rather than keeping a third copy: this list had already lost feed-history.css, so
+# that file's dead blocks were never checked.
+ORDER = re.findall(r'@import\s+["\']\./styles/([^"\']+)\.css["\']', pathlib.Path("app/globals.css").read_text())
+if not ORDER:
+    # An empty list would scan nothing and still print "0", which passes the test
+    # that guards this script vacuously.
+    sys.exit('find-dead-css: no @import "./styles/*.css" lines found in app/globals.css')
 BLOCK = re.compile(r'(?P<sel>[^{}@/]+?)\s*\{(?P<body>[^{}]*)\}', re.S)
 
 def decls(body):

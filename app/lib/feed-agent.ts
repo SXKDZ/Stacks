@@ -9,6 +9,7 @@ import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
 import { claudeEffortArgs, effortSetting } from "@/app/lib/effort";
 import { isStoppedExit } from "@/app/lib/agent-exit";
 import { formatAgentFailure } from "@/app/lib/agent-error";
+import { buildFeedTranscript } from "@/app/lib/feed-history";
 import { buildForkPrompt, parseProposalsResult, type ProposalOperation } from "@/app/lib/feed-prompt";
 import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 import { feedAgentModel } from "@/app/lib/feed-model";
@@ -274,19 +275,27 @@ async function clearSessionId(snippetId: string): Promise<void> {
   database.update(feedSnippets).set({ sessionId: "" }).where(eq(feedSnippets.id, snippetId)).run();
 }
 
-/** A plain-text transcript of the thread so far (user + agent turns), used to
- *  seed a fresh session when a resume can't find its original conversation. */
+/** A plain-text transcript of the thread so far (its opening instruction plus the
+ *  user and agent turns), used to seed a fresh session when a resume can't find
+ *  its original conversation. The same builder a forked thread is seeded with, so
+ *  the two cannot describe the same thread differently. */
 async function threadTranscript(snippetId: string): Promise<string> {
   const database = await ensureDatabase();
-  return database
-    .select()
-    .from(feedMessages)
-    .where(eq(feedMessages.snippetId, snippetId))
-    .orderBy(asc(feedMessages.createdAt))
-    .all()
-    .filter((message) => message.kind === "text" || message.kind === "result")
-    .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
-    .join("\n\n");
+  const snippet = database
+    .select({ instruction: feedSnippets.instruction, historyMode: feedSnippets.historyMode })
+    .from(feedSnippets)
+    .where(eq(feedSnippets.id, snippetId))
+    .get();
+  return buildFeedTranscript(
+    snippet?.instruction ?? "",
+    database
+      .select()
+      .from(feedMessages)
+      .where(eq(feedMessages.snippetId, snippetId))
+      .orderBy(asc(feedMessages.createdAt))
+      .all(),
+    snippet?.historyMode === "tools",
+  );
 }
 
 interface TurnUsage {

@@ -136,9 +136,6 @@ interface ExtractedPdfMetadata {
 
 interface PdfExtractionResponse {
   metadata: ExtractedPdfMetadata;
-  analyzedPages: number;
-  totalPages: number;
-  usedFallback: boolean;
   warning?: string;
 }
 
@@ -161,7 +158,6 @@ const extractedMetadataFields: Array<{ field: ExtractedMetadataField; label: str
   { field: "paperType", label: "Paper type" },
   { field: "venueName", label: "Venue" },
   { field: "venueAcronym", label: "Venue acronym" },
-  { field: "category", label: "Category" },
   { field: "preprintId", label: "Preprint ID" },
   { field: "doi", label: "DOI" },
   { field: "url", label: "Source URL" },
@@ -310,7 +306,7 @@ function createLibraryFilter(kind: LibraryFilterKind, valueId: string, label: st
 
 interface MutationBody {
   entity: "paper" | "author" | "venue" | "collection";
-  action: "create" | "bulk-create" | "update" | "delete" | "bulk-update" | "bulk-delete";
+  action: "create" | "bulk-create" | "update" | "delete";
   id?: string;
   ids?: string[];
   data?: Record<string, unknown>;
@@ -337,6 +333,35 @@ function initials(value: string): string {
 // A venue monogram: the leading letters of the acronym. Four uppercase glyphs
 // are what makes the chip recognizable (COLM, AAAI), so the chip sets its own
 // type size to fit them whole rather than clipping the widest labels.
+interface SummaryGrounding {
+  source: "pdf" | "webpage" | "none";
+  pagesRead?: number;
+  pagesSkipped?: number;
+}
+
+/**
+ * One line for the activity log: what a generated summary was actually written
+ * from. A review drawn from the abstract alone reads exactly like one drawn from
+ * the paper, and that difference is what a reader needs before trusting it.
+ */
+function groundingNote(grounding?: SummaryGrounding): string {
+  if (grounding?.source === "pdf") {
+    const pages = grounding.pagesRead ? `${grounding.pagesRead} page${grounding.pagesRead === 1 ? "" : "s"}` : "the stored PDF";
+    return grounding.pagesSkipped
+      ? `Read ${pages} of the stored PDF; ${grounding.pagesSkipped} could not be parsed.`
+      : `Read ${pages} of the stored PDF.`;
+  }
+  if (grounding?.source === "webpage") return "Read a snapshot of the paper's page.";
+  return "No paper text could be read: writing from the record's metadata only.";
+}
+
+/** The toast for a saved summary, which names a metadata-only review as such. */
+function summarySavedMessage(grounding?: SummaryGrounding): string {
+  return grounding?.source === "pdf" || grounding?.source === "webpage"
+    ? "Summary generated and saved."
+    : "Summary saved. It was written from the record's metadata: the paper's text could not be read.";
+}
+
 function venueMonogram(venue: { acronym: string | null; name: string }): string {
   return (venue.acronym || venue.name).slice(0, 4);
 }
@@ -995,7 +1020,7 @@ function StacksWorkspace() {
       return;
     }
     const succeeded = await mutateLibrary(
-      { entity, action: ids.length === 1 ? "delete" : "bulk-delete", ids },
+      { entity, action: "delete", ids },
       `${ids.length} ${label} deleted.`,
     );
     if (succeeded) {
@@ -1040,11 +1065,13 @@ function StacksWorkspace() {
           <ActionButton variant="ghost" size="icon" className="mobile-close" onClick={closeMobileNavigation} aria-label="Close navigation" icon={<X />} />
         </div>
 
-        <button className="new-paper-button" onClick={() => setModal({ kind: "add-paper" })}>
-          <Plus size={17} strokeWidth={2.4} />
-          Add paper
-          <kbd>N</kbd>
-        </button>
+        <ActionButton
+          variant="primary"
+          className="new-paper-button"
+          onClick={() => setModal({ kind: "add-paper" })}
+          icon={<Plus strokeWidth={2.4} />}
+          kbd="N"
+        >Add paper</ActionButton>
 
         <nav className="main-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
@@ -1437,7 +1464,7 @@ function Dashboard({
         <div className="recent-list">
           {recentPapers.map((paper) => (
             <article className="recent-row" key={paper.id}>
-              <span className={`type-tile type-${paper.paperType}`}><FileText size={18} /></span>
+              <span className="type-tile"><FileText size={18} /></span>
               <span className="recent-copy">
                 <button type="button" className="recent-title-button" onClick={() => openPaper(paper)}><strong>{paper.title}</strong></button>
                 <span className="recent-meta"><AdaptiveAuthors authors={paper.authors} /><span>{venueLine(paper)} {paper.year}</span></span>
@@ -2654,7 +2681,15 @@ function DiscoverView({ mutateLibrary, notify, onImport, onSearchLibrary }: {
         <div className="discover-search-box">
           <Search size={21} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a topic, title, DOI, or researcher" autoFocus />
-          <button type="submit" disabled={loading || !query.trim()}>{loading ? <LoaderCircle size={17} className="spin" /> : <Search size={17} />}<span>Search</span></button>
+          {/* The shared action, not a hand-rolled copy of it: the bespoke button had
+              drifted to its own height, so the same 16px radius read as a rounded
+              rectangle here and as a capsule on every button beside it. */}
+          <ActionButton
+            type="submit"
+            variant="primary"
+            disabled={loading || !query.trim()}
+            icon={loading ? <LoaderCircle size={16} className="spin" /> : <Search size={16} />}
+          >Search</ActionButton>
         </div>
       </form>
 
@@ -2796,9 +2831,10 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
             }),
           });
           if (!response.ok) throw new Error(await readError(response));
-          const payload = await response.json() as { summary: string };
+          const payload = await response.json() as { summary: string; grounding?: SummaryGrounding };
+          log.step(groundingNote(payload.grounding));
           log.step("Saving the generated summary.");
-          await onUpdate(paper, { summary: payload.summary }, "Summary generated and saved.");
+          await onUpdate(paper, { summary: payload.summary }, summarySavedMessage(payload.grounding));
         }, () => log.step("Waiting for an available summary slot."));
       }, { key: summaryTaskKey });
     } catch {
@@ -3185,7 +3221,11 @@ function LocalFileField({ name, label, kind, defaultValue = "", notify }: {
         if (!response.ok) {
           throw new Error(await readError(response));
         }
-        return response.json() as Promise<{ storedPath: string }>;
+        const stored = await response.json() as { storedPath: string; bytes?: number };
+        if (typeof stored.bytes === "number" && stored.bytes !== file.size) {
+          throw new Error(`Only ${stored.bytes} of ${file.size} bytes were stored, so the copy was stopped.`);
+        }
+        return stored;
       });
       if (pathInput.current) {
         pathInput.current.value = payload.storedPath;
@@ -3860,8 +3900,13 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
       if (!upload.ok) {
         throw new Error(await readError(upload));
       }
-      const { storedPath } = await upload.json() as { storedPath: string };
-      log.step(`Stored as ${storedPath}.`);
+      const { storedPath, bytes } = await upload.json() as { storedPath: string; bytes?: number };
+      // The server holds the body to its Content-Length, so this is belt and
+      // braces: never tell the user a file was copied when fewer bytes landed.
+      if (typeof bytes === "number" && bytes !== file.size) {
+        throw new Error(`Only ${bytes} of ${file.size} bytes were stored, so the import was stopped.`);
+      }
+      log.step(`Stored as ${storedPath} (${bytes ?? file.size} bytes).`);
       log.step("Extracting metadata from the PDF…");
       const extraction = await extractPdfMetadata(file, file.name);
       log.step(`Extracted: ${extraction.metadata.title || "no title found"}`);
@@ -3955,7 +4000,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
             {results.map((result) => {
               const key = result.sourceId || result.title;
               const isAdded = added.includes(key);
-              return <article key={key}><div><small>{result.source} · {result.year ?? "n.d."}</small><h3>{result.title}</h3><p>{result.authors.join(", ") || "Authors unavailable"}</p><span>{result.venueName || "Venue unknown"}</span></div><button disabled={isAdded} onClick={() => void addResult(result)}>{isAdded ? <><Check size={15} /> Added</> : <><Plus size={15} /> Add</>}</button></article>;
+              return <article key={key}><div><small>{result.source} · {result.year ?? "n.d."}</small><h3>{result.title}</h3><p>{result.authors.join(", ") || "Authors unavailable"}</p><span>{result.venueName || "Venue unknown"}</span></div><ActionButton variant={isAdded ? "success" : "primary"} size="small" disabled={isAdded} onClick={() => void addResult(result)} icon={isAdded ? <Check /> : <Plus />}>{isAdded ? "Added" : "Add"}</ActionButton></article>;
             })}
           </div>
         </div>
@@ -4129,11 +4174,12 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
           if (!response.ok) {
             throw new Error(await readError(response));
           }
-          const generated = await response.json() as { summary: string };
+          const generated = await response.json() as { summary: string; grounding?: SummaryGrounding };
+          log.step(groundingNote(generated.grounding));
           log.step("Saving the generated summary.");
           await mutateLibrary(
             { entity: "paper", action: "update", id: paper.id, data: { summary: generated.summary } },
-            "Summary generated and saved.",
+            summarySavedMessage(generated.grounding),
           );
           return generated;
         }, () => log.step("Waiting for an available summary slot."));
@@ -4184,7 +4230,6 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         year: metadata.year,
         venueName: metadata.venueName,
         venueAcronym: metadata.venueAcronym,
-        category: metadata.category,
         preprintId: metadata.preprintId,
         doi: metadata.doi,
         url: metadata.url,
@@ -4265,7 +4310,6 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         paperType,
         venueName: String(currentForm.get("venueName") ?? ""),
         venueAcronym: String(currentForm.get("venueAcronym") ?? ""),
-        category: String(currentForm.get("category") ?? ""),
         preprintId: String(currentForm.get("preprintId") ?? ""),
         doi: String(currentForm.get("doi") ?? ""),
         url: String(currentForm.get("url") ?? ""),
@@ -4722,7 +4766,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
         data[key] = value;
       }
     }
-    const succeeded = await mutateLibrary({ entity, action: "bulk-update", ids, data }, `${ids.length} ${entity} records updated.`);
+    const succeeded = await mutateLibrary({ entity, action: "update", ids, data }, `${ids.length} ${entity} records updated.`);
     if (succeeded) {
       onComplete();
       onClose();

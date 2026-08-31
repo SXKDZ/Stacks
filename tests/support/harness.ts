@@ -1,11 +1,12 @@
 /**
  * Shared harness for the behavioral test suites.
  *
- * These tests exercise the real modules: an isolated SQLite library per test
- * file, route handlers called in-process as the plain functions they are, and
- * `fetch` stubbed so nothing reaches the network. That is the difference between
- * these suites and the older structural ones, which only read source files as
- * text and matched regexes against them.
+ * These tests exercise the real modules: an isolated SQLite library per test file
+ * and route handlers called in-process as the plain functions they are.
+ * That is the difference between these suites and the older structural ones, which
+ * only read source files as text and matched regexes against them. A suite that
+ * would otherwise reach the network stubs `fetch` itself, next to the assertion
+ * that needs it.
  *
  * IMPORTANT: `createTempLibrary()` must run before anything imports a db module.
  * `db/library-paths` resolves the library root once per process from
@@ -37,61 +38,6 @@ export function jsonRequest(url: string, body: unknown, headers: Record<string, 
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
-}
-
-/** One recorded outbound call made through the stubbed `fetch`. */
-export interface RecordedCall {
-  url: string;
-  method: string;
-  body: string | null;
-  headers: Record<string, string>;
-}
-
-export interface FetchStub {
-  /** Every call made, in order. */
-  calls: RecordedCall[];
-  /** Restore the real `fetch`. */
-  restore: () => void;
-}
-
-/**
- * Replace `globalThis.fetch` with a router over exact-or-prefix URL matchers, so
- * a suite can assert on what the code *sent* as well as how it handled the
- * reply. An unmatched URL throws, which keeps an accidental real network call
- * from silently passing.
- *
- * A handler returns either a Response or a plain object (sent as JSON 200).
- */
-export function stubFetch(
-  routes: Array<{
-    match: (url: string, init: RequestInit | undefined) => boolean;
-    respond: (url: string, init: RequestInit | undefined) => Response | unknown;
-  }>,
-): FetchStub {
-  const original = globalThis.fetch;
-  const calls: RecordedCall[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-    const body = typeof init?.body === "string" ? init.body : null;
-    const headers: Record<string, string> = {};
-    new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined)).forEach((value, key) => {
-      headers[key] = value;
-    });
-    calls.push({ url, method, body, headers });
-    const route = routes.find((candidate) => candidate.match(url, init));
-    if (!route) {
-      throw new Error(`Unstubbed fetch in test: ${method} ${url}`);
-    }
-    const result = route.respond(url, init);
-    return result instanceof Response ? result : Response.json(result);
-  }) as typeof fetch;
-  return {
-    calls,
-    restore: () => {
-      globalThis.fetch = original;
-    },
-  };
 }
 
 /** Read a route handler's JSON response, with its status, in one step. */

@@ -75,7 +75,6 @@ export const authors = sqliteTable(
     givenName: text("given_name"),
     familyName: text("family_name"),
     orcid: text("orcid"),
-    semanticScholarId: text("semantic_scholar_id"),
     notes: text("notes"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),

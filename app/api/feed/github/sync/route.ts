@@ -4,6 +4,8 @@ import { asc, eq, isNotNull } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
+import { buildFeedTranscript } from "@/app/lib/feed-history";
+import { storedProposalSummary } from "@/app/lib/schemas/proposals";
 import { readGithubLastSyncedAt, readGithubLinkedRepo, writeGithubLastSyncedAt, writeGithubLinkedRepo } from "@/app/lib/local-settings";
 import {
   createIssue,
@@ -44,8 +46,12 @@ const MIRRORED_KINDS = new Set(["text", "result"]);
 // Contents API); larger files stay local-only rather than bloating the repo.
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/** Who said it, for a mirrored comment. Stacks's own thread notes (a model switch,
+ *  an approval decision, an interrupted turn) are system rows: labelling them as
+ *  the agent read as if it had said them. */
 function mirrorLabel(role: string): string {
-  return role === "user" ? "**You:**" : "**Agent:**";
+  if (role === "user") return "**You:**";
+  return role === "system" ? "**Stacks:**" : "**Agent:**";
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -58,13 +64,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 /** A GitHub comment body summarizing a proposed library change + its status. */
 function proposalCommentBody(operation: string, status: string): string {
-  let summary = "Proposed change";
-  try {
-    const parsed = JSON.parse(operation) as { summary?: string; action?: string; entity?: string };
-    summary = parsed.summary ?? ([parsed.action, parsed.entity].filter(Boolean).join(" ") || summary);
-  } catch {
-    // Keep the default summary if the stored operation isn't parseable.
-  }
+  const summary = storedProposalSummary(operation, "Proposed change");
   return `**Proposed library change** · ${STATUS_LABEL[status] ?? status}\n\n${summary}\n\n_Approve or reject in Stacks; this reflects the current status._`;
 }
 
@@ -362,15 +362,19 @@ export async function POST(): Promise<Response> {
         const prompt = buildFollowUpPrompt({ reply, outcomes, attachments: [] });
         void runFeedAgent({ snippetId: feed.id, sessionId: feed.sessionId, prompt, resume: true }).catch(() => {});
       } else {
-        const history = database
-          .select()
-          .from(feedMessages)
-          .where(eq(feedMessages.snippetId, feed.id))
-          .orderBy(asc(feedMessages.createdAt))
-          .all()
-          .filter((message) => MIRRORED_KINDS.has(message.kind))
-          .map((message) => `${message.role === "user" ? "User" : "Agent"}: ${message.content}`)
-          .join("\n\n");
+        // The same transcript a fork started from the app is seeded with, so a
+        // branch resumed from the inbox keeps its opening instruction and drops
+        // the system notes this used to hand the agent as its own words.
+        const history = buildFeedTranscript(
+          feed.instruction,
+          database
+            .select()
+            .from(feedMessages)
+            .where(eq(feedMessages.snippetId, feed.id))
+            .orderBy(asc(feedMessages.createdAt))
+            .all(),
+          feed.historyMode === "tools",
+        );
         const prompt = buildForkPrompt({ reply, transcript: history, attachments: [] });
         void runFeedAgent({ snippetId: feed.id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
       }

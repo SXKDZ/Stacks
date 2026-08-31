@@ -142,11 +142,13 @@ export async function captureWebpageSnapshot(url: URL): Promise<WebpageSnapshot>
     const page = await context.newPage();
     const response = await page.goto(url.href, { waitUntil: "networkidle", timeout: NAV_TIMEOUT }).catch(async (error) => {
       // networkidle can time out on long-polling pages; fall back to domcontentloaded.
-      await page.goto(url.href, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
+      const fallback = await page.goto(url.href, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
       if (error instanceof Error && !/networkidle|Timeout/i.test(error.message)) {
         throw error;
       }
-      return page.mainFrame() ? null : null;
+      // Return the fallback's response: discarding it left status at 0, so the
+      // >= 400 check below never ran and a 404 page could be stored as a snapshot.
+      return fallback;
     });
     const status = response?.status?.() ?? 0;
     if (status >= 400) {

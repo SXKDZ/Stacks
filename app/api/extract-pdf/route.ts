@@ -28,7 +28,6 @@ interface ExtractedMetadata {
   paperType: "conference" | "journal" | "workshop" | "preprint" | "other";
   doi: string | null;
   url: string | null;
-  category: string | null;
   preprintId: string | null;
 }
 
@@ -73,7 +72,6 @@ function normalizeMetadata(value: Record<string, unknown>, fallback: ExtractedMe
     paperType: allowedPaperTypes.has(paperType) ? paperType : fallback.paperType,
     doi: cleanNullable(value.doi) ?? fallback.doi,
     url: cleanNullable(value.url) ?? fallback.url,
-    category: cleanNullable(value.category) ?? fallback.category,
     preprintId: cleanNullable(value.preprintId || value.preprint_id) ?? fallback.preprintId,
   };
 }
@@ -112,6 +110,11 @@ async function recoverAuthors(input: {
     effort: input.effort,
     temperature: temperatureOption(input.sendTemperature, 0),
   });
+  // A very long author list can reach the ceiling. Saying so beats reporting the
+  // resulting invalid JSON, which reads like the model misbehaved.
+  if (result.truncated) {
+    throw new Error("The author list reached the 1,200 token ceiling for this step and was cut off.");
+  }
   const parsed = parseJsonWith(ExtractedMetadataSchema, stripJsonFence(result.content));
   return parsed.ok ? authorNamesFrom(parsed.data.authors) : [];
 }
@@ -140,7 +143,6 @@ function fallbackMetadata(text: string, info: Record<string, unknown>, filename:
     paperType: arxivMatch ? "preprint" : "other",
     doi: null,
     url: null,
-    category: null,
     preprintId: arxivMatch ? `arXiv ${arxivMatch[1]}` : null,
   };
 }
@@ -155,6 +157,15 @@ export async function POST(request: Request): Promise<Response> {
   let document: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
   try {
     const bytes = new Uint8Array(await request.arrayBuffer());
+    // A body cut short still starts with %PDF- and pdf.js will happily read the
+    // pages that survived, so metadata would be extracted from a mutilated
+    // document and look validated. Content-Length describes the whole file.
+    if (declaredLength > 0 && bytes.length !== declaredLength) {
+      return Response.json(
+        { error: `The upload is incomplete: ${bytes.length} of ${declaredLength} bytes arrived.` },
+        { status: 400 },
+      );
+    }
     if (!bytes.length || bytes.length > 50 * 1024 * 1024) {
       return Response.json({ error: bytes.length ? "The PDF exceeds the 50 MB extraction limit." : "The PDF is empty." }, { status: 400 });
     }
@@ -169,7 +180,6 @@ export async function POST(request: Request): Promise<Response> {
     // {{source_text[1:2]}}. Default (no slice) reads the first two pages.
     const slice = pageSliceFor(template, "source_text") ?? { start: 1, end: 2 };
     const { text: sourceText, firstPage, lastPage } = await readPdfPagesFromDocument(document, slice);
-    const pageCount = Math.max(0, lastPage - firstPage + 1);
     if (!sourceText) {
       return Response.json({ error: `No selectable text was found in PDF pages ${firstPage}-${lastPage}.` }, { status: 422 });
     }
@@ -181,7 +191,7 @@ export async function POST(request: Request): Promise<Response> {
       const warning = fallback.authors.length
         ? "Bedrock is not configured; Stacks used embedded PDF metadata and text heuristics."
         : "Bedrock is not configured, and the PDF metadata did not contain an author list. Review the authors before saving.";
-      return Response.json({ metadata: fallback, analyzedPages: pageCount, totalPages: document.numPages, usedFallback: true, warning });
+      return Response.json({ metadata: fallback, warning });
     }
 
     const region = runtimeValue(runtime, "AWS_REGION", "us-east-1");
@@ -207,6 +217,9 @@ export async function POST(request: Request): Promise<Response> {
         effort,
         temperature: temperatureOption(sendTemperature, 0),
       });
+      if (result.truncated) {
+        throw new Error("The metadata reply reached the 1,800 token ceiling for this step and was cut off.");
+      }
       // The model's JSON: validated as an object before normalizeMetadata reads
       // fields off it, so a non-object reply (a bare string, an array, prose)
       // falls into the catch below and returns the heuristic fallback.
@@ -232,10 +245,6 @@ export async function POST(request: Request): Promise<Response> {
       }
       return Response.json({
         metadata,
-        analyzedPages: pageCount,
-        totalPages: document.numPages,
-        usedFallback: false,
-        endpoint: result.endpoint,
         ...(!metadata.authors.length
           ? { warning: "No author list was found in the analyzed PDF pages. Review the authors before saving." }
           : {}),
@@ -246,9 +255,6 @@ export async function POST(request: Request): Promise<Response> {
         : error instanceof Error ? error.message : "Metadata extraction failed.";
       return Response.json({
         metadata: fallback,
-        analyzedPages: pageCount,
-        totalPages: document.numPages,
-        usedFallback: true,
         warning: fallback.authors.length
           ? warning
           : `${warning} No author list was found; review the authors before saving.`,

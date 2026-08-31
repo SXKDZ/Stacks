@@ -19,6 +19,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { feedProposals, feedSnippets } from "@/db/schema";
 import { isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
 import { buildOutcomePrompt } from "@/app/lib/feed-prompt";
+import { storedProposalSummary } from "@/app/lib/schemas/proposals";
 
 /** How long to wait for further decisions before telling the agent. */
 const COALESCE_MS = 1500;
@@ -43,14 +44,6 @@ const timersGlobal = globalThis as typeof globalThis & {
 };
 const timers = timersGlobal.__stacksFeedOutcomeTimers ??= new Map<string, ReturnType<typeof setTimeout>>();
 
-function summaryOf(operation: string): string {
-  try {
-    return (JSON.parse(operation) as { summary?: string }).summary ?? "a change";
-  } catch {
-    return "a change";
-  }
-}
-
 /** The decisions this feed has not told the agent about yet, oldest first. */
 export async function unreportedOutcomes(snippetId: string): Promise<OutcomeReport> {
   const database = await ensureDatabase();
@@ -74,7 +67,7 @@ export async function unreportedOutcomes(snippetId: string): Promise<OutcomeRepo
       continue;
     }
     report.ids.push(row.id);
-    const summary = summaryOf(row.operation);
+    const summary = storedProposalSummary(row.operation, "a change");
     if (row.status === "applied") report.applied.push(summary);
     else if (row.status === "rejected") report.rejected.push(summary);
     else report.failed.push(row.resultSummary ? `${summary} (${row.resultSummary})` : summary);

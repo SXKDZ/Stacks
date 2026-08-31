@@ -247,7 +247,6 @@ async function readSnapshot() {
     givenName: cleanString(author.givenName),
     familyName: cleanString(author.familyName),
     orcid: cleanString(author.orcid),
-    semanticScholarId: cleanString(author.semanticScholarId),
     notes: cleanString(author.notes),
     paperCount: Number(paperCount ?? 0),
     latestYear: cleanNumber(latestYear),
@@ -290,6 +289,36 @@ async function readSnapshot() {
 }
 
 /** Resolve (or create) the venue id for a paper mutation on the given querier. */
+/**
+ * Whether a record is an arXiv paper. The category column holds the subject class
+ * a source assigns (cs.LG), and arXiv is the only source in this app that assigns
+ * one: everything else either has no such concept or names its own scheme, so the
+ * field is kept empty there rather than filled with something that looks like a
+ * class and is not.
+ */
+function isArxivRecord(fields: {
+  venueName?: string | null;
+  venueAcronym?: string | null;
+  preprintId?: string | null;
+  url?: string | null;
+  pdfUrl?: string | null;
+}): boolean {
+  const named = [fields.venueAcronym, fields.venueName].some((value) => (value ?? "").trim().toLowerCase().startsWith("arxiv"));
+  const identified = /^\s*arxiv[\s:]/i.test(fields.preprintId ?? "");
+  const linked = [fields.url, fields.pdfUrl].some((value) => /(^|\.)arxiv\.org\b/i.test(hostOf(value)));
+  return named || identified || linked;
+}
+
+/** The host of a stored URL, or "" when it is absent or unparseable. */
+function hostOf(value: string | null | undefined): string {
+  if (!value) return "";
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return "";
+  }
+}
+
 function resolveVenueId(
   querier: LibraryQuerier,
   data: Record<string, unknown>,
@@ -481,6 +510,18 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       throw new DuplicatePaperError();
     }
     const venueId = resolveVenueId(tx, data);
+    // Only arXiv assigns the subject class this column holds, so a value offered
+    // for anything else is dropped rather than stored as if it were one.
+    const venueRow = venueId
+      ? tx.select({ name: venues.name, acronym: venues.acronym }).from(venues).where(eq(venues.id, venueId)).get()
+      : null;
+    const category = isArxivRecord({
+      venueName: venueRow?.name ?? cleanString(data.venueName),
+      venueAcronym: venueRow?.acronym ?? cleanString(data.venueAcronym),
+      preprintId: canonicalPreprintId(data.preprintId),
+      url: cleanString(data.url),
+      pdfUrl: cleanString(data.pdfUrl),
+    }) ? cleanString(data.category) : null;
     const collectionIds = Array.isArray(data.collectionNames)
       ? resolveCollectionIdsByName(tx, data.collectionNames)
       : (Array.isArray(data.collectionIds) ? data.collectionIds : [])
@@ -495,7 +536,7 @@ async function createPaper(data: Record<string, unknown>): Promise<void> {
       volume: cleanString(data.volume),
       issue: cleanString(data.issue),
       pages: normalizedPages,
-      category: cleanString(data.category),
+      category,
       doi: canonicalDoi(data.doi),
       preprintId: canonicalPreprintId(data.preprintId),
       semanticScholarId: cleanString(data.semanticScholarId),
@@ -804,6 +845,39 @@ async function updatePaper(id: string, data: Record<string, unknown>): Promise<v
     if ("venueId" in data || "venueName" in data) {
       assignments.venueId = resolveVenueId(tx, data);
     }
+    // The subject class survives only on an arXiv record, judged from the row as it
+    // will be after this edit. An edit that moves a paper off arXiv clears it, and
+    // one that offers a class for a non-arXiv record does not store it.
+    if ("category" in assignments || "venueId" in assignments || "preprintId" in assignments || "url" in assignments || "pdfUrl" in assignments) {
+      const row = tx
+        .select({
+          venueName: venues.name,
+          venueAcronym: venues.acronym,
+          preprintId: papers.preprintId,
+          url: papers.url,
+          pdfUrl: papers.pdfUrl,
+        })
+        .from(papers)
+        .leftJoin(venues, eq(venues.id, papers.venueId))
+        .where(eq(papers.id, id))
+        .get();
+      const venueId = "venueId" in assignments ? (assignments.venueId as string | null) : undefined;
+      const venueRow = venueId === undefined
+        ? { name: row?.venueName ?? null, acronym: row?.venueAcronym ?? null }
+        : venueId
+          ? tx.select({ name: venues.name, acronym: venues.acronym }).from(venues).where(eq(venues.id, venueId)).get() ?? { name: null, acronym: null }
+          : { name: null, acronym: null };
+      const effective = {
+        venueName: venueRow.name,
+        venueAcronym: venueRow.acronym,
+        preprintId: "preprintId" in assignments ? (assignments.preprintId as string | null) : row?.preprintId ?? null,
+        url: "url" in assignments ? (assignments.url as string | null) : row?.url ?? null,
+        pdfUrl: "pdfUrl" in assignments ? (assignments.pdfUrl as string | null) : row?.pdfUrl ?? null,
+      };
+      if (!isArxivRecord(effective)) {
+        assignments.category = null;
+      }
+    }
     if (Object.keys(assignments).length) {
       tx.update(papers)
         .set({ ...assignments, updatedAt: sql`CURRENT_TIMESTAMP` } as never)
@@ -938,14 +1012,14 @@ export async function POST(request: Request): Promise<Response> {
       }
       if (added) scheduleAutoSync();
       return Response.json({ ...(await readSnapshot()), importSummary: { added, skipped, failed } });
-    } else if (body.action === "update" || body.action === "bulk-update") {
+    } else if (body.action === "update") {
       const data = body.data ?? {};
       if (body.entity === "paper") {
         if (!ids[0]) {
           return jsonError("A paper id is required for updates.");
         }
-        // Every addressed paper, not just the first: a bulk-update of N ids used
-        // to write ids[0] alone and still answer 200, so the other N-1 rows were
+        // Every addressed paper, not just the first: an update of N ids used to
+        // write ids[0] alone and still answer 200, so the other N-1 rows were
         // silently untouched. (The author/venue/collection branch below already
         // applied to all of them.)
         for (const paperId of ids) {
@@ -954,7 +1028,7 @@ export async function POST(request: Request): Promise<Response> {
       } else {
         await updateEntities(body.entity, ids, data);
       }
-    } else if (body.action === "delete" || body.action === "bulk-delete") {
+    } else if (body.action === "delete") {
       await deleteEntities(body.entity, ids);
     }
 

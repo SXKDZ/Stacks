@@ -816,22 +816,27 @@
   touch-action: none;
   transform: translate(-50%, -50%);
   transition-duration: 120ms;
-  transition-property: opacity, border-color, color;
+  transition-property: opacity, background, border-color, color;
   transition-timing-function: ease-out;
   width: 48px;
   z-index: 2;
 }
 
 /* Discoverability: the grip is a small pill straddling the panel's top edge, so
-   hovering anywhere in the composer fades it in before the pointer has to find it. */
+   hovering anywhere in the composer fades it in before the pointer has to find it.
+   It fades to fully opaque rather than to a partial alpha: the grip sits on the
+   composer's own border, which showed straight through a translucent pill. */
 .feed-dock-input:hover .feed-panel-resize-handle,
 .feed-dock-input:focus-within .feed-panel-resize-handle {
-  opacity: 0.7;
+  opacity: 1;
 }
 
 .feed-panel-resize-handle:hover {
+  background: color-mix(in srgb, var(--brand-blue) 10%, var(--surface-1));
   border-color: color-mix(in srgb, var(--brand-blue) 45%, var(--line-strong));
   color: var(--brand-blue-strong);
+  /* Stated locally as well as on the composer: hovering the grip must never leave
+     it translucent, whatever the reveal rule above does. */
   opacity: 1;
 }
 
@@ -1691,6 +1696,35 @@
   margin-inline-end: 7px;
 }
 
+/* Fork and Rewind lead the turn's footer, ahead of its time and cost: they are the
+   controls, and the provenance reads after them. Quiet by default, in the same
+   micro type as the metrics, so a thread of them stays calm. */
+.feed-turn-action {
+  align-items: center;
+  /* The row aligns on the text baseline, but a flex box whose first child is an
+     icon has no text baseline to offer: it would hand over its bottom edge and sit
+     a couple of pixels high. Centre it in the line against the metrics instead. */
+  align-self: center;
+  background: none;
+  border: 0;
+  color: var(--soft);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 3px;
+  padding: 0;
+  transition: color var(--motion-fast);
+}
+
+.feed-turn-action:hover:not(:disabled),
+.feed-turn-action:focus-visible {
+  color: var(--brand-blue-strong);
+}
+
+.feed-turn-action:disabled {
+  cursor: default;
+}
+
 .feed-turn-user {
   align-items: flex-end;
   align-self: flex-end;
@@ -1784,9 +1818,11 @@
   color: inherit;
 }
 
+/* On the gradient the well's own hairline is dark-on-blue, so the surface and the
+   hairline both take the bubble's foreground instead. */
 .feed-turn-user .feed-bubble blockquote {
-  background: rgba(255, 255, 255, 0.14);
-  border-left-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.32);
 }
 
 .feed-turn-user .feed-bubble :is(.markdown-table-scroll, .markdown-table-scroll :is(th, td)) {

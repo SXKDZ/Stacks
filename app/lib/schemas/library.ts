@@ -2,7 +2,7 @@
  * The library write API's wire contract.
  *
  * `/api/library` accepts one shape per action, and the actions have genuinely
- * different requirements: an update needs an id, a bulk-create needs a paper
+ * different requirements: an update needs at least one id, a bulk-create needs a paper
  * list, a create must not carry either. Expressing that as a discriminated
  * union on `action` makes those requirements types rather than a chain of
  * hand-written `if (!ids[0]) return jsonError(...)` guards: after a successful
@@ -66,18 +66,7 @@ export const LibraryMutationSchema = z.discriminatedUnion("action", [
   z.object({
     ...withEntity,
     ...idFields,
-    action: z.literal("bulk-update"),
-    data: PaperDataSchema.optional(),
-  }),
-  z.object({
-    ...withEntity,
-    ...idFields,
     action: z.literal("delete"),
-  }),
-  z.object({
-    ...withEntity,
-    ...idFields,
-    action: z.literal("bulk-delete"),
   }),
 ]);
 export type LibraryMutation = z.infer<typeof LibraryMutationSchema>;

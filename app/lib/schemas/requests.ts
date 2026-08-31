@@ -102,6 +102,12 @@ export const FeedForkRequestSchema = z.object({
   includeToolDetails: z.boolean().prefault(false),
 });
 
+/** The interaction a rewind returns the thread to, from the same boundaries the
+ *  history selection uses. That interaction is removed along with every later one. */
+export const FeedRewindRequestSchema = z.object({
+  interactionId: z.string().trim().min(1),
+});
+
 /** The composer's JSON form (the multipart form is handled separately). */
 export const FeedSnippetCreateSchema = z.object({
   instruction: z.string().optional(),

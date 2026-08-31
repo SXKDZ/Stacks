@@ -45,7 +45,6 @@ const schemaStatements = [
     given_name TEXT,
     family_name TEXT,
     orcid TEXT UNIQUE,
-    semantic_scholar_id TEXT,
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -158,24 +157,24 @@ const seedStatements = [
     ["venue-arxiv", "arXiv", "arXiv", "preprint", "Cornell Tech", "https://arxiv.org"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-amina", "Amina Rahman", "Amina", "Rahman", "0000-0002-3141-5926", "s2-amina"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-amina", "Amina Rahman", "Amina", "Rahman", "0000-0002-3141-5926"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-theo", "Theo Martins", "Theo", "Martins", "0000-0001-7462-9012", "s2-theo"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-theo", "Theo Martins", "Theo", "Martins", "0000-0001-7462-9012"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-yuki", "Yuki Tanaka", "Yuki", "Tanaka", "0000-0003-8420-1187", "s2-yuki"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-yuki", "Yuki Tanaka", "Yuki", "Tanaka", "0000-0003-8420-1187"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-lena", "Lena Ortiz", "Lena", "Ortiz", "0000-0002-5579-2401", "s2-lena"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-lena", "Lena Ortiz", "Lena", "Ortiz", "0000-0002-5579-2401"],
   ],
   [
-    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid, semantic_scholar_id) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["author-sam", "Samir Patel", "Samir", "Patel", "0000-0001-6034-8752", "s2-samir"],
+    `INSERT OR IGNORE INTO authors (id, display_name, given_name, family_name, orcid) VALUES (?, ?, ?, ?, ?)`,
+    ["author-sam", "Samir Patel", "Samir", "Patel", "0000-0001-6034-8752"],
   ],
   [
     `INSERT OR IGNORE INTO papers (id, title, abstract, year, paper_type, doi, semantic_scholar_id, url, pdf_url, notes, reading_status, favorite, venue_id, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -236,6 +235,29 @@ function getDatabase(): LibraryDb {
  * turn's attachments) are rewritten here, longest id first so "legacy-paper-1"
  * cannot eat the prefix of "legacy-paper-10".
  */
+/**
+ * Clear the subject class on every record that is not an arXiv paper. arXiv is the
+ * one source in this app that assigns one: anything else either has no such concept
+ * or names its own scheme, and the AI extractor used to fill the field with topic
+ * labels of its own making ("AI for science"). Idempotent, so it also repairs a row
+ * an older build wrote. Exported so the test drives this statement rather than a
+ * second copy of it.
+ */
+export function sweepNonArxivCategories(raw: import("better-sqlite3").Database): void {
+  raw
+    .prepare(`UPDATE papers SET category = NULL WHERE category IS NOT NULL AND id NOT IN (
+      SELECT p.id FROM papers p LEFT JOIN venues v ON v.id = p.venue_id
+      WHERE lower(COALESCE(v.acronym, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(v.name, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(p.preprint_id, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(p.url, '')) LIKE '%//arxiv.org/%'
+         OR lower(COALESCE(p.url, '')) LIKE '%.arxiv.org/%'
+         OR lower(COALESCE(p.pdf_url, '')) LIKE '%//arxiv.org/%'
+         OR lower(COALESCE(p.pdf_url, '')) LIKE '%.arxiv.org/%'
+    )`)
+    .run();
+}
+
 export function normalizeLegacyIds(raw: import("better-sqlite3").Database): void {
   const renames = new Map<string, string>();
   for (const [table, prefix] of [["papers", "paper"], ["authors", "author"], ["venues", "venue"], ["collections", "collection"]] as const) {
@@ -331,6 +353,8 @@ async function initializeDatabase(): Promise<void> {
   if (!feedMessageColumns.has("attachments_synced")) {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
   }
+
+  sweepNonArxivCategories(raw);
 
   normalizeLegacyIds(raw);
 

@@ -22,3 +22,29 @@ test("PDF page extraction returns all selected text without a character cap", as
   assert.equal(result.text, `${pageText}\n\n${pageText}`);
   assert.ok(result.text.length > 32_000);
 });
+
+test("one malformed page does not cost the rest of the document", async () => {
+  // A real 14-page paper threw "Page dictionary kid reference points to wrong type
+  // of object" on its last page. The read was all-or-nothing, so the summary route
+  // received no text and the review was written from the abstract alone.
+  const document = {
+    numPages: 3,
+    async getPage(pageNumber: number) {
+      if (pageNumber === 2) {
+        throw new Error("Page dictionary kid reference points to wrong type of object.");
+      }
+      return {
+        async getTextContent() {
+          return { items: [{ str: `page ${pageNumber}` }] };
+        },
+        cleanup() {},
+      };
+    },
+  };
+
+  const result = await readPdfPagesFromDocument(document as never, { start: 1, end: null });
+
+  assert.equal(result.text, "page 1\n\npage 3");
+  assert.deepEqual(result.skippedPages, [2]);
+  assert.equal(result.totalPages, 3);
+});
