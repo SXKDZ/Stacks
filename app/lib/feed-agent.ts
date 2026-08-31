@@ -742,6 +742,12 @@ export async function runFeedAgent(options: {
     emit(snippetId, { type: "done", status });
     settle({ status, text: finalText, error: undefined });
     releaseRun();
+    // A decision taken while this turn was running was left for it to report, so
+    // check now that the feed is idle again. Imported lazily: feed-outcomes starts
+    // the turn that carries them, which means it depends on this module.
+    void import("@/app/lib/feed-outcomes")
+      .then((module) => module.scheduleOutcomeReport(snippetId))
+      .catch(() => {});
   });
 
   return completion;

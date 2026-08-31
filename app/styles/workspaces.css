@@ -2591,78 +2591,196 @@
 
 /* Proposed library changes: a panel the user must decide on. A flat surface
    with a brand-tinted border so it stands apart without heavy shadow. */
+/* The approval block borrows the tool-call chrome: one foldable frame, a compact
+   summary row, and rows that read as entries rather than cards. The only
+   departure is a brand-tinted border, since this block asks for a decision. */
 .feed-proposals {
-  background: var(--surface-1);
-  border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line-strong));
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-self: stretch;
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 24%, var(--line-strong));
+  border-radius: var(--radius-sm);
+  box-shadow: var(--edge-highlight);
   margin-top: 4px;
-  padding: 15px 16px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .feed-proposals-head {
   align-items: center;
+  cursor: pointer;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: space-between;
-  margin-bottom: 2px;
+  list-style: none;
+  min-height: 38px;
+  padding: 8px 11px;
 }
 
-.feed-proposals h2 {
+.feed-proposals-head::-webkit-details-marker {
+  display: none;
+}
+
+.feed-proposals-head:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.feed-proposals[open] .feed-proposals-head {
+  border-bottom: 1px solid var(--line);
+}
+
+.feed-proposals-title {
   align-items: center;
   color: var(--brand-blue-strong);
   display: flex;
-  font-size: var(--type-label);
-  font-weight: 800;
+  font-size: var(--type-control);
+  font-weight: 650;
   gap: 7px;
-  letter-spacing: 0.08em;
-  margin: 0;
-  text-transform: uppercase;
+}
+
+.feed-proposals-title::before {
+  border-bottom: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  content: "";
+  height: 5px;
+  rotate: -45deg;
+  transition: rotate var(--motion-fast);
+  width: 5px;
+}
+
+.feed-proposals[open] .feed-proposals-title::before {
+  rotate: 45deg;
+}
+
+.feed-proposals-count {
+  color: var(--soft);
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
 }
 
 .feed-proposals-bulk {
   display: flex;
-  flex-shrink: 0;
   gap: 6px;
+  justify-content: flex-end;
+  padding: 8px 8px 0;
 }
 
+/* One entry per proposal, in the tool-group rhythm: a hairline frame on the
+   quieter surface, no per-status card colour shouting from the thread. */
 .feed-proposal {
-  background: var(--surface-2);
+  background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 11px 13px;
+  margin: 8px;
+  overflow: hidden;
+}
+
+.feed-proposal + .feed-proposal {
+  margin-top: 0;
 }
 
 .feed-proposal-row {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: space-between;
+  min-height: 38px;
+  padding: 6px 8px 6px 11px;
 }
 
-.feed-proposal-summary svg {
+.feed-proposal.is-expanded > .feed-proposal-row {
+  border-bottom: 1px solid var(--line);
+}
+
+/* The row is the toggle: chevron, what the change is, then its state. */
+.feed-proposal-body {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.feed-proposal-body > svg {
   color: var(--soft);
   flex-shrink: 0;
 }
 
-.feed-proposal-row .feed-proposal-actions {
-  align-self: flex-start;
+.feed-proposal-summary-text {
+  color: var(--ink);
+  flex: 1;
+  font-size: var(--type-control);
+  font-weight: 500;
+  line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.feed-proposal.is-expanded {
-  border-color: color-mix(in srgb, var(--brand-blue) 30%, var(--line-strong));
+.feed-proposal-meta {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
 }
 
-/* Structured operation view inside an expanded card. */
+.feed-proposal-status {
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.feed-proposal-status-applied { color: var(--status-complete); }
+.feed-proposal-status-rejected,
+.feed-proposal-status-failed { color: var(--soft); }
+.feed-proposal-status-pending { color: var(--amber); }
+
+.feed-proposal-rejected,
+.feed-proposal-failed {
+  opacity: 0.75;
+}
+
+.feed-proposal-tag {
+  border-radius: var(--radius-sm);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+/* The action chip (Create paper / Update venue …) is the primary label. */
+.feed-proposal-tag-action {
+  background: var(--brand-blue-soft);
+  color: var(--brand-blue-strong);
+}
+
+.feed-proposal-tag-meta {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--muted);
+}
+
+.feed-proposal-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+/* Structured operation view inside an expanded entry. */
 .feed-proposal-detail {
-  border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
+  padding: 10px 11px 11px;
 }
 
 .feed-proposal-fields {
@@ -2695,100 +2813,17 @@
   overflow-wrap: anywhere;
 }
 
+/* The venue, year, and stored id of the record a change targets. */
+.feed-proposal-target-meta {
+  color: var(--soft);
+  display: block;
+  font-size: var(--type-micro);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
 .feed-proposal-json summary {
   color: var(--soft);
-}
-
-.feed-proposal-applied {
-  border-color: color-mix(in srgb, var(--green) 34%, var(--line-strong));
-}
-
-.feed-proposal-rejected,
-.feed-proposal-failed {
-  opacity: 0.7;
-}
-
-/* The card body is a button: click to expand the structured change details. */
-.feed-proposal-body {
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 7px;
-  min-width: 0;
-  padding: 0;
-  text-align: left;
-}
-
-.feed-proposal-summary {
-  align-items: baseline;
-  color: var(--ink);
-  display: flex;
-  font-size: var(--type-body);
-  gap: 7px;
-}
-
-.feed-proposal-summary svg {
-  align-self: center;
-}
-
-.feed-proposal-summary-text {
-  font-weight: 500;
-  line-height: 1.35;
-  min-width: 0;
-}
-
-/* The meta line under the summary: a status pill followed by at-a-glance chips
-   (the action, e.g. "Create paper", plus paper type and venue). Indented to
-   align with the summary text past the chevron. */
-.feed-proposal-meta {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-left: 21px;
-}
-
-.feed-proposal-status {
-  border-radius: var(--radius-pill);
-  color: var(--muted);
-  font-size: var(--type-micro);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.feed-proposal-status-applied { color: var(--status-complete); }
-.feed-proposal-status-rejected,
-.feed-proposal-status-failed { color: var(--rose); }
-.feed-proposal-status-pending { color: var(--amber); }
-
-.feed-proposal-tag {
-  border-radius: var(--radius-sm);
-  font-size: var(--type-micro);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  padding: 2px 7px;
-  text-transform: capitalize;
-}
-
-/* The action chip (Create paper / Update venue …) is the primary label. */
-.feed-proposal-tag-action {
-  background: var(--brand-blue-soft);
-  color: var(--brand-blue-strong);
-}
-
-.feed-proposal-tag-meta {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--muted);
-}
-
-.feed-proposal-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 6px;
 }
 
 /* Collapsed agent tool calls: a compact one-line summary that expands to show

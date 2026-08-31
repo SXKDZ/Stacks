@@ -1142,6 +1142,91 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /message\.id === usage\.messageId/);
 });
 
+test("a proposal can rename a collection and edit its membership", async () => {
+  const [libraryRoute, prompt] = await Promise.all([
+    readFile(new URL("../app/api/library/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-prompt.ts", import.meta.url), "utf8"),
+  ]);
+
+  // A collection can be renamed and its membership edited without restating it:
+  // paperIds reconciles to an exact set, which silently drops every paper a caller
+  // omits, so an agent that only knows what to add needs a delta. Both, and the
+  // fields each entity accepts, are documented where the agent will read them.
+  assert.match(libraryRoute, /function editCollectionPapers/);
+  assert.match(libraryRoute, /editCollectionPapers\(tx, id, data\.addPaperIds, data\.removePaperIds\)/);
+  assert.match(prompt, /collection: name \(this is how you RENAME a collection\)/);
+  assert.match(prompt, /addPaperIds\[\] \/ removePaperIds\[\]/);
+  assert.match(prompt, /paperIds\[\]: the complete membership, REPLACING it/);
+  // An update used to drop semanticScholarId even though a create stores it.
+  assert.match(libraryRoute, /const paperTextFields = \{[\s\S]*?semanticScholarId: papers\.semanticScholarId/);
+
+});
+
+test("the user's decisions reach the agent exactly once", async () => {
+  const [outcomes, resolveRoute, replyRoute, syncRoute, agent, bootstrap, schema] = await Promise.all([
+    readFile(new URL("../app/lib/feed-outcomes.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/proposals/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/reply/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  // A decision is recorded in the thread and handed to the agent: once, promptly,
+  // and coalesced, so approving a batch is one turn rather than one turn each.
+  assert.match(schema, /reportedAt: text\("reported_at"\)/);
+  assert.match(bootstrap, /ADD COLUMN reported_at TEXT/);
+  assert.match(bootstrap, /UPDATE feed_proposals SET reported_at = COALESCE\(resolved_at, CURRENT_TIMESTAMP\) WHERE status <> 'pending'/);
+  assert.match(resolveRoute, /async function recordDecision/);
+  assert.match(resolveRoute, /scheduleOutcomeReport\(snippetId\)/);
+  assert.match(resolveRoute, /Approved and applied: \$\{summary\}/);
+  assert.match(resolveRoute, /Rejected: \$\{proposalNote\(proposal\.operation\)\}/);
+  assert.match(outcomes, /const COALESCE_MS = 1500/);
+  assert.match(outcomes, /if \(isFeedRunning\(snippetId\)\) return/);
+  assert.match(outcomes, /isNull\(feedProposals\.reportedAt\)/);
+  // A turn that was running when the decision was taken reports it when it ends.
+  assert.match(agent, /import\("@\/app\/lib\/feed-outcomes"\)[\s\S]*?scheduleOutcomeReport\(snippetId\)/);
+  // Reply and inbox-comment turns carry only what has not been reported yet, so
+  // the same approvals stop being repeated in every later prompt.
+  assert.match(replyRoute, /const outcomes = await unreportedOutcomes\(id\)/);
+  assert.match(replyRoute, /await markOutcomesReported\(outcomes\.ids\)/);
+  assert.match(syncRoute, /const outcomes = await unreportedOutcomes\(feed\.id\)/);
+  assert.doesNotMatch(replyRoute, /status === "applied"\)\.map/);
+});
+
+test("the approval block reads like a tool call and names what it targets", async () => {
+  const [feed, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Proposals take their place in the thread by time. A proposal the agent posted
+  // through the API is anchored to a tool_use message, which renders inside a
+  // collapsed tool group, so those used to sink to a trailing block: a resolved
+  // change then sat below newer pending ones.
+  assert.match(feed, /const floatingProposals = proposals/);
+  assert.match(feed, /flushFloatingProposals\(message\.createdAt\)/);
+  assert.match(feed, /flushFloatingProposals\(null\)/);
+  assert.doesNotMatch(feed, /props-unanchored/);
+
+  // The block folds like a tool call, open while a decision is outstanding. The
+  // open state is React state because the thread re-renders on every poll, which
+  // would otherwise snap a block the reader just opened shut again.
+  assert.match(feed, /<details\s+className="feed-proposals"[\s\S]*?open=\{proposalBlockOpen\[key\] \?\? pendingHere > 0\}/);
+  assert.match(feed, /setProposalBlockOpen/);
+  assert.match(styles, /\.feed-proposals \{[^}]*box-shadow: var\(--edge-highlight\)/);
+  assert.match(styles, /\.feed-proposals\[open\] \.feed-proposals-head \{[^}]*border-bottom/);
+
+  // A stored id names nothing, so the target and any id-valued field resolve to
+  // the record's own name, with the id kept as secondary text.
+  assert.match(feed, /function describeProposalTarget/);
+  assert.match(feed, /const collectionsById = new Map/);
+  assert.match(feed, /const ID_FIELDS = new Set\(\["paperIds", "addPaperIds", "removePaperIds", "collectionIds"\]\)/);
+  assert.match(feed, /fieldValue\(value, ID_FIELDS\.has\(key\) \? describeTarget : undefined\)/);
+  assert.match(styles, /\.feed-proposal-target-meta/);
+});
+
 test("a user's Markdown stays legible on the blue bubble", async () => {
   const styles = await readApplicationStyles();
   // Headings, quotes, tables, and math each declare an ink-dark colour, which the
