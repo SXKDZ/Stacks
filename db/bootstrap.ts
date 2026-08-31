@@ -236,6 +236,29 @@ function getDatabase(): LibraryDb {
  * turn's attachments) are rewritten here, longest id first so "legacy-paper-1"
  * cannot eat the prefix of "legacy-paper-10".
  */
+/**
+ * Clear the subject class on every record that is not an arXiv paper. arXiv is the
+ * one source in this app that assigns one: anything else either has no such concept
+ * or names its own scheme, and the AI extractor used to fill the field with topic
+ * labels of its own making ("AI for science"). Idempotent, so it also repairs a row
+ * an older build wrote. Exported so the test drives this statement rather than a
+ * second copy of it.
+ */
+export function sweepNonArxivCategories(raw: import("better-sqlite3").Database): void {
+  raw
+    .prepare(`UPDATE papers SET category = NULL WHERE category IS NOT NULL AND id NOT IN (
+      SELECT p.id FROM papers p LEFT JOIN venues v ON v.id = p.venue_id
+      WHERE lower(COALESCE(v.acronym, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(v.name, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(p.preprint_id, '')) LIKE 'arxiv%'
+         OR lower(COALESCE(p.url, '')) LIKE '%//arxiv.org/%'
+         OR lower(COALESCE(p.url, '')) LIKE '%.arxiv.org/%'
+         OR lower(COALESCE(p.pdf_url, '')) LIKE '%//arxiv.org/%'
+         OR lower(COALESCE(p.pdf_url, '')) LIKE '%.arxiv.org/%'
+    )`)
+    .run();
+}
+
 export function normalizeLegacyIds(raw: import("better-sqlite3").Database): void {
   const renames = new Map<string, string>();
   for (const [table, prefix] of [["papers", "paper"], ["authors", "author"], ["venues", "venue"], ["collections", "collection"]] as const) {
@@ -332,23 +355,7 @@ async function initializeDatabase(): Promise<void> {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
   }
 
-  // The subject class belongs to arXiv records only: it is the one source in this
-  // app that assigns one. Anything else either has no such concept or names its own
-  // scheme, and the AI extractor used to fill the field with topic labels of its own
-  // making ("AI for science"). Idempotent, so it also repairs a row an older build
-  // wrote.
-  raw
-    .prepare(`UPDATE papers SET category = NULL WHERE category IS NOT NULL AND id NOT IN (
-      SELECT p.id FROM papers p LEFT JOIN venues v ON v.id = p.venue_id
-      WHERE lower(COALESCE(v.acronym, '')) LIKE 'arxiv%'
-         OR lower(COALESCE(v.name, '')) LIKE 'arxiv%'
-         OR lower(COALESCE(p.preprint_id, '')) LIKE 'arxiv%'
-         OR lower(COALESCE(p.url, '')) LIKE '%//arxiv.org/%'
-         OR lower(COALESCE(p.url, '')) LIKE '%.arxiv.org/%'
-         OR lower(COALESCE(p.pdf_url, '')) LIKE '%//arxiv.org/%'
-         OR lower(COALESCE(p.pdf_url, '')) LIKE '%.arxiv.org/%'
-    )`)
-    .run();
+  sweepNonArxivCategories(raw);
 
   normalizeLegacyIds(raw);
 

@@ -15,16 +15,7 @@ import test from "node:test";
 
 import Database from "better-sqlite3";
 
-const SWEEP = `UPDATE papers SET category = NULL WHERE category IS NOT NULL AND id NOT IN (
-  SELECT p.id FROM papers p LEFT JOIN venues v ON v.id = p.venue_id
-  WHERE lower(COALESCE(v.acronym, '')) LIKE 'arxiv%'
-     OR lower(COALESCE(v.name, '')) LIKE 'arxiv%'
-     OR lower(COALESCE(p.preprint_id, '')) LIKE 'arxiv%'
-     OR lower(COALESCE(p.url, '')) LIKE '%//arxiv.org/%'
-     OR lower(COALESCE(p.url, '')) LIKE '%.arxiv.org/%'
-     OR lower(COALESCE(p.pdf_url, '')) LIKE '%//arxiv.org/%'
-     OR lower(COALESCE(p.pdf_url, '')) LIKE '%.arxiv.org/%'
-)`;
+import { sweepNonArxivCategories } from "../../db/bootstrap.ts";
 
 test("the startup sweep keeps a class on arXiv records and clears it everywhere else", () => {
   const root = mkdtempSync(join(tmpdir(), "stacks-arxiv-category-"));
@@ -56,7 +47,7 @@ test("the startup sweep keeps a class on arXiv records and clears it everywhere 
       INSERT INTO papers VALUES ('clear-lookalike', 'Lookalike host', 'cs.LG', NULL, 'https://notarxiv.org/abs/1', NULL, NULL);
     `);
 
-    database.prepare(SWEEP).run();
+    sweepNonArxivCategories(database);
 
     const rows = database.prepare("SELECT id, category FROM papers ORDER BY id").all() as Array<{ id: string; category: string | null }>;
     const byId = new Map(rows.map((row) => [row.id, row.category]));
@@ -69,9 +60,10 @@ test("the startup sweep keeps a class on arXiv records and clears it everywhere 
     assert.equal(byId.get("clear-bare"), null);
     assert.equal(byId.get("clear-lookalike"), null);
 
-    // Idempotent: a second run changes nothing.
-    const second = database.prepare(SWEEP).run();
-    assert.equal(second.changes, 0);
+    // Idempotent: a second run leaves every row exactly as the first did.
+    sweepNonArxivCategories(database);
+    const after = database.prepare("SELECT id, category FROM papers ORDER BY id").all();
+    assert.deepEqual(after, rows);
   } finally {
     database.close();
     rmSync(root, { recursive: true, force: true });
