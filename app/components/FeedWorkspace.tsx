@@ -8,6 +8,7 @@ import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper }
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { readError, readErrorInfo } from "@/app/lib/http";
+import { beginPointerResize } from "@/app/lib/pointer-resize";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { ProposalOperationSchema } from "@/app/lib/schemas/proposals";
 import { SnippetAttachmentListSchema, type SnippetAttachment as FeedAttachment } from "@/app/lib/schemas/attachments";
@@ -1966,22 +1967,18 @@ export default function FeedWorkspace() {
     if (saved >= FEED_SIDEBAR_MIN && saved <= FEED_SIDEBAR_MAX) setSidebarWidth(saved);
   }, []);
 
+  // The shared handler owns the listener lifecycle: it matches the pointer id,
+  // coalesces moves into a frame, and releases on cancel, blur, or a button let
+  // go outside the window, none of which this used to survive.
   function startSidebarResize(event: React.PointerEvent) {
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = sidebarWidth;
-    const onMove = (moveEvent: PointerEvent) => {
-      const next = Math.min(FEED_SIDEBAR_MAX, Math.max(FEED_SIDEBAR_MIN, startWidth + moveEvent.clientX - startX));
-      setSidebarWidth(next);
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      document.body.classList.remove("is-resizing-column");
-      setSidebarWidth((width) => { window.localStorage.setItem(FEED_SIDEBAR_KEY, String(width)); return width; });
-    };
-    document.body.classList.add("is-resizing-column");
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, { once: true });
+    beginPointerResize(
+      event.pointerId,
+      (clientX) => setSidebarWidth(Math.min(FEED_SIDEBAR_MAX, Math.max(FEED_SIDEBAR_MIN, startWidth + clientX - startX))),
+      () => setSidebarWidth((width) => { window.localStorage.setItem(FEED_SIDEBAR_KEY, String(width)); return width; }),
+    );
   }
   const [library, setLibrary] = useState<LibraryPaper[]>([]);
   const [collections, setCollections] = useState<Array<{ id: string; name: string }>>([]);
