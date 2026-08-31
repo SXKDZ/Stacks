@@ -379,7 +379,17 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   const [selectingStorageDirectory, setSelectingStorageDirectory] = useState(false);
   const [storageTarget, setStorageTarget] = useState("");
   const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
-  const [doctorModal, setDoctorModal] = useState<{ label: string; detail: string; records?: Array<{ id: string; label: string; kind: string }>; paths?: string[]; paperIds?: string[] } | null>(null);
+  // `repair` names the operation this modal's action button performs. It used to
+  // render whenever the modal listed records and always called removeOrphans, so
+  // opening it from Unlinked assets ran the database repair and deleted no files.
+  const [doctorModal, setDoctorModal] = useState<{
+    label: string;
+    detail: string;
+    records?: Array<{ id: string; label: string; kind: string }>;
+    paths?: string[];
+    paperIds?: string[];
+    repair?: "orphaned-records" | "unlinked-files";
+  } | null>(null);
   const doctorDialogRef = useRef<HTMLDivElement | null>(null);
   const doctorCloseRef = useRef<HTMLButtonElement | null>(null);
   const doctorReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -692,17 +702,17 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     }
   }, [notify, papers]);
 
-  async function cleanStorage() {
+  async function cleanStorage(): Promise<boolean> {
     if (!storageReport?.orphanedFiles) {
       notify("Doctor did not find any unlinked Stacks-managed assets.", "info");
-      return;
+      return false;
     }
     const summary = `${storageReport.orphanedFiles} unlinked file${storageReport.orphanedFiles === 1 ? "" : "s"} (${byteLabel(storageReport.orphanedBytes)})`;
     if (!window.confirm(`Remove ${summary} from the active Stacks library? Referenced files will not be touched.`)) {
-      return;
+      return false;
     }
     if (!window.confirm(`Final confirmation: permanently delete ${summary}? This cannot be undone.`)) {
-      return;
+      return false;
     }
     setCleaningStorage(true);
     try {
@@ -725,8 +735,10 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       const report = await response.json() as StorageReport;
       notify(`Removed ${report.removedFiles} unlinked file${report.removedFiles === 1 ? "" : "s"} and reclaimed ${byteLabel(report.removedBytes)}.`, "success");
       await inspectStorage(false);
+      return true;
     } catch (error) {
       notify(error instanceof Error ? error.message : "Unlinked assets could not be removed.", "error");
+      return false;
     } finally {
       setCleaningStorage(false);
     }
@@ -1053,13 +1065,13 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                           <DoctorMetric icon={<DatabaseBackup size={17} />} label="Library database" value={h ? h.integrityOk && !h.foreignKeyViolations ? "Healthy" : "Needs attention" : storageReport.databasePresent ? "Available" : "Missing"} detail={`${storageReport.paperRecords} papers · ${h?.foreignKeyViolations ?? 0} FK violations`} tone={h ? h.integrityOk && !h.foreignKeyViolations ? "good" : "bad" : storageReport.databasePresent ? "good" : "bad"} onClick={() => setDoctorModal({ label: "Library database", detail: `SQLite integrity check: ${h?.integrityOk ? "OK" : "problems found"}. ${h?.foreignKeyViolations ?? 0} foreign-key violations across ${storageReport.paperRecords} papers.${h?.integrityMessages?.length ? ` Messages: ${h.integrityMessages.join("; ")}.` : ""}` })} />
                           <DoctorMetric icon={<DatabaseBackup size={17} />} label="Associations" value={`${assoc} orphaned`} detail={h?.foreignKeyEnforced ? "Foreign keys are enforced" : "Foreign-key enforcement unavailable"} tone={h && (h.foreignKeyViolations || Object.values(h.orphanedAssociations).some(Boolean)) ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Associations", detail: h ? `Dangling link rows whose paper or target no longer exists: ${h.orphanedAssociations.paperAuthors} author links, ${h.orphanedAssociations.paperCollections} collection links. Repair library removes these.` : "No database health data." })} />
                           {entities ? (
-                            <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${orphanTotal} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={orphanTotal ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Orphaned records", detail: "Authors, venues, and collections with no papers. Removing them deletes only these empty records; no paper is affected.", records: orphanList })} />
+                            <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${orphanTotal} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={orphanTotal ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Orphaned records", detail: "Authors, venues, and collections with no papers. Removing them deletes only these empty records; no paper is affected.", records: orphanList, repair: "orphaned-records" })} />
                           ) : null}
                           <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={fileChecks ? `${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked` : `${storageReport.referencedPdfFiles} referenced`} detail={fileChecks ? `${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingPdfFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "PDFs", detail: `${storageReport.presentPdfFiles} of ${storageReport.referencedPdfFiles} referenced PDFs are present on disk (${storageReport.missingPdfFiles} missing). ${storageReport.storedPdfFiles} physical files total, ${byteLabel(storageReport.storedPdfBytes)}.`, paths: storageReport.missingPdfPaths })} />
                           <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={fileChecks ? `${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked` : `${storageReport.referencedHtmlFiles} referenced`} detail={fileChecks ? `${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}` : "Physical-file checks require local mode"} tone={storageReport.missingHtmlFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "HTML snapshots", detail: `${storageReport.presentHtmlFiles} of ${storageReport.referencedHtmlFiles} referenced snapshots are present on disk (${storageReport.missingHtmlFiles} missing). ${storageReport.storedHtmlFiles} physical files total, ${byteLabel(storageReport.storedHtmlBytes)}.`, paths: storageReport.missingHtmlPaths })} />
                           <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} ${storageReport.papersWithoutLocalAsset === 1 ? "paper" : "papers"}`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Papers without a local source", detail: `${storageReport.papersWithoutLocalAsset} paper${storageReport.papersWithoutLocalAsset === 1 ? " has" : "s have"} neither a local PDF nor an HTML snapshot. Review every affected record below, then edit its source information or attach a file.`, paperIds: storageReport.paperIdsWithoutLocalAsset })} />
                           <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="File paths saved in a form Stacks can’t use" tone={storageReport.invalidReferences ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Invalid references", detail: "Stored file paths that are absolute or otherwise break Stacks’s portable-path rules. Repair library rewrites these to portable names.", paths: [...storageReport.invalidPdfPaths, ...storageReport.invalidHtmlPaths] })} />
-                          <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} ${storageReport.orphanedFiles === 1 ? "file" : "files"}`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Unlinked assets", detail: `${storageReport.orphanedFiles} file${storageReport.orphanedFiles === 1 ? "" : "s"} in the managed pdfs/ and html_snapshots/ folders are not referenced by any paper (${byteLabel(storageReport.orphanedBytes)} reclaimable of ${byteLabel(storageReport.totalBytes)} managed). Use "Clean unlinked assets" below to remove them.`, records: (storageReport.orphanedNames ?? []).map((file) => ({ id: file.name, kind: file.kind.toUpperCase(), label: file.name })) })} />
+                          <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} ${storageReport.orphanedFiles === 1 ? "file" : "files"}`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Unlinked assets", detail: `${storageReport.orphanedFiles} file${storageReport.orphanedFiles === 1 ? "" : "s"} in the managed pdfs/ and html_snapshots/ folders are not referenced by any paper (${byteLabel(storageReport.orphanedBytes)} reclaimable of ${byteLabel(storageReport.totalBytes)} managed).`, records: (storageReport.orphanedNames ?? []).map((file) => ({ id: file.name, kind: file.kind.toUpperCase(), label: file.name })), repair: "unlinked-files" })} />
                           {storageReport.systemHealth ? (
                             <>
                               <DoctorMetric icon={<Cpu size={17} />} label="Runtime" value={storageReport.systemHealth.runtime} detail={storageReport.systemHealth.platform ?? "Local server"} tone="good" onClick={() => setDoctorModal({ label: "Runtime", detail: `${storageReport.systemHealth!.runtime} on ${storageReport.systemHealth!.platform ?? "this machine"}.${storageReport.systemHealth!.freeBytes ? ` ${byteLabel(storageReport.systemHealth!.freeBytes)} free on the library volume.` : ""}` })} />
@@ -1207,8 +1219,17 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             ) : null}
             <footer className="doctor-modal-foot">
               <ActionButton variant="secondary" size="small" onClick={() => setDoctorModal(null)}>Close</ActionButton>
-              {doctorModal.records ? (
-                <ActionButton variant="danger" size="small" disabled={removingOrphans || !doctorModal.records.length} onClick={() => void removeOrphans()} icon={removingOrphans ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}>Remove orphaned records</ActionButton>
+              {doctorModal.repair === "orphaned-records" ? (
+                <ActionButton variant="danger" size="small" disabled={removingOrphans || !doctorModal.records?.length} onClick={() => void removeOrphans()} icon={removingOrphans ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}>Remove orphaned records</ActionButton>
+              ) : null}
+              {doctorModal.repair === "unlinked-files" ? (
+                <ActionButton
+                  variant="danger"
+                  size="small"
+                  disabled={cleaningStorage || !storageReport?.orphanedFiles}
+                  onClick={() => void cleanStorage().then((cleaned) => { if (cleaned) setDoctorModal(null); })}
+                  icon={cleaningStorage ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}
+                >Remove unlinked files</ActionButton>
               ) : null}
             </footer>
           </div>

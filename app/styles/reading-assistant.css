@@ -465,8 +465,10 @@
   padding: 12px;
 }
 
+/* The card's own metadata, not every span inside it: this reached the label span of
+   the Add button and repainted it muted 11px text on its gradient. */
 .modal-results small,
-.modal-results span {
+.modal-results span:not(:where(button *)) {
   color: var(--soft);
   font-size: var(--type-micro);
 }

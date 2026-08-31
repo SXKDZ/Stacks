@@ -1233,6 +1233,26 @@ test("a summary says what it was written from, and quotes read as one shape", as
   assert.doesNotMatch(styles, /\.feed-turn-user \.feed-bubble blockquote \{[^}]*box-shadow/);
 });
 
+test("a Doctor repair button performs the repair it names", async () => {
+  const settings = await readFile(new URL("../app/components/SettingsView.tsx", import.meta.url), "utf8");
+
+  // The action button used to render whenever the modal listed records and always
+  // called removeOrphans, so opening it from Unlinked assets ran the database
+  // repair (clean-orphans) and deleted no files, while reporting success.
+  assert.match(settings, /repair\?: "orphaned-records" \| "unlinked-files"/);
+  assert.match(settings, /records: orphanList, repair: "orphaned-records"/);
+  assert.match(settings, /repair: "unlinked-files"/);
+  assert.match(settings, /doctorModal\.repair === "orphaned-records" \?[\s\S]*?removeOrphans\(\)/);
+  assert.match(settings, /doctorModal\.repair === "unlinked-files" \?[\s\S]*?cleanStorage\(\)/);
+  assert.doesNotMatch(settings, /doctorModal\.records \?\s*\(\s*<ActionButton/);
+  // It closes only when files were actually removed, so a cancelled confirmation
+  // leaves the list on screen.
+  assert.match(settings, /async function cleanStorage\(\): Promise<boolean>/);
+  assert.match(settings, /cleanStorage\(\)\.then\(\(cleaned\) => \{ if \(cleaned\) setDoctorModal\(null\)/);
+  // And the modal no longer points at a button somewhere else on the page.
+  assert.doesNotMatch(settings, /Use "Clean unlinked assets" below/);
+});
+
 test("every button is one family: capsule, gradient to the edge, one shadow", async () => {
   const [controls, application, styles] = await Promise.all([
     readFile(new URL("../app/components/ui/controls.tsx", import.meta.url), "utf8"),
@@ -1263,6 +1283,18 @@ test("every button is one family: capsule, gradient to the edge, one shadow", as
   assert.doesNotMatch(styles, /\.discover-search-box > button \{[^}]*height: 48px/);
   assert.doesNotMatch(styles, /\.discover-search-box > button,\s*\.modal-results/);
   assert.match(styles, /\.discover-search-box > button \{[^}]*min-width: 118px/);
+
+  // Text buttons that sit beside the family take its shape too, wherever they are
+  // hand-rolled: the eyebrow Regenerate, the field-label Regenerate, the toolbar
+  // Filters toggle, and the sort reset.
+  for (const selector of [".eyebrow-generate", ".field-label-action > button", ".filter-builder-toggle", ".sort-reset-button"]) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(styles, new RegExp(`${escaped} \\{[^}]*border-radius: var\\(--radius-pill\\)`), `${selector} should be a capsule`);
+  }
+  // A card's own metadata rules must not reach the label inside a button: these
+  // repainted the Add button's label muted 11px text on its gradient.
+  assert.match(styles, /\.modal-results span:not\(:where\(button \*\)\)/);
+  assert.doesNotMatch(styles, /\.modal-results span \{/);
 
   // The composer's grip sits on the panel's own border, so a partial alpha let the
   // border show straight through the pill.

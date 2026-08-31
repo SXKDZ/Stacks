@@ -1399,7 +1399,7 @@ td.number-cell {
   align-items: center;
   background: var(--brand-blue-soft);
   border: 1px solid color-mix(in srgb, var(--brand-blue) 28%, var(--line));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   color: var(--brand-blue-strong);
   cursor: pointer;
   display: inline-flex;

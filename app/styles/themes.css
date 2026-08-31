@@ -339,7 +339,7 @@ textarea::placeholder {
 }
 
 .modal-results small,
-.modal-results span,
+.modal-results span:not(:where(button *)),
 .settings-card-title small,
 .integration-name small {
   font-size: var(--type-micro);
