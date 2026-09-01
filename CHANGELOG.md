@@ -4,6 +4,10 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed
+
+- A step in the activity log wraps across the full width of the panel. The timestamp was a column holding a third of it, so a long step message wrapped in the ribbon left over while the space under the timestamps sat empty.
+
 ## [0.6.0] - 2026-09-01
 
 ### Fixed
