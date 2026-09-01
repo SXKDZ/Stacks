@@ -579,13 +579,16 @@ test("the sync button shows how far along it is, not how many writes it made", a
   assert.match(sync, /remaining: outstandingWrites\(database\)/);
   assert.match(feed, /Math\.min\(99, Math\.round\(\(syncProgress\.done \/ \(syncProgress\.done \+ syncProgress\.remaining\)\) \* 100\)\)/);
   assert.match(feed, /`Syncing \$\{syncPercent\}%`/);
-  // The ring fills clockwise from twelve, and spins instead of claiming a number until
-  // the first pass answers.
-  assert.match(feed, /function SyncProgressRing/);
-  assert.match(feed, /strokeDashoffset=\{percent === null \? circumference \* 0\.75 : circumference \* \(1 - percent \/ 100\)\}/);
-  assert.match(styles, /\.sync-ring \{[^}]*transform: rotate\(-90deg\)/);
-  assert.match(styles, /\.sync-ring-arc \{[^}]*transition: stroke-dashoffset/);
-  assert.match(styles, /@keyframes sync-ring-spin/);
+  // The button's own border is the progress: a conic gradient clipped to the border box
+  // over the fill clipped to the padding box, so nothing is added beside the button.
+  assert.match(feed, /className=\{syncing \? `sync-progress\$\{syncPercent === null \? " is-indeterminate" : ""\}` : undefined\}/);
+  assert.match(feed, /\["--sync-progress" as string\]: syncPercent/);
+  assert.match(styles, /@property --sync-progress \{[^}]*syntax: "<number>"/);
+  assert.match(styles, /conic-gradient\(\s*from calc\(var\(--sync-angle\) \* 1deg\)/);
+  assert.match(styles, /\) border-box;/);
+  // A registered property is what lets the fill grow between passes instead of jumping.
+  assert.match(styles, /transition: --sync-progress var\(--motion-control\)/);
+  assert.match(styles, /@keyframes sync-border-travel/);
 });
 
 test("cutting or copying a thread does not confuse its GitHub issue", async () => {

@@ -357,31 +357,6 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
   );
 }
 
-/**
- * The sync button's progress, as a ring that fills clockwise from twelve.
- *
- * `percent` is null until the first pass reports what is still outstanding, and the
- * ring spins as an indeterminate arc until then: a sync's write count means nothing
- * without a denominator, since each pass spends a small budget and asks for another.
- */
-function SyncProgressRing({ percent }: { percent: number | null }) {
-  const radius = 6;
-  const circumference = 2 * Math.PI * radius;
-  return (
-    <svg viewBox="0 0 16 16" className={`sync-ring ${percent === null ? "is-indeterminate" : ""}`} aria-hidden="true">
-      <circle className="sync-ring-track" cx="8" cy="8" r={radius} />
-      <circle
-        className="sync-ring-arc"
-        cx="8"
-        cy="8"
-        r={radius}
-        strokeDasharray={circumference}
-        strokeDashoffset={percent === null ? circumference * 0.75 : circumference * (1 - percent / 100)}
-      />
-    </svg>
-  );
-}
-
 /** Sync failures use the same standalone toast surface as Settings instead of
  * becoming another nested card inside the feed sidebar. */
 function SyncFailureToast({ failure, onDismiss }: { failure: { summary: string; details: string }; onDismiss: () => void }) {
@@ -2795,7 +2770,11 @@ export default function FeedWorkspace() {
                 onClick={() => void syncGithub()}
                 disabled={syncing}
                 aria-label="Sync the GitHub inbox"
-                icon={syncing ? <SyncProgressRing percent={syncPercent} /> : <RefreshCw size={15} />}
+                // The button's own border is the progress: it fills clockwise from the
+                // top as the share grows, and turns while the first pass is in flight.
+                className={syncing ? `sync-progress${syncPercent === null ? " is-indeterminate" : ""}` : undefined}
+                style={syncPercent === null ? undefined : { ["--sync-progress" as string]: syncPercent }}
+                icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />}
                 kbd={`${modKey}S`}
               >
                 {syncing ? (syncPercent === null ? "Syncing…" : `Syncing ${syncPercent}%`) : "Sync"}

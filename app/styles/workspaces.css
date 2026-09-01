@@ -1705,43 +1705,48 @@
   margin: 0;
 }
 
-/* The sync button's progress ring. It fills clockwise from twelve, so the button says
-   how far along a resumable sync is instead of counting writes nobody can scale. */
-.sync-ring {
-  height: 15px;
-  transform: rotate(-90deg);
-  width: 15px;
+/* Sync progress, drawn as the button's own border rather than an indicator beside it.
+   Two background layers: the button's fill clipped to the padding box, and a conic
+   gradient clipped to the border box, so the border itself is the track. The rounded
+   corners sweep a little faster than the straight edges, which is what a conic gradient
+   does on a pill; nothing else traces a border without a second element. */
+@property --sync-progress {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
 }
 
-.sync-ring circle {
-  fill: none;
-  stroke-linecap: round;
-  stroke-width: 2;
+@property --sync-angle {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
 }
 
-.sync-ring-track {
-  stroke: color-mix(in srgb, var(--ink) 12%, transparent);
+.sync-progress {
+  background:
+    linear-gradient(var(--surface-1), var(--surface-1)) padding-box,
+    conic-gradient(
+      from calc(var(--sync-angle) * 1deg),
+      var(--brand-blue) calc(var(--sync-progress) * 1%),
+      color-mix(in srgb, var(--ink) 14%, transparent) calc(var(--sync-progress) * 1%)
+    ) border-box;
+  border-color: transparent;
+  /* The registered property is what makes the fill grow between passes instead of
+     jumping from one share to the next. */
+  transition: --sync-progress var(--motion-control);
 }
 
-.sync-ring-arc {
-  stroke: var(--brand-blue);
-  /* The arc grows into its new length rather than jumping between passes. */
-  transition: stroke-dashoffset var(--motion-control);
-}
-
-/* Before the first pass reports what is outstanding there is no share to show, so the
-   quarter arc turns instead: the same signal a spinner gives, in the ring's own shape. */
-.sync-ring.is-indeterminate {
-  animation: sync-ring-spin 900ms linear infinite;
-}
-
-.sync-ring.is-indeterminate .sync-ring-arc {
+/* Before the first pass reports what is outstanding there is no share to show, so a
+   quarter of the border travels around it: the same signal a spinner gives. */
+.sync-progress.is-indeterminate {
+  --sync-progress: 25;
+  animation: sync-border-travel 1s linear infinite;
   transition: none;
 }
 
-@keyframes sync-ring-spin {
-  from { transform: rotate(-90deg); }
-  to { transform: rotate(270deg); }
+@keyframes sync-border-travel {
+  from { --sync-angle: 0; }
+  to { --sync-angle: 360; }
 }
 
 /* A compaction's two ends, in the thread header: where it came from, where it went. */
