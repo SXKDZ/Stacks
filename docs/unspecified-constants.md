@@ -1,9 +1,6 @@
 # Unspecified constants
 
-Every hardcoded limit, timeout, threshold, cap and default in the codebase that
-nobody asked for explicitly: what each one decides, how it could be changed today,
-and what a wrong value would look like. Produced by a sweep of the whole repo, so
-it includes framework defaults the app merely restates.
+Every hardcoded limit, timeout, threshold, cap and default in the codebase that nobody asked for explicitly: what each one decides, how it could be changed today, and what a wrong value would look like. Produced by a sweep of the whole repo, so it includes framework defaults the app merely restates.
 
 708 values across 102 files. By how they can be changed:
 

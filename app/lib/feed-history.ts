@@ -159,23 +159,65 @@ export function selectFeedHistory<TMessage extends FeedHistoryMessage>(input: {
   };
 }
 
-/** A fresh fork session receives this transcript as one supported user prompt. */
+/**
+ * Roughly 32k tokens of history: enough to carry dozens of turns, and small enough
+ * that the seeded prompt plus the turn's own work still fits the model's window.
+ * The cap is the point of this budget: a long thread is megabytes of transcript
+ * (one 405-turn feed here is 1.2 MB), and a prompt that large is refused outright
+ * with "Prompt is too long" before the agent does anything.
+ */
+const TRANSCRIPT_BUDGET_CHARS = 120_000;
+/**
+ * No single message may spend the whole budget. A 100 kB tool result would
+ * otherwise crowd out every turn around it, and its opening lines are the part
+ * worth carrying.
+ */
+const TRANSCRIPT_MESSAGE_CHARS = 4_000;
+
+function clipForTranscript(text: string): string {
+  return text.length <= TRANSCRIPT_MESSAGE_CHARS
+    ? text
+    : `${text.slice(0, TRANSCRIPT_MESSAGE_CHARS)}\n[${text.length - TRANSCRIPT_MESSAGE_CHARS} more characters omitted]`;
+}
+
+function transcriptLine(message: FeedHistoryMessage): string {
+  const content = clipForTranscript(message.content);
+  if (message.kind === "tool_use") return `Assistant tool request: ${content}`;
+  if (message.kind === "tool_result") return `Tool result: ${content}`;
+  return `${message.role === "user" ? "User" : "Assistant"}: ${content}`;
+}
+
+/**
+ * A fresh fork session receives this transcript as one supported user prompt.
+ *
+ * The opening instruction always survives, since it is what the thread was for.
+ * The rest is taken newest first and stops at the budget: a continuation needs the
+ * end of the conversation, and dropping the oldest turns keeps what remains
+ * contiguous. What was dropped is stated rather than left to look like the thread
+ * simply began there.
+ */
 export function buildFeedTranscript(
   instruction: string,
   messages: FeedHistoryMessage[],
   includeToolDetails = false,
 ): string {
-  const lines: string[] = [];
-  if (instruction.trim()) lines.push(`User: ${instruction.trim()}`);
-  for (const message of messages) {
-    if (!historyMessageAllowed(message, includeToolDetails)) continue;
-    if (message.kind === "tool_use") {
-      lines.push(`Assistant tool request: ${message.content}`);
-    } else if (message.kind === "tool_result") {
-      lines.push(`Tool result: ${message.content}`);
-    } else {
-      lines.push(`${message.role === "user" ? "User" : "Assistant"}: ${message.content}`);
+  const opening = instruction.trim() ? `User: ${clipForTranscript(instruction.trim())}` : "";
+  const carried = messages.filter((message) => historyMessageAllowed(message, includeToolDetails));
+  const recent: string[] = [];
+  let remaining = TRANSCRIPT_BUDGET_CHARS - opening.length;
+  let omitted = 0;
+  for (let index = carried.length - 1; index >= 0; index -= 1) {
+    const line = transcriptLine(carried[index]);
+    if (line.length + 2 > remaining) {
+      omitted = index + 1;
+      break;
     }
+    remaining -= line.length + 2;
+    recent.push(line);
   }
-  return lines.join("\n\n");
+  recent.reverse();
+  const note = omitted
+    ? `[${omitted} earlier message${omitted === 1 ? "" : "s"} omitted: this thread is longer than one prompt can carry]`
+    : "";
+  return [opening, note, ...recent].filter(Boolean).join("\n\n");
 }

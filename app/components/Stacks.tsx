@@ -242,7 +242,6 @@ const VENUE_LABELS: Record<string, string> = {
 const ENTITY_SUBTITLES: Record<string, string> = {
   author: "Changes apply to every paper by this author.",
   venue: "Keep this venue's details consistent everywhere.",
-  collection: "Move papers between this collection and the rest of your library.",
 };
 
 const navigation: Array<{
@@ -359,7 +358,7 @@ function groundingNote(grounding?: SummaryGrounding): string {
 function summarySavedMessage(grounding?: SummaryGrounding): string {
   return grounding?.source === "pdf" || grounding?.source === "webpage"
     ? "Summary generated and saved."
-    : "Summary saved. It was written from the record's metadata: the paper's text could not be read.";
+    : "Summary saved from metadata only: the paper's text could not be read.";
 }
 
 function venueMonogram(venue: { acronym: string | null; name: string }): string {
@@ -761,12 +760,12 @@ function SelectionBox({ checked }: { checked: boolean }) {
   );
 }
 
-function EmptyState({ icon, title, detail, action }: { icon: ReactNode; title: string; detail: string; action?: ReactNode }) {
+function EmptyState({ icon, title, detail, action }: { icon: ReactNode; title: string; detail?: string; action?: ReactNode }) {
   return (
     <div className="empty-state">
       <div className="empty-icon" aria-hidden="true">{icon}</div>
       <h3>{title}</h3>
-      <p>{detail}</p>
+      {detail ? <p>{detail}</p> : null}
       {action ? <div className="empty-state-action">{action}</div> : null}
     </div>
   );
@@ -1015,7 +1014,7 @@ function StacksWorkspace() {
       return;
     }
     const label = ids.length === 1 ? entity : `${entity}s`;
-    const approved = window.confirm(`Delete ${ids.length} selected ${label}? This cannot be undone.`);
+    const approved = window.confirm(`Delete ${ids.length} ${label}? This cannot be undone.`);
     if (!approved) {
       return;
     }
@@ -1668,7 +1667,7 @@ function LibraryView({
     <div className="data-view">
       <div className="view-toolbar library-toolbar">
         <PageSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search titles, authors, venues…" />
-        <button type="button" className={`filter-builder-toggle ${filterBuilderOpen ? "is-open" : ""} ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} aria-pressed={filterBuilderOpen} title={filterBuilderOpen ? "Close library filters" : "Build library filters"}><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
+        <button type="button" className={`filter-builder-toggle ${filterBuilderOpen ? "is-open" : ""} ${filters.length ? "has-filters" : ""}`} onClick={() => setFilterBuilderOpen((current) => !current)} aria-expanded={filterBuilderOpen} aria-pressed={filterBuilderOpen}><ListFilter size={16} /><span>Filters</span>{filters.length ? <b>{filters.length}</b> : null}</button>
         {/* Only shown while a column sort is active, since it does nothing at
             rest and the default order has no header of its own to click. */}
         {sortIsDefault ? null : (
@@ -1863,7 +1862,7 @@ function LibraryView({
         <EmptyState
           icon={<Search size={24} />}
           title={papers.length ? "No papers found" : "No papers yet"}
-          detail={papers.length ? "Try another search or clear the current filters." : "Add a paper to start building your research library."}
+          detail={papers.length ? "Try another search or fewer filters." : undefined}
           action={query || filters.length ? <ActionButton size="small" onClick={() => { setQuery(""); setFilters([]); }}>Clear search and filters</ActionButton> : undefined}
         />
       )}
@@ -2553,7 +2552,7 @@ function TablePagination({ page, pageSize, total, itemLabel, pageSizeOptions = [
   }
   return (
     <div className="table-pagination">
-      <span>Showing {start}-{end} of {total} {itemLabel}</span>
+      <span>{start}-{end} of {total} {itemLabel}</span>
       <div className="table-pagination-controls">
         <div className="page-size-control">
           <span>{pageSizeLabel}</span>
@@ -3106,7 +3105,7 @@ function ExportReferencesModal({ papers, onClose }: {
   return (
     <ModalFrame
       title="Export references"
-      subtitle={`${papers.length} selected ${papers.length === 1 ? "paper" : "papers"}. `}
+      subtitle={`${papers.length} ${papers.length === 1 ? "paper" : "papers"}`}
       onClose={onClose}
       className="export-modal"
     >
@@ -3607,7 +3606,7 @@ function CollectionNamesField({ collections, value, onChange }: { collections: C
       <AnchoredOptions anchorRef={editorRef} open={open && Boolean(matches.length)} className="metadata-autocomplete-options collection-autocomplete-options" id={listboxId}>
         {matches.map((collection) => <button type="button" role="option" aria-selected="false" onMouseDown={(event) => event.preventDefault()} onClick={() => addName(collection.name)} key={collection.id}><span className={`collection-option-dot swatch-${collection.color}`} /><span><strong>{collection.name}</strong><small>{collection.paperCount} {collection.paperCount === 1 ? "paper" : "papers"}</small></span></button>)}
       </AnchoredOptions>
-      <small>Choose an existing collection or type a new name and press Enter.</small>
+      <small>Choose one or type a new name, then press Enter.</small>
     </div>
   );
 }
@@ -3730,7 +3729,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
 
   async function acquireImportSource(data: Record<string, unknown>, log?: TaskLogger): Promise<Record<string, unknown>> {
     if (!hasAcquirableSource(data)) {
-      log?.step("No downloadable source on the record, keeping metadata only.");
+      log?.step("No downloadable source: keeping metadata only.");
       return data;
     }
     log?.step("Downloading the source file…");
@@ -4030,7 +4029,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
             />
           </label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={<ArrowRight size={16} />} disabled={!identifier.trim()}>Import paper</ActionButton>
-          <p className="identifier-footnote">This imports a single paper. Use BibTeX / RIS to import many at once.</p>
+          <p className="identifier-footnote">Use BibTeX / RIS to import many at once.</p>
         </form>
       ) : tab === "bibliography" ? (
         <form className="modal-body bibliography-import-form" onSubmit={importBibliography}>
@@ -4068,7 +4067,6 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
             <input type="file" accept=".pdf,application/pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setPdfFile(event.target.files?.[0] ?? null)} />
           </label>
           <ActionButton type="submit" variant="primary" className="full-action" icon={<FileSearch size={16} />} disabled={!pdfFile}>Import and extract PDF</ActionButton>
-          <p className="identifier-footnote">You can edit the details after import.</p>
         </form>
       ) : tab === "url" ? (
         <form className="modal-body import-form" onSubmit={importUrl}>
@@ -4080,7 +4078,7 @@ function AddPaperModal({ authors, venues, collections, onClose, mutateLibrary, n
         </form>
       ) : (
         <form className="modal-body entity-form" autoComplete="off" onSubmit={addManual}>
-          <label className="field-span-2"><span>Paper title *</span><input name="title" required autoFocus placeholder="A precise, complete title" /></label>
+          <label className="field-span-2"><span>Paper title *</span><input name="title" required autoFocus /></label>
           <AuthorNamesField authors={authors} />
           <label><span>Year</span><input name="year" type="number" min="1500" max="2200" defaultValue={new Date().getFullYear()} /></label>
           <label><span>Paper type</span><Select ariaLabel="Paper type" value={manualPaperType} onChange={(next) => setManualPaperType(next as EditablePaperType)} options={paperTypeOptions.map((option) => ({ value: option.value, label: option.label }))} /></label>
@@ -4277,7 +4275,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
     const warning = pendingMetadataReview.extraction.warning;
     setPendingMetadataReview(null);
     notify(
-      warning ?? `${selectedCount} of ${total} extracted ${total === 1 ? "change" : "changes"} applied. Review the form, then save the paper.`,
+      warning ?? `${selectedCount} of ${total} extracted ${total === 1 ? "change" : "changes"} applied.`,
       warning ? "info" : "success",
     );
   }
@@ -4408,7 +4406,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
         id: paper.id,
         data,
       },
-      "Paper metadata updated across the library.",
+      "Paper updated.",
     );
     setSaving(false);
     if (succeeded) {
@@ -4486,7 +4484,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
               <span>
                 <h3 id="metadata-review-title">Review extracted metadata</h3>
                 <p id="metadata-review-description">
-                  Choose which PDF values should replace the current paper details. Nothing changes until you apply your selection.
+                  Choose which PDF values replace the current paper details.
                 </p>
               </span>
             </header>
@@ -4541,7 +4539,7 @@ function PaperEditModal({ paper, authors, venues, collections, onClose, mutateLi
             <div className="asset-acquisition-icon"><Download size={22} /></div>
             <div>
               <h3 id="asset-acquisition-title">No file saved yet</h3>
-              <p id="asset-acquisition-description">The PDF or HTML file isn&apos;t in your library. Save a copy before saving this paper?</p>
+              <p id="asset-acquisition-description">Save a copy before saving this paper?</p>
             </div>
             <div className="asset-acquisition-actions">
               <ActionButton variant="secondary" onClick={() => setPendingSave(null)} disabled={saving} icon={<X />}>Cancel</ActionButton>
@@ -4707,7 +4705,7 @@ function EntityModal({ entity, record, papers, onClose, mutateLibrary }: {
             <div className="transfer-paper-details">
               {/* The same expandable author line as the paper detail panel, so the
                   hidden names are reachable here instead of being a dead "+5". */}
-              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><AdaptiveAuthors authors={selectedTransferPaper.authors} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to inspect it before moving.</small>}
+              {selectedTransferPaper ? <span><b>{selectedTransferPaper.title}</b><small><AdaptiveAuthors authors={selectedTransferPaper.authors} /> · {venueLine(selectedTransferPaper)}{selectedTransferPaper.year ? ` · ${selectedTransferPaper.year}` : ""}</small></span> : <small>Select a paper to see its details.</small>}
             </div>
           </section>
         </>}
@@ -4773,7 +4771,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
     }
   }
   return (
-    <ModalFrame title={`Bulk edit ${ids.length} ${entity}s`} subtitle="Only filled fields will be applied to every selected record." onClose={onClose}>
+    <ModalFrame title={`Bulk edit ${ids.length} ${entity}s`} subtitle="Only filled fields are applied." onClose={onClose}>
       <form className="modal-body entity-form" autoComplete="off" onSubmit={submit}>
         {entity === "author" ? <>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
@@ -4782,7 +4780,7 @@ function BulkEditModal({ entity, ids, onClose, mutateLibrary, onComplete }: {
           <label><span>Publisher</span><input name="publisher" placeholder="Apply a publisher" /></label>
           <label className="field-span-2"><span>Notes</span><textarea name="notes" rows={4} placeholder="Add shared notes" /></label>
         </>}
-        <div className="bulk-warning field-span-2"><Database size={16} /><span><strong>Links stay intact.</strong> These changes will be visible immediately on every related paper.</span></div>
+        <div className="bulk-warning field-span-2"><Database size={16} /><span><strong>Links stay intact.</strong> Changes show on every related paper.</span></div>
         <div className="form-actions field-span-2">
           <ActionButton variant="secondary" onClick={onClose} icon={<X />}>Cancel</ActionButton>
           <ActionButton type="submit" variant="primary" icon={<Save />}>Apply changes</ActionButton>

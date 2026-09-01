@@ -1696,6 +1696,106 @@
   margin-inline-end: 7px;
 }
 
+/* A compaction's two ends, in the thread header: where it came from, where it went. */
+.feed-detail-link {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--brand-blue-strong);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 4px;
+  padding: 0;
+}
+
+.feed-detail-link:hover {
+  text-decoration: underline;
+}
+
+/* The composer's command list, opened by typing "/". A dropdown pinned just above the
+   line being typed (its position is measured from the editor), so it reads as an
+   autocomplete for the caret rather than a panel belonging to the whole composer. */
+.feed-command-menu {
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+  margin: 0;
+  max-height: 216px;
+  overflow-y: auto;
+  padding: 5px;
+  position: fixed;
+  z-index: 90;
+}
+
+/* The editor's own box, which the list is measured against. */
+.feed-composer-slot {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.feed-command-menu > li {
+  margin: 0;
+}
+
+.feed-command-menu button {
+  align-items: baseline;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: grid;
+  gap: 1px 12px;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  padding: 6px 9px;
+  text-align: start;
+  width: 100%;
+}
+
+.feed-command-menu button.is-active {
+  background: color-mix(in srgb, var(--brand-blue-soft) 55%, transparent);
+}
+
+.feed-command-name {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.feed-command-name code {
+  background: none;
+  color: var(--brand-blue-strong);
+  font-size: var(--type-control);
+  font-weight: 600;
+  padding: 0;
+}
+
+.feed-command-name i {
+  color: var(--soft);
+  font-size: var(--type-caption);
+  font-style: normal;
+}
+
+.feed-command-hint {
+  color: var(--muted);
+  font-size: var(--type-caption);
+  line-height: 1.45;
+}
+
+@media (max-width: 620px) {
+  /* Too little width for two columns: the hint drops under the name. */
+  .feed-command-menu button {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Fork and Rewind lead the turn's footer, ahead of its time and cost: they are the
    controls, and the provenance reads after them. Quiet by default, in the same
    micro type as the metrics, so a thread of them stays calm. */

@@ -491,12 +491,77 @@ test("a message that interrupts a turn carries that turn's request with it", asy
   );
 });
 
-test("fork and rewind act on the same interaction boundaries", async () => {
-  const [feed, rewindRoute, forkRoute, history] = await Promise.all([
+test("a thread's agent session can be compacted the way the interactive client does", async () => {
+  const [agent, route, feed, composer, errors, styles, schema, bootstrap] = await Promise.all([
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/compact/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-errors.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Verified against the installed CLI: `claude -p "/compact" --resume <id>` runs the
+  // same command the interactive client does and answers with a result event.
+  assert.match(agent, /export async function compactFeedSession/);
+  // A new feed carries the summary forward and the original keeps its thread and its
+  // session, so nothing that was readable stops being readable.
+  assert.match(agent, /compactedFromId: snippetId/);
+  assert.match(agent, /copyFileSync\(sourceTranscript, join\(targetProject/);
+  assert.match(agent, /persistMessage\(targetId, "assistant", "text", summary\)/);
+  assert.match(schema, /compactedFromId: text\("compacted_from_id"\)/);
+  assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN compacted_from_id TEXT/);
+  // Both ends of the link are reachable from the thread header.
+  assert.match(feed, /const compactionLinks = \[/);
+  assert.match(feed, /label: "Compacted from"/);
+  assert.match(feed, /label: "Continued in"/);
+  assert.match(agent, /"-p",\s*focus \? `\/compact \$\{focus\}` : "\/compact",[\s\S]*?"--resume",\s*sessionId/);
+  // The session transcript is one file the CLI rewrites, so a turn must not be
+  // writing to it at the same time.
+  assert.match(agent, /if \(isFeedRunning\(snippetId\) \|\| launching\.has\(snippetId\)\)/);
+  assert.match(agent, /launching\.add\(snippetId\)/);
+  assert.match(agent, /const COMPACT_TIMEOUT_MS = 300_000/);
+  // A refusal is a state the user can act on, not a fault.
+  assert.match(route, /status: 409/);
+  // It is a command in the composer, not a button of its own: typing "/" lists what
+  // the thread can do, and the rest of the line is the command's argument.
+  assert.match(feed, /async function compactSession\(instructions: string\): Promise<boolean>/);
+  assert.match(feed, /name: "compact",[\s\S]*?run: compactSession/);
+  assert.match(composer, /export function matchCommand\(/);
+  assert.match(composer, /const match = \/\^\\\/\(\[\\w-\]\+\)/);
+  assert.match(composer, /commands\.find\(\(candidate\) => candidate\.name === match\[1\]\.toLowerCase\(\)\)/);
+  assert.match(composer, /if \(await invocation\.command\.run\(invocation\.argument\)\) \{/);
+  assert.match(composer, /createPortal\(\s*<ul\s+className="feed-command-menu"/);
+  // The palette owns the keys that would otherwise send the message.
+  assert.match(composer, /if \(commandMatches\.length\) \{[\s\S]*?event\.key === "ArrowDown"/);
+  assert.match(composer, /completeCommand\(commandMatches\[activeCommand\]\)/);
+  // Opaque, lifted, and pinned to the caret's line: on --panel (translucent in both
+  // themes) the list showed the thread through itself, and anchored to the composer's
+  // outer edge it sat far above the line being typed.
+  assert.match(styles, /\.feed-command-menu \{[^}]*background: var\(--panel-strong\)/);
+  assert.match(styles, /\.feed-command-menu \{[^}]*position: fixed/);
+  assert.match(composer, /const rect = editorRef\.current\?\.getBoundingClientRect\(\)/);
+  assert.match(composer, /bottom: Math\.round\(window\.innerHeight - rect\.top \+ 6\)/);
+  // Every command maps to an operation that already exists, and each is implemented
+  // once: the composer calls the same handlers the sidebar row does.
+  for (const name of ["compact", "stop", "fork", "rename", "export"]) {
+    assert.match(feed, new RegExp(`name: "${name}"`));
+  }
+  assert.match(feed, /run: async \(title\) => \{ await onRename\(title \|\| undefined\); return true; \}/);
+  // The context-limit failure names the ways out that exist.
+  assert.match(errors, /prompt is too long/i);
+});
+
+test("retry, fork and rewind act on the same interaction boundaries", async () => {
+  const [feed, rewindRoute, retryRoute, forkRoute, history, truncate] = await Promise.all([
     readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/rewind/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/retry/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/fork/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-history.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-truncate.ts", import.meta.url), "utf8"),
   ]);
 
   // Three features, one notion of where a turn begins and ends: the selection
@@ -504,9 +569,15 @@ test("fork and rewind act on the same interaction boundaries", async () => {
   // (which truncates this one in place).
   assert.match(history, /export function messagesFromInteraction/);
   assert.match(history, /export function interactionsBefore/);
-  assert.match(rewindRoute, /groupFeedInteractions\(\s*snippet\.instruction/);
-  assert.match(rewindRoute, /messagesFromInteraction\(interactions\(\), parsed\.data\.interactionId\)/);
+  assert.match(truncate, /messagesFromInteraction\(interactions, interactionId\)/);
   assert.match(forkRoute, /selectFeedHistory\(\{/);
+  // A rewind and a retry are one truncation, differing only in whether the turn's own
+  // message survives it, so neither route re-implements the deletion.
+  assert.match(rewindRoute, /truncateFeedAt\(snippet, parsed\.data\.interactionId, \{ keepStarter: false \}\)/);
+  assert.match(retryRoute, /truncateFeedAt\(snippet, parsed\.data\.interactionId, \{ keepStarter: true \}\)/);
+  // The retried turn is the prompt, so it is not also in the seeded history.
+  assert.match(retryRoute, /kept\.filter\(\(message\) => message\.id !== starter\.id\)/);
+  assert.match(retryRoute, /resume: false/);
   // One client call posts a selection to the fork route; the modal and a turn's own
   // Fork are two entry points into it, and the turn's uses the shared helper.
   assert.match(feed, /async function createForkFromHistory\(interactionIds: string\[\], toolDetails: boolean\)/);
@@ -514,9 +585,17 @@ test("fork and rewind act on the same interaction boundaries", async () => {
   assert.match(feed, /createForkFromHistory\(interactionsBefore\(interactions, message\.id\), includeToolDetails\)/);
   assert.match(feed, /interactions\.length - interactionsBefore\(interactions, message\.id\)\.length - 1/);
   assert.match(feed, /body: JSON\.stringify\(\{ interactionId: message\.id \}\)/);
+  assert.match(feed, /onRetry=\{message\.role === "user" \? \(\) => void retryTurn\(message\.id\) : undefined\}/);
+  // The opening turn can be retried too: an interrupted first turn has no other way
+  // back, since there is no earlier turn to rewind to.
+  assert.match(feed, /onRetry=\{\(\) => void retryTurn\(OPENING_INTERACTION_ID\)\}/);
   // The session is dropped so the next reply reseeds from what is left, and the
   // agent is not resumed onto a transcript holding the removed turns.
-  assert.match(rewindRoute, /sessionId: "",/);
+  assert.match(truncate, /sessionId: "",/);
+  // A thread can outgrow the model's window; the seeded history is therefore bounded,
+  // and the failure that happens without it is explained rather than dumped raw.
+  assert.match(history, /const TRANSCRIPT_BUDGET_CHARS = 120_000/);
+  assert.match(history, /omitted: this thread is longer than one prompt can carry/);
 });
 
 test("uses integrated sortable table headers without a detached sort control", async () => {
@@ -1172,7 +1251,7 @@ test("each feed turn ends with its own time and the turn's measured usage", asyn
   assert.match(feed, /<time className="feed-turn-metric" dateTime=\{iso\}>\{fullTime\(iso\)\}<\/time>/);
   assert.match(feed, /\{speed \? <span className="feed-turn-metric">\{formatSpeed\(speed\)\} tok\/sec<\/span> : null\}/);
   assert.match(feed, /outputTokens && durationMs \? outputTokens \/ \(durationMs \/ 1000\) : 0/);
-  assert.match(feed, /<TurnMeta iso=\{snippet\.createdAt\} \/>/);
+  assert.match(feed, /<TurnMeta\s+iso=\{snippet\.createdAt\}/);
   assert.match(feed, /<TurnMeta\s+iso=\{message\.createdAt\}\s+message=\{message\}/);
   // Provenance, not content: dot-separated text with no chip chrome around it.
   assert.match(styles, /\.feed-turn-meta \{[^}]*font-variant-numeric: tabular-nums/);
@@ -1240,7 +1319,7 @@ test("a summary says what it was written from, and quotes read as one shape", as
   assert.match(application, /log\.step\(groundingNote\(payload\.grounding\)\)/);
   assert.match(application, /log\.step\(groundingNote\(generated\.grounding\)\)/);
   assert.match(application, /summarySavedMessage\(payload\.grounding\)/);
-  assert.match(application, /written from the record's metadata/);
+  assert.match(application, /Summary saved from metadata only/);
 
   // The field the extractor kept filling with invented topic labels is the source's
   // own subject class, which is what the BibTeX export writes as eprintclass.
@@ -1516,7 +1595,9 @@ test("the feed composer reads as one control, with a visible placeholder", async
   assert.match(attachBox, /\{hint \? <span className="feed-dock-hint">\{hint\}<\/span> : null\}/);
   assert.match(styles, /\.feed-dock-hint \{[^}]*font-size: var\(--type-caption\)/);
   assert.equal([...feed.matchAll(/hint=\{<><kbd>⌥↵<\/kbd> newline<\/>\}/g)].length, 2);
-  assert.match(attachBox, /title="Enter sends, Option Enter starts a newline"/);
+  // The row itself carries the newline reminder and the ↵ badge, so the submit
+  // button repeats neither in a tooltip.
+  assert.match(attachBox, /\{hint \? <span className="feed-dock-hint">\{hint\}<\/span> : null\}/);
 
   // The composer is resizable by pointer and keyboard, and the grip fades in with
   // the composer instead of waiting for the pointer to find a pill on its edge.

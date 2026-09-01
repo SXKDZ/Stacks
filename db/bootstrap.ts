@@ -83,6 +83,7 @@ const schemaStatements = [
     issue_title_synced TEXT,
     collapsed INTEGER NOT NULL DEFAULT 0,
     issue_state_synced TEXT,
+    compacted_from_id TEXT,
     attachments TEXT,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
@@ -342,6 +343,9 @@ async function initializeDatabase(): Promise<void> {
   }
   if (!feedSnippetColumns.has("collapsed")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0").run();
+  }
+  if (!feedSnippetColumns.has("compacted_from_id")) {
+    raw.prepare("ALTER TABLE feed_snippets ADD COLUMN compacted_from_id TEXT").run();
   }
   if (!feedSnippetColumns.has("issue_state_synced")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN issue_state_synced TEXT").run();

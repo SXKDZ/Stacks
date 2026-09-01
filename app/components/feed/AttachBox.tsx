@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, Cpu, FileText, GripHorizontal, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { BookOpen, Check, Cpu, FileText, FoldVertical, GripHorizontal, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ActionButton, type SelectOption } from "@/app/components/ui/controls";
@@ -22,6 +22,32 @@ export interface LibraryPaper {
   venueAcronym?: string | null;
   venueName?: string | null;
   year?: number | null;
+}
+
+/** One thing the composer can do instead of sending a message. */
+export interface FeedCommand {
+  /** Typed after the slash, e.g. "compact". */
+  name: string;
+  /** One line saying what running it does. */
+  hint: string;
+  /** What the text after the name is taken as, when the command uses any. */
+  argument?: string;
+  /** Runs it; resolves true when the composer's text was consumed. */
+  run: (argument: string) => Promise<boolean>;
+}
+
+/**
+ * The command a submission invokes, or null when the text is an ordinary message.
+ * Only a name in the list counts, so "/Users/me/paper.pdf" stays a message.
+ */
+export function matchCommand(
+  text: string,
+  commands: FeedCommand[],
+): { command: FeedCommand; argument: string } | null {
+  const match = /^\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
+  if (!match) return null;
+  const command = commands.find((candidate) => candidate.name === match[1].toLowerCase());
+  return command ? { command, argument: (match[2] ?? "").trim() } : null;
 }
 
 export interface AttachSubmit {
@@ -85,6 +111,7 @@ export function AttachBox({
   initialPapers = [],
   hint,
   leadingAction,
+  commands = [],
   models = [],
   initialModel = "",
   initialEffort = "",
@@ -100,10 +127,15 @@ export function AttachBox({
   compact?: boolean;
   initialText?: string;
   initialPapers?: LibraryPaper[];
-  /** Optional control shown beside the submit button (e.g. Stop while running). */
   /** A short keyboard reminder shown beside the submit button. */
   hint?: ReactNode;
+  /** Optional control shown beside the submit button (e.g. Stop while running). */
   leadingAction?: ReactNode;
+  /**
+   * Commands the composer can run instead of sending a message. Typing "/" opens the
+   * list; submitting "/name rest" runs that command with "rest" as its argument.
+   */
+  commands?: FeedCommand[];
   /** Selectable agent models; empty hides the picker. */
   models?: FeedModelOption[];
   /** The feed's current model id ("" = the default). */
@@ -117,6 +149,12 @@ export function AttachBox({
   onSubmit: (payload: AttachSubmit) => Promise<boolean>;
 }) {
   const [text, setText] = useState(initialText);
+  // The palette opens on "/" and closes once the command name is complete (a space
+  // starts its argument) or Escape dismisses it until the text next changes.
+  const [commandIndex, setCommandIndex] = useState(0);
+  const [paletteDismissed, setPaletteDismissed] = useState(false);
+  const [runningCommand, setRunningCommand] = useState(false);
+  const [commandMenuPosition, setCommandMenuPosition] = useState<{ left: number; bottom: number; width: number } | null>(null);
   const [model, setModel] = useState(initialModel);
   const [effort, setEffort] = useState<string>(initialEffort);
   // The composer's initialModel arrives after mount (the last-used model is read
@@ -140,8 +178,39 @@ export function AttachBox({
   const trayRef = useRef<HTMLDivElement>(null);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const panelResizeDrag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const [panelHeight, setPanelHeight] = useState<number | null>(null);
+
+  const commandQuery = commands.length ? /^\/([\w-]*)$/.exec(text)?.[1] ?? null : null;
+  const commandMatches = commandQuery === null || paletteDismissed
+    ? []
+    : commands.filter((command) => command.name.startsWith(commandQuery.toLowerCase()));
+  // Clamped rather than reset in an effect, so a shrinking list cannot leave the
+  // highlight past its end.
+  const activeCommand = commandMatches.length ? Math.min(commandIndex, commandMatches.length - 1) : 0;
+  const invocation = matchCommand(text, commands);
+
+  function changeText(value: string) {
+    setText(value);
+    setPaletteDismissed(false);
+    // Anchored to the line being typed rather than to the composer's outer edge: the
+    // list only opens while the whole text is the command name, so the caret is on the
+    // editor's first line.
+    const rect = editorRef.current?.getBoundingClientRect();
+    if (rect) {
+      setCommandMenuPosition({
+        left: Math.round(rect.left),
+        bottom: Math.round(window.innerHeight - rect.top + 6),
+        width: Math.round(Math.min(520, rect.width)),
+      });
+    }
+  }
+
+  function completeCommand(command: FeedCommand) {
+    changeText(`/${command.name} `);
+    setCommandIndex(0);
+  }
 
   const minimumPanelHeight = compact ? 128 : 210;
 
@@ -283,7 +352,21 @@ export function AttachBox({
 
   async function submit(event: FormEvent | ReactKeyboardEvent) {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || runningCommand) return;
+    // "/compact keep the decisions" runs the command with the rest as its argument.
+    // An unknown name is left alone: a message can legitimately start with a path.
+    if (invocation) {
+      setRunningCommand(true);
+      try {
+        if (await invocation.command.run(invocation.argument)) {
+          setText("");
+          setPickerOpen(false);
+        }
+      } finally {
+        setRunningCommand(false);
+      }
+      return;
+    }
     // Text attachments ride along as .txt files the agent reads from its dir.
     const textFiles = texts.map((entry, index) =>
       new File([entry.content], `pasted-${index + 1}.txt`, { type: "text/plain" }),
@@ -338,6 +421,37 @@ export function AttachBox({
       onDrop={handleDrop}
     >
       {dragging ? <div className="feed-drop-hint"><Paperclip size={18} /> Drop files to attach</div> : null}
+
+      {commandMatches.length && commandMenuPosition ? createPortal(
+        <ul
+          className="feed-command-menu"
+          role="listbox"
+          aria-label="Commands"
+          style={{ left: commandMenuPosition.left, bottom: commandMenuPosition.bottom, width: commandMenuPosition.width }}
+        >
+          {commandMatches.map((command, index) => (
+            <li key={command.name}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={index === activeCommand}
+                className={index === activeCommand ? "is-active" : ""}
+                // Down rather than click: the editor keeps focus, so typing the
+                // argument continues straight after the name.
+                onMouseDown={(event) => { event.preventDefault(); completeCommand(command); }}
+                onMouseEnter={() => setCommandIndex(index)}
+              >
+                <span className="feed-command-name">
+                  <code>/{command.name}</code>
+                  {command.argument ? <i>{command.argument}</i> : null}
+                </span>
+                <span className="feed-command-hint">{command.hint}</span>
+              </button>
+            </li>
+          ))}
+        </ul>,
+        document.body,
+      ) : null}
 
       <div
         ref={panelRef}
@@ -404,11 +518,32 @@ export function AttachBox({
             })}
           </div>
         ) : null}
+        <div ref={editorRef} className="feed-composer-slot">
         <MarkdownCodeEditor
           className="feed-composer-editor"
           value={text}
-          onChange={setText}
+          onChange={changeText}
           onKeyDown={(event) => {
+            // The palette owns the arrows, Tab, Enter, and Escape while it is open,
+            // so the name can be chosen without the composer sending anything.
+            if (commandMatches.length) {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const step = event.key === "ArrowDown" ? 1 : commandMatches.length - 1;
+                setCommandIndex((activeCommand + step) % commandMatches.length);
+                return;
+              }
+              if (event.key === "Enter" || event.key === "Tab") {
+                event.preventDefault();
+                completeCommand(commandMatches[activeCommand]);
+                return;
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setPaletteDismissed(true);
+                return;
+              }
+            }
             // Enter sends; Alt/Shift/Cmd/Ctrl+Enter inserts a newline instead.
             if (event.key === "Enter" && !event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
               void submit(event);
@@ -419,6 +554,7 @@ export function AttachBox({
           rows={compact ? 3 : 6}
           autoFocus={autoFocus}
         />
+        </div>
 
         <div className="feed-dock-actions">
           <div className="feed-dock-tools">
@@ -469,10 +605,15 @@ export function AttachBox({
               type="submit"
               variant="primary"
               size={compact ? "small" : undefined}
-              disabled={!canSubmit}
-              title="Enter sends, Option Enter starts a newline"
-              icon={submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}
-            ><span className="feed-send-label">{submitLabel}</span><kbd className="feed-send-kbd">↵</kbd></ActionButton>
+              disabled={!canSubmit || runningCommand}
+              title={invocation ? `Run /${invocation.command.name}` : undefined}
+              icon={submitting || runningCommand
+                ? <LoaderCircle className="spin" size={15} />
+                : invocation ? <FoldVertical size={15} /> : <Send size={15} />}
+            >
+              <span className="feed-send-label">{invocation ? `Run /${invocation.command.name}` : submitLabel}</span>
+              <kbd className="feed-send-kbd">↵</kbd>
+            </ActionButton>
           </div>
         </div>
       </div>

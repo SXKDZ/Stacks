@@ -173,6 +173,10 @@ export const feedSnippets = sqliteTable(
     // The issue state (open|closed) last pushed to GitHub, so collapse-sync only
     // calls the API when the collapsed flag actually changed. Null until synced.
     issueStateSynced: text("issue_state_synced"),
+    // The feed this one was compacted out of. A compaction leaves the original
+    // thread readable and starts a fresh one from the summary, so the two are linked
+    // rather than one being rewritten.
+    compactedFromId: text("compacted_from_id"),
     // JSON array of the files attached to the opening turn ({label, relativePath,
     // kind}), staged under the feed working dir, so the UI can list and link them.
     attachments: text("attachments"),

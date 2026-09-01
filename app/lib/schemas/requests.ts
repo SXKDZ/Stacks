@@ -102,9 +102,37 @@ export const FeedForkRequestSchema = z.object({
   includeToolDetails: z.boolean().prefault(false),
 });
 
-/** The interaction a rewind returns the thread to, from the same boundaries the
- *  history selection uses. That interaction is removed along with every later one. */
-export const FeedRewindRequestSchema = z.object({
+/**
+ * A session-transcript line that carries a compaction summary. The CLI writes it as a
+ * user-role entry flagged `isCompactSummary`, which is how a compacted session is
+ * re-seeded, and where the summary text can be read back from.
+ */
+export const CompactSummaryEntrySchema = z.object({
+  isCompactSummary: z.boolean().prefault(false),
+  message: z.object({
+    content: z.union([z.string(), z.array(z.object({ text: z.string().optional() }).loose())]).prefault(""),
+  }).loose().prefault({ content: "" }),
+}).loose();
+
+/** Optional focus text for a compaction, passed through to the CLI after `/compact`. */
+export const CompactRequestSchema = z.object({
+  instructions: z.string().trim().max(2000).optional(),
+});
+
+/**
+ * What `claude -p "/compact" --output-format json` answers with. The CLI says
+ * nothing on success and puts its refusals ("Not enough messages to compact") in
+ * `result`, so both fields are read.
+ */
+export const CompactResultSchema = z.object({
+  is_error: z.boolean().prefault(false),
+  result: z.string().prefault(""),
+}).loose();
+
+/** The interaction a rewind or a retry addresses, from the same boundaries the
+ *  history selection uses. Everything from it onward is removed; a retry keeps its
+ *  user turn and runs it again. */
+export const FeedInteractionCutSchema = z.object({
   interactionId: z.string().trim().min(1),
 });
 

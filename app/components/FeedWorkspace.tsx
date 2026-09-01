@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Undo2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FoldVertical, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Undo2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
+import { AttachBox, type AttachSubmit, type FeedCommand, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { readError, readErrorInfo } from "@/app/lib/http";
@@ -172,6 +172,8 @@ interface FeedSnippet {
   durationMs?: number;
   turns?: number;
   attachments?: string | null;
+  /** Set on a feed that was compacted out of another one. */
+  compactedFromId?: string | null;
   pendingProposals?: number;
   collapsed?: boolean;
   createdAt: string;
@@ -303,7 +305,7 @@ function syncDiagnosticText(entry: SyncLogEntry): string {
   if (entry.details) return entry.details;
   const legacyNote = entry.summary.startsWith("GitHub API ")
     ? "This entry was captured by an older Stacks version, which truncated GitHub's response before saving it. Run sync again to capture complete diagnostics."
-    : "No additional diagnostic information was returned.";
+    : "No additional diagnostics were returned.";
   return `${entry.summary}\n\n${legacyNote}`;
 }
 
@@ -325,7 +327,7 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
             </div>
           </header>
           <div className="background-task-list">
-            {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
+            {!log.length ? <p className="activity-log-empty">No syncs yet.</p> : log.map((entry) => (
               <div className={`background-task-row is-${entry.status === "success" ? "complete" : entry.status === "paused" ? "running" : "error"}`} key={entry.id}>
                 {entry.status === "success" ? <CircleCheck size={16} /> : entry.status === "paused" ? <CircleDot size={16} /> : <CircleAlert size={16} />}
                 <span>
@@ -605,11 +607,12 @@ function formatSpeed(tokensPerSecond: number): string {
  * toLocaleString renders it in the reader's own zone. A reply recorded before
  * per-turn usage was stored shows its time alone.
  */
-function TurnMeta({ iso, message, onFork, onRewind, busy = false }: {
+function TurnMeta({ iso, message, onRetry, onFork, onRewind, busy = false }: {
   iso: string;
   message?: FeedMessage;
-  /** Both are present on the user's own turns, for the point just before it: fork
-   *  continues from there in a copy, rewind takes this thread back to there. */
+  /** All three act on this turn: retry asks it again, fork continues from just
+   *  before it in a copy, and rewind takes this thread back to before it. */
+  onRetry?: () => void;
   onFork?: () => void;
   onRewind?: () => void;
   busy?: boolean;
@@ -620,6 +623,18 @@ function TurnMeta({ iso, message, onFork, onRewind, busy = false }: {
   const speed = outputTokens && durationMs ? outputTokens / (durationMs / 1000) : 0;
   return (
     <div className="feed-turn-meta">
+      {onRetry ? (
+        <button
+          type="button"
+          className="feed-turn-action"
+          onClick={onRetry}
+          disabled={busy}
+          title="Ask this again and replace the answer below it"
+        >
+          {busy ? <LoaderCircle className="spin" size={11} aria-hidden="true" /> : <RefreshCw size={11} aria-hidden="true" />}
+          Retry
+        </button>
+      ) : null}
       {onFork ? (
         <button
           type="button"
@@ -640,7 +655,7 @@ function TurnMeta({ iso, message, onFork, onRewind, busy = false }: {
           disabled={busy}
           title="Take this thread back to before this message"
         >
-          {busy ? <LoaderCircle className="spin" size={11} aria-hidden="true" /> : <Undo2 size={11} aria-hidden="true" />}
+          <Undo2 size={11} aria-hidden="true" />
           Rewind
         </button>
       ) : null}
@@ -1002,7 +1017,7 @@ function FeedHistorySelectionModal({
           <div>
             <span className="feed-history-modal-kicker">{feedName}</span>
             <h2 id="feed-history-title">Select history</h2>
-            <p id="feed-history-description">Choose user requests for a new feed. Each request includes the agent response and work that followed it.</p>
+            <p id="feed-history-description">Requests you pick carry their response and the work that followed into a new feed.</p>
           </div>
           <ActionButton variant="ghost" size="icon" onClick={onClose} disabled={creating} aria-label="Close" icon={<X />} />
         </header>
@@ -1118,7 +1133,7 @@ function FeedHistorySelectionModal({
         <footer className="feed-history-modal-foot">
           <div className="feed-history-selection-copy" aria-live="polite">
             <strong>{selected.size} request{selected.size === 1 ? "" : "s"} selected</strong>
-            <span>Kept in their original chronological order.</span>
+            <span>In chronological order.</span>
           </div>
           <label className="feed-history-tool-toggle">
             <input type="checkbox" checked={includeToolDetails} onChange={(event) => onIncludeToolDetails(event.target.checked)} />
@@ -1140,7 +1155,7 @@ function FeedHistorySelectionModal({
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, collections, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated }: {
+function FeedDetail({ snippet, library, collections, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated, siblings, onOpenFeed, onRename, onFork, onExport }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   collections: Array<{ id: string; name: string }>;
@@ -1152,15 +1167,23 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   onBack: () => void;
   onChanged: () => void;
   onCreated: (id: string) => void;
+  /** The same whole-feed actions the sidebar row offers, reused by the composer's
+   *  commands so there is one implementation of each. */
+  /** Every feed, so a compaction link can name and reach its counterpart. */
+  siblings: FeedSnippet[];
+  onOpenFeed: (id: string) => void;
+  onRename: (title?: string) => Promise<void>;
+  onFork: () => Promise<void>;
+  onExport: () => Promise<void>;
 }) {
   const feedName = snippet.title || snippet.instruction || "Untitled";
   const [messages, setMessages] = useState<FeedMessage[]>([]);
   const [proposalBlockOpen, setProposalBlockOpen] = useState<Record<string, boolean>>({});
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
-  // A rewind in flight (the message it targets), the text it recovered, and the
+  // The turn a retry or rewind is working on, the text a rewind recovered, and the
   // key that remounts the composer around that text.
-  const [rewindingId, setRewindingId] = useState<string | null>(null);
+  const [busyTurnId, setBusyTurnId] = useState<string | null>(null);
   const [forkingFromId, setForkingFromId] = useState<string | null>(null);
   const [restoredReply, setRestoredReply] = useState("");
   const [composerNonce, setComposerNonce] = useState(0);
@@ -1442,6 +1465,35 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     await fetch(`/api/feed/snippets/${snippet.id}/stop`, { method: "POST" });
   }
 
+  /**
+   * Compact this thread into a new feed and open it. This thread is left as it is, so
+   * the whole conversation stays readable; the new one starts from the summary and is
+   * linked back to this. Anything typed in the composer becomes the compaction's focus
+   * text and is then cleared, since it was consumed rather than sent.
+   */
+  async function compactSession(instructions: string): Promise<boolean> {
+    setError(null);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippet.id}/compact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(instructions ? { instructions } : {}),
+      });
+      if (!response.ok) {
+        setError(await readError(response));
+        return false;
+      }
+      const payload = await response.json().catch(() => null) as { id?: string } | null;
+      setStreamNonce((nonce) => nonce + 1);
+      if (payload?.id) onCreated(payload.id);
+      else onChanged();
+      return true;
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "The session could not be compacted.");
+      return false;
+    }
+  }
+
   async function openWorkingDirectory() {
     setOpeningWorkingDirectory(true);
     setError(null);
@@ -1615,6 +1667,39 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     }
   }
 
+  /**
+   * Ask one of the turns again: its question stays, and what it produced (plus every
+   * turn after it) is replaced by a new attempt. This is the way back from a turn
+   * that was interrupted or failed, where only the answer is missing. Confirmed only
+   * when later turns would go with it, since retrying the last turn discards nothing
+   * the user has not already seen fail.
+   */
+  async function retryTurn(interactionId: string) {
+    const later = interactions.length - interactionsBefore(interactions, interactionId).length - 1;
+    if (later > 0 && !window.confirm(`Ask this turn again? Its answer and the ${later} turn${later === 1 ? "" : "s"} after it are removed. This cannot be undone.`)) {
+      return;
+    }
+    setBusyTurnId(interactionId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/feed/snippets/${snippet.id}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interactionId }),
+      });
+      if (!response.ok) {
+        setError(await readError(response));
+        return;
+      }
+      setStreamNonce((nonce) => nonce + 1);
+      onChanged();
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "The turn could not be retried.");
+    } finally {
+      setBusyTurnId(null);
+    }
+  }
+
   /** Continue from before one of the user's turns in a new feed, leaving this one
    *  as it is: the copy holds the history a rewind to that point would keep. */
   async function forkBefore(message: FeedMessage) {
@@ -1642,7 +1727,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     if (!window.confirm(`Rewind to before this message? Stacks removes ${scope} from this thread and puts the text back in the reply box. This cannot be undone.`)) {
       return;
     }
-    setRewindingId(message.id);
+    setBusyTurnId(message.id);
     setError(null);
     try {
       const response = await fetch(`/api/feed/snippets/${snippet.id}/rewind`, {
@@ -1664,12 +1749,55 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "The thread could not be rewound.");
     } finally {
-      setRewindingId(null);
+      setBusyTurnId(null);
     }
   }
 
   // A stored id says nothing about which record a change would hit, so name it from
   // the snapshot the composer already loads, and keep the id as secondary text.
+  // Both directions of a compaction: where this thread came from, and where it was
+  // carried on. Read off the list the sidebar already has rather than asked for.
+  const compactionLinks = [
+    ...(snippet.compactedFromId && siblings.some((feed) => feed.id === snippet.compactedFromId)
+      ? [{ id: snippet.compactedFromId, label: "Compacted from" }]
+      : []),
+    ...siblings
+      .filter((feed) => feed.compactedFromId === snippet.id)
+      .map((feed) => ({ id: feed.id, label: "Continued in" })),
+  ];
+
+  const threadCommands: FeedCommand[] = [
+    {
+      name: "compact",
+      argument: "[what to keep]",
+      hint: "Continue in a new feed from a summary of this one",
+      run: compactSession,
+    },
+    ...(running
+      ? [{
+        name: "stop",
+        hint: "Stop the current turn",
+        run: async () => { await stop(); return true; },
+      }]
+      : []),
+    {
+      name: "fork",
+      hint: "Continue in a copy of this thread",
+      run: async () => { await onFork(); return true; },
+    },
+    {
+      name: "rename",
+      argument: "<new title>",
+      hint: "Retitle this feed",
+      run: async (title) => { await onRename(title || undefined); return true; },
+    },
+    {
+      name: "export",
+      hint: "Download as Markdown",
+      run: async () => { await onExport(); return true; },
+    },
+  ];
+
   const papersById = new Map(library.map((paper) => [paper.id, paper]));
   const collectionsById = new Map(collections.map((collection) => [collection.id, collection]));
   function describeProposalTarget(id: string): { label: string; meta?: string } {
@@ -1788,6 +1916,17 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
               ))}
               <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Created ${fullTime(snippet.createdAt)}`}>Created {relativeTime(snippet.createdAt)}</span>
               <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Updated ${fullTime(snippet.updatedAt)}`}>Updated {relativeTime(snippet.updatedAt)}</span>
+              {compactionLinks.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  className="feed-detail-link"
+                  onClick={() => onOpenFeed(link.id)}
+                >
+                  <FoldVertical size={12} aria-hidden="true" />
+                  {link.label}
+                </button>
+              ))}
             </div>
             <button
               type="button"
@@ -1840,7 +1979,11 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
               <span className="feed-turn-label">You</span>
               {openingText ? <MarkdownContent content={openingText} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
-              <TurnMeta iso={snippet.createdAt} />
+              <TurnMeta
+                iso={snippet.createdAt}
+                onRetry={() => void retryTurn(OPENING_INTERACTION_ID)}
+                busy={busyTurnId === OPENING_INTERACTION_ID}
+              />
             </div>
           );
         })()}
@@ -1955,9 +2098,10 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
                     <TurnMeta
                       iso={message.createdAt}
                       message={message}
+                      onRetry={message.role === "user" ? () => void retryTurn(message.id) : undefined}
                       onFork={message.role === "user" ? () => void forkBefore(message) : undefined}
                       onRewind={message.role === "user" ? () => void rewindTo(message) : undefined}
-                      busy={rewindingId === message.id || (creatingFromHistory && forkingFromId === message.id)}
+                      busy={busyTurnId === message.id || (creatingFromHistory && forkingFromId === message.id)}
                     />
                   </div>,
                 );
@@ -2011,12 +2155,13 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           initialEffort={snippet.effort ?? ""}
           defaultModelLabel={defaultModelLabel}
           defaultEffortLabel={defaultEffort}
-          placeholder={running ? "Message the agent…" : "Reply to continue this thread."}
+          placeholder={running ? "Message the agent…" : "Reply to the agent…"}
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
           compact
           hint={<><kbd>⌥↵</kbd> newline</>}
           onSubmit={sendReply}
+          commands={threadCommands}
           leadingAction={running ? (
             // Labelled and in the danger colour: a bare grey square beside the
             // attachment icons read as an empty checkbox rather than a stop control.
@@ -2245,7 +2390,7 @@ export default function FeedWorkspace() {
       await loadSnippets();
     } catch (error) {
       const details = error instanceof Error ? error.message : "No diagnostic information was returned.";
-      const summary = "Unable to reach the GitHub sync service. Check your connection and try again.";
+      const summary = "Unable to reach the GitHub sync service.";
       setSyncAlert({ summary, details });
       recordSync("error", summary, details);
     } finally {
@@ -2461,8 +2606,9 @@ export default function FeedWorkspace() {
     }
   }
 
-  async function renameSnippet(snippet: FeedSnippet) {
-    const next = window.prompt("Rename this feed", snippet.title || snippet.instruction || "")?.trim();
+  async function renameSnippet(snippet: FeedSnippet, title?: string) {
+    // The command supplies the title on its line; the menu item asks for one.
+    const next = (title ?? window.prompt("Rename this feed", snippet.title || snippet.instruction || "") ?? "").trim();
     if (!next || next === snippet.title) return;
     const response = await fetch(`/api/feed/snippets/${snippet.id}`, {
       method: "PATCH",
@@ -2541,7 +2687,7 @@ export default function FeedWorkspace() {
         ) : null}
         <div className="feed-list" role="list">
           {snippets.length === 0 ? (
-            <p className="feed-list-empty">Nothing captured yet. Start a new feed.</p>
+            <p className="feed-list-empty">No feeds yet.</p>
           ) : filteredSnippets.length === 0 ? (
             <p className="feed-list-empty">No feeds match “{query}”.</p>
           ) : (
@@ -2623,6 +2769,11 @@ export default function FeedWorkspace() {
             defaultEffort={defaultEffort}
             historySelectionRequest={historySelectionRequest?.id === selected.id ? historySelectionRequest : null}
             onHistorySelectionClosed={() => setHistorySelectionRequest(null)}
+            siblings={snippets}
+            onOpenFeed={(id) => { setComposing(false); setSelectedId(id); }}
+            onRename={(title) => renameSnippet(selected, title)}
+            onFork={() => forkSnippet(selected)}
+            onExport={() => exportSnippet(selected)}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
             onCreated={(id) => {
@@ -2661,7 +2812,7 @@ export default function FeedWorkspace() {
               models={models}
               defaultModelLabel={defaultModelLabel}
               defaultEffortLabel={defaultEffort}
-              placeholder="Capture anything. A link or a note, and what to do with it."
+              placeholder="A link or a note, and what to do with it."
               submitLabel="Add to feed"
               submitting={submitting}
               autoFocus

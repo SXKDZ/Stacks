@@ -138,6 +138,35 @@ test("fresh-session transcript leaves the app's own thread notes out", () => {
   assert.ok(transcript.endsWith("Assistant: Third answer"));
 });
 
+test("a thread too long for one prompt keeps its recent end and says what it dropped", () => {
+  // The failure this prevents is not a truncated answer but no answer at all: the
+  // API refuses an oversized prompt outright ("Prompt is too long"), which is what
+  // a 405-turn thread produced when its whole transcript was seeded into a fork.
+  const long: FeedHistoryMessage[] = [];
+  for (let index = 0; index < 200; index += 1) {
+    long.push(message(`u${index}`, "user", "text", `question ${index} ${"x".repeat(900)}`));
+    long.push(message(`a${index}`, "assistant", "result", `answer ${index} ${"y".repeat(900)}`));
+  }
+  const transcript = buildFeedTranscript("Opening question", long);
+
+  assert.ok(transcript.length < 130_000, `transcript should stay bounded, got ${transcript.length}`);
+  // The instruction frames the whole thread, so it survives regardless of length.
+  assert.ok(transcript.startsWith("User: Opening question"));
+  assert.match(transcript, /\[\d+ earlier messages omitted: this thread is longer than one prompt can carry\]/);
+  // What survives is the end of the conversation, contiguous, not a sample of it.
+  assert.ok(transcript.includes("answer 199"));
+  assert.ok(transcript.includes("question 199"));
+  assert.ok(!transcript.includes("question 0 "));
+
+  // One enormous message cannot spend the whole budget on its own.
+  const huge = buildFeedTranscript("Opening question", [
+    message("t1", "tool", "tool_result", "z".repeat(50_000)),
+    message("a1", "assistant", "result", "the answer"),
+  ], true);
+  assert.match(huge, /\[46,?000 more characters omitted\]/);
+  assert.ok(huge.includes("Assistant: the answer"));
+});
+
 test("fresh-session transcript includes paired tool details when the feed requests them", () => {
   const transcript = buildFeedTranscript("Opening question", history, true);
   assert.match(transcript, /Assistant tool request: Read file/);
