@@ -4,6 +4,8 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-01
+
 ### Fixed
 
 - Rewinding or retrying a thread that is mirrored to GitHub keeps its issue. The comments belonging to removed messages are retired instead, so they stay on the issue as a record and are never read back in. Unlinking the issue left one that no feed claimed, which the next sync adopted as a feed of its own, cloned the thread into and ran an agent on; a phone reply to it then landed in that clone along with a replay of every earlier reply on the issue.
@@ -361,7 +363,8 @@ Initial public release.
 - One-way OneDrive backup of the library, database, managed files, and feed transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.6.0
 [0.5.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.2
 [0.5.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.1
 [0.5.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.0
