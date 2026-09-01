@@ -4,6 +4,10 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- Forking from a turn copies the thread's tool requests and results. It was following the history modal's `Include tool calls` checkbox, which is off by default, so the copy arrived as prose only.
+
 ## [0.5.2] - 2026-09-01
 
 ### Added
