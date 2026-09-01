@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { libraryRoot } from "@/db/library-paths";
@@ -15,7 +15,7 @@ import { issueFeedToken, revokeFeedToken } from "@/app/lib/feed-token";
 import { feedAgentModel } from "@/app/lib/feed-model";
 import { proposalSummary } from "@/app/lib/schemas/proposals";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
-import { CompactResultSchema } from "@/app/lib/schemas/requests";
+import { CompactResultSchema, CompactSummaryEntrySchema } from "@/app/lib/schemas/requests";
 
 /**
  * Drives a headless `claude -p` agent for one feed snippet. The agent runs with
@@ -386,20 +386,46 @@ async function agentEnv(feedToken: string): Promise<NodeJS.ProcessEnv> {
  *  seconds; it exists to stop a wedged subprocess, not to bound normal work. */
 const COMPACT_TIMEOUT_MS = 300_000;
 
+/** Where the CLI keeps a feed's session transcripts. The directory name is the
+ *  working directory with its separators flattened, so the source feed's directory
+ *  and the new one's differ only where their ids do. */
+function sessionProjectDir(feedId: string): string | null {
+  const projects = join(claudeConfigDir(), "projects");
+  if (!existsSync(projects)) return null;
+  return readdirSync(projects).map((name) => join(projects, name)).find((dir) => dir.endsWith(feedId)) ?? null;
+}
+
+/** The summary the CLI wrote for this session, newest first. It is a user-role entry
+ *  flagged isCompactSummary, which is how the client re-seeds a compacted session. */
+function latestCompactSummary(transcript: string): string {
+  const summaries: string[] = [];
+  for (const line of readFileSync(transcript, "utf8").split("\n")) {
+    if (!line.includes("isCompactSummary")) continue;
+    const parsed = parseJsonWith(CompactSummaryEntrySchema, line);
+    if (parsed.ok && parsed.data.isCompactSummary) {
+      const content = parsed.data.message.content;
+      const text = typeof content === "string"
+        ? content
+        : content.map((block) => (typeof block.text === "string" ? block.text : "")).join("\n");
+      if (text.trim()) summaries.push(text.trim());
+    }
+  }
+  return summaries.at(-1) ?? "";
+}
+
 /**
- * Compact this feed's agent session in place: the same `/compact` the interactive
- * client runs, driven headlessly.
+ * Compact a thread by starting a new feed from its summary.
  *
- * The CLI replaces the older part of its session transcript with a summary, so the
- * next resumed turn sends far less. Nothing in the Stacks thread changes: the
- * conversation the user reads is stored separately, and only what the agent carries
- * between turns gets shorter. That is the difference from a rewind, which shortens
- * the thread itself and throws the session away.
+ * The CLI's own `/compact` is what produces the summary: the same command the
+ * interactive client runs, driven headlessly against a COPY of the session. The
+ * original feed keeps its thread and its session exactly as they were, so the whole
+ * conversation stays readable, and the new feed carries the summary forward. The two
+ * are linked through `compactedFromId`.
  *
- * Not a rescue for every context-limit failure. Compaction summarizes older groups
- * of a conversation, so it needs a conversation to work with: a single oversized
- * message (a fork seeded with a huge transcript, say) leaves it nothing to summarize
- * and the CLI reports as much.
+ * Not a rescue for every context-limit failure. Compaction summarizes older groups of
+ * a conversation, so it needs a conversation to work with: a single oversized message
+ * (a fork seeded with a huge transcript, say) leaves it nothing to summarize and the
+ * CLI reports as much.
  *
  * `instructions` is passed through as the focus text the CLI accepts after
  * `/compact`, so the user can say what the summary must keep.
@@ -407,33 +433,58 @@ const COMPACT_TIMEOUT_MS = 300_000;
 export async function compactFeedSession(
   snippetId: string,
   instructions = "",
-): Promise<{ ok: boolean; message: string }> {
+): Promise<{ ok: boolean; message: string; id?: string }> {
   const database = await ensureDatabase();
-  const row = database
-    .select({ sessionId: feedSnippets.sessionId, model: feedSnippets.model })
-    .from(feedSnippets)
-    .where(eq(feedSnippets.id, snippetId))
-    .get();
-  const sessionId = row?.sessionId?.trim();
-  if (!sessionId) {
+  const source = database.select().from(feedSnippets).where(eq(feedSnippets.id, snippetId)).get();
+  const sessionId = source?.sessionId?.trim();
+  if (!source || !sessionId) {
     return { ok: false, message: "This thread has no agent session yet, so there is nothing to compact." };
   }
-  // The session transcript is a single file the CLI rewrites; a turn writing to it
-  // at the same time would race. The run slot is claimed for the same reason a turn
-  // claims it, so a reply cannot start while this is in flight.
+  // The source transcript is read while the CLI may be appending to it, so no turn
+  // may be in flight. The run slot is claimed for the same reason a turn claims it.
   if (isFeedRunning(snippetId) || launching.has(snippetId)) {
     return { ok: false, message: "The agent is working. Stop the current turn, then compact." };
   }
+  const sourceProject = sessionProjectDir(snippetId);
+  const sourceTranscript = sourceProject ? join(sourceProject, `${sessionId}.jsonl`) : null;
+  if (!sourceTranscript || !existsSync(sourceTranscript)) {
+    return { ok: false, message: "The agent session for this thread is no longer on disk, so it cannot be compacted." };
+  }
+
+  const targetId = `feed-${crypto.randomUUID()}`;
   launching.add(snippetId);
   try {
+    const now = new Date().toISOString();
+    const sourceName = source.title || source.instruction || "Untitled";
+    database.insert(feedSnippets).values({
+      id: targetId,
+      title: `Compacted: ${sourceName}`.slice(0, 200),
+      instruction: source.instruction,
+      status: "done",
+      // The copy keeps the session id: ids are scoped to a project directory, and the
+      // two feeds have their own, so nothing collides and no entry has to be rewritten.
+      sessionId,
+      model: source.model,
+      effort: source.effort,
+      historyMode: source.historyMode,
+      compactedFromId: snippetId,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+
+    // feedWorkingDir only names the directory; the CLI needs it to exist to run in it.
+    const workingDir = feedWorkingDir(targetId);
+    mkdirSync(workingDir, { recursive: true });
+    const targetProject = join(dirname(sourceProject!), basename(sourceProject!).replace(snippetId, targetId));
+    mkdirSync(targetProject, { recursive: true });
+    copyFileSync(sourceTranscript, join(targetProject, `${sessionId}.jsonl`));
+
     const runtime = await resolveRuntimeValues();
-    const model = feedAgentModel(row?.model, runtimeValue(runtime, "BEDROCK_MODEL_ID"));
+    const model = feedAgentModel(source.model, runtimeValue(runtime, "BEDROCK_MODEL_ID"));
+    // Newlines would end the command line the CLI parses, so the focus text is one line.
+    const focus = instructions.replace(/\s+/g, " ").trim();
     // No feed token: /compact never calls the library API, so no credential is minted.
     const env = await agentEnv("");
-    const workingDir = feedWorkingDir(snippetId);
-    // Newlines would end the command line the CLI parses, so the focus text arrives
-    // as one line.
-    const focus = instructions.replace(/\s+/g, " ").trim();
     const child = spawn(CLAUDE_BIN, [
       "-p",
       focus ? `/compact ${focus}` : "/compact",
@@ -457,18 +508,37 @@ export async function compactFeedSession(
 
     const parsed = parseJsonWith(CompactResultSchema, stdout.trim());
     if (code !== 0 || !parsed.ok || parsed.data.is_error) {
+      // The new feed never became usable, so it is removed rather than left as an
+      // empty thread the user has to clean up.
+      database.delete(feedSnippets).where(eq(feedSnippets.id, targetId)).run();
       const detail = (parsed.ok ? parsed.data.result : "") || stderr.trim() || `the CLI exited with code ${code ?? "none"}`;
       return { ok: false, message: `The session could not be compacted: ${detail}` };
     }
     // The CLI says nothing on success and reports its refusals (for instance "Not
-    // enough messages to compact") in the result text, so pass that through.
+    // enough messages to compact") in the result text.
     const said = parsed.data.result.trim();
-    const message = said || (focus
-      ? `Compacted this thread's agent session, focused on: ${focus}`
-      : "Compacted this thread's agent session; its next turn carries a summary of the earlier conversation.");
-    await persistMessage(snippetId, "system", "text", message);
-    emit(snippetId, { type: "status", status: "done" });
-    return { ok: true, message };
+    if (said) {
+      database.delete(feedSnippets).where(eq(feedSnippets.id, targetId)).run();
+      return { ok: false, message: said };
+    }
+
+    const summary = latestCompactSummary(join(targetProject, `${sessionId}.jsonl`));
+    if (summary) {
+      // The summary is what the new thread starts from, so it reads as the agent's
+      // first word in it rather than being buried in the session file.
+      await persistMessage(targetId, "assistant", "text", summary);
+    }
+    if (focus) {
+      await persistMessage(targetId, "system", "text", `Compacted with a focus on: ${focus}`);
+    }
+    await persistMessage(snippetId, "system", "text", `Compacted into “Compacted: ${sourceName}”. This thread stays as it is.`);
+    return {
+      ok: true,
+      id: targetId,
+      message: summary
+        ? "Compacted into a new feed; it starts from the summary of this conversation."
+        : "Compacted into a new feed.",
+    };
   } finally {
     launching.delete(snippetId);
   }

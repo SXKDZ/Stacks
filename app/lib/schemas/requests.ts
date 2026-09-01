@@ -102,6 +102,18 @@ export const FeedForkRequestSchema = z.object({
   includeToolDetails: z.boolean().prefault(false),
 });
 
+/**
+ * A session-transcript line that carries a compaction summary. The CLI writes it as a
+ * user-role entry flagged `isCompactSummary`, which is how a compacted session is
+ * re-seeded, and where the summary text can be read back from.
+ */
+export const CompactSummaryEntrySchema = z.object({
+  isCompactSummary: z.boolean().prefault(false),
+  message: z.object({
+    content: z.union([z.string(), z.array(z.object({ text: z.string().optional() }).loose())]).prefault(""),
+  }).loose().prefault({ content: "" }),
+}).loose();
+
 /** Optional focus text for a compaction, passed through to the CLI after `/compact`. */
 export const CompactRequestSchema = z.object({
   instructions: z.string().trim().max(2000).optional(),

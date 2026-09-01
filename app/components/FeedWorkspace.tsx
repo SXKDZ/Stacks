@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Undo2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FoldVertical, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Undo2, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -172,6 +172,8 @@ interface FeedSnippet {
   durationMs?: number;
   turns?: number;
   attachments?: string | null;
+  /** Set on a feed that was compacted out of another one. */
+  compactedFromId?: string | null;
   pendingProposals?: number;
   collapsed?: boolean;
   createdAt: string;
@@ -1153,7 +1155,7 @@ function FeedHistorySelectionModal({
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, collections, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated, onRename, onFork, onExport }: {
+function FeedDetail({ snippet, library, collections, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated, siblings, onOpenFeed, onRename, onFork, onExport }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   collections: Array<{ id: string; name: string }>;
@@ -1167,6 +1169,9 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   onCreated: (id: string) => void;
   /** The same whole-feed actions the sidebar row offers, reused by the composer's
    *  commands so there is one implementation of each. */
+  /** Every feed, so a compaction link can name and reach its counterpart. */
+  siblings: FeedSnippet[];
+  onOpenFeed: (id: string) => void;
   onRename: (title?: string) => Promise<void>;
   onFork: () => Promise<void>;
   onExport: () => Promise<void>;
@@ -1461,12 +1466,10 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   }
 
   /**
-   * Compact this thread's agent session: the CLI summarizes the older part of its
-   * transcript, so the next turn carries less. Anything typed in the composer is
-   * passed as the compaction's focus instructions and then cleared, since it was
-   * consumed here rather than sent as a message. The thread itself is untouched, and
-   * the outcome (including a refusal such as "Not enough messages to compact") is
-   * recorded in it by the route.
+   * Compact this thread into a new feed and open it. This thread is left as it is, so
+   * the whole conversation stays readable; the new one starts from the summary and is
+   * linked back to this. Anything typed in the composer becomes the compaction's focus
+   * text and is then cleared, since it was consumed rather than sent.
    */
   async function compactSession(instructions: string): Promise<boolean> {
     setError(null);
@@ -1480,8 +1483,10 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
         setError(await readError(response));
         return false;
       }
+      const payload = await response.json().catch(() => null) as { id?: string } | null;
       setStreamNonce((nonce) => nonce + 1);
-      onChanged();
+      if (payload?.id) onCreated(payload.id);
+      else onChanged();
       return true;
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "The session could not be compacted.");
@@ -1750,23 +1755,34 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
 
   // A stored id says nothing about which record a change would hit, so name it from
   // the snapshot the composer already loads, and keep the id as secondary text.
+  // Both directions of a compaction: where this thread came from, and where it was
+  // carried on. Read off the list the sidebar already has rather than asked for.
+  const compactionLinks = [
+    ...(snippet.compactedFromId && siblings.some((feed) => feed.id === snippet.compactedFromId)
+      ? [{ id: snippet.compactedFromId, label: "Compacted from" }]
+      : []),
+    ...siblings
+      .filter((feed) => feed.compactedFromId === snippet.id)
+      .map((feed) => ({ id: feed.id, label: "Continued in" })),
+  ];
+
   const threadCommands: FeedCommand[] = [
     {
       name: "compact",
       argument: "[what to keep]",
-      hint: "Summarize the earlier conversation so the agent carries less into its next turn",
+      hint: "Continue in a new feed from a summary of this one",
       run: compactSession,
     },
     ...(running
       ? [{
         name: "stop",
-        hint: "Stop the turn the agent is working on",
+        hint: "Stop the current turn",
         run: async () => { await stop(); return true; },
       }]
       : []),
     {
       name: "fork",
-      hint: "Continue in a copy of this thread, leaving this one as it is",
+      hint: "Continue in a copy of this thread",
       run: async () => { await onFork(); return true; },
     },
     {
@@ -1777,7 +1793,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     },
     {
       name: "export",
-      hint: "Download this thread as Markdown",
+      hint: "Download as Markdown",
       run: async () => { await onExport(); return true; },
     },
   ];
@@ -1900,6 +1916,17 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
               ))}
               <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Created ${fullTime(snippet.createdAt)}`}>Created {relativeTime(snippet.createdAt)}</span>
               <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Updated ${fullTime(snippet.updatedAt)}`}>Updated {relativeTime(snippet.updatedAt)}</span>
+              {compactionLinks.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  className="feed-detail-link"
+                  onClick={() => onOpenFeed(link.id)}
+                >
+                  <FoldVertical size={12} aria-hidden="true" />
+                  {link.label}
+                </button>
+              ))}
             </div>
             <button
               type="button"
@@ -2742,6 +2769,8 @@ export default function FeedWorkspace() {
             defaultEffort={defaultEffort}
             historySelectionRequest={historySelectionRequest?.id === selected.id ? historySelectionRequest : null}
             onHistorySelectionClosed={() => setHistorySelectionRequest(null)}
+            siblings={snippets}
+            onOpenFeed={(id) => { setComposing(false); setSelectedId(id); }}
             onRename={(title) => renameSnippet(selected, title)}
             onFork={() => forkSnippet(selected)}
             onExport={() => exportSnippet(selected)}

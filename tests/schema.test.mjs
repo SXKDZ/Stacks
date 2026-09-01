@@ -492,18 +492,31 @@ test("a message that interrupts a turn carries that turn's request with it", asy
 });
 
 test("a thread's agent session can be compacted the way the interactive client does", async () => {
-  const [agent, route, feed, composer, errors, styles] = await Promise.all([
+  const [agent, route, feed, composer, errors, styles, schema, bootstrap] = await Promise.all([
     readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/compact/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-errors.ts", import.meta.url), "utf8"),
     readApplicationStyles(),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
   ]);
 
   // Verified against the installed CLI: `claude -p "/compact" --resume <id>` runs the
   // same command the interactive client does and answers with a result event.
   assert.match(agent, /export async function compactFeedSession/);
+  // A new feed carries the summary forward and the original keeps its thread and its
+  // session, so nothing that was readable stops being readable.
+  assert.match(agent, /compactedFromId: snippetId/);
+  assert.match(agent, /copyFileSync\(sourceTranscript, join\(targetProject/);
+  assert.match(agent, /persistMessage\(targetId, "assistant", "text", summary\)/);
+  assert.match(schema, /compactedFromId: text\("compacted_from_id"\)/);
+  assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN compacted_from_id TEXT/);
+  // Both ends of the link are reachable from the thread header.
+  assert.match(feed, /const compactionLinks = \[/);
+  assert.match(feed, /label: "Compacted from"/);
+  assert.match(feed, /label: "Continued in"/);
   assert.match(agent, /"-p",\s*focus \? `\/compact \$\{focus\}` : "\/compact",[\s\S]*?"--resume",\s*sessionId/);
   // The session transcript is one file the CLI rewrites, so a turn must not be
   // writing to it at the same time.
@@ -520,14 +533,17 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(composer, /const match = \/\^\\\/\(\[\\w-\]\+\)/);
   assert.match(composer, /commands\.find\(\(candidate\) => candidate\.name === match\[1\]\.toLowerCase\(\)\)/);
   assert.match(composer, /if \(await invocation\.command\.run\(invocation\.argument\)\) \{/);
-  assert.match(composer, /className="feed-command-menu" role="listbox"/);
+  assert.match(composer, /createPortal\(\s*<ul\s+className="feed-command-menu"/);
   // The palette owns the keys that would otherwise send the message.
   assert.match(composer, /if \(commandMatches\.length\) \{[\s\S]*?event\.key === "ArrowDown"/);
   assert.match(composer, /completeCommand\(commandMatches\[activeCommand\]\)/);
-  // Opaque and lifted: --panel is translucent in both themes, so a floating list on
-  // it showed the thread through itself.
+  // Opaque, lifted, and pinned to the caret's line: on --panel (translucent in both
+  // themes) the list showed the thread through itself, and anchored to the composer's
+  // outer edge it sat far above the line being typed.
   assert.match(styles, /\.feed-command-menu \{[^}]*background: var\(--panel-strong\)/);
-  assert.match(styles, /\.feed-command-menu \{[^}]*box-shadow: var\(--shadow-md\)/);
+  assert.match(styles, /\.feed-command-menu \{[^}]*position: fixed/);
+  assert.match(composer, /const rect = editorRef\.current\?\.getBoundingClientRect\(\)/);
+  assert.match(composer, /bottom: Math\.round\(window\.innerHeight - rect\.top \+ 6\)/);
   // Every command maps to an operation that already exists, and each is implemented
   // once: the composer calls the same handlers the sidebar row does.
   for (const name of ["compact", "stop", "fork", "rename", "export"]) {

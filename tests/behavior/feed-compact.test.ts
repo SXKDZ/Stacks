@@ -1,8 +1,7 @@
 /**
- * Compacting a feed's agent session. The compaction itself is a `claude -p
- * "/compact"` subprocess, which a test must not run, so what is exercised here are
- * the states that answer without spawning anything: a thread with no session, and a
- * thread whose agent is mid-turn.
+ * Compacting a feed into a new one. The compaction itself is a `claude -p "/compact"`
+ * subprocess, which a test must not run, so what is exercised here are the states that
+ * answer without spawning anything.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -47,6 +46,22 @@ test("a thread with no agent session has nothing to compact", async () => {
 test("compacting an unknown feed is a 404", async () => {
   const result = await compact("feed-compact-missing");
   assert.equal(result.status, 404);
+});
+
+test("a compaction with no session on disk refuses rather than leaving an empty feed", async () => {
+  await seed("feed-compact-3", "9e4da064-3677-464c-ae7d-22cf27fe0955");
+  const { ensureDatabase } = await import("../../db/bootstrap.ts");
+  const { feedSnippets } = await import("../../db/schema.ts");
+  const database = await ensureDatabase();
+
+  const before = database.select().from(feedSnippets).all().length;
+  const result = await compact("feed-compact-3");
+
+  assert.equal(result.status, 409);
+  assert.match(String(result.body.error), /no longer on disk/);
+  // The new feed is only created once there is something to compact, so a refusal
+  // cannot leave a stray thread behind.
+  assert.equal(database.select().from(feedSnippets).all().length, before);
 });
 
 test("the thread's own messages are never touched by a compaction", async () => {

@@ -154,6 +154,7 @@ export function AttachBox({
   const [commandIndex, setCommandIndex] = useState(0);
   const [paletteDismissed, setPaletteDismissed] = useState(false);
   const [runningCommand, setRunningCommand] = useState(false);
+  const [commandMenuPosition, setCommandMenuPosition] = useState<{ left: number; bottom: number; width: number } | null>(null);
   const [model, setModel] = useState(initialModel);
   const [effort, setEffort] = useState<string>(initialEffort);
   // The composer's initialModel arrives after mount (the last-used model is read
@@ -177,6 +178,7 @@ export function AttachBox({
   const trayRef = useRef<HTMLDivElement>(null);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const panelResizeDrag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const [panelHeight, setPanelHeight] = useState<number | null>(null);
 
@@ -192,6 +194,17 @@ export function AttachBox({
   function changeText(value: string) {
     setText(value);
     setPaletteDismissed(false);
+    // Anchored to the line being typed rather than to the composer's outer edge: the
+    // list only opens while the whole text is the command name, so the caret is on the
+    // editor's first line.
+    const rect = editorRef.current?.getBoundingClientRect();
+    if (rect) {
+      setCommandMenuPosition({
+        left: Math.round(rect.left),
+        bottom: Math.round(window.innerHeight - rect.top + 6),
+        width: Math.round(Math.min(520, rect.width)),
+      });
+    }
   }
 
   function completeCommand(command: FeedCommand) {
@@ -409,6 +422,36 @@ export function AttachBox({
     >
       {dragging ? <div className="feed-drop-hint"><Paperclip size={18} /> Drop files to attach</div> : null}
 
+      {commandMatches.length && commandMenuPosition ? createPortal(
+        <ul
+          className="feed-command-menu"
+          role="listbox"
+          aria-label="Commands"
+          style={{ left: commandMenuPosition.left, bottom: commandMenuPosition.bottom, width: commandMenuPosition.width }}
+        >
+          {commandMatches.map((command, index) => (
+            <li key={command.name}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={index === activeCommand}
+                className={index === activeCommand ? "is-active" : ""}
+                // Down rather than click: the editor keeps focus, so typing the
+                // argument continues straight after the name.
+                onMouseDown={(event) => { event.preventDefault(); completeCommand(command); }}
+                onMouseEnter={() => setCommandIndex(index)}
+              >
+                <span className="feed-command-name">
+                  <code>/{command.name}</code>
+                  {command.argument ? <i>{command.argument}</i> : null}
+                </span>
+                <span className="feed-command-hint">{command.hint}</span>
+              </button>
+            </li>
+          ))}
+        </ul>,
+        document.body,
+      ) : null}
 
       <div
         ref={panelRef}
@@ -475,30 +518,7 @@ export function AttachBox({
             })}
           </div>
         ) : null}
-        {commandMatches.length ? (
-          <ul className="feed-command-menu" role="listbox" aria-label="Commands">
-            {commandMatches.map((command, index) => (
-              <li key={command.name}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={index === activeCommand}
-                  className={index === activeCommand ? "is-active" : ""}
-                  // Down rather than click: the editor keeps focus, so typing the
-                  // argument continues straight after the name.
-                  onMouseDown={(event) => { event.preventDefault(); completeCommand(command); }}
-                  onMouseEnter={() => setCommandIndex(index)}
-                >
-                  <span className="feed-command-name">
-                    <code>/{command.name}</code>
-                    {command.argument ? <i>{command.argument}</i> : null}
-                  </span>
-                  <span className="feed-command-hint">{command.hint}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <div ref={editorRef} className="feed-composer-slot">
         <MarkdownCodeEditor
           className="feed-composer-editor"
           value={text}
@@ -534,6 +554,7 @@ export function AttachBox({
           rows={compact ? 3 : 6}
           autoFocus={autoFocus}
         />
+        </div>
 
         <div className="feed-dock-actions">
           <div className="feed-dock-tools">
