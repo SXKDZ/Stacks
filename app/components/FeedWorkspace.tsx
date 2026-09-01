@@ -4,7 +4,7 @@ import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, Chevr
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AttachBox, type AttachSubmit, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
+import { AttachBox, type AttachSubmit, type FeedCommand, type FeedModelOption, type LibraryPaper } from "@/app/components/feed/AttachBox";
 import { DEFAULT_FEED_SKILLS, type FeedSkill, feedSkillIcon } from "@/app/lib/feed-skills";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import { readError, readErrorInfo } from "@/app/lib/http";
@@ -1171,7 +1171,6 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   const [proposalBlockOpen, setProposalBlockOpen] = useState<Record<string, boolean>>({});
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
-  const [compacting, setCompacting] = useState(false);
   // The turn a retry or rewind is working on, the text a rewind recovered, and the
   // key that remounts the composer around that text.
   const [busyTurnId, setBusyTurnId] = useState<string | null>(null);
@@ -1465,7 +1464,6 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
    * recorded in it by the route.
    */
   async function compactSession(instructions: string): Promise<boolean> {
-    setCompacting(true);
     setError(null);
     try {
       const response = await fetch(`/api/feed/snippets/${snippet.id}/compact`, {
@@ -1483,8 +1481,6 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "The session could not be compacted.");
       return false;
-    } finally {
-      setCompacting(false);
     }
   }
 
@@ -1749,6 +1745,22 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
 
   // A stored id says nothing about which record a change would hit, so name it from
   // the snapshot the composer already loads, and keep the id as secondary text.
+  const threadCommands: FeedCommand[] = [
+    {
+      name: "compact",
+      argument: "[what to keep]",
+      hint: "Summarize the earlier conversation so the agent carries less into its next turn",
+      run: compactSession,
+    },
+    ...(running
+      ? [{
+        name: "stop",
+        hint: "Stop the turn the agent is working on",
+        run: async () => { await stop(); return true; },
+      }]
+      : []),
+  ];
+
   const papersById = new Map(library.map((paper) => [paper.id, paper]));
   const collectionsById = new Map(collections.map((collection) => [collection.id, collection]));
   function describeProposalTarget(id: string): { label: string; meta?: string } {
@@ -2101,8 +2113,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           compact
           hint={<><kbd>⌥↵</kbd> newline</>}
           onSubmit={sendReply}
-          onCompact={compactSession}
-          compacting={compacting}
+          commands={threadCommands}
           leadingAction={running ? (
             // Labelled and in the danger colour: a bare grey square beside the
             // attachment icons read as an empty checkbox rather than a stop control.

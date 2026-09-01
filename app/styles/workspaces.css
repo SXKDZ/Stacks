@@ -1696,6 +1696,58 @@
   margin-inline-end: 7px;
 }
 
+/* The composer's command list, opened by typing "/" and closed once the name is
+   complete. It sits inside the composer frame, above the text, so the name being
+   chosen and the text it will run against read as one thing. */
+.feed-command-palette {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+  margin: 0;
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 4px 4px 6px;
+}
+
+.feed-command-palette > li {
+  margin: 0;
+}
+
+.feed-command-palette button {
+  align-items: baseline;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px;
+  text-align: start;
+  width: 100%;
+}
+
+.feed-command-palette button.is-active {
+  background: color-mix(in srgb, var(--brand-blue-soft) 62%, transparent);
+}
+
+.feed-command-palette code {
+  background: none;
+  color: var(--brand-blue-strong);
+  flex: 0 0 auto;
+  font-size: var(--type-caption);
+  padding: 0;
+}
+
+.feed-command-palette span {
+  color: var(--muted);
+  font-size: var(--type-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Fork and Rewind lead the turn's footer, ahead of its time and cost: they are the
    controls, and the provenance reads after them. Quiet by default, in the same
    micro type as the metrics, so a thread of them stays calm. */

@@ -6,7 +6,7 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ### Added
 
-- A feed's agent session can be compacted from the reply box: the same `/compact` the interactive Claude client runs, which shortens what the agent carries between turns while leaving the thread itself untouched. Anything typed in the composer is used as the compaction's focus instructions.
+- The reply box takes commands: typing `/` lists what the thread can do, and the rest of the line is the command's argument. `/compact [what to keep]` runs the same compaction the interactive Claude client does, which shortens what the agent carries between turns while leaving the thread itself untouched; `/stop` stops the turn in flight.
 - Every turn in a feed can be retried, forked, or rewound from its own footer. Retry asks that turn again and replaces what it produced; Fork continues from just before it in a new feed and leaves this one alone; Rewind takes the thread back to before it and returns the message to the reply box. All three cut the thread at the same turn boundaries the history selection uses.
 
 ### Changed

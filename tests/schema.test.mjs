@@ -511,13 +511,18 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(agent, /const COMPACT_TIMEOUT_MS = 300_000/);
   // A refusal is a state the user can act on, not a fault.
   assert.match(route, /status: 409/);
-  // The control sits in the reply box, beside Stop: it acts on the thread the composer
-  // replies to, and whatever is typed there becomes the compaction's focus text.
+  // It is a command in the composer, not a button of its own: typing "/" lists what
+  // the thread can do, and the rest of the line is the command's argument.
   assert.match(feed, /async function compactSession\(instructions: string\): Promise<boolean>/);
-  assert.match(feed, /onCompact=\{compactSession\}/);
-  assert.match(composer, /onCompact\?: \(instructions: string\) => Promise<boolean>/);
-  assert.match(composer, /void onCompact\(text\.trim\(\)\)\.then\(\(consumed\) => \{/);
-  assert.match(composer, /if \(consumed\) setText\(""\)/);
+  assert.match(feed, /name: "compact",[\s\S]*?run: compactSession/);
+  assert.match(composer, /export function matchCommand\(/);
+  assert.match(composer, /const match = \/\^\\\/\(\[\\w-\]\+\)/);
+  assert.match(composer, /commands\.find\(\(candidate\) => candidate\.name === match\[1\]\.toLowerCase\(\)\)/);
+  assert.match(composer, /if \(await invocation\.command\.run\(invocation\.argument\)\) \{/);
+  assert.match(composer, /className="feed-command-palette" role="listbox"/);
+  // The palette owns the keys that would otherwise send the message.
+  assert.match(composer, /if \(commandMatches\.length\) \{[\s\S]*?event\.key === "ArrowDown"/);
+  assert.match(composer, /completeCommand\(commandMatches\[activeCommand\]\)/);
   // The context-limit failure names the ways out that exist.
   assert.match(errors, /prompt is too long/i);
 });
@@ -1563,7 +1568,7 @@ test("the feed composer reads as one control, with a visible placeholder", async
   assert.match(attachBox, /\{hint \? <span className="feed-dock-hint">\{hint\}<\/span> : null\}/);
   assert.match(styles, /\.feed-dock-hint \{[^}]*font-size: var\(--type-caption\)/);
   assert.equal([...feed.matchAll(/hint=\{<><kbd>⌥↵<\/kbd> newline<\/>\}/g)].length, 2);
-  assert.match(attachBox, /title="Enter sends, Option Enter starts a newline"/);
+  assert.match(attachBox, /: "Enter sends, Option Enter starts a newline"/);
 
   // The composer is resizable by pointer and keyboard, and the grip fades in with
   // the composer instead of waiting for the pointer to find a pill on its edge.
