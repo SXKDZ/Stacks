@@ -523,15 +523,30 @@ export async function compactFeedSession(
     }
 
     const summary = latestCompactSummary(join(targetProject, `${sessionId}.jsonl`));
+    // Both threads say where the other one is, as a link: the pair is the point of a
+    // compaction, and a title the reader has to go and find is not a link.
+    await persistMessage(
+      targetId,
+      "system",
+      "text",
+      `Compacted from [“${sourceName}”](/feed?snippet=${snippetId})${focus ? `, with a focus on: ${focus}` : ""}.`,
+    );
     if (summary) {
       // The summary is what the new thread starts from, so it reads as the agent's
       // first word in it rather than being buried in the session file.
       await persistMessage(targetId, "assistant", "text", summary);
     }
-    if (focus) {
-      await persistMessage(targetId, "system", "text", `Compacted with a focus on: ${focus}`);
-    }
-    await persistMessage(snippetId, "system", "text", `Compacted into “Compacted: ${sourceName}”.`);
+    await persistMessage(snippetId, "system", "text", `Compacted into [“Compacted: ${sourceName}”](/feed?snippet=${targetId}).`);
+    // Both rows are stamped after their notes, not before. A "done" feed whose newest
+    // message post-dates its own updatedAt is read as output that arrived after the run
+    // finished (effectiveFeedStatus), which is why a successful compaction showed up as
+    // a failed turn in the new thread.
+    const stamped = new Date().toISOString();
+    database.update(feedSnippets).set({ updatedAt: stamped }).where(eq(feedSnippets.id, targetId)).run();
+    // The source is settled now, whatever its last turn did: the compaction is how the
+    // thread ended, and a failed turn is still in it to read. Leaving the row red would
+    // keep calling for a fix that has already been made somewhere else.
+    database.update(feedSnippets).set({ status: "done", error: null, updatedAt: stamped }).where(eq(feedSnippets.id, snippetId)).run();
     return {
       ok: true,
       id: targetId,

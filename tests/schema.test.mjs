@@ -511,6 +511,14 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(agent, /compactedFromId: snippetId/);
   assert.match(agent, /copyFileSync\(sourceTranscript, join\(targetProject/);
   assert.match(agent, /persistMessage\(targetId, "assistant", "text", summary\)/);
+  // Each thread links to the other, and both rows are stamped after their notes: a
+  // "done" feed whose newest message post-dates its updatedAt is reported as output
+  // that arrived after the run finished.
+  assert.match(agent, /Compacted from \[“\$\{sourceName\}”\]\(\/feed\?snippet=\$\{snippetId\}\)/);
+  assert.match(agent, /Compacted into \[“Compacted: \$\{sourceName\}”\]\(\/feed\?snippet=\$\{targetId\}\)/);
+  assert.match(agent, /\.set\(\{ updatedAt: stamped \}\)\.where\(eq\(feedSnippets\.id, targetId\)\)/);
+  assert.match(agent, /\.set\(\{ status: "done", error: null, updatedAt: stamped \}\)\.where\(eq\(feedSnippets\.id, snippetId\)\)/);
+  assert.match(feed, /\/\\\]\\\(\/\.test\(message\.content\)/);
   assert.match(schema, /compactedFromId: text\("compacted_from_id"\)/);
   assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN compacted_from_id TEXT/);
   // Both ends of the link are reachable from the thread header.

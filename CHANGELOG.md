@@ -6,6 +6,8 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
+- A compaction no longer reports itself as a failed turn. The new feed was stamped before its summary was written, and a finished feed whose newest message post-dates that stamp is read as output arriving after the run ended.
+- The note each end of a compaction carries links to the other thread, and the compacted thread settles to done instead of keeping the error from the turn that prompted the compaction.
 - Forking from a turn copies the thread's tool requests and results. It was following the history modal's `Include tool calls` checkbox, which is off by default, so the copy arrived as prose only.
 
 ## [0.5.2] - 2026-09-01

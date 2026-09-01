@@ -2081,9 +2081,16 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
                 continue;
               }
               // System notices (e.g. a model switch) render as a subtle centered line.
+              // A note that carries a link (the two ends of a compaction) goes through
+              // the markdown renderer so the link is clickable; every other note stays
+              // plain text, where a stray bracket or underscore cannot be read as markup.
               if (message.role === "system") {
                 nodes.push(
-                  <div key={message.id} className="feed-message feed-system-note">{message.content}</div>,
+                  <div key={message.id} className="feed-message feed-system-note">
+                    {/\]\(/.test(message.content)
+                      ? <MarkdownContent content={message.content} className="feed-system-note-copy" />
+                      : message.content}
+                  </div>,
                 );
                 continue;
               }
