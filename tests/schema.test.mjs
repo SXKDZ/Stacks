@@ -492,17 +492,18 @@ test("a message that interrupts a turn carries that turn's request with it", asy
 });
 
 test("a thread's agent session can be compacted the way the interactive client does", async () => {
-  const [agent, route, feed, errors] = await Promise.all([
+  const [agent, route, feed, composer, errors] = await Promise.all([
     readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/compact/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-errors.ts", import.meta.url), "utf8"),
   ]);
 
   // Verified against the installed CLI: `claude -p "/compact" --resume <id>` runs the
   // same command the interactive client does and answers with a result event.
   assert.match(agent, /export async function compactFeedSession/);
-  assert.match(agent, /"-p",\s*"\/compact",[\s\S]*?"--resume",\s*sessionId/);
+  assert.match(agent, /"-p",\s*focus \? `\/compact \$\{focus\}` : "\/compact",[\s\S]*?"--resume",\s*sessionId/);
   // The session transcript is one file the CLI rewrites, so a turn must not be
   // writing to it at the same time.
   assert.match(agent, /if \(isFeedRunning\(snippetId\) \|\| launching\.has\(snippetId\)\)/);
@@ -510,8 +511,13 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(agent, /const COMPACT_TIMEOUT_MS = 300_000/);
   // A refusal is a state the user can act on, not a fault.
   assert.match(route, /status: 409/);
-  assert.match(feed, /async function compactSnippet/);
-  assert.match(feed, /<Wrench size=\{14\} \/> Compact session/);
+  // The control sits in the reply box, beside Stop: it acts on the thread the composer
+  // replies to, and whatever is typed there becomes the compaction's focus text.
+  assert.match(feed, /async function compactSession\(instructions: string\): Promise<boolean>/);
+  assert.match(feed, /onCompact=\{compactSession\}/);
+  assert.match(composer, /onCompact\?: \(instructions: string\) => Promise<boolean>/);
+  assert.match(composer, /void onCompact\(text\.trim\(\)\)\.then\(\(consumed\) => \{/);
+  assert.match(composer, /if \(consumed\) setText\(""\)/);
   // The context-limit failure names the ways out that exist.
   assert.match(errors, /prompt is too long/i);
 });

@@ -400,8 +400,14 @@ const COMPACT_TIMEOUT_MS = 300_000;
  * of a conversation, so it needs a conversation to work with: a single oversized
  * message (a fork seeded with a huge transcript, say) leaves it nothing to summarize
  * and the CLI reports as much.
+ *
+ * `instructions` is passed through as the focus text the CLI accepts after
+ * `/compact`, so the user can say what the summary must keep.
  */
-export async function compactFeedSession(snippetId: string): Promise<{ ok: boolean; message: string }> {
+export async function compactFeedSession(
+  snippetId: string,
+  instructions = "",
+): Promise<{ ok: boolean; message: string }> {
   const database = await ensureDatabase();
   const row = database
     .select({ sessionId: feedSnippets.sessionId, model: feedSnippets.model })
@@ -425,9 +431,12 @@ export async function compactFeedSession(snippetId: string): Promise<{ ok: boole
     // No feed token: /compact never calls the library API, so no credential is minted.
     const env = await agentEnv("");
     const workingDir = feedWorkingDir(snippetId);
+    // Newlines would end the command line the CLI parses, so the focus text arrives
+    // as one line.
+    const focus = instructions.replace(/\s+/g, " ").trim();
     const child = spawn(CLAUDE_BIN, [
       "-p",
-      "/compact",
+      focus ? `/compact ${focus}` : "/compact",
       "--output-format",
       "json",
       "--resume",
@@ -454,7 +463,9 @@ export async function compactFeedSession(snippetId: string): Promise<{ ok: boole
     // The CLI says nothing on success and reports its refusals (for instance "Not
     // enough messages to compact") in the result text, so pass that through.
     const said = parsed.data.result.trim();
-    const message = said || "Compacted this thread's agent session; its next turn carries a summary of the earlier conversation.";
+    const message = said || (focus
+      ? `Compacted this thread's agent session, focused on: ${focus}`
+      : "Compacted this thread's agent session; its next turn carries a summary of the earlier conversation.");
     await persistMessage(snippetId, "system", "text", message);
     emit(snippetId, { type: "status", status: "done" });
     return { ok: true, message };

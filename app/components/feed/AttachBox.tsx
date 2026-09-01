@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, Cpu, FileText, GripHorizontal, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
+import { BookOpen, Check, Cpu, FileText, FoldVertical, GripHorizontal, Image as ImageIcon, LoaderCircle, Paperclip, Search, Send, X } from "lucide-react";
 import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ActionButton, type SelectOption } from "@/app/components/ui/controls";
@@ -85,6 +85,8 @@ export function AttachBox({
   initialPapers = [],
   hint,
   leadingAction,
+  onCompact,
+  compacting = false,
   models = [],
   initialModel = "",
   initialEffort = "",
@@ -100,10 +102,17 @@ export function AttachBox({
   compact?: boolean;
   initialText?: string;
   initialPapers?: LibraryPaper[];
-  /** Optional control shown beside the submit button (e.g. Stop while running). */
   /** A short keyboard reminder shown beside the submit button. */
   hint?: ReactNode;
+  /** Optional control shown beside the submit button (e.g. Stop while running). */
   leadingAction?: ReactNode;
+  /**
+   * Compact the thread's agent session. It sits here because it acts on the same
+   * thread the composer replies to, and because whatever is typed becomes the
+   * compaction's focus instructions: the CLI accepts them after `/compact`.
+   */
+  onCompact?: (instructions: string) => Promise<boolean>;
+  compacting?: boolean;
   /** Selectable agent models; empty hides the picker. */
   models?: FeedModelOption[];
   /** The feed's current model id ("" = the default). */
@@ -464,6 +473,25 @@ export function AttachBox({
           </div>
           <div className="feed-dock-send">
             {hint ? <span className="feed-dock-hint">{hint}</span> : null}
+            {onCompact ? (
+              <ActionButton
+                type="button"
+                variant="secondary"
+                size="small"
+                disabled={compacting}
+                onClick={() => {
+                  void onCompact(text.trim()).then((consumed) => {
+                    // The text became the compaction's instructions, so it must not
+                    // then be sent as a message too.
+                    if (consumed) setText("");
+                  });
+                }}
+                title={text.trim()
+                  ? "Compact this thread's agent session, focused on what you have typed"
+                  : "Compact this thread's agent session: the agent carries a summary of the earlier conversation into its next turn"}
+                icon={compacting ? <LoaderCircle className="spin" size={13} /> : <FoldVertical size={13} />}
+              >{compacting ? "Compacting…" : "Compact"}</ActionButton>
+            ) : null}
             {leadingAction}
             <ActionButton
               type="submit"

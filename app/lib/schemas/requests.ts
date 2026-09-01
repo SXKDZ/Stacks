@@ -102,6 +102,11 @@ export const FeedForkRequestSchema = z.object({
   includeToolDetails: z.boolean().prefault(false),
 });
 
+/** Optional focus text for a compaction, passed through to the CLI after `/compact`. */
+export const CompactRequestSchema = z.object({
+  instructions: z.string().trim().max(2000).optional(),
+});
+
 /**
  * What `claude -p "/compact" --output-format json` answers with. The CLI says
  * nothing on success and puts its refusals ("Not enough messages to compact") in
