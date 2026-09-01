@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
@@ -24,20 +24,14 @@ import {
 } from "@/app/lib/github-sync";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
 import { markOutcomesReported, unreportedOutcomes } from "@/app/lib/feed-outcomes";
-import { flushGithubOutbox } from "@/app/lib/feed-github-outbox";
+import { flushGithubOutbox, retiredCommentIds } from "@/app/lib/feed-github-outbox";
+import { claimGithubSync, releaseGithubSync } from "@/app/lib/feed-sync-state";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { SnippetAttachmentListSchema } from "@/app/lib/schemas/attachments";
 import { buildFollowUpPrompt, buildForkPrompt, buildSnippetPrompt } from "@/app/lib/feed-prompt";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-// One sync at a time. The route is a long chain of check-then-write GitHub +
-// DB calls; two overlapping runs would each see a feed as unlinked or a comment
-// as un-ingested and duplicate issues, feeds, agents, and messages. A single
-// Node process serves every request, so a module-scope flag is a sufficient
-// mutex (the unique index on feed_snippets.issue_number is the DB backstop).
-let syncInProgress = false;
 
 // Prose turns and failures are mirrored to GitHub. Tool calls and raw proposal blocks
 // stay local: they are implementation detail, not something to read on a phone. A
@@ -154,11 +148,13 @@ export async function POST(): Promise<Response> {
   const syncPolicy = createGitHubSyncPolicy();
   const config: GitHubConfig = { repo, token, syncPolicy };
 
-  // Refuse to start while another sync is running (see syncInProgress above).
-  if (syncInProgress) {
+  // One sync at a time. The route is a long chain of check-then-write GitHub + DB
+  // calls; two overlapping runs would each see a feed as unlinked or a comment as
+  // un-ingested and duplicate issues, feeds, agents, and messages. The flag lives in
+  // app/lib/feed-sync-state.ts so a rewind or retry can see a pass in flight too.
+  if (!claimGithubSync()) {
     return Response.json({ error: "A GitHub sync is already running." }, { status: 409 });
   }
-  syncInProgress = true;
 
   const database = await ensureDatabase();
   const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0, issuesClosed: 0, issuesReopened: 0, feedsUnlinked: 0 };
@@ -195,6 +191,9 @@ export async function POST(): Promise<Response> {
     //     feed) BEFORE reading issues, so a just-deleted feed's issue is already
     //     closed and the inbound pass won't recreate it from an open issue.
     await flushGithubOutbox(config);
+    // Comments whose local messages a rewind or retry removed. They stay on the issue
+    // as a record, so the inbound pass has to be told not to read them as new.
+    const retiredComments = await retiredCommentIds(repo);
 
     // 1. OUTBOUND — ensure an issue per feed, push local renames, mirror
     //    unposted local messages. Runs over all feeds (not the incremental
@@ -275,7 +274,14 @@ export async function POST(): Promise<Response> {
           if (!content && !attachmentLinks) continue;
           const body = [`${mirrorLabel(message.role, message.kind)}\n\n${content}`, attachmentLinks].filter(Boolean).join("\n\n");
           const commentId = await postComment(config, issueNumber, body);
-          database.update(feedMessages).set({ githubCommentId: commentId, attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
+          // Only if the row is still there and still unposted: this loop makes network
+          // calls, and a rewind running meanwhile can have deleted the message or a
+          // parallel path have mirrored it already.
+          database
+            .update(feedMessages)
+            .set({ githubCommentId: commentId, attachmentsSynced: 1 })
+            .where(and(eq(feedMessages.id, message.id), isNull(feedMessages.githubCommentId)))
+            .run();
           counts.commentsPosted += 1;
         }
 
@@ -355,7 +361,10 @@ export async function POST(): Promise<Response> {
         }
       }
 
-      const fresh = comments.filter((comment) => !comment.fromStacks && !localByComment.has(comment.id) && comment.body.trim());
+      const fresh = comments.filter((comment) => !comment.fromStacks
+        && !localByComment.has(comment.id)
+        && !retiredComments.has(comment.id)
+        && comment.body.trim());
       if (!fresh.length) return;
       // Leave new comments unrecorded if the agent is mid-run, so the next sync
       // (when it's free) ingests and acts on them rather than dropping them.
@@ -553,6 +562,6 @@ export async function POST(): Promise<Response> {
       retryAfterMs: error instanceof GitHubError && error.retryAfterMs > 0 ? error.retryAfterMs : undefined,
     }, { status });
   } finally {
-    syncInProgress = false;
+    releaseGithubSync();
   }
 }

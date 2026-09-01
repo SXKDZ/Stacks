@@ -125,9 +125,18 @@ const schemaStatements = [
     repo TEXT NOT NULL,
     op TEXT NOT NULL,
     issue_number INTEGER NOT NULL,
+    comment_id INTEGER,
+    body TEXT,
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS feed_github_retired_comments (
+    repo TEXT NOT NULL,
+    comment_id INTEGER NOT NULL,
+    snippet_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (repo, comment_id)
   )`,
   "CREATE INDEX IF NOT EXISTS papers_title_idx ON papers(title)",
   "CREATE INDEX IF NOT EXISTS papers_year_idx ON papers(year)",
@@ -343,6 +352,12 @@ async function initializeDatabase(): Promise<void> {
   }
   if (!feedSnippetColumns.has("collapsed")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0").run();
+  }
+  const outboxColumns = tableColumns(raw, "feed_github_outbox");
+  for (const column of ["comment_id INTEGER", "body TEXT"]) {
+    if (!outboxColumns.has(column.split(" ")[0])) {
+      raw.prepare(`ALTER TABLE feed_github_outbox ADD COLUMN ${column}`).run();
+    }
   }
   if (!feedSnippetColumns.has("compacted_from_id")) {
     raw.prepare("ALTER TABLE feed_snippets ADD COLUMN compacted_from_id TEXT").run();

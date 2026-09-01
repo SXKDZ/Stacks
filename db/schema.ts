@@ -277,9 +277,33 @@ export const feedGithubOutbox = sqliteTable(
     op: text("op").notNull(),
     // The issue the op acts on.
     issueNumber: integer("issue_number").notNull(),
+    // The comment an "edit-comment" op rewrites, and the body to put there. Null for
+    // ops that act on the issue itself.
+    commentId: integer("comment_id"),
+    body: text("body"),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("feed_github_outbox_repo_idx").on(table.repo)],
+);
+
+/**
+ * Comments that were mirrored into a thread and then cut out of it (a rewind, a retry).
+ * The remote comment stays on the issue, since a comment the user wrote on their phone
+ * is theirs, but its local message is gone: without this record the inbound pass reads
+ * it as a comment it has never seen and ingests it again, starting a turn on a request
+ * the user has already removed.
+ */
+export const feedGithubRetiredComments = sqliteTable(
+  "feed_github_retired_comments",
+  {
+    // "owner/name", so switching repos never retires a comment in the new one.
+    repo: text("repo").notNull(),
+    commentId: integer("comment_id").notNull(),
+    /** The feed it belonged to, for provenance when reading the table by hand. */
+    snippetId: text("snippet_id").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [primaryKey({ columns: [table.repo, table.commentId] })],
 );

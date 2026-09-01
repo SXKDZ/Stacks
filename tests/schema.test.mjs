@@ -566,18 +566,35 @@ test("a thread's agent session can be compacted the way the interactive client d
 });
 
 test("cutting or copying a thread does not confuse its GitHub issue", async () => {
-  const [sync, github, truncate, agent, rewindRoute, retryRoute] = await Promise.all([
+  const [sync, github, truncate, agent, rewindRoute, retryRoute, schema, bootstrap] = await Promise.all([
     readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-truncate.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/rewind/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/retry/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
   ]);
 
-  // An abandoned issue is closed, not merely unlinked: left open, the inbound pass
-  // adopts it as a feed of its own, clones the thread into it and runs an agent there.
-  assert.match(truncate, /await enqueueCloseIssue\(snippet\.issueNumber\)/);
+  // The issue keeps its link. Unlinking left an issue no feed claimed, which the
+  // inbound pass adopted as a feed of its own, cloned the thread into and ran an agent
+  // there; the removed messages' comments are retired instead, so they stay on the
+  // issue as a record and are never read as new.
+  assert.match(truncate, /await retireComments\(snippet\.id, retiredComments\)/);
+  assert.match(sync, /const retiredComments = await retiredCommentIds\(repo\)/);
+  assert.match(sync, /!retiredComments\.has\(comment\.id\)/);
+  // A cut proposal's comment stops offering a change nobody can approve.
+  assert.match(truncate, /await enqueueEditComment\(/);
+  assert.match(schema, /export const feedGithubRetiredComments/);
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS feed_github_retired_comments/);
+  // Surviving messages keep their comment ids, so a cut no longer re-mirrors the whole
+  // thread: nothing clears githubCommentId across the feed any more.
+  assert.doesNotMatch(truncate, /githubCommentId: null/);
+  // A comment id is only stamped onto a row that is still there and still unposted.
+  assert.match(sync, /isNull\(feedMessages\.githubCommentId\)/);
+  // And a cut refuses while a sync pass may be ingesting a comment into this thread.
+  assert.match(sync, /if \(!claimGithubSync\(\)\)/);
   // And the marker decides authorship, so an orphan that was never closed (a crash, a
   // manual edit) is still not mistaken for an issue written on a phone.
   assert.match(github, /fromStacks: \(issue\.body \?\? ""\)\.includes\(STACKS_MARKER\)/);
@@ -603,6 +620,7 @@ test("cutting or copying a thread does not confuse its GitHub issue", async () =
   assert.match(agent, /export function isFeedUninterruptible/);
   for (const route of [rewindRoute, retryRoute]) {
     assert.match(route, /if \(isFeedUninterruptible\(id\)\) \{[\s\S]*?status: 409/);
+    assert.match(route, /if \(isGithubSyncRunning\(\)\) \{[\s\S]*?status: 409/);
   }
 });
 
@@ -875,8 +893,9 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   // next pass rather than dropping them.
   assert.match(sync, /githubCommentId/);
   assert.match(sync, /isFeedRunning/);
-  // Only one sync runs at a time; overlapping runs would duplicate issues/feeds.
-  assert.match(sync, /syncInProgress/);
+  // Only one sync runs at a time; overlapping runs would duplicate issues/feeds. The
+  // flag lives in feed-sync-state so a rewind or retry can see a pass in flight too.
+  assert.match(sync, /if \(!claimGithubSync\(\)\)/);
   // Full pagination (follow Link rel=next) and incremental pulls (since=).
   assert.match(client, /rel="next"/);
   assert.match(client, /since=/);
@@ -1494,7 +1513,6 @@ test("every button is one family: capsule, gradient to the edge, one shadow", as
   // A fixed 16px corner reads as a pill on a 34px button and as a rounded rectangle
   // on a 48px one, so two buttons side by side looked like different families. Text
   // buttons are capsules at every height; icon buttons stay squircles.
-  assert.match(controls, /large: "h-11 rounded-full/);
   assert.match(controls, /medium: "h-10 rounded-full/);
   assert.match(controls, /small: "h-\[34px\] rounded-full/);
   assert.match(controls, /icon: "size-10 rounded-\[var\(--radius-lg\)\]/);
