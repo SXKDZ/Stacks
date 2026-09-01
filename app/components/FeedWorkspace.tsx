@@ -153,7 +153,7 @@ function ProposalDetails({ operation, feedId, feedName, describeTarget }: {
       ) : null}
       <details className="feed-tool-call feed-proposal-json">
         <summary><Code2 size={12} /> <span>Raw JSON</span></summary>
-        <div className="feed-tool-io"><MarkdownContent content={toolFence(pretty, "json")} className="feed-tool-md" enableFeedRichContent feedId={feedId} feedName={feedName} /></div>
+        <div className="feed-tool-io"><MarkdownContent content={toolFence(pretty, "json")} className="feed-tool-md" feedId={feedId} feedName={feedName} /></div>
       </details>
     </div>
   );
@@ -458,7 +458,7 @@ function renderToolContent(content: string, feedId: string, feedName: string): R
   if (!content.trim()) {
     return <p className="feed-tool-empty">No output</p>;
   }
-  return <MarkdownContent content={toolFence(content)} className="feed-tool-md" enableFeedRichContent feedId={feedId} feedName={feedName} />;
+  return <MarkdownContent content={toolFence(content)} className="feed-tool-md" feedId={feedId} feedName={feedName} />;
 }
 
 /**
@@ -1979,7 +1979,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           return (
             <div className="feed-message feed-turn feed-turn-user" data-interaction-id={OPENING_INTERACTION_ID}>
               <span className="feed-turn-label">You</span>
-              {openingText ? <MarkdownContent content={openingText} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
+              {openingText ? <MarkdownContent content={openingText} className="feed-bubble" feedId={snippet.id} feedName={feedName} /> : null}
               <AttachmentChips snippetId={snippet.id} attachments={openingAttachments} />
               <TurnMeta
                 iso={snippet.createdAt}
@@ -2102,7 +2102,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
                 nodes.push(
                   <div key={message.id} className={`feed-message feed-turn feed-turn-${message.role}`} data-interaction-id={message.role === "user" ? message.id : undefined}>
                     <span className="feed-turn-label">{message.role === "user" ? "You" : "Agent"}</span>
-                    {prose ? <MarkdownContent content={prose} className="feed-bubble" enableFeedRichContent feedId={snippet.id} feedName={feedName} /> : null}
+                    {prose ? <MarkdownContent content={prose} className="feed-bubble" feedId={snippet.id} feedName={feedName} /> : null}
                     <AttachmentChips snippetId={snippet.id} attachments={messageAttachments} />
                     <TurnMeta
                       iso={message.createdAt}

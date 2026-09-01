@@ -19,7 +19,7 @@ export async function POST(request: Request): Promise<Response> {
     if (parsed.data.data) {
       persistSettings(parsed.data.data);
     }
-    const result = await runSync(false);
+    const result = await runSync();
     return Response.json({ result, sync: currentSettings().sync }, { status: result.ok ? 200 : 502 });
   } catch (error) {
     return Response.json(

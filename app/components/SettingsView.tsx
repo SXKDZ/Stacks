@@ -49,18 +49,13 @@ import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 import { readError } from "@/app/lib/http";
 import { useBackgroundTasks } from "@/app/components/BackgroundTasks";
 import { ActionButton, ActionLink, Scrim, Select, SelectCard, TabButton } from "@/app/components/ui/controls";
+import type { SyncResult } from "@/app/lib/schemas/settings";
 import type { Paper } from "@/app/lib/types";
+import type { ThemeMode } from "@/app/lib/use-theme";
 
 type SettingsTab = "appearance" | "model" | "prompts" | "skills" | "workflows" | "storage" | "sync" | "integrations" | "about";
-type ThemeMode = "dark" | "light";
-
-interface SyncResult {
-  ok: boolean;
-  summary: string;
-  changes: Record<string, number>;
-  conflicts: number;
-  errors: string[];
-}
+/** The toast callback every section of this view takes from Stacks. */
+type Notify = (message: string, tone?: "success" | "error" | "warning" | "info") => void;
 
 interface SettingsSnapshot {
   ai: {
@@ -173,13 +168,6 @@ interface StorageReport {
     };
     absolutePdfPaths: string[];
     absoluteHtmlPaths: string[];
-    repairSummary?: {
-      orphanedAssociations: number;
-      portablePaths: number;
-      renamedPdfs: number;
-      skippedRepairs: number;
-      migratedLegacyFiles?: number;
-    };
   };
   systemHealth?: {
     runtime: string;
@@ -343,7 +331,7 @@ function paperTypeLabel(value: string): string {
 
 
 export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibraryNameChange, papers, onEditPaper }: {
-  notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void;
+  notify: Notify;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   libraryName: string;
@@ -725,15 +713,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
         return response.json() as Promise<StorageReport>;
       });
       setStorageReport(report);
-      const summary = report.databaseHealth?.repairSummary;
-      notify(summary
-        ? `Repair complete: ${summary.orphanedAssociations} associations removed, ${summary.portablePaths} paths fixed, ${summary.renamedPdfs} PDFs renamed, and ${summary.migratedLegacyFiles ?? 0} legacy files copied into this library.`
-        : "Database repair completed.", "success");
-      if (summary && (summary.portablePaths || summary.renamedPdfs)) {
-        window.setTimeout(() => window.location.reload(), 900);
-      } else {
-        await inspectStorage(false);
-      }
+      // A per-repair breakdown (paths fixed, PDFs renamed) used to be reported
+      // here, with a page reload when files moved. The route never returned that
+      // summary, so both were unreachable; a fresh inspection is the report.
+      notify("Database repair completed.", "success");
+      await inspectStorage(false);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Stacks could not complete the repair.", "error");
     } finally {
@@ -1192,7 +1176,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
   tokenDraft: string;
   onRepoChange: (value: string) => void;
   onTokenChange: (value: string) => void;
-  notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void;
+  notify: Notify;
 }) {
   const [testing, setTesting] = useState(false);
 
@@ -1251,7 +1235,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
   );
 }
 
-function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void }) {
+function FeedSkillsEditor({ notify }: { notify: Notify }) {
   const [skills, setSkills] = useState<FeedSkill[]>(DEFAULT_FEED_SKILLS);
   const [selectedId, setSelectedId] = useState<string | null>(DEFAULT_FEED_SKILLS[0]?.id ?? null);
   const [loading, setLoading] = useState(true);
@@ -1425,7 +1409,7 @@ const result = await agent(
 log('Proposed collection changes. Approve them above.')
 `;
 
-function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "success" | "error" | "warning" | "info") => void }) {
+function FeedWorkflowsEditor({ notify }: { notify: Notify }) {
   const [workflows, setWorkflows] = useState<StoredWorkflow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

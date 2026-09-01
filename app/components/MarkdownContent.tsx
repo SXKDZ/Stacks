@@ -107,7 +107,6 @@ function HighlightedCodeLines({ children, className, showLineNumbers, wrapLines,
 export const MarkdownContent = memo(function MarkdownContent({
   content,
   className = "",
-  enableFeedRichContent = false,
   feedId,
   feedName,
   showCodeLineNumbers = false,
@@ -115,7 +114,8 @@ export const MarkdownContent = memo(function MarkdownContent({
 }: {
   content: string;
   className?: string;
-  enableFeedRichContent?: boolean;
+  // The feed's rich content (Mermaid, focused viewers) needs a feed to attach
+  // its visualizations to, so `feedId` alone decides whether it renders.
   feedId?: string;
   feedName?: string;
   showCodeLineNumbers?: boolean;
@@ -133,9 +133,11 @@ export const MarkdownContent = memo(function MarkdownContent({
           ),
           pre: ({ children, node, ...props }) => {
             void node;
-            const source = enableFeedRichContent ? mermaidSource(children) : null;
-            if (source !== null && feedId) return <MermaidDiagram source={source} feedId={feedId} feedName={feedName ?? "AI feed"} />;
-            if (enableFeedRichContent && feedId) return <FeedCodeBlock feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedCodeBlock>;
+            if (feedId) {
+              const source = mermaidSource(children);
+              if (source !== null) return <MermaidDiagram source={source} feedId={feedId} feedName={feedName ?? "AI feed"} />;
+              return <FeedCodeBlock feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedCodeBlock>;
+            }
             return <pre {...props}>{children}</pre>;
           },
           code: ({ children, className, node, ...props }) => {
@@ -153,7 +155,7 @@ export const MarkdownContent = memo(function MarkdownContent({
           },
           table: ({ children, node, ...props }) => {
             void node;
-            return enableFeedRichContent && feedId ? (
+            return feedId ? (
               <FeedTable feedId={feedId} feedName={feedName ?? "AI feed"} {...props}>{children}</FeedTable>
             ) : (
               <div className="markdown-media markdown-table-scroll">
@@ -163,7 +165,7 @@ export const MarkdownContent = memo(function MarkdownContent({
           },
           img: ({ node, alt = "", ...props }) => {
             void node;
-            return enableFeedRichContent && feedId ? (
+            return feedId ? (
               <FeedImage feedId={feedId} feedName={feedName ?? "AI feed"} alt={alt} {...props} />
             ) : (
               <span className="markdown-media markdown-image">

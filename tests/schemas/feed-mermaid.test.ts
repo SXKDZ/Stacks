@@ -19,11 +19,11 @@ test("AI feed rich content opens in focused viewers with safe Mermaid rendering"
 
   assert.match(packageJson, /"mermaid":/);
   assert.match(markdown, /language-mermaid/);
-  assert.match(markdown, /enableFeedRichContent/);
+  assert.match(markdown, /return feedId \? \(\s*<FeedImage/);
   assert.match(markdown, /FeedCodeBlock/);
   assert.match(markdown, /FeedImage/);
   assert.match(markdown, /FeedTable/);
-  assert.match(feed, /className="feed-bubble" enableFeedRichContent feedId=\{snippet\.id\}/);
+  assert.match(feed, /className="feed-bubble" feedId=\{snippet\.id\}/);
   assert.match(feed, /renderToolContent\(operation\.input, feedId, feedName\)/);
   assert.match(feed, /document\.title = `\$\{title\} · Stacks`/);
 

@@ -7,8 +7,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { twMerge } from "tailwind-merge";
 
-export type ActionVariant = "primary" | "secondary" | "ghost" | "danger" | "success" | "light" | "brand-ghost" | "on-dark";
-export type ActionSize = "small" | "medium" | "large" | "icon" | "icon-small" | "icon-large";
+export type ActionVariant = "primary" | "secondary" | "ghost" | "danger" | "success" | "brand-ghost" | "on-dark";
+export type ActionSize = "small" | "medium" | "icon" | "icon-small";
 
 export function cx(...values: Array<string | false | null | undefined>) {
   return twMerge(values.filter(Boolean).join(" "));
@@ -44,10 +44,6 @@ const actionVariants = cva(
         success: [
           "border-[color-mix(in_srgb,var(--green)_40%,transparent)] bg-[var(--green-soft)] text-[var(--green)]",
         ],
-        light: [
-          "border-[rgba(16,19,26,0.14)] bg-white text-[#10131a] shadow-[0_1px_2px_rgba(16,19,26,0.06)]",
-          "hover:border-[rgba(16,19,26,0.22)] hover:bg-[#f3f6f9]",
-        ],
         "brand-ghost": [
           "border-[color-mix(in_srgb,var(--brand-blue)_24%,transparent)] bg-[var(--brand-blue-soft)] text-[var(--brand-blue-strong)]",
           "hover:border-[color-mix(in_srgb,var(--brand-blue)_40%,transparent)] hover:bg-[color-mix(in_srgb,var(--brand-blue)_18%,transparent)]",
@@ -61,12 +57,10 @@ const actionVariants = cva(
         // A capsule, not a fixed 16px corner: the same radius reads as a pill on a
         // 34px button and as a rounded rectangle on a 48px one, which is what made
         // two buttons side by side look like different families.
-        large: "h-11 rounded-full px-[18px] text-[length:var(--type-body)]",
         medium: "h-10 rounded-full px-3.5 text-[length:var(--type-control)]",
         small: "h-[34px] rounded-full px-2.5 text-[length:var(--type-control)]",
         icon: "size-10 rounded-[var(--radius-lg)] p-0",
         "icon-small": "size-8 rounded-[var(--radius-md)] p-0",
-        "icon-large": "size-11 rounded-[var(--radius-lg)] p-0",
       },
     },
     defaultVariants: {
@@ -208,8 +202,8 @@ export function StatusPill({
   );
 }
 
-/* --- TabButton: pill / underline / nav / segmented tabs and section nav --- */
-export type TabVariant = "pill" | "underline" | "segmented" | "nav";
+/* --- TabButton: pill / underline tabs and nav section links --- */
+export type TabVariant = "pill" | "underline" | "nav";
 
 const tabVariants = cva(
   [
@@ -223,7 +217,6 @@ const tabVariants = cva(
       variant: {
         pill: "h-[36px] justify-center rounded-[10px] border-transparent bg-transparent px-3 text-[length:var(--type-control)] text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] hover:text-[var(--ink)]",
         underline: "rounded-t-[var(--radius-md)] border-transparent border-b-2 bg-transparent px-2.5 py-2.5 text-[length:var(--type-control)] text-[var(--muted)] hover:text-[var(--ink)]",
-        segmented: "h-[30px] flex-1 justify-center rounded-[9px] border-transparent bg-transparent px-2 text-[length:var(--type-caption)] text-[var(--muted)] hover:text-[var(--ink)]",
         nav: "grid w-full grid-cols-[auto_1fr] items-center gap-2.5 rounded-xl border-transparent bg-transparent p-2.5 text-left text-[var(--muted)] [&_svg]:size-[16px] [&>span]:flex [&>span]:min-w-0 [&>span]:flex-col [&>span]:gap-0.5 [&_strong]:truncate [&_strong]:text-[length:var(--type-caption)] [&_strong]:text-[var(--ink)] [&_small]:truncate [&_small]:text-[length:var(--type-micro)] [&_small]:text-[var(--muted)]",
       },
       active: { true: "", false: "" },
@@ -238,11 +231,6 @@ const tabVariants = cva(
         variant: "underline",
         active: true,
         className: "border-b-[var(--brand-blue)] text-[var(--brand-blue-strong)]",
-      },
-      {
-        variant: "segmented",
-        active: true,
-        className: "border-[var(--line-strong)] bg-[var(--surface-1)] text-[var(--ink)] shadow-[0_5px_16px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.05)]",
       },
       {
         variant: "nav",
