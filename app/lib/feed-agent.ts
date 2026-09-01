@@ -28,7 +28,10 @@ import { CompactResultSchema, CompactSummaryEntrySchema } from "@/app/lib/schema
  */
 
 type FeedEvent =
-  | { type: "status"; status: string }
+  // Marks the end of the replay for a live run. It carries no payload: both the
+  // emitter and the events route only ever meant "running", and the client reads the
+  // event, not its body.
+  | { type: "status" }
   | { type: "message"; id: string; role: string; kind: string; content: string; toolUseId?: string | null; createdAt: string }
   | { type: "proposal"; id: string; messageId: string | null; operation: string; status: string; summary: string; createdAt: string }
   | { type: "usage"; messageId: string; inputTokens: number; outputTokens: number; durationMs: number }
@@ -666,7 +669,7 @@ export async function runFeedAgent(options: {
     ];
 
     await setStatus(snippetId, "running");
-    emit(snippetId, { type: "status", status: "running" });
+    emit(snippetId, { type: "status" });
 
     child = spawn(CLAUDE_BIN, args, {
       cwd: workingDir,

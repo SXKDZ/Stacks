@@ -34,10 +34,10 @@ test("reads the meta of a normal script", () => {
   phase("Scan");
   log("scanning");
   `);
+  // A script may carry more than this (phases, say); the read keeps what the feed uses.
   assert.deepEqual(meta, {
     name: "find-flaky-tests",
     description: "Find flaky tests and propose fixes",
-    phases: [{ title: "Scan", detail: "grep logs" }],
   });
 });
 
@@ -147,7 +147,7 @@ test("a doc comment mentioning the meta export does not break the read", () => {
    * Write your workflow with export const meta = { name, description }.
    */
   export const meta = { name: "real", description: "the real one" };`);
-  assert.deepEqual(meta, { name: "real", description: "the real one", phases: undefined });
+  assert.deepEqual(meta, { name: "real", description: "the real one" });
 
   // Same for a string literal that happens to contain the phrase.
   const fromString = readWorkflowMeta(
@@ -164,7 +164,9 @@ test("a script using top-level await still yields its meta", () => {
   const result = await agent("do the thing");
   log(result);`);
   assert.equal(meta?.name, "s");
-  assert.deepEqual(meta?.phases, [{ title: "A" }]);
+  // `phases` is not read back: nothing in Stacks displays a workflow's phases, so the
+  // parsed meta carries only what the feed uses.
+  assert.ok(!("phases" in (meta ?? {})));
 });
 
 test("work scheduled in a microtask cannot outlive or block the meta read", () => {
