@@ -594,6 +594,22 @@ test("the sync button shows how far along it is, not how many writes it made", a
   assert.match(styles, /@keyframes sync-border-travel/);
 });
 
+test("only agent output counts as output arriving after a turn ended", async () => {
+  const [list, events, decision] = await Promise.all([
+    readFile(new URL("../app/api/feed/snippets/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/events/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/proposals/[id]/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Both readers of the rule filter to the roles a run writes. Counting every row made
+  // approving a proposal turn its feed red until the next turn ended, because the
+  // decision note post-dated the row's terminal stamp.
+  assert.match(list, /\.where\(inArray\(feedMessages\.role, AGENT_MESSAGE_ROLES\)\)/);
+  assert.match(events, /messages\.filter\(\(message\) => AGENT_MESSAGE_ROLES\.includes\(message\.role\)\)\.at\(-1\)/);
+  // And a decision moves the row's own timestamp, since it changes the thread.
+  assert.match(decision, /\.set\(\{ updatedAt: new Date\(\)\.toISOString\(\) \}\)/);
+});
+
 test("cutting or copying a thread does not confuse its GitHub issue", async () => {
   const [sync, github, truncate, agent, rewindRoute, retryRoute, schema, bootstrap] = await Promise.all([
     readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),

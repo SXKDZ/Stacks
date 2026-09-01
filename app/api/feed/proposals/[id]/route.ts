@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedMessages, feedProposals } from "@/db/schema";
+import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { scheduleOutcomeReport } from "@/app/lib/feed-outcomes";
 import { applyLibraryMutation } from "@/app/lib/library-mutations";
 import { parseJsonWith, parseWith } from "@/app/lib/schemas/parse";
@@ -26,6 +26,14 @@ const ResolveRequestSchema = z.object({
  */
 async function recordDecision(snippetId: string, note: string): Promise<void> {
   const database = await ensureDatabase();
+  // The row's "Updated" moves with the decision: it is a change to the thread, and
+  // leaving the stamp behind its own newest message is what the status rule reads as a
+  // run that outlived its turn.
+  database
+    .update(feedSnippets)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(eq(feedSnippets.id, snippetId))
+    .run();
   database
     .insert(feedMessages)
     .values({
