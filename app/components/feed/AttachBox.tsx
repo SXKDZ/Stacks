@@ -7,10 +7,10 @@ import { ActionButton, type SelectOption } from "@/app/components/ui/controls";
 import { RunSettingsMenu } from "@/app/components/feed/RunSettingsMenu";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 
-/** A library paper the user can attach (its PDF/HTML is sent to the agent). */
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
 import { EFFORT_LEVELS, effortLabel, effortSetting, type EffortSetting } from "@/app/lib/effort";
 
+/** A library paper the user can attach (its PDF/HTML is sent to the agent). */
 export interface LibraryPaper {
   id: string;
   title: string;
@@ -157,17 +157,13 @@ export function AttachBox({
   const [commandMenuPosition, setCommandMenuPosition] = useState<{ left: number; bottom: number; width: number } | null>(null);
   const [model, setModel] = useState(initialModel);
   const [effort, setEffort] = useState<string>(initialEffort);
-  // The composer's initialModel arrives after mount (the last-used model is read
-  // from localStorage), so adopt a changed initialModel — but only while the user
-  // hasn't picked one yet, so a late default can't clobber an active choice. The
-  // ref tracks the last prop value we synced from, distinguishing a prop change
-  // from a user selection.
-  const syncedModelRef = useRef(initialModel);
+  // The feed's model can change under a mounted composer (a reply from another
+  // window switches it, and the list poll brings that in), so adopt the new value
+  // only while the user hasn't picked one: a late change must not clobber an active
+  // choice. The effect re-runs only when the prop changes, so no ref is needed to
+  // tell a prop change from a user selection.
   useEffect(() => {
-    if (initialModel !== syncedModelRef.current) {
-      syncedModelRef.current = initialModel;
-      setModel((current) => (current === "" ? initialModel : current));
-    }
+    setModel((current) => (current === "" ? initialModel : current));
   }, [initialModel]);
   const [files, setFiles] = useState<File[]>([]);
   const [papers, setPapers] = useState<LibraryPaper[]>(initialPapers);
@@ -273,8 +269,6 @@ export function AttachBox({
 
   const hasAttachments = files.length > 0 || papers.length > 0 || texts.length > 0;
 
-  // Esc closes whichever overlay is open (library picker, zoomed image, or the
-  // pasted-text editor), innermost first.
   // Move focus into the picker's search box when it opens. `autoFocus` on a
   // conditionally-rendered input is racy (the composer textarea can win the
   // focus), which left keystrokes landing in the composer behind the modal.
@@ -285,6 +279,8 @@ export function AttachBox({
     }
   }, [pickerOpen]);
 
+  // Esc closes whichever overlay is open (library picker, zoomed image, or the
+  // pasted-text editor), innermost first.
   const overlayOpen = pickerOpen || zoomedImage !== null || editingText !== null;
   useEffect(() => {
     if (!overlayOpen) return;

@@ -61,7 +61,7 @@ import { AdaptiveAuthors } from "@/app/components/ui/AdaptiveAuthors";
 import { BackgroundTaskDock, BackgroundTaskProvider, useBackgroundTasks, type TaskLogger } from "@/app/components/BackgroundTasks";
 import { Brand } from "@/app/components/ui/Brand";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
-import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, Scrim, Select, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
+import { ActionButton, ActionLink, Chip, CollectionChip, cx, PaginationButton, readingStatusLabel, Scrim, Select, SelectCard, StatusPill, TabButton, TextButton } from "@/app/components/ui/controls";
 import { cycleTableSort, SortableTableHeader, useResizableColumns, type TableSort } from "@/app/components/ui/ResizableTable";
 import { useTheme } from "@/app/lib/use-theme";
 import {
@@ -513,15 +513,6 @@ function venueFullNameHint(paper: Paper): string | undefined {
     return undefined;
   }
   return name;
-}
-
-function statusLabel(value: string): string {
-  const labels: Record<string, string> = {
-    inbox: "To read",
-    reading: "Reading",
-    complete: "Read",
-  };
-  return labels[value] ?? value;
 }
 
 /** The icon paired with each reading status (matches StatusPill's mapping). */
@@ -1678,7 +1669,7 @@ function LibraryView({
         <div className="filter-tabs">
           {["all", "inbox", "reading", "complete", "favorite"].map((item) => (
             <TabButton key={item} variant="pill" active={status === item} onClick={() => { setStatus(item); setPage(1); }}>
-              {item === "all" ? "All" : item === "favorite" ? "Starred" : statusLabel(item)}
+              {item === "all" ? "All" : item === "favorite" ? "Starred" : readingStatusLabel(item)}
             </TabButton>
           ))}
         </div>
@@ -2966,10 +2957,10 @@ function PaperDetail({ paper, suspendAutoClose, onClose, onUpdate, onChat, onRea
                     role="radio"
                     aria-checked={paper.readingStatus === status}
                     className={`reading-status-option status-${status} ${paper.readingStatus === status ? "is-active" : ""}`}
-                    onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${statusLabel(status).toLowerCase()}.`)}
+                    onClick={() => void onUpdate(paper, { readingStatus: status }, `Marked as ${readingStatusLabel(status).toLowerCase()}.`)}
                   >
                     <span className="reading-status-icon" aria-hidden="true"><StatusIcon status={status} /></span>
-                    <span className="reading-status-label">{statusLabel(status)}</span>
+                    <span className="reading-status-label">{readingStatusLabel(status)}</span>
                   </button>
                 ))}
               </div>

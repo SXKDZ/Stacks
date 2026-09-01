@@ -4,6 +4,21 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- Rewinding or retrying a thread that is mirrored to GitHub keeps its issue. The comments belonging to removed messages are retired instead, so they stay on the issue as a record and are never read back in. Unlinking the issue left one that no feed claimed, which the next sync adopted as a feed of its own, cloned the thread into and ran an agent on; a phone reply to it then landed in that clone along with a replay of every earlier reply on the issue.
+- The comment that offered a cut proposal for approval is rewritten to say the change was withdrawn, rather than claiming a decision is pending forever.
+- Surviving messages keep their mirrored comment ids, so a cut no longer re-posts the whole thread to a fresh issue.
+- A rewind or retry refuses while a GitHub sync is mid-pass, which could otherwise delete a comment the sync had just ingested from a phone before anyone saw it arrive.
+- An issue Stacks opened is never adopted as a new feed, whatever its state, so an orphan left by a crash cannot clone a thread either.
+- Both halves of a sync re-read each feed before acting on it. A rewind, retry or compaction landing mid-pass could otherwise post the surviving thread to the issue it had just abandoned, stamp that issue's comment ids onto messages that had moved, or read a whole inbox history as new and start a turn on it.
+- A compacted feed is created only once the compaction succeeds, so a refused one leaves nothing for a sync to open an issue against, and a rewind or retry refuses while a compaction holds the thread rather than deleting the messages it is reading.
+- A whole-feed fork no longer copies a pending proposal, which would have queued the same library change in two threads and let it be approved twice.
+- A failed turn is mirrored to GitHub, labelled as a failure. It used to be dropped, so a retry that failed again left the issue showing a question with no answer.
+- A compaction no longer reports itself as a failed turn. The new feed was stamped before its summary was written, and a finished feed whose newest message post-dates that stamp is read as output arriving after the run ended.
+- The note each end of a compaction carries links to the other thread, and the compacted thread settles to done instead of keeping the error from the turn that prompted the compaction.
+- Forking from a turn copies the thread's tool requests and results. It was following the history modal's `Include tool calls` checkbox, which is off by default, so the copy arrived as prose only.
+
 ## [0.5.2] - 2026-09-01
 
 ### Added

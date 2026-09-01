@@ -12,6 +12,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { groupFeedInteractions, messagesFromInteraction, type FeedInteraction } from "@/app/lib/feed-history";
+import { enqueueEditComment, flushGithubOutbox, retireComments } from "@/app/lib/feed-github-outbox";
 
 type FeedSnippetRow = typeof feedSnippets.$inferSelect;
 export type FeedMessageRow = typeof feedMessages.$inferSelect;
@@ -54,6 +55,12 @@ export async function feedInteractions(
  * own decisions, applied to their library, and cutting the conversation short does
  * not revoke them. The proposals themselves go, so a pending one cannot be approved
  * after the message that proposed it is gone.
+ *
+ * A mirrored feed keeps its GitHub issue. The comments belonging to removed messages
+ * are retired rather than unlinked or deleted: the issue stays a record of what
+ * happened, the surviving comments stay in step, and nothing is mirrored a second
+ * time. Unlinking instead left an issue no feed claimed, which the next inbound pass
+ * adopted as a feed of its own.
  */
 export async function truncateFeedAt(
   snippet: FeedSnippetRow,
@@ -89,39 +96,40 @@ export async function truncateFeedAt(
   );
   const now = new Date().toISOString();
 
+  // Both halves matter: a proposal anchored to a removed message, and one the removed
+  // turns created without an anchor Stacks kept (an API-posted proposal records the
+  // tool_use message it came with, which is itself removed here).
+  const firstRemoved = cut[0]?.createdAt;
+  const droppedProposals = database
+    .select()
+    .from(feedProposals)
+    .where(eq(feedProposals.snippetId, snippet.id))
+    .all()
+    .filter((proposal) => (proposal.messageId ? removedIds.has(proposal.messageId) : false)
+      || (firstRemoved !== undefined && proposal.createdAt >= firstRemoved));
+  // Comments the removed messages were mirrored to. The remote comments stay: one the
+  // user wrote from their phone is theirs, and one Stacks posted is a record of what
+  // happened. They are retired instead, so the inbound pass never reads them as new.
+  const retiredComments = removed
+    .map((message) => message.githubCommentId)
+    .filter((commentId): commentId is number => typeof commentId === "number");
+
   database.transaction((tx) => {
     if (removedIds.size) {
       tx.delete(feedMessages).where(inArray(feedMessages.id, [...removedIds])).run();
     }
-    // Both halves matter: a proposal anchored to a removed message, and one the
-    // removed turns created without an anchor Stacks kept (an API-posted proposal
-    // records the tool_use message it came with, which is itself removed here).
-    const firstRemoved = cut[0]?.createdAt;
-    for (const proposal of database.select().from(feedProposals).where(eq(feedProposals.snippetId, snippet.id)).all()) {
-      const orphaned = proposal.messageId ? removedIds.has(proposal.messageId) : false;
-      if (orphaned || (firstRemoved !== undefined && proposal.createdAt >= firstRemoved)) {
-        tx.delete(feedProposals).where(eq(feedProposals.id, proposal.id)).run();
-      }
+    for (const proposal of droppedProposals) {
+      tx.delete(feedProposals).where(eq(feedProposals.id, proposal.id)).run();
     }
-    if (snippet.issueNumber !== null) {
-      // The removed messages are still comments on that issue, so keeping the link
-      // would let the next sync read one back in as new and start a turn on it.
-      // Everything that stays has to be mirrored again into the replacement issue,
-      // hence the comment ids pointing into the old one are dropped.
-      tx.update(feedMessages)
-        .set({ githubCommentId: null, attachmentsSynced: 0 })
-        .where(eq(feedMessages.snippetId, snippet.id))
-        .run();
-      tx.update(feedProposals)
-        .set({ githubCommentId: null, githubStatusSynced: null })
-        .where(eq(feedProposals.snippetId, snippet.id))
-        .run();
+    if (snippet.issueNumber !== null && retiredComments.length) {
+      // The issue keeps its link and every surviving comment id, so nothing is
+      // mirrored twice. This note is what explains the gap to a phone reader.
       tx.insert(feedMessages).values({
         id: `msg-${crypto.randomUUID()}`,
         snippetId: snippet.id,
         role: "system",
         kind: "text",
-        content: `Removed messages mirrored to GitHub issue #${snippet.issueNumber}; the next sync opens a fresh issue.`,
+        content: `Removed ${retiredComments.length} message${retiredComments.length === 1 ? "" : "s"} that had been mirrored to GitHub issue #${snippet.issueNumber}. Their comments stay on the issue as a record, but are no longer read.`,
         createdAt: now,
       }).run();
     }
@@ -133,9 +141,6 @@ export async function truncateFeedAt(
       .set({
         sessionId: "",
         status: "done",
-        ...(snippet.issueNumber === null
-          ? {}
-          : { issueNumber: null, issueTitleSynced: null, issueStateSynced: null }),
         inputTokens: Math.max(0, snippet.inputTokens - spent.inputTokens),
         outputTokens: Math.max(0, snippet.outputTokens - spent.outputTokens),
         durationMs: Math.max(0, snippet.durationMs - spent.durationMs),
@@ -145,6 +150,22 @@ export async function truncateFeedAt(
       .where(eq(feedSnippets.id, snippet.id))
       .run();
   });
+
+  if (snippet.issueNumber !== null) {
+    await retireComments(snippet.id, retiredComments);
+    // A proposal's mirrored comment offers it for approval. Cut from the thread, it
+    // cannot be approved any more, so the comment has to stop saying it is pending.
+    for (const proposal of droppedProposals) {
+      if (typeof proposal.githubCommentId === "number") {
+        await enqueueEditComment(
+          snippet.issueNumber,
+          proposal.githubCommentId,
+          `**Proposed library change** · 🗑 Removed from the thread\n\n_This change was withdrawn when the thread was rewound; there is nothing to approve._`,
+        );
+      }
+    }
+    void flushGithubOutbox().catch(() => {});
+  }
 
   return { target, removed, kept };
 }

@@ -1696,6 +1696,15 @@
   margin-inline-end: 7px;
 }
 
+/* A linked system note keeps the quiet one-line look: the markdown renderer's own
+   block spacing would otherwise push it apart from the turns around it. */
+.feed-system-note-copy,
+.feed-system-note-copy p {
+  color: inherit;
+  font: inherit;
+  margin: 0;
+}
+
 /* A compaction's two ends, in the thread header: where it came from, where it went. */
 .feed-detail-link {
   align-items: center;

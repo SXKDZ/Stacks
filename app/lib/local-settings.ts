@@ -512,7 +512,7 @@ function pythonExecutable(): string {
   return process.platform === "win32" ? "python" : "python3";
 }
 
-export async function runSync(auto = false): Promise<SyncResult> {
+export async function runSync(): Promise<SyncResult> {
   if (syncRunning) {
     throw new Error("A Stacks backup is already running.");
   }
@@ -559,9 +559,6 @@ export async function runSync(auto = false): Promise<SyncResult> {
         "--remote",
         resolvedRemote,
       ];
-      if (auto) {
-        args.push("--auto");
-      }
       const child = spawn(pythonExecutable(), args, {
         cwd: repositoryRoot,
         env: process.env,
@@ -648,7 +645,7 @@ async function fireAutoSync(): Promise<void> {
     return;
   }
   try {
-    await runSync(true);
+    await runSync();
   } catch {
     // Best-effort: a failed background backup must not crash the mutation path.
   } finally {

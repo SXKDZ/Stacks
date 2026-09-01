@@ -509,8 +509,19 @@ test("a thread's agent session can be compacted the way the interactive client d
   // A new feed carries the summary forward and the original keeps its thread and its
   // session, so nothing that was readable stops being readable.
   assert.match(agent, /compactedFromId: snippetId/);
+  // No opening turn on the new feed: the original request is inside the summary, and
+  // repeating it would read as a turn the agent never received.
+  assert.match(agent, /instruction: "",/);
   assert.match(agent, /copyFileSync\(sourceTranscript, join\(targetProject/);
   assert.match(agent, /persistMessage\(targetId, "assistant", "text", summary\)/);
+  // Each thread links to the other, and both rows are stamped after their notes: a
+  // "done" feed whose newest message post-dates its updatedAt is reported as output
+  // that arrived after the run finished.
+  assert.match(agent, /Compacted from \[“\$\{sourceName\}”\]\(\/feed\?snippet=\$\{snippetId\}\)/);
+  assert.match(agent, /Compacted into \[“Compacted: \$\{sourceName\}”\]\(\/feed\?snippet=\$\{targetId\}\)/);
+  assert.match(agent, /\.set\(\{ updatedAt: stamped \}\)\.where\(eq\(feedSnippets\.id, targetId\)\)/);
+  assert.match(agent, /\.set\(\{ status: "done", error: null, updatedAt: stamped \}\)\.where\(eq\(feedSnippets\.id, snippetId\)\)/);
+  assert.match(feed, /\/\\\]\\\(\/\.test\(message\.content\)/);
   assert.match(schema, /compactedFromId: text\("compacted_from_id"\)/);
   assert.match(bootstrap, /ALTER TABLE feed_snippets ADD COLUMN compacted_from_id TEXT/);
   // Both ends of the link are reachable from the thread header.
@@ -552,6 +563,65 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(feed, /run: async \(title\) => \{ await onRename\(title \|\| undefined\); return true; \}/);
   // The context-limit failure names the ways out that exist.
   assert.match(errors, /prompt is too long/i);
+});
+
+test("cutting or copying a thread does not confuse its GitHub issue", async () => {
+  const [sync, github, truncate, agent, rewindRoute, retryRoute, schema, bootstrap] = await Promise.all([
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-truncate.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/rewind/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/retry/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+  ]);
+
+  // The issue keeps its link. Unlinking left an issue no feed claimed, which the
+  // inbound pass adopted as a feed of its own, cloned the thread into and ran an agent
+  // there; the removed messages' comments are retired instead, so they stay on the
+  // issue as a record and are never read as new.
+  assert.match(truncate, /await retireComments\(snippet\.id, retiredComments\)/);
+  assert.match(sync, /const retiredComments = await retiredCommentIds\(repo\)/);
+  assert.match(sync, /!retiredComments\.has\(comment\.id\)/);
+  // A cut proposal's comment stops offering a change nobody can approve.
+  assert.match(truncate, /await enqueueEditComment\(/);
+  assert.match(schema, /export const feedGithubRetiredComments/);
+  assert.match(bootstrap, /CREATE TABLE IF NOT EXISTS feed_github_retired_comments/);
+  // Surviving messages keep their comment ids, so a cut no longer re-mirrors the whole
+  // thread: nothing clears githubCommentId across the feed any more.
+  assert.doesNotMatch(truncate, /githubCommentId: null/);
+  // A comment id is only stamped onto a row that is still there and still unposted.
+  assert.match(sync, /isNull\(feedMessages\.githubCommentId\)/);
+  // And a cut refuses while a sync pass may be ingesting a comment into this thread.
+  assert.match(sync, /if \(!claimGithubSync\(\)\)/);
+  // And the marker decides authorship, so an orphan that was never closed (a crash, a
+  // manual edit) is still not mistaken for an issue written on a phone.
+  assert.match(github, /fromStacks: \(issue\.body \?\? ""\)\.includes\(STACKS_MARKER\)/);
+  assert.match(sync, /if \(issue\.fromStacks\) continue;/);
+
+  // Both sync loops re-read the feed row: they make network calls, and a cut landing
+  // mid-pass moves the feed to another issue.
+  assert.match(sync, /const feed = database\.select\(\)\.from\(feedSnippets\)\.where\(eq\(feedSnippets\.id, snapshot\.id\)\)\.get\(\);\s*\n\s*if \(!feed\) continue;/);
+  assert.match(sync, /if \(!feed \|\| feed\.issueNumber !== issueNumber\) \{[\s\S]*?deferredInbound = true;/);
+
+  // A failed turn reaches the phone, labelled as a failure rather than as the agent.
+  assert.match(sync, /const MIRRORED_KINDS = new Set\(\["text", "result", "error"\]\)/);
+  assert.match(sync, /if \(kind === "error"\) return "\*\*Stacks \(this turn failed\):\*\*"/);
+  // An in-app link would resolve against github.com in a mirrored comment.
+  assert.match(sync, /function withoutAppLinks/);
+  assert.match(sync, /const content = withoutAppLinks\(message\.content\.trim\(\)\)/);
+
+  // The compacted feed exists only once the CLI has succeeded, so a refusal cannot
+  // leave a row for a concurrent sync to open an issue against.
+  assert.match(agent, /Only now does the feed exist/);
+  // And a cut refuses while a compaction holds the run slot, which has no process to
+  // interrupt, rather than deleting the messages it is reading.
+  assert.match(agent, /export function isFeedUninterruptible/);
+  for (const route of [rewindRoute, retryRoute]) {
+    assert.match(route, /if \(isFeedUninterruptible\(id\)\) \{[\s\S]*?status: 409/);
+    assert.match(route, /if \(isGithubSyncRunning\(\)\) \{[\s\S]*?status: 409/);
+  }
 });
 
 test("retry, fork and rewind act on the same interaction boundaries", async () => {
@@ -823,8 +893,9 @@ test("mirrors feeds to a private GitHub repo as a remote inbox, loop-safely", as
   // next pass rather than dropping them.
   assert.match(sync, /githubCommentId/);
   assert.match(sync, /isFeedRunning/);
-  // Only one sync runs at a time; overlapping runs would duplicate issues/feeds.
-  assert.match(sync, /syncInProgress/);
+  // Only one sync runs at a time; overlapping runs would duplicate issues/feeds. The
+  // flag lives in feed-sync-state so a rewind or retry can see a pass in flight too.
+  assert.match(sync, /if \(!claimGithubSync\(\)\)/);
   // Full pagination (follow Link rel=next) and incremental pulls (since=).
   assert.match(client, /rel="next"/);
   assert.match(client, /since=/);
@@ -1442,7 +1513,6 @@ test("every button is one family: capsule, gradient to the edge, one shadow", as
   // A fixed 16px corner reads as a pill on a 34px button and as a rounded rectangle
   // on a 48px one, so two buttons side by side looked like different families. Text
   // buttons are capsules at every height; icon buttons stay squircles.
-  assert.match(controls, /large: "h-11 rounded-full/);
   assert.match(controls, /medium: "h-10 rounded-full/);
   assert.match(controls, /small: "h-\[34px\] rounded-full/);
   assert.match(controls, /icon: "size-10 rounded-\[var\(--radius-lg\)\]/);

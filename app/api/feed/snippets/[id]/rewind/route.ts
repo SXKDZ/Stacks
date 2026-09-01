@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedSnippets } from "@/db/schema";
-import { isFeedRunning, stopFeedAndWait } from "@/app/lib/feed-agent";
+import { isFeedRunning, isFeedUninterruptible, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { feedInteractions, truncateFeedAt } from "@/app/lib/feed-truncate";
+import { isGithubSyncRunning } from "@/app/lib/feed-sync-state";
 import { parseWith } from "@/app/lib/schemas/parse";
 import { FeedInteractionCutSchema } from "@/app/lib/schemas/requests";
 
@@ -42,6 +43,16 @@ export async function POST(
     return Response.json({ error: "That interaction is not part of this feed." }, { status: 404 });
   }
 
+  // A compaction holds the run slot with no process to interrupt, so stopping would
+  // return at once and this would delete the messages it is reading.
+  if (isFeedUninterruptible(id)) {
+    return Response.json({ error: "This thread is being compacted. Try again when that finishes." }, { status: 409 });
+  }
+  // A sync pass in flight may be ingesting a comment from the phone into this very
+  // thread. Cutting now would delete that message before anyone saw it arrive.
+  if (isGithubSyncRunning()) {
+    return Response.json({ error: "A GitHub sync is running. Try again when it finishes." }, { status: 409 });
+  }
   if (isFeedRunning(id)) {
     await stopFeedAndWait(id);
   }

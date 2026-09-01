@@ -82,9 +82,13 @@ export async function POST(
     ),
   }));
   const messageIds = new Map(copiedMessages.map((message) => [message.source.id, message.id]));
+  // Settled proposals only. A pending one copied into the fork is the same library
+  // change queued twice, offered for approval in two threads and mirrored under two
+  // issues; approving both applies it twice.
   const proposals = selectedFork
     ? []
-    : database.select().from(feedProposals).where(eq(feedProposals.snippetId, id)).all();
+    : database.select().from(feedProposals).where(eq(feedProposals.snippetId, id)).all()
+      .filter((proposal) => proposal.status !== "pending");
 
   database.transaction((tx) => {
     tx.insert(feedSnippets).values({

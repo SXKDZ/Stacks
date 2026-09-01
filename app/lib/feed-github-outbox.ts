@@ -1,26 +1,40 @@
 import { and, asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
-import { feedGithubOutbox } from "@/db/schema";
+import { feedGithubOutbox, feedGithubRetiredComments } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
-import { patchIssueState, GitHubError, GitHubSyncDeferred, type GitHubConfig } from "@/app/lib/github-sync";
+import { editComment, patchIssueState, GitHubError, GitHubSyncDeferred, type GitHubConfig } from "@/app/lib/github-sync";
 
 /**
  * A small durable outbox for GitHub actions that must reach the repo even when
- * the app is offline or a sync is mid-flight. Today it carries one op:
- * "close-issue", enqueued when a mirrored feed is deleted (deletion has to reach
- * GitHub, or inbound sync would recreate the feed from its still-open issue).
+ * the app is offline or a sync is mid-flight. Two ops:
+ *
+ *   close-issue  — a mirrored feed was deleted. Deletion has to reach GitHub, or
+ *                  inbound sync recreates the feed from its still-open issue.
+ *   edit-comment — a mirrored proposal was cut out of its thread, so the comment
+ *                  offering it for approval has to stop saying it is pending.
  *
  * Each op records the repo it targets, so switching repos never fires a stale
- * close at the wrong one. The queue is drained on delete, at sync start, and on
+ * write at the wrong one. The queue is drained on delete, at sync start, and on
  * startup; a failed op stays queued (with its error) and is retried next time.
+ *
+ * This module also records RETIRED comments: a comment that was mirrored into a
+ * thread and then cut out of it. The remote comment stays (one the user wrote on
+ * their phone is theirs), but its local message is gone, so the inbound pass would
+ * otherwise read it as new and act on a request the user has removed.
  */
 
 const CLOSE_ISSUE = "close-issue";
+const EDIT_COMMENT = "edit-comment";
+
+/** The repo every queued op targets, or "" when GitHub sync is not configured. */
+async function activeRepo(): Promise<string> {
+  const runtime = await resolveRuntimeValues();
+  return runtimeValue(runtime, "STACKS_GITHUB_REPO");
+}
 
 /** Queue "close this issue" for the active repo. No-op if the repo is unknown. */
 export async function enqueueCloseIssue(issueNumber: number): Promise<void> {
-  const runtime = await resolveRuntimeValues();
-  const repo = runtimeValue(runtime, "STACKS_GITHUB_REPO");
+  const repo = await activeRepo();
   if (!repo) return;
   const database = await ensureDatabase();
   // Collapse duplicates: one pending close per (repo, issue).
@@ -34,6 +48,54 @@ export async function enqueueCloseIssue(issueNumber: number): Promise<void> {
     .insert(feedGithubOutbox)
     .values({ id: `gho-${crypto.randomUUID()}`, repo, op: CLOSE_ISSUE, issueNumber, attempts: 0, createdAt: new Date().toISOString() })
     .run();
+}
+
+/** Queue "rewrite this comment" for the active repo. No-op if the repo is unknown. */
+export async function enqueueEditComment(issueNumber: number, commentId: number, body: string): Promise<void> {
+  const repo = await activeRepo();
+  if (!repo) return;
+  const database = await ensureDatabase();
+  // One pending edit per comment: the newest body wins, so a re-queue replaces.
+  database
+    .delete(feedGithubOutbox)
+    .where(and(eq(feedGithubOutbox.repo, repo), eq(feedGithubOutbox.op, EDIT_COMMENT), eq(feedGithubOutbox.commentId, commentId)))
+    .run();
+  database
+    .insert(feedGithubOutbox)
+    .values({ id: `gho-${crypto.randomUUID()}`, repo, op: EDIT_COMMENT, issueNumber, commentId, body, attempts: 0, createdAt: new Date().toISOString() })
+    .run();
+}
+
+/**
+ * Record comments whose local messages have been removed from a thread, so the
+ * inbound pass never ingests them again. Idempotent: re-retiring is a no-op.
+ */
+export async function retireComments(snippetId: string, commentIds: number[]): Promise<void> {
+  if (!commentIds.length) return;
+  const repo = await activeRepo();
+  if (!repo) return;
+  const database = await ensureDatabase();
+  const now = new Date().toISOString();
+  for (const commentId of commentIds) {
+    database
+      .insert(feedGithubRetiredComments)
+      .values({ repo, commentId, snippetId, createdAt: now })
+      .onConflictDoNothing()
+      .run();
+  }
+}
+
+/** Every retired comment id for one repo, for the inbound pass to skip. */
+export async function retiredCommentIds(repo: string): Promise<Set<number>> {
+  const database = await ensureDatabase();
+  return new Set(
+    database
+      .select({ commentId: feedGithubRetiredComments.commentId })
+      .from(feedGithubRetiredComments)
+      .where(eq(feedGithubRetiredComments.repo, repo))
+      .all()
+      .map((row) => row.commentId),
+  );
 }
 
 /**
@@ -63,6 +125,8 @@ export async function flushGithubOutbox(syncConfig?: GitHubConfig): Promise<void
       try {
         if (item.op === CLOSE_ISSUE) {
           await patchIssueState(config, item.issueNumber, "closed");
+        } else if (item.op === EDIT_COMMENT && item.commentId !== null && item.body !== null) {
+          await editComment(config, item.commentId, item.body);
         }
         // Unknown ops are dropped rather than retried forever.
         database.delete(feedGithubOutbox).where(eq(feedGithubOutbox.id, item.id)).run();

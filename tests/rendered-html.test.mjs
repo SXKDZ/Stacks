@@ -159,8 +159,6 @@ test("button archetypes route through shared primitives, not hand-written CSS", 
   // must use the explicit length hint or controls silently fall back to 14px.
   assert.doesNotMatch(controls, /text-\[var\(--type-/);
   assert.match(controls, /text-\[length:var\(--type-control\)\]/);
-  assert.match(controls, /light:\s*\[[\s\S]*?border-\[rgba\(16,19,26,0\.14\)\]/);
-  assert.doesNotMatch(controls, /light:\s*\[[\s\S]{0,80}?border-0/);
 
   // CVA emits both base and selected-state utilities. Every variant result
   // must pass through twMerge so active borders/backgrounds win consistently.

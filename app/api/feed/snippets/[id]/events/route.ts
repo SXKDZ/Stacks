@@ -74,7 +74,8 @@ export async function GET(
         return;
       }
 
-      controller.enqueue(frame("status", { status: "running" }));
+      // The event is the replay boundary; its body was never read.
+      controller.enqueue(frame("status", {}));
       let closed = false;
       const unsubscribe = subscribeFeed(id, (event) => {
         if (closed) {

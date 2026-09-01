@@ -28,7 +28,10 @@ import { CompactResultSchema, CompactSummaryEntrySchema } from "@/app/lib/schema
  */
 
 type FeedEvent =
-  | { type: "status"; status: string }
+  // Marks the end of the replay for a live run. It carries no payload: both the
+  // emitter and the events route only ever meant "running", and the client reads the
+  // event, not its body.
+  | { type: "status" }
   | { type: "message"; id: string; role: string; kind: string; content: string; toolUseId?: string | null; createdAt: string }
   | { type: "proposal"; id: string; messageId: string | null; operation: string; status: string; summary: string; createdAt: string }
   | { type: "usage"; messageId: string; inputTokens: number; outputTokens: number; durationMs: number }
@@ -125,6 +128,18 @@ export function feedMaxTurnsArgs(value: string | undefined): string[] {
 
 export function isFeedRunning(snippetId: string): boolean {
   return runs.has(snippetId) || launching.has(snippetId);
+}
+
+/**
+ * True while the run slot is held by work that has no process to interrupt: a
+ * compaction copying and summarizing the session.
+ *
+ * stopFeedAndWait can only stop a spawned turn, so a caller that stops and then
+ * deletes messages (a rewind, a retry) has to refuse instead of proceeding, or it
+ * would cut the thread out from under work already in flight.
+ */
+export function isFeedUninterruptible(snippetId: string): boolean {
+  return launching.has(snippetId) && !runs.has(snippetId);
 }
 
 /** Subscribe to live events for a running snippet; returns an unsubscribe fn. */
@@ -454,24 +469,7 @@ export async function compactFeedSession(
   const targetId = `feed-${crypto.randomUUID()}`;
   launching.add(snippetId);
   try {
-    const now = new Date().toISOString();
     const sourceName = source.title || source.instruction || "Untitled";
-    database.insert(feedSnippets).values({
-      id: targetId,
-      title: `Compacted: ${sourceName}`.slice(0, 200),
-      instruction: source.instruction,
-      status: "done",
-      // The copy keeps the session id: ids are scoped to a project directory, and the
-      // two feeds have their own, so nothing collides and no entry has to be rewritten.
-      sessionId,
-      model: source.model,
-      effort: source.effort,
-      historyMode: source.historyMode,
-      compactedFromId: snippetId,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-
     // feedWorkingDir only names the directory; the CLI needs it to exist to run in it.
     const workingDir = feedWorkingDir(targetId);
     mkdirSync(workingDir, { recursive: true });
@@ -508,9 +506,6 @@ export async function compactFeedSession(
 
     const parsed = parseJsonWith(CompactResultSchema, stdout.trim());
     if (code !== 0 || !parsed.ok || parsed.data.is_error) {
-      // The new feed never became usable, so it is removed rather than left as an
-      // empty thread the user has to clean up.
-      database.delete(feedSnippets).where(eq(feedSnippets.id, targetId)).run();
       const detail = (parsed.ok ? parsed.data.result : "") || stderr.trim() || `the CLI exited with code ${code ?? "none"}`;
       return { ok: false, message: `The session could not be compacted: ${detail}` };
     }
@@ -518,20 +513,58 @@ export async function compactFeedSession(
     // enough messages to compact") in the result text.
     const said = parsed.data.result.trim();
     if (said) {
-      database.delete(feedSnippets).where(eq(feedSnippets.id, targetId)).run();
       return { ok: false, message: said };
     }
 
+    // Only now does the feed exist. Created before the CLI ran, a refusal or a failure
+    // left a row to delete again, and a sync landing in that window would have opened
+    // an issue for it that nothing then closed: the inbound pass adopts such an issue
+    // as a feed of its own and runs an agent on it.
+    const now = new Date().toISOString();
+    database.insert(feedSnippets).values({
+      id: targetId,
+      title: `Compacted: ${sourceName}`.slice(0, 200),
+      // No opening turn: the request that started the original thread is inside the
+      // summary, and repeating it as this thread's own first message would read as a
+      // turn the agent never received. The title carries the subject.
+      instruction: "",
+      status: "done",
+      // The copy keeps the session id: ids are scoped to a project directory, and the
+      // two feeds have their own, so nothing collides and no entry has to be rewritten.
+      sessionId,
+      model: source.model,
+      effort: source.effort,
+      historyMode: source.historyMode,
+      compactedFromId: snippetId,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+
     const summary = latestCompactSummary(join(targetProject, `${sessionId}.jsonl`));
+    // Both threads say where the other one is, as a link: the pair is the point of a
+    // compaction, and a title the reader has to go and find is not a link.
+    await persistMessage(
+      targetId,
+      "system",
+      "text",
+      `Compacted from [“${sourceName}”](/feed?snippet=${snippetId})${focus ? `, with a focus on: ${focus}` : ""}.`,
+    );
     if (summary) {
       // The summary is what the new thread starts from, so it reads as the agent's
       // first word in it rather than being buried in the session file.
       await persistMessage(targetId, "assistant", "text", summary);
     }
-    if (focus) {
-      await persistMessage(targetId, "system", "text", `Compacted with a focus on: ${focus}`);
-    }
-    await persistMessage(snippetId, "system", "text", `Compacted into “Compacted: ${sourceName}”.`);
+    await persistMessage(snippetId, "system", "text", `Compacted into [“Compacted: ${sourceName}”](/feed?snippet=${targetId}).`);
+    // Both rows are stamped after their notes, not before. A "done" feed whose newest
+    // message post-dates its own updatedAt is read as output that arrived after the run
+    // finished (effectiveFeedStatus), which is why a successful compaction showed up as
+    // a failed turn in the new thread.
+    const stamped = new Date().toISOString();
+    database.update(feedSnippets).set({ updatedAt: stamped }).where(eq(feedSnippets.id, targetId)).run();
+    // The source is settled now, whatever its last turn did: the compaction is how the
+    // thread ended, and a failed turn is still in it to read. Leaving the row red would
+    // keep calling for a fix that has already been made somewhere else.
+    database.update(feedSnippets).set({ status: "done", error: null, updatedAt: stamped }).where(eq(feedSnippets.id, snippetId)).run();
     return {
       ok: true,
       id: targetId,
@@ -636,7 +669,7 @@ export async function runFeedAgent(options: {
     ];
 
     await setStatus(snippetId, "running");
-    emit(snippetId, { type: "status", status: "running" });
+    emit(snippetId, { type: "status" });
 
     child = spawn(CLAUDE_BIN, args, {
       cwd: workingDir,

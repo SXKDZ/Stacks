@@ -31,7 +31,6 @@ const MAX_TOTAL_AGENTS = 200;
 export interface WorkflowMeta {
   name: string;
   description: string;
-  phases?: Array<{ title: string; detail?: string }>;
 }
 
 /**
@@ -96,7 +95,7 @@ export function readWorkflowMeta(script: string): WorkflowMeta | null {
     ) as string;
     const meta = JSON.parse(encoded) as WorkflowMeta | null;
     if (meta && typeof meta.name === "string" && typeof meta.description === "string") {
-      return { name: meta.name, description: meta.description, phases: Array.isArray(meta.phases) ? meta.phases : undefined };
+      return { name: meta.name, description: meta.description };
     }
     return null;
   } catch {

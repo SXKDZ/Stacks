@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
@@ -24,7 +24,8 @@ import {
 } from "@/app/lib/github-sync";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
 import { markOutcomesReported, unreportedOutcomes } from "@/app/lib/feed-outcomes";
-import { flushGithubOutbox } from "@/app/lib/feed-github-outbox";
+import { flushGithubOutbox, retiredCommentIds } from "@/app/lib/feed-github-outbox";
+import { claimGithubSync, releaseGithubSync } from "@/app/lib/feed-sync-state";
 import { parseJsonWith } from "@/app/lib/schemas/parse";
 import { SnippetAttachmentListSchema } from "@/app/lib/schemas/attachments";
 import { buildFollowUpPrompt, buildForkPrompt, buildSnippetPrompt } from "@/app/lib/feed-prompt";
@@ -32,26 +33,32 @@ import { buildFollowUpPrompt, buildForkPrompt, buildSnippetPrompt } from "@/app/
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// One sync at a time. The route is a long chain of check-then-write GitHub +
-// DB calls; two overlapping runs would each see a feed as unlinked or a comment
-// as un-ingested and duplicate issues, feeds, agents, and messages. A single
-// Node process serves every request, so a module-scope flag is a sufficient
-// mutex (the unique index on feed_snippets.issue_number is the DB backstop).
-let syncInProgress = false;
-
-// Only prose turns are mirrored to GitHub — tool calls and raw proposal blocks
-// are local implementation detail, not something to read on a phone.
-const MIRRORED_KINDS = new Set(["text", "result"]);
+// Prose turns and failures are mirrored to GitHub. Tool calls and raw proposal blocks
+// stay local: they are implementation detail, not something to read on a phone. A
+// failed turn is not detail, and dropping it meant a retry that failed again left the
+// issue showing the question with no answer and no explanation.
+const MIRRORED_KINDS = new Set(["text", "result", "error"]);
 // Cap the size Stacks will push to the repo per attachment (base64 via the
 // Contents API); larger files stay local-only rather than bloating the repo.
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 /** Who said it, for a mirrored comment. Stacks's own thread notes (a model switch,
  *  an approval decision, an interrupted turn) are system rows: labelling them as
- *  the agent read as if it had said them. */
-function mirrorLabel(role: string): string {
+ *  the agent read as if it had said them. A failed turn is labelled as the failure it
+ *  is, so the phone does not read a diagnostic dump as the agent's answer. */
+function mirrorLabel(role: string, kind: string): string {
+  if (kind === "error") return "**Stacks (this turn failed):**";
   if (role === "user") return "**You:**";
   return role === "system" ? "**Stacks:**" : "**Agent:**";
+}
+
+/**
+ * A thread note can link to another feed (`/feed?snippet=…`), which is an in-app URL:
+ * mirrored verbatim it resolves against github.com. The link text is what carries the
+ * meaning, so the mirror keeps that and drops the target.
+ */
+function withoutAppLinks(content: string): string {
+  return content.replace(/\[([^\]]+)\]\(\/[^)]*\)/g, "$1");
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -141,11 +148,13 @@ export async function POST(): Promise<Response> {
   const syncPolicy = createGitHubSyncPolicy();
   const config: GitHubConfig = { repo, token, syncPolicy };
 
-  // Refuse to start while another sync is running (see syncInProgress above).
-  if (syncInProgress) {
+  // One sync at a time. The route is a long chain of check-then-write GitHub + DB
+  // calls; two overlapping runs would each see a feed as unlinked or a comment as
+  // un-ingested and duplicate issues, feeds, agents, and messages. The flag lives in
+  // app/lib/feed-sync-state.ts so a rewind or retry can see a pass in flight too.
+  if (!claimGithubSync()) {
     return Response.json({ error: "A GitHub sync is already running." }, { status: 409 });
   }
-  syncInProgress = true;
 
   const database = await ensureDatabase();
   const counts = { issuesCreated: 0, commentsPosted: 0, feedsCreated: 0, repliesQueued: 0, commentsIngested: 0, commentsUpdated: 0, titlesRenamed: 0, attachmentsUploaded: 0, proposalsPosted: 0, proposalsUpdated: 0, issuesClosed: 0, issuesReopened: 0, feedsUnlinked: 0 };
@@ -182,12 +191,22 @@ export async function POST(): Promise<Response> {
     //     feed) BEFORE reading issues, so a just-deleted feed's issue is already
     //     closed and the inbound pass won't recreate it from an open issue.
     await flushGithubOutbox(config);
+    // Comments whose local messages a rewind or retry removed. They stay on the issue
+    // as a record, so the inbound pass has to be told not to read them as new.
+    const retiredComments = await retiredCommentIds(repo);
 
     // 1. OUTBOUND — ensure an issue per feed, push local renames, mirror
     //    unposted local messages. Runs over all feeds (not the incremental
     //    set), so a purely-local change is never missed.
     const feeds = database.select().from(feedSnippets).all();
-    for (const feed of feeds) {
+    for (const snapshot of feeds) {
+      // Re-read the row: this loop makes network calls, and a rewind, retry or
+      // compaction running meanwhile can move the feed to another issue or unlink it.
+      // Acting on the snapshot posted the surviving thread to the abandoned issue and
+      // stamped its comment ids onto messages, so the replacement issue then missed
+      // that part of the thread for good.
+      const feed = database.select().from(feedSnippets).where(eq(feedSnippets.id, snapshot.id)).get();
+      if (!feed) continue;
       // One feed whose issue was deleted on GitHub must not wedge the whole sync:
       // every outbound call below 404s, and that error used to escape to the route
       // and return 400, so no later feed was ever processed. Unlink the feed
@@ -250,12 +269,19 @@ export async function POST(): Promise<Response> {
             database.update(feedMessages).set({ attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
             continue;
           }
-          const content = message.content.trim();
+          const content = withoutAppLinks(message.content.trim());
           const attachmentLinks = await mirrorAttachments(config, feed.id, message.attachments, counts);
           if (!content && !attachmentLinks) continue;
-          const body = [`${mirrorLabel(message.role)}\n\n${content}`, attachmentLinks].filter(Boolean).join("\n\n");
+          const body = [`${mirrorLabel(message.role, message.kind)}\n\n${content}`, attachmentLinks].filter(Boolean).join("\n\n");
           const commentId = await postComment(config, issueNumber, body);
-          database.update(feedMessages).set({ githubCommentId: commentId, attachmentsSynced: 1 }).where(eq(feedMessages.id, message.id)).run();
+          // Only if the row is still there and still unposted: this loop makes network
+          // calls, and a rewind running meanwhile can have deleted the message or a
+          // parallel path have mirrored it already.
+          database
+            .update(feedMessages)
+            .set({ githubCommentId: commentId, attachmentsSynced: 1 })
+            .where(and(eq(feedMessages.id, message.id), isNull(feedMessages.githubCommentId)))
+            .run();
           counts.commentsPosted += 1;
         }
 
@@ -301,7 +327,17 @@ export async function POST(): Promise<Response> {
      * the issue-level `since` gate: once a missed comment falls behind that
      * cursor, comparing ids is the only way a later manual sync can recover it.
      */
-    const reconcileComments = async (issueNumber: number, feed: typeof feeds[number]): Promise<void> => {
+    const reconcileComments = async (issueNumber: number, snapshot: typeof feeds[number]): Promise<void> => {
+      // Re-read for the same reason the outbound loop does. Ingesting into a feed that
+      // has since moved to another issue would read the whole inbox history as new,
+      // and the reply turn it starts would resume a session a cut just abandoned.
+      const feed = database.select().from(feedSnippets).where(eq(feedSnippets.id, snapshot.id)).get();
+      if (!feed || feed.issueNumber !== issueNumber) {
+        // Not this issue's feed any more: leave the comments for the pass that reads
+        // the issue the feed now owns, and hold the high-water mark back.
+        deferredInbound = true;
+        return;
+      }
       const localByComment = new Map<number, { id: string; content: string; role: string }>();
       for (const message of database.select().from(feedMessages).where(eq(feedMessages.snippetId, feed.id)).all()) {
         if (typeof message.githubCommentId === "number") {
@@ -325,7 +361,10 @@ export async function POST(): Promise<Response> {
         }
       }
 
-      const fresh = comments.filter((comment) => !comment.fromStacks && !localByComment.has(comment.id) && comment.body.trim());
+      const fresh = comments.filter((comment) => !comment.fromStacks
+        && !localByComment.has(comment.id)
+        && !retiredComments.has(comment.id)
+        && comment.body.trim());
       if (!fresh.length) return;
       // Leave new comments unrecorded if the agent is mid-run, so the next sync
       // (when it's free) ingests and acts on them rather than dropping them.
@@ -415,9 +454,15 @@ export async function POST(): Promise<Response> {
 
       if (!feed) {
         // Only OPEN unlinked issues become feeds. A closed unlinked issue is
-        // history — most importantly a deleted feed's issue (closed via the
+        // history: most importantly a deleted feed's issue (closed via the
         // outbox), which must not resurrect the feed it belonged to.
         if (issue.state !== "open") continue;
+        // An issue Stacks opened and no feed claims any more was abandoned here (a
+        // rewind or a retry moved its feed to a fresh issue, or a crash left it
+        // behind). Adopting it would clone the feed it came from and launch an agent
+        // on the clone, so the marker decides authorship rather than the close state
+        // alone: an abandoned issue that was never closed is still not phone-authored.
+        if (issue.fromStacks) continue;
         // A whitespace-only title is truthy, so the "Untitled" fallback never fired
         // and the instruction collapsed to empty: the result was a junk feed that
         // immediately launched an agent with no instruction at all.
@@ -517,6 +562,6 @@ export async function POST(): Promise<Response> {
       retryAfterMs: error instanceof GitHubError && error.retryAfterMs > 0 ? error.retryAfterMs : undefined,
     }, { status });
   } finally {
-    syncInProgress = false;
+    releaseGithubSync();
   }
 }

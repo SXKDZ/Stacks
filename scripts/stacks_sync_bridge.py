@@ -29,9 +29,6 @@ def parse_args():
     parser.add_argument("--local", required=True)
     parser.add_argument("--database", required=True)
     parser.add_argument("--remote", required=True)
-    # Accepted for backward compatibility; this bridge is always a one-way backup.
-    parser.add_argument("--policy", choices=("local",), default="local")
-    parser.add_argument("--auto", action="store_true")
     return parser.parse_args()
 
 

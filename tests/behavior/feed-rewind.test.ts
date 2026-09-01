@@ -61,7 +61,7 @@ async function seedFeed(id: string, options: { issueNumber?: number } = {}): Pro
       role: row.role,
       kind: row.kind,
       content: row.content,
-      githubCommentId: options.issueNumber ? 5000 : null,
+      githubCommentId: options.issueNumber ? 5000 + rows.indexOf(row) : null,
       inputTokens: row.inputTokens,
       outputTokens: row.outputTokens,
       durationMs: row.durationMs,
@@ -83,6 +83,7 @@ async function seedFeed(id: string, options: { issueNumber?: number } = {}): Pro
     messageId: `${id}-a2`,
     operation: JSON.stringify({ entity: "paper", action: "delete", id: "paper-1", summary: "drop the paper" }),
     status: "pending",
+    githubCommentId: options.issueNumber ? 6000 : null,
     createdAt: "2026-08-31T00:00:04.500Z",
   }).run();
 
@@ -189,16 +190,60 @@ test("a retry keeps the turn's own message and removes only what it produced", a
   assert.deepEqual(truncation.kept.map((message) => message.id), ["feed-retry-1-a1", "feed-retry-1-u2"]);
 });
 
-test("a rewind unlinks a feed mirrored to a GitHub issue", async () => {
-  const feed = await seedFeed("feed-rewind-3", { issueNumber: 42 });
+test("a fork leaves a pending proposal behind", async () => {
+  const feed = await seedFeed("feed-fork-1");
+  const { POST } = await import("../../app/api/feed/snippets/[id]/fork/route.ts");
+  const { ensureDatabase } = await import("../../db/bootstrap.ts");
+  const { feedProposals } = await import("../../db/schema.ts");
+  const { eq } = await import("drizzle-orm");
+  const database = await ensureDatabase();
 
-  assert.equal((await rewind("feed-rewind-3", "feed-rewind-3-u2")).status, 200);
+  const forked = await readJson<{ id: string }>(await POST(
+    jsonRequest("http://127.0.0.1/api/feed/snippets/feed-fork-1/fork", {}),
+    context("feed-fork-1"),
+  ));
 
-  const { messages, snippet } = await feed.read();
-  assert.equal(snippet.issueNumber, null);
-  // Otherwise the next sync reads the rewound comments back in as new messages.
-  assert.ok(messages.some((message) => message.role === "system" && /issue #42/.test(message.content)));
-  // What remains has to be mirrored again, into the issue the next sync opens.
-  const kept = messages.find((message) => message.id === "feed-rewind-3-a1");
-  assert.equal((kept as unknown as { githubCommentId: number | null }).githubCommentId, null);
+  assert.equal(forked.status, 200);
+  // The applied one is history worth copying; the pending one is a library change
+  // still awaiting approval, and copied it would be queued twice, offered in two
+  // threads and mirrored under two issues.
+  const copied = database.select().from(feedProposals).where(eq(feedProposals.snippetId, forked.body.id)).all();
+  assert.deepEqual(copied.map((proposal) => proposal.status), ["applied"]);
+  // The source keeps both.
+  assert.equal(database.select().from(feedProposals).where(eq(feedProposals.snippetId, "feed-fork-1")).all().length, 2);
+  void feed;
+});
+
+test("cutting a mirrored thread retires its comments and keeps the issue", async () => {
+  // The outbox and the retired-comment record both key on the configured repo, so
+  // neither fires for a library with no GitHub sync set up.
+  process.env.STACKS_GITHUB_REPO = "SXKDZ/stacks-test";
+  const feed = await seedFeed("feed-rewind-5", { issueNumber: 77 });
+  const { truncateFeedAt } = await import("../../app/lib/feed-truncate.ts");
+  const { ensureDatabase } = await import("../../db/bootstrap.ts");
+  const { feedGithubOutbox, feedGithubRetiredComments, feedSnippets, feedMessages } = await import("../../db/schema.ts");
+  const { eq } = await import("drizzle-orm");
+  const database = await ensureDatabase();
+  const snippet = database.select().from(feedSnippets).where(eq(feedSnippets.id, "feed-rewind-5")).get()!;
+
+  await truncateFeedAt(snippet, "feed-rewind-5-u2", { keepStarter: false });
+
+  // The issue keeps its link: unlinking left an issue no feed claimed, which the next
+  // inbound pass adopted as a feed of its own and ran an agent on.
+  const { snippet: after, messages } = await feed.read();
+  assert.equal(after.issueNumber, 77);
+  // The removed messages' comments stay on the issue as a record, but are retired so
+  // the inbound pass never reads them as new.
+  const retired = database.select().from(feedGithubRetiredComments).all();
+  assert.deepEqual(retired.map((row) => row.commentId).sort(), [5001, 5002, 5003]);
+  // What survived keeps its comment id, so nothing is mirrored a second time.
+  const kept = messages.find((message) => message.id === "feed-rewind-5-a1");
+  assert.equal((kept as unknown as { githubCommentId: number | null }).githubCommentId, 5000);
+  // The dropped proposal's comment stops offering a change nobody can approve.
+  const queued = database.select().from(feedGithubOutbox).where(eq(feedGithubOutbox.op, "edit-comment")).all();
+  assert.equal(queued.length, 1);
+  assert.match(String(queued[0].body), /Removed from the thread/);
+  assert.ok(messages.some((message) => message.role === "system" && /no longer read/.test(message.content)));
+  void feedMessages;
+  delete process.env.STACKS_GITHUB_REPO;
 });
