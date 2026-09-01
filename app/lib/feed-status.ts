@@ -9,14 +9,23 @@ const STALE_COMPLETION_ERROR =
 const LOST_RUN_ERROR =
   "The agent process is no longer running. Send a follow-up message to continue.";
 
+/** Roles an agent run writes. Everything else in a thread is written by the app (a
+ *  system note) or by the user, and says nothing about whether a run is loose. */
+export const AGENT_MESSAGE_ROLES = ["assistant", "tool"];
+
 /**
  * Resolve the status shown after polling or reconnecting.
  *
- * A terminal timestamp must be at least as new as every persisted message. If
- * output is newer, an overlapping/orphaned run continued after another run set
+ * A terminal timestamp must be at least as new as every message an agent run wrote. If
+ * such output is newer, an overlapping/orphaned run continued after another run set
  * Done, so presenting that row as completed is misleading. Likewise, a stored
- * running/queued state without a live process is an interrupted run after a
- * server restart, not active work.
+ * running/queued state without a live process is an interrupted run after a server
+ * restart, not active work.
+ *
+ * `latestMessageAt` must therefore cover ONLY the roles in AGENT_MESSAGE_ROLES.
+ * Approving a proposal writes a system note into the thread, and counting that made
+ * every feed report a failed turn from the moment of the decision until its next turn
+ * ended.
  */
 export function effectiveFeedStatus<T extends FeedStatusSnapshot>(
   snippet: T,

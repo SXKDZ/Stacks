@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { isFeedRunning, subscribeFeed } from "@/app/lib/feed-agent";
-import { effectiveFeedStatus } from "@/app/lib/feed-status";
+import { AGENT_MESSAGE_ROLES, effectiveFeedStatus } from "@/app/lib/feed-status";
 import { storedProposalSummary } from "@/app/lib/schemas/proposals";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,10 @@ export async function GET(
     .orderBy(asc(feedMessages.createdAt))
     .all();
   const running = isFeedRunning(id);
-  const effectiveSnippet = effectiveFeedStatus(snippet, messages.at(-1)?.createdAt, running);
+  // The newest AGENT-written row, not the newest row: a system note (an approval
+  // decision, a model switch) is not output from a run that outlived its turn.
+  const latestAgentMessageAt = messages.filter((message) => AGENT_MESSAGE_ROLES.includes(message.role)).at(-1)?.createdAt;
+  const effectiveSnippet = effectiveFeedStatus(snippet, latestAgentMessageAt, running);
   const proposals = database
     .select()
     .from(feedProposals)
