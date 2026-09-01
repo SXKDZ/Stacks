@@ -11,6 +11,7 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- Section subheadings, field captions, tooltips, toasts, and empty states across Settings, the library, and the feed were cut back to what the reader cannot see for themselves. Captions that only restated their own heading or the button beside them are gone.
 - The history a fresh session is seeded with is bounded: the most recent turns are carried and what was dropped is stated. A long thread used to be sent whole, and a prompt that large is refused outright.
 
 ### Fixed

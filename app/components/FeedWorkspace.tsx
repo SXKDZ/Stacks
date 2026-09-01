@@ -305,7 +305,7 @@ function syncDiagnosticText(entry: SyncLogEntry): string {
   if (entry.details) return entry.details;
   const legacyNote = entry.summary.startsWith("GitHub API ")
     ? "This entry was captured by an older Stacks version, which truncated GitHub's response before saving it. Run sync again to capture complete diagnostics."
-    : "No additional diagnostic information was returned.";
+    : "No additional diagnostics were returned.";
   return `${entry.summary}\n\n${legacyNote}`;
 }
 
@@ -327,7 +327,7 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
             </div>
           </header>
           <div className="background-task-list">
-            {!log.length ? <p className="activity-log-empty">GitHub inbox syncs will be logged here.</p> : log.map((entry) => (
+            {!log.length ? <p className="activity-log-empty">No syncs yet.</p> : log.map((entry) => (
               <div className={`background-task-row is-${entry.status === "success" ? "complete" : entry.status === "paused" ? "running" : "error"}`} key={entry.id}>
                 {entry.status === "success" ? <CircleCheck size={16} /> : entry.status === "paused" ? <CircleDot size={16} /> : <CircleAlert size={16} />}
                 <span>
@@ -1017,7 +1017,7 @@ function FeedHistorySelectionModal({
           <div>
             <span className="feed-history-modal-kicker">{feedName}</span>
             <h2 id="feed-history-title">Select history</h2>
-            <p id="feed-history-description">Choose user requests for a new feed. Each request includes the agent response and work that followed it.</p>
+            <p id="feed-history-description">Requests you pick carry their response and the work that followed into a new feed.</p>
           </div>
           <ActionButton variant="ghost" size="icon" onClick={onClose} disabled={creating} aria-label="Close" icon={<X />} />
         </header>
@@ -1133,7 +1133,7 @@ function FeedHistorySelectionModal({
         <footer className="feed-history-modal-foot">
           <div className="feed-history-selection-copy" aria-live="polite">
             <strong>{selected.size} request{selected.size === 1 ? "" : "s"} selected</strong>
-            <span>Kept in their original chronological order.</span>
+            <span>In chronological order.</span>
           </div>
           <label className="feed-history-tool-toggle">
             <input type="checkbox" checked={includeToolDetails} onChange={(event) => onIncludeToolDetails(event.target.checked)} />
@@ -1676,7 +1676,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
    */
   async function retryTurn(interactionId: string) {
     const later = interactions.length - interactionsBefore(interactions, interactionId).length - 1;
-    if (later > 0 && !window.confirm(`Ask this turn again? Stacks removes its answer and the ${later} turn${later === 1 ? "" : "s"} after it, then runs it again. This cannot be undone.`)) {
+    if (later > 0 && !window.confirm(`Ask this turn again? Its answer and the ${later} turn${later === 1 ? "" : "s"} after it are removed. This cannot be undone.`)) {
       return;
     }
     setBusyTurnId(interactionId);
@@ -2155,7 +2155,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           initialEffort={snippet.effort ?? ""}
           defaultModelLabel={defaultModelLabel}
           defaultEffortLabel={defaultEffort}
-          placeholder={running ? "Message the agent…" : "Reply to continue this thread."}
+          placeholder={running ? "Message the agent…" : "Reply to the agent…"}
           submitLabel={running ? "Interrupt & send" : "Reply"}
           submitting={replying}
           compact
@@ -2390,7 +2390,7 @@ export default function FeedWorkspace() {
       await loadSnippets();
     } catch (error) {
       const details = error instanceof Error ? error.message : "No diagnostic information was returned.";
-      const summary = "Unable to reach the GitHub sync service. Check your connection and try again.";
+      const summary = "Unable to reach the GitHub sync service.";
       setSyncAlert({ summary, details });
       recordSync("error", summary, details);
     } finally {
@@ -2687,7 +2687,7 @@ export default function FeedWorkspace() {
         ) : null}
         <div className="feed-list" role="list">
           {snippets.length === 0 ? (
-            <p className="feed-list-empty">Nothing captured yet. Start a new feed.</p>
+            <p className="feed-list-empty">No feeds yet.</p>
           ) : filteredSnippets.length === 0 ? (
             <p className="feed-list-empty">No feeds match “{query}”.</p>
           ) : (
@@ -2812,7 +2812,7 @@ export default function FeedWorkspace() {
               models={models}
               defaultModelLabel={defaultModelLabel}
               defaultEffortLabel={defaultEffort}
-              placeholder="Capture anything. A link or a note, and what to do with it."
+              placeholder="A link or a note, and what to do with it."
               submitLabel="Add to feed"
               submitting={submitting}
               autoFocus

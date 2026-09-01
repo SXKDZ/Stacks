@@ -121,7 +121,7 @@ export async function truncateFeedAt(
         snippetId: snippet.id,
         role: "system",
         kind: "text",
-        content: `Removed messages already mirrored to GitHub issue #${snippet.issueNumber}; the next sync opens a fresh issue for this thread.`,
+        content: `Removed messages mirrored to GitHub issue #${snippet.issueNumber}; the next sync opens a fresh issue.`,
         createdAt: now,
       }).run();
     }

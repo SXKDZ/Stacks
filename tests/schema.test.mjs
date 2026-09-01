@@ -1319,7 +1319,7 @@ test("a summary says what it was written from, and quotes read as one shape", as
   assert.match(application, /log\.step\(groundingNote\(payload\.grounding\)\)/);
   assert.match(application, /log\.step\(groundingNote\(generated\.grounding\)\)/);
   assert.match(application, /summarySavedMessage\(payload\.grounding\)/);
-  assert.match(application, /written from the record's metadata/);
+  assert.match(application, /Summary saved from metadata only/);
 
   // The field the extractor kept filling with invented topic labels is the source's
   // own subject class, which is what the BibTeX export writes as eprintclass.
@@ -1595,7 +1595,9 @@ test("the feed composer reads as one control, with a visible placeholder", async
   assert.match(attachBox, /\{hint \? <span className="feed-dock-hint">\{hint\}<\/span> : null\}/);
   assert.match(styles, /\.feed-dock-hint \{[^}]*font-size: var\(--type-caption\)/);
   assert.equal([...feed.matchAll(/hint=\{<><kbd>⌥↵<\/kbd> newline<\/>\}/g)].length, 2);
-  assert.match(attachBox, /: "Enter sends, Option Enter starts a newline"/);
+  // The row itself carries the newline reminder and the ↵ badge, so the submit
+  // button repeats neither in a tooltip.
+  assert.match(attachBox, /\{hint \? <span className="feed-dock-hint">\{hint\}<\/span> : null\}/);
 
   // The composer is resizable by pointer and keyboard, and the grip fades in with
   // the composer instead of waiting for the pointer to find a pill on its edge.

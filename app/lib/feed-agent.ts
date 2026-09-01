@@ -531,7 +531,7 @@ export async function compactFeedSession(
     if (focus) {
       await persistMessage(targetId, "system", "text", `Compacted with a focus on: ${focus}`);
     }
-    await persistMessage(snippetId, "system", "text", `Compacted into “Compacted: ${sourceName}”. This thread stays as it is.`);
+    await persistMessage(snippetId, "system", "text", `Compacted into “Compacted: ${sourceName}”.`);
     return {
       ok: true,
       id: targetId,

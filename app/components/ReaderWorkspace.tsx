@@ -260,7 +260,7 @@ export default function ReaderWorkspace() {
         <div
           className="reader-sidebar-resize"
           role="separator"
-          aria-label="Resize paper information sidebar"
+          aria-label="Resize sidebar"
           aria-orientation="vertical"
           aria-valuemin={READER_SIDEBAR_MIN}
           aria-valuemax={READER_SIDEBAR_MAX}
@@ -296,7 +296,7 @@ export default function ReaderWorkspace() {
               placeholder="Add a note…"
             />
           </section>
-          <ActionButton variant="primary" className="mt-5 w-full" onClick={() => window.open(`/feed?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer")} icon={<Sparkles />}>Discuss this paper in the feed</ActionButton>
+          <ActionButton variant="primary" className="mt-5 w-full" onClick={() => window.open(`/feed?paper=${encodeURIComponent(paper.id)}`, "_blank", "noopener,noreferrer")} icon={<Sparkles />}>Discuss in feed</ActionButton>
         </aside>
       </div>
     </main>

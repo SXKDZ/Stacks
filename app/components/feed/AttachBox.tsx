@@ -606,7 +606,7 @@ export function AttachBox({
               variant="primary"
               size={compact ? "small" : undefined}
               disabled={!canSubmit || runningCommand}
-              title={invocation ? `Run /${invocation.command.name}` : "Enter sends, Option Enter starts a newline"}
+              title={invocation ? `Run /${invocation.command.name}` : undefined}
               icon={submitting || runningCommand
                 ? <LoaderCircle className="spin" size={15} />
                 : invocation ? <FoldVertical size={15} /> : <Send size={15} />}

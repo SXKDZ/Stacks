@@ -69,7 +69,7 @@ export async function POST(
         snippetId: id,
         role: "system",
         kind: "text",
-        content: "Stopped this turn to send the next message; its request carries into the next turn.",
+        content: "Stopped this turn to send the next message; its request carries over.",
         createdAt: new Date().toISOString(),
       })
       .run();

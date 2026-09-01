@@ -334,7 +334,7 @@ export async function runWorkflow(options: { snippetId: string; script: string; 
   try {
     await vm.runInContext(wrapped, context, { timeout: 30 * 60 * 1000 });
     await setStatus(snippetId, "done");
-    await postSystem(snippetId, "Workflow finished. Review any proposed changes above.");
+    await postSystem(snippetId, "Workflow finished.");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await postSystem(snippetId, `Workflow error: ${message}`);

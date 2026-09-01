@@ -312,7 +312,7 @@ function syncStatusDetail(settings: SettingsSnapshot): string {
   if (!settings.sync.remotePath.trim()) return "No backup folder set yet";
   return settings.sync.autoSync
     ? `Backs up to your OneDrive folder ${settings.sync.autoSyncInterval}s after each change`
-    : "Auto-backup is off; use Back up now to copy your library";
+    : "Auto-backup is off";
 }
 
 function byteLabel(bytes: number): string {
@@ -675,7 +675,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
       return false;
     }
     const summary = `${storageReport.orphanedFiles} unlinked file${storageReport.orphanedFiles === 1 ? "" : "s"} (${byteLabel(storageReport.orphanedBytes)})`;
-    if (!window.confirm(`Remove ${summary} from the active Stacks library? Referenced files will not be touched.`)) {
+    if (!window.confirm(`Remove ${summary} from the Stacks library?`)) {
       return false;
     }
     if (!window.confirm(`Final confirmation: permanently delete ${summary}? This cannot be undone.`)) {
@@ -704,7 +704,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
   }
 
   async function repairStorage() {
-    const description = "remove orphaned association rows, delete authors, venues, and collections left with no papers, and delete unlinked files from the managed pdfs/ and html_snapshots/ folders";
+    const description = "remove orphaned association rows, authors, venues, and collections with no papers, and unlinked files in pdfs/ and html_snapshots/";
     if (!window.confirm(`Repair Stacks now? Doctor will ${description}. Missing or ambiguous files will be left unchanged.`)) {
       return;
     }
@@ -772,7 +772,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
     if (!window.confirm(`Move the complete Stacks library from ${sourcePath} to ${targetPath}?`)) {
       return;
     }
-    if (!window.confirm("Final confirmation: copy Stacks’s managed PDFs and HTML snapshots to the new location, switch local file storage to it, and remove the old managed-file folder?")) {
+    if (!window.confirm("Final confirmation: copy the library to the new folder and delete the old folder?")) {
       return;
     }
     setMovingStorage(true);
@@ -886,11 +886,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "appearance" ? (
           <section>
-            <SettingsHeading icon={<Palette size={19} />} title="Appearance" detail="Name and theme for this browser." />
+            <SettingsHeading icon={<Palette size={19} />} title="Appearance" />
             <div className="settings-card">
               <div className="settings-form-grid">
                 <label className="span-2"><span>Library name</span><input value={libraryName} maxLength={60} onChange={(event) => onLibraryNameChange(event.target.value)} placeholder="My Paper Library" /></label>
-                <div className="theme-choice-field span-2"><span>Color theme</span><div className="theme-choice-grid"><SelectCard selected={theme === "dark"} onClick={() => onThemeChange("dark")} icon={<Moon />} title="Dark" description="Low-glare research workspace" trailing={theme === "dark" ? <Check /> : null} /><SelectCard selected={theme === "light"} onClick={() => onThemeChange("light")} icon={<Sun />} title="Light" description="Bright, paper-like workspace" trailing={theme === "light" ? <Check /> : null} /></div><small>Appearance is saved automatically in this browser.</small></div>
+                <div className="theme-choice-field span-2"><span>Color theme</span><div className="theme-choice-grid"><SelectCard selected={theme === "dark"} onClick={() => onThemeChange("dark")} icon={<Moon />} title="Dark" description="Low-glare research workspace" trailing={theme === "dark" ? <Check /> : null} /><SelectCard selected={theme === "light"} onClick={() => onThemeChange("light")} icon={<Sun />} title="Light" description="Bright, paper-like workspace" trailing={theme === "light" ? <Check /> : null} /></div></div>
               </div>
             </div>
           </section>
@@ -902,19 +902,19 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card">
               <div className="settings-card-title"><span><Cloud size={16} /></span><div><strong>Amazon Bedrock</strong><small>Connected with an API key</small></div><i className="connected-pill"><Check size={11} /> Active</i></div>
               <div className="settings-form-grid">
-                <label className="span-2"><span>Model</span><Select value={knownModel ? settings.ai.modelId : "custom"} onChange={(next) => updateAi("modelId", next === "custom" ? "" : next)} ariaLabel="Model" options={[...modelOptions.map((model) => ({ value: model.id, label: model.label })), { value: "custom", label: "Custom Bedrock model ID…" }]} /><small>{models.length ? `${models.length} Bedrock models loaded from Runtime and Mantle.` : "Using the built-in model list while the Bedrock catalogs load."} GPT-5.6 uses the Responses API. The agent feed remains Claude-only because Claude Code powers it.</small></label>
+                <label className="span-2"><span>Model</span><Select value={knownModel ? settings.ai.modelId : "custom"} onChange={(next) => updateAi("modelId", next === "custom" ? "" : next)} ariaLabel="Model" options={[...modelOptions.map((model) => ({ value: model.id, label: model.label })), { value: "custom", label: "Custom Bedrock model ID…" }]} /><small>{models.length ? `${models.length} Bedrock models loaded from Runtime and Mantle.` : "Using the built-in model list while the Bedrock catalogs load."} The agent feed is Claude-only.</small></label>
                 {!knownModel ? <label className="span-2"><span>Custom model ID</span><input value={settings.ai.modelId} onChange={(event) => updateAi("modelId", event.target.value)} placeholder="openai.gpt-5.6-terra or us.provider.model-id" required /></label> : null}
                 <div className={`model-access-row span-2 ${visibleModelAccess ? visibleModelAccess.available ? "is-available" : "is-unavailable" : ""}`}>
                   <span id={visibleModelAccess ? "model-access-detail" : undefined}>
                     {visibleModelAccess ? visibleModelAccess.available ? <CircleCheck size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" /> : null}
-                    {visibleModelAccess ? visibleModelAccess.message : "A model can appear here before your key can use it. Select Test access to verify."}
+                    {visibleModelAccess ? visibleModelAccess.message : "A model can be listed before your key can use it."}
                   </span>
                   <ActionButton variant="secondary" size="small" onClick={() => void loadModels(true)} disabled={loadingModels} icon={loadingModels ? <LoaderCircle className="spin" /> : <RefreshCw />}>Refresh models</ActionButton>
                   <ActionButton aria-describedby={visibleModelAccess ? "model-access-detail" : undefined} variant="secondary" size="small" onClick={() => void testModelAccess()} disabled={testingModel || !settings.ai.modelId.trim()} icon={testingModel ? <LoaderCircle className="spin" /> : <Check />}>Test access</ActionButton>
                 </div>
                 <label><span>AWS region</span><Select value={settings.ai.region} onChange={(next) => updateAi("region", next)} ariaLabel="AWS region" options={[{ value: "us-east-1", label: "US East (N. Virginia) · us-east-1" }, { value: "us-east-2", label: "US East (Ohio) · us-east-2" }, { value: "us-west-2", label: "US West (Oregon) · us-west-2" }, { value: "eu-west-1", label: "Europe (Ireland) · eu-west-1" }, { value: "eu-central-1", label: "Europe (Frankfurt) · eu-central-1" }, { value: "ap-northeast-1", label: "Asia Pacific (Tokyo) · ap-northeast-1" }, { value: "ap-southeast-1", label: "Asia Pacific (Singapore) · ap-southeast-1" }, { value: "ap-southeast-2", label: "Asia Pacific (Sydney) · ap-southeast-2" }]} /></label>
                 <label><span>Maximum output tokens</span><input type="number" min="128" step="1" value={settings.ai.maxTokens} onChange={(event) => updateAi("maxTokens", Number(event.target.value))} /><small>The model’s own limit still applies.</small></label>
-                <label><span>Reasoning effort</span><Select value={settings.ai.effort} onChange={(next) => updateAi("effort", next)} ariaLabel="Reasoning effort" options={[{ value: "", label: "Let the model decide" }, ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]} /><small>How much the model thinks before answering. Left unset, Stacks sends no effort and the model chooses per request. Applies to summaries, PDF extraction, and new feeds, which can each override it. Older models reject the setting.</small></label>
+                <label><span>Reasoning effort</span><Select value={settings.ai.effort} onChange={(next) => updateAi("effort", next)} ariaLabel="Reasoning effort" options={[{ value: "", label: "Let the model decide" }, ...EFFORT_LEVELS.map((level) => ({ value: level, label: effortLabel(level) }))]} /><small>Left unset, Stacks sends no effort and the model chooses per request. Applies to summaries, PDF extraction, and feeds; each feed can override it. Older models reject it.</small></label>
                 <label><span>Maximum agent turns</span><input type="number" min="0" step="1" value={settings.ai.feedMaxTurns} onChange={(event) => updateAi("feedMaxTurns", Number(event.target.value))} aria-describedby="feed-max-turns-help" /><small id="feed-max-turns-help">Applies to each AI feed run. Use 0 for unlimited. Higher limits can increase runtime and cost.</small></label>
                 {/* A switch rather than a model list: newer models reject `temperature`
                     outright, and which ones cannot be told from the model id. */}
@@ -952,7 +952,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
 
         {!loading && tab === "workflows" ? (
           <section>
-            <SettingsHeading icon={<Waypoints size={19} />} title="Feed workflows" detail="Save Claude Code workflow scripts and run them against your library. Every change a workflow proposes is approved in the feed, just like a normal agent." />
+            <SettingsHeading icon={<Waypoints size={19} />} title="Feed workflows" detail="Scripts that run agents over your library. You approve every change they propose in the feed." />
             <FeedWorkflowsEditor notify={notify} />
           </section>
         ) : null}
@@ -983,7 +983,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             <div className="settings-card storage-doctor-card">
               <div className="storage-doctor-heading">
                 <span className="storage-doctor-icon"><ScanSearch size={18} /></span>
-                <div><strong>Library Doctor</strong><small>Checks database records against PDFs, HTML snapshots, invalid paths, and unlinked Stacks-managed assets.</small></div>
+                <div><strong>Library Doctor</strong><small>Checks database records against the files on disk.</small></div>
                 <ActionButton variant="secondary" onClick={() => void inspectStorage(true)} disabled={checkingStorage} icon={checkingStorage ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}>Check now</ActionButton>
               </div>
               {storageReport ? (
@@ -1006,17 +1006,17 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                           <DoctorMetric icon={<DatabaseBackup size={17} />} label="Library database" value={h ? h.integrityOk && !h.foreignKeyViolations ? "Healthy" : "Needs attention" : storageReport.databasePresent ? "Available" : "Missing"} detail={`${storageReport.paperRecords} papers · ${h?.foreignKeyViolations ?? 0} FK violations`} tone={h ? h.integrityOk && !h.foreignKeyViolations ? "good" : "bad" : storageReport.databasePresent ? "good" : "bad"} onClick={() => setDoctorModal({ label: "Library database", detail: `SQLite integrity check: ${h?.integrityOk ? "OK" : "problems found"}. ${h?.foreignKeyViolations ?? 0} foreign-key violations across ${storageReport.paperRecords} papers.${h?.integrityMessages?.length ? ` Messages: ${h.integrityMessages.join("; ")}.` : ""}` })} />
                           <DoctorMetric icon={<DatabaseBackup size={17} />} label="Associations" value={`${assoc} orphaned`} detail={h?.foreignKeyEnforced ? "Foreign keys are enforced" : "Foreign-key enforcement unavailable"} tone={h && (h.foreignKeyViolations || Object.values(h.orphanedAssociations).some(Boolean)) ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Associations", detail: h ? `Dangling link rows whose paper or target no longer exists: ${h.orphanedAssociations.paperAuthors} author links, ${h.orphanedAssociations.paperCollections} collection links. Repair library removes these.` : "No database health data." })} />
                           {entities ? (
-                            <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${orphanTotal} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={orphanTotal ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Orphaned records", detail: "Authors, venues, and collections with no papers. Removing them deletes only these empty records; no paper is affected.", records: orphanList, repair: "orphaned-records" })} />
+                            <DoctorMetric icon={<Users size={17} />} label="Orphaned records" value={`${orphanTotal} orphaned`} detail={`${entities.authors} authors · ${entities.venues} venues · ${entities.collections} collections with no papers`} tone={orphanTotal ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Orphaned records", detail: "Authors, venues, and collections with no papers. Removing them deletes only these empty records.", records: orphanList, repair: "orphaned-records" })} />
                           ) : null}
                           <DoctorMetric icon={<HardDrive size={17} />} label="PDFs" value={`${storageReport.presentPdfFiles}/${storageReport.referencedPdfFiles} linked`} detail={`${storageReport.missingPdfFiles} missing · ${storageReport.storedPdfFiles} physical files · ${byteLabel(storageReport.storedPdfBytes)}`} tone={storageReport.missingPdfFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "PDFs", detail: `${storageReport.presentPdfFiles} of ${storageReport.referencedPdfFiles} referenced PDFs are present on disk (${storageReport.missingPdfFiles} missing). ${storageReport.storedPdfFiles} physical files total, ${byteLabel(storageReport.storedPdfBytes)}.`, paths: storageReport.missingPdfPaths })} />
                           <DoctorMetric icon={<HardDrive size={17} />} label="HTML snapshots" value={`${storageReport.presentHtmlFiles}/${storageReport.referencedHtmlFiles} linked`} detail={`${storageReport.missingHtmlFiles} missing · ${storageReport.storedHtmlFiles} physical files · ${byteLabel(storageReport.storedHtmlBytes)}`} tone={storageReport.missingHtmlFiles ? "bad" : "good"} onClick={() => setDoctorModal({ label: "HTML snapshots", detail: `${storageReport.presentHtmlFiles} of ${storageReport.referencedHtmlFiles} referenced snapshots are present on disk (${storageReport.missingHtmlFiles} missing). ${storageReport.storedHtmlFiles} physical files total, ${byteLabel(storageReport.storedHtmlBytes)}.`, paths: storageReport.missingHtmlPaths })} />
-                          <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} ${storageReport.papersWithoutLocalAsset === 1 ? "paper" : "papers"}`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Papers without a local source", detail: `${storageReport.papersWithoutLocalAsset} paper${storageReport.papersWithoutLocalAsset === 1 ? " has" : "s have"} neither a local PDF nor an HTML snapshot. Review every affected record below, then edit its source information or attach a file.`, paperIds: storageReport.paperIdsWithoutLocalAsset })} />
+                          <DoctorMetric icon={<FileWarning size={17} />} label="No local source" value={`${storageReport.papersWithoutLocalAsset} ${storageReport.papersWithoutLocalAsset === 1 ? "paper" : "papers"}`} detail="Neither a readable PDF nor HTML snapshot was found" tone={storageReport.papersWithoutLocalAsset ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Papers without a local source", detail: `${storageReport.papersWithoutLocalAsset} paper${storageReport.papersWithoutLocalAsset === 1 ? " has" : "s have"} neither a local PDF nor an HTML snapshot.`, paperIds: storageReport.paperIdsWithoutLocalAsset })} />
                           <DoctorMetric icon={<FileWarning size={17} />} label="Invalid references" value={`${storageReport.invalidReferences} paths`} detail="File paths saved in a form Stacks can’t use" tone={storageReport.invalidReferences ? "bad" : "good"} onClick={() => setDoctorModal({ label: "Invalid references", detail: "Stored file paths that are absolute or otherwise break Stacks’s portable-path rules. Repair library rewrites these to portable names.", paths: [...storageReport.invalidPdfPaths, ...storageReport.invalidHtmlPaths] })} />
                           <DoctorMetric icon={<Trash2 size={17} />} label="Unlinked assets" value={`${storageReport.orphanedFiles} ${storageReport.orphanedFiles === 1 ? "file" : "files"}`} detail={`${byteLabel(storageReport.orphanedBytes)} reclaimable · ${byteLabel(storageReport.totalBytes)} managed total`} tone={storageReport.orphanedFiles ? "warn" : "good"} onClick={() => setDoctorModal({ label: "Unlinked assets", detail: `${storageReport.orphanedFiles} file${storageReport.orphanedFiles === 1 ? "" : "s"} in the managed pdfs/ and html_snapshots/ folders are not referenced by any paper (${byteLabel(storageReport.orphanedBytes)} reclaimable of ${byteLabel(storageReport.totalBytes)} managed).`, records: (storageReport.orphanedNames ?? []).map((file) => ({ id: file.name, kind: file.kind.toUpperCase(), label: file.name })), repair: "unlinked-files" })} />
                           {storageReport.systemHealth ? (
                             <>
                               <DoctorMetric icon={<Cpu size={17} />} label="Runtime" value={storageReport.systemHealth.runtime} detail={storageReport.systemHealth.platform ?? "Local server"} tone="good" onClick={() => setDoctorModal({ label: "Runtime", detail: `${storageReport.systemHealth!.runtime} on ${storageReport.systemHealth!.platform ?? "this machine"}.${storageReport.systemHealth!.freeBytes ? ` ${byteLabel(storageReport.systemHealth!.freeBytes)} free on the library volume.` : ""}` })} />
-                              <DoctorMetric icon={<DatabaseBackup size={17} />} label="Database engine" value={storageReport.systemHealth.database} detail="All data stays on this computer" tone="good" onClick={() => setDoctorModal({ label: "Database engine", detail: `${storageReport.systemHealth!.database}. Stacks stores everything in a single local SQLite file (library.db) inside the library folder; there is no external database server.` })} />
+                              <DoctorMetric icon={<DatabaseBackup size={17} />} label="Database engine" value={storageReport.systemHealth.database} detail="All data stays on this computer" tone="good" onClick={() => setDoctorModal({ label: "Database engine", detail: `${storageReport.systemHealth!.database}. Your records live in one local SQLite file (library.db) in the library folder.` })} />
                               <DoctorMetric icon={<Bot size={17} />} label="Claude CLI (AI feed)" value={storageReport.systemHealth.claudeCli ?? "Not found"} detail={storageReport.systemHealth.claudeCli ? "Ready for the AI feed" : "Install the claude CLI to use the AI feed"} tone={storageReport.systemHealth.claudeCli ? "good" : "warn"} onClick={() => setDoctorModal({ label: "Claude CLI (AI feed)", detail: storageReport.systemHealth!.claudeCli ? `The claude CLI (${storageReport.systemHealth!.claudeCli}) is on PATH, so the AI feed can drive headless agents.` : "The claude CLI was not found on PATH. Install it (npm i -g @anthropic-ai/claude-code) so the AI feed can run headless agents." })} />
                             </>
                           ) : null}
@@ -1025,7 +1025,7 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
                     })()}
                   </div>
                   <div className="storage-doctor-actions">
-                    <p>Cleanup deletes only files no paper uses. It asks twice and never removes files still in use.</p>
+                    <p>Cleanup deletes only files no paper uses. Asks twice first.</p>
                     <div className="storage-doctor-action-buttons">
                       <ActionButton variant="secondary" onClick={() => void repairStorage()} disabled={repairingStorage} icon={repairingStorage ? <LoaderCircle className="spin" size={15} /> : <Wrench size={15} />}>Repair library</ActionButton>
                       <ActionButton variant="danger" onClick={() => void cleanStorage()} disabled={cleaningStorage || !storageReport.orphanedFiles} icon={cleaningStorage ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}>Clean unlinked assets</ActionButton>
@@ -1047,11 +1047,11 @@ export function SettingsView({ notify, theme, onThemeChange, libraryName, onLibr
             </div>
             <div className="settings-card">
               <div className="settings-form-grid">
-                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>Stacks backs up your database, PDFs, and saved web pages here, creating the folder if needed. It only adds files, never deletes them. Pick a folder outside your library.</small></label>
+                <label className="span-2"><span>OneDrive backup folder</span><div className="path-picker-control"><input list="onedrive-paths" value={settings.sync.remotePath} onChange={(event) => updateSync("remotePath", event.target.value)} placeholder="~/Library/CloudStorage/OneDrive-…/Stacks-Backup" /><ActionButton variant="secondary" onClick={() => void chooseDirectory()} disabled={selectingDirectory} icon={selectingDirectory ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}>Choose</ActionButton></div><datalist id="onedrive-paths">{settings.sync.detectedPaths.map((path) => <option value={`${path}/Stacks-Backup`} key={path} />)}</datalist><small>Created if needed. Stacks only adds files here, never deletes them. Keep it outside your library.</small></label>
                 <label><span>Auto-back up delay</span><div className="unit-input"><input disabled={!settings.sync.autoSync} type="number" min="5" max="3600" value={settings.sync.autoSyncInterval} onChange={(event) => updateSync("autoSyncInterval", Number(event.target.value))} /><i>seconds</i></div></label>
               </div>
               <label className="settings-toggle"><input type="checkbox" checked={settings.sync.autoSync} onChange={(event) => updateSync("autoSync", event.target.checked)} /><span /><div><strong>Auto-back up after live Stacks changes</strong></div></label>
-              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>Your library on this computer is the real one.</strong> Backups copy it to OneDrive, but nothing is ever copied back. To restore, you copy the files back yourself.</p></div>
+              <div className="sync-caution"><ShieldCheck size={16} /><p><strong>Your library on this computer is the real one.</strong> Nothing is ever copied back; to restore, copy the files yourself.</p></div>
             </div>
             <SettingsFooter saving={saving} onRefresh={() => void loadSettings()} />
           </form>
@@ -1227,7 +1227,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
         <span><Github size={16} /></span>
         <div>
           <strong>GitHub inbox sync</strong>
-          <small>Mirror feeds to a private repo’s issues so you can read and reply from any device. One issue per feed; the agent posts and reads comments.</small>
+          <small>Mirror each feed to an issue in a private repo so you can read and reply from any device.</small>
         </div>
         <span className={`connected-pill ${connected ? "" : "is-off"}`}>{connected ? <><Check size={11} /> Connected</> : "Not set"}</span>
       </div>
@@ -1240,7 +1240,7 @@ function GitHubInboxCard({ repo, connected, tokenDraft, onRepoChange, onTokenCha
         <label className="span-2">
           <span>Access token</span>
           <input type="password" value={tokenDraft} onChange={(event) => onTokenChange(event.target.value)} placeholder={connected ? "Paste to replace the saved token" : "Fine-grained PAT with Issues + Contents write"} autoComplete="new-password" />
-          <small>A fine-grained personal access token scoped to just this repo, with Issues read/write (and Contents read/write to upload attachments). Stored in your library’s settings.json.</small>
+          <small>A fine-grained token scoped to this repo: Issues read/write, plus Contents read/write for attachments.</small>
         </label>
       </div>
       <div className="github-inbox-actions">
@@ -1379,7 +1379,7 @@ function FeedSkillsEditor({ notify }: { notify: (message: string, tone?: "succes
               <MarkdownCodeEditor value={selected.prompt} onChange={(value) => update(selected.id, { prompt: value })} ariaLabel={`${selected.label || "Skill"} prompt`} placeholder="The instruction for this skill." />
             </>
           ) : (
-            <div className="feed-skill-empty"><Sparkles size={22} /><p>No skills yet. Add one to get started.</p></div>
+            <div className="feed-skill-empty"><Sparkles size={22} /><p>No skills yet.</p></div>
           )}
         </div>
       </div>
@@ -1505,7 +1505,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
       });
       if (!response.ok) throw new Error(await readError(response));
       const { id } = await response.json() as { id: string };
-      notify("Workflow started. Follow it in the feed.", "success");
+      notify("Workflow started.", "success");
       window.open(`/feed?snippet=${encodeURIComponent(id)}`, "_blank", "noopener,noreferrer");
     } catch (error) {
       notify(error instanceof Error ? error.message : "The workflow could not be started.", "error");
@@ -1564,7 +1564,7 @@ function FeedWorkflowsEditor({ notify }: { notify: (message: string, tone?: "suc
               <MarkdownCodeEditor value={selected.script} onChange={(value) => update(selected.id, value)} language="javascript" ariaLabel={`${metaField(selected.script, "name") || "Workflow"} script`} rows={16} placeholder="A Claude Code workflow: export const meta = { name, description } then use agent()/parallel()/pipeline()/log()/phase()." />
             </>
           ) : (
-            <div className="feed-skill-empty"><Waypoints size={22} /><p>No workflows yet. Add one or import a .js file.</p></div>
+            <div className="feed-skill-empty"><Waypoints size={22} /><p>No workflows yet.</p></div>
           )}
         </div>
       </div>
@@ -1629,5 +1629,5 @@ function PromptVariables({ variables, onInsert }: { variables: PromptVariableDef
 }
 
 function SettingsFooter({ saving, onRefresh }: { saving: boolean; onRefresh: () => void }) {
-  return <div className="settings-footer"><ActionButton variant="secondary" onClick={onRefresh} icon={<RefreshCw size={14} />} title="Discard unsaved changes and reload the last saved settings">Reload</ActionButton><ActionButton type="submit" variant="primary" disabled={saving} icon={saving ? <LoaderCircle size={14} className="spin" /> : <Save size={14} />}>{saving ? "Saving…" : "Save settings"}</ActionButton></div>;
+  return <div className="settings-footer"><ActionButton variant="secondary" onClick={onRefresh} icon={<RefreshCw size={14} />} title="Discard unsaved changes">Reload</ActionButton><ActionButton type="submit" variant="primary" disabled={saving} icon={saving ? <LoaderCircle size={14} className="spin" /> : <Save size={14} />}>{saving ? "Saving…" : "Save settings"}</ActionButton></div>;
 }

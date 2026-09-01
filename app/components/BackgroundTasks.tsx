@@ -180,7 +180,7 @@ export function BackgroundTaskDock() {
                 {task.status === "running" ? <LoaderCircle className="spin" size={16} /> : task.status === "complete" ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
                 <span>
                   <strong>{task.label}</strong>
-                  <small>{task.status === "running" ? "Running" : task.status === "complete" ? "Completed" : "Needs attention"} · {new Date(task.completedAt ?? task.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
+                  <small>{task.status === "running" ? "Running" : task.status === "complete" ? "Completed" : "Failed"} · {new Date(task.completedAt ?? task.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
                   {task.steps?.length ? (
                     <>
                       <button
