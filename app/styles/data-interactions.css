@@ -750,12 +750,12 @@
   padding: 0 0 0 8px;
 }
 
+/* The time is an inline prefix, not a column. As a column it held a third of the
+   width and the message wrapped in the ribbon left over, dangling beside empty space
+   under the timestamps; inline, a continuation line runs the whole width. */
 .background-task-steps > li {
   color: var(--muted);
-  display: grid;
   font-size: var(--type-micro);
-  gap: 7px;
-  grid-template-columns: auto minmax(0, 1fr);
   line-height: 1.45;
 }
 
@@ -767,6 +767,7 @@
 .background-task-steps > li > time {
   color: var(--soft);
   font-variant-numeric: tabular-nums;
+  margin-inline-end: 6px;
 }
 
 .background-task-steps > li.is-warn > span {
