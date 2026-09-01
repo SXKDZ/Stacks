@@ -565,6 +565,29 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(errors, /prompt is too long/i);
 });
 
+test("the sync button shows how far along it is, not how many writes it made", async () => {
+  const [feed, sync, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // A resumable sync spends a small write budget per pass, so its write count has no
+  // ceiling to be a share of: each pass reports what is still outstanding, and that is
+  // the denominator.
+  assert.match(sync, /function outstandingWrites/);
+  assert.match(sync, /remaining: outstandingWrites\(database\)/);
+  assert.match(feed, /Math\.min\(99, Math\.round\(\(syncProgress\.done \/ \(syncProgress\.done \+ syncProgress\.remaining\)\) \* 100\)\)/);
+  assert.match(feed, /`Syncing \$\{syncPercent\}%`/);
+  // The ring fills clockwise from twelve, and spins instead of claiming a number until
+  // the first pass answers.
+  assert.match(feed, /function SyncProgressRing/);
+  assert.match(feed, /strokeDashoffset=\{percent === null \? circumference \* 0\.75 : circumference \* \(1 - percent \/ 100\)\}/);
+  assert.match(styles, /\.sync-ring \{[^}]*transform: rotate\(-90deg\)/);
+  assert.match(styles, /\.sync-ring-arc \{[^}]*transition: stroke-dashoffset/);
+  assert.match(styles, /@keyframes sync-ring-spin/);
+});
+
 test("cutting or copying a thread does not confuse its GitHub issue", async () => {
   const [sync, github, truncate, agent, rewindRoute, retryRoute, schema, bootstrap] = await Promise.all([
     readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),

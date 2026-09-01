@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { resolveRuntimeValues, runtimeValue } from "@/app/lib/runtime-config";
@@ -135,6 +135,39 @@ async function mirrorAttachments(
  * were created in (github.linkedRepo); switching repos unlinks everything first
  * so no stale id touches the new repo's issues.
  */
+/**
+ * How many outbound writes this repo still needs, counted locally.
+ *
+ * The sync is resumable: each pass spends a small write budget and asks for another,
+ * so the number of writes performed says nothing on its own. This is the denominator
+ * that makes it a fraction. Only the outbound half is predictable (inbound work is
+ * whatever GitHub hands back), and that is the half the budget is spent on.
+ */
+function outstandingWrites(database: Awaited<ReturnType<typeof ensureDatabase>>): number {
+  const feeds = database.select().from(feedSnippets).all();
+  let remaining = 0;
+  for (const feed of feeds) {
+    if (feed.issueNumber === null) {
+      // A new issue, then every message and proposal it has to carry.
+      remaining += 1;
+    } else {
+      if (feed.issueTitleSynced !== null && feed.issueTitleSynced !== feed.title) remaining += 1;
+      if ((feed.issueStateSynced ?? "open") !== (feed.collapsed ? "closed" : "open")) remaining += 1;
+    }
+  }
+  remaining += database
+    .select({ count: sql<number>`count(*)` })
+    .from(feedMessages)
+    .where(and(isNull(feedMessages.githubCommentId), inArray(feedMessages.kind, [...MIRRORED_KINDS])))
+    .get()?.count ?? 0;
+  remaining += database
+    .select({ count: sql<number>`count(*)` })
+    .from(feedProposals)
+    .where(or(isNull(feedProposals.githubCommentId), ne(feedProposals.githubStatusSynced, feedProposals.status)))
+    .get()?.count ?? 0;
+  return remaining;
+}
+
 export async function POST(): Promise<Response> {
   const runtime = await resolveRuntimeValues();
   const repo = runtimeValue(runtime, "STACKS_GITHUB_REPO");
@@ -539,7 +572,7 @@ export async function POST(): Promise<Response> {
     if (!truncated && !deferredInbound) {
       writeGithubLastSyncedAt(startedAt);
     }
-    return Response.json({ ok: true, counts, truncated, pending: false, mutations: syncPolicy.mutations });
+    return Response.json({ ok: true, counts, truncated, pending: false, mutations: syncPolicy.mutations, remaining: outstandingWrites(database) });
   } catch (error) {
     if (error instanceof GitHubSyncDeferred) {
       return Response.json({
@@ -549,6 +582,7 @@ export async function POST(): Promise<Response> {
         pauseReason: error.reason,
         retryAfterMs: error.retryAfterMs,
         mutations: syncPolicy.mutations,
+        remaining: outstandingWrites(database),
       });
     }
     const message = error instanceof GitHubError || error instanceof Error ? error.message : "GitHub sync failed.";

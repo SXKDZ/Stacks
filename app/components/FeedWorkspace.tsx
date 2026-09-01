@@ -357,6 +357,31 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
   );
 }
 
+/**
+ * The sync button's progress, as a ring that fills clockwise from twelve.
+ *
+ * `percent` is null until the first pass reports what is still outstanding, and the
+ * ring spins as an indeterminate arc until then: a sync's write count means nothing
+ * without a denominator, since each pass spends a small budget and asks for another.
+ */
+function SyncProgressRing({ percent }: { percent: number | null }) {
+  const radius = 6;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg viewBox="0 0 16 16" className={`sync-ring ${percent === null ? "is-indeterminate" : ""}`} aria-hidden="true">
+      <circle className="sync-ring-track" cx="8" cy="8" r={radius} />
+      <circle
+        className="sync-ring-arc"
+        cx="8"
+        cy="8"
+        r={radius}
+        strokeDasharray={circumference}
+        strokeDashoffset={percent === null ? circumference * 0.75 : circumference * (1 - percent / 100)}
+      />
+    </svg>
+  );
+}
+
 /** Sync failures use the same standalone toast surface as Settings instead of
  * becoming another nested card inside the feed sidebar. */
 function SyncFailureToast({ failure, onDismiss }: { failure: { summary: string; details: string }; onDismiss: () => void }) {
@@ -2245,7 +2270,9 @@ export default function FeedWorkspace() {
   const [initialPapers, setInitialPapers] = useState<LibraryPaper[]>([]);
   const [githubReady, setGithubReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState(0);
+  // Writes done so far, and what the last pass said was left. A percentage needs both:
+  // the sync is resumable, so the count on its own has no ceiling to be a share of.
+  const [syncProgress, setSyncProgress] = useState<{ done: number; remaining: number } | null>(null);
   // The current failure stays visible until dismissed or a later sync succeeds;
   // the activity log below remains the durable history across reloads.
   const [syncAlert, setSyncAlert] = useState<{ summary: string; details: string } | null>(null);
@@ -2329,9 +2356,18 @@ export default function FeedWorkspace() {
     };
   }, []);
 
+  // Done over the work known so far. It can only be a share once a pass has reported
+  // what is left; before that the ring spins instead of claiming a number. Capped at 99
+  // while passes continue, so the ring completes when the sync does, not before.
+  const syncPercent = syncProgress
+    ? syncProgress.done + syncProgress.remaining === 0
+      ? 100
+      : Math.min(99, Math.round((syncProgress.done / (syncProgress.done + syncProgress.remaining)) * 100))
+    : null;
+
   const syncGithub = useCallback(async () => {
     setSyncing(true);
-    setSyncProgress(0);
+    setSyncProgress(null);
     try {
       const totals: Record<string, number> = {};
       let totalMutations = 0;
@@ -2359,12 +2395,16 @@ export default function FeedWorkspace() {
           pauseReason?: "batch" | "cooldown";
           retryAfterMs?: number;
           mutations?: number;
+          remaining?: number;
         };
         for (const [key, value] of Object.entries(data.counts ?? {})) {
           totals[key] = (totals[key] ?? 0) + (Number.isFinite(value) ? value : 0);
         }
         totalMutations += typeof data.mutations === "number" && Number.isFinite(data.mutations) ? data.mutations : 0;
-        setSyncProgress(totalMutations);
+        setSyncProgress({
+          done: totalMutations,
+          remaining: typeof data.remaining === "number" && Number.isFinite(data.remaining) ? Math.max(0, data.remaining) : 0,
+        });
         truncated ||= Boolean(data.truncated);
         if (!data.pending) break;
         if (data.pauseReason === "cooldown") {
@@ -2404,7 +2444,7 @@ export default function FeedWorkspace() {
       recordSync("error", summary, details);
     } finally {
       setSyncing(false);
-      setSyncProgress(0);
+      setSyncProgress(null);
     }
   }, [loadSnippets, recordSync]);
 
@@ -2749,8 +2789,16 @@ export default function FeedWorkspace() {
                 <strong>{libraryName}</strong>
                 <small>{syncLog[0] ? `${syncLog[0].status === "success" ? "Synced" : syncLog[0].status === "paused" ? "Sync paused" : "Sync failed"} ${relativeTime(new Date(syncLog[0].at).toISOString())}` : `${library.length} papers · GitHub inbox`}</small>
               </span>
-              <ActionButton variant="secondary" size="small" onClick={() => void syncGithub()} disabled={syncing} aria-label="Sync the GitHub inbox" icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />} kbd={`${modKey}S`}>
-                {syncing ? syncProgress ? `Syncing ${syncProgress}…` : "Syncing…" : "Sync"}
+              <ActionButton
+                variant="secondary"
+                size="small"
+                onClick={() => void syncGithub()}
+                disabled={syncing}
+                aria-label="Sync the GitHub inbox"
+                icon={syncing ? <SyncProgressRing percent={syncPercent} /> : <RefreshCw size={15} />}
+                kbd={`${modKey}S`}
+              >
+                {syncing ? (syncPercent === null ? "Syncing…" : `Syncing ${syncPercent}%`) : "Sync"}
               </ActionButton>
             </div>
           </div>

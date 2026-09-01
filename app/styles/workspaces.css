@@ -1705,6 +1705,45 @@
   margin: 0;
 }
 
+/* The sync button's progress ring. It fills clockwise from twelve, so the button says
+   how far along a resumable sync is instead of counting writes nobody can scale. */
+.sync-ring {
+  height: 15px;
+  transform: rotate(-90deg);
+  width: 15px;
+}
+
+.sync-ring circle {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.sync-ring-track {
+  stroke: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.sync-ring-arc {
+  stroke: var(--brand-blue);
+  /* The arc grows into its new length rather than jumping between passes. */
+  transition: stroke-dashoffset var(--motion-control);
+}
+
+/* Before the first pass reports what is outstanding there is no share to show, so the
+   quarter arc turns instead: the same signal a spinner gives, in the ring's own shape. */
+.sync-ring.is-indeterminate {
+  animation: sync-ring-spin 900ms linear infinite;
+}
+
+.sync-ring.is-indeterminate .sync-ring-arc {
+  transition: none;
+}
+
+@keyframes sync-ring-spin {
+  from { transform: rotate(-90deg); }
+  to { transform: rotate(270deg); }
+}
+
 /* A compaction's two ends, in the thread header: where it came from, where it went. */
 .feed-detail-link {
   align-items: center;
