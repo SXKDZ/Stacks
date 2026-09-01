@@ -565,6 +565,35 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(errors, /prompt is too long/i);
 });
 
+test("the sync button shows how far along it is, not how many writes it made", async () => {
+  const [feed, sync, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // A resumable sync spends a small write budget per pass, so its write count has no
+  // ceiling to be a share of: each pass reports what is still outstanding, and that is
+  // the denominator.
+  assert.match(sync, /function outstandingWrites/);
+  assert.match(sync, /remaining: outstandingWrites\(database\)/);
+  assert.match(feed, /Math\.min\(99, Math\.round\(\(syncProgress\.done \/ \(syncProgress\.done \+ syncProgress\.remaining\)\) \* 100\)\)/);
+  // The label stays one word: the border is what says how far along it is, and the
+  // share is spelled out in aria-label for anyone who cannot see the border.
+  assert.match(feed, /\{syncing \? "Syncing" : "Sync"\}/);
+  assert.match(feed, /`Syncing the GitHub inbox, \$\{syncPercent\}% done`/);
+  // The button's own border is the progress: a conic gradient clipped to the border box
+  // over the fill clipped to the padding box, so nothing is added beside the button.
+  assert.match(feed, /className=\{syncing \? `sync-progress\$\{syncPercent === null \? " is-indeterminate" : ""\}` : undefined\}/);
+  assert.match(feed, /\["--sync-progress" as string\]: syncPercent/);
+  assert.match(styles, /@property --sync-progress \{[^}]*syntax: "<number>"/);
+  assert.match(styles, /conic-gradient\(\s*from calc\(var\(--sync-angle\) \* 1deg\)/);
+  assert.match(styles, /\) border-box;/);
+  // A registered property is what lets the fill grow between passes instead of jumping.
+  assert.match(styles, /transition: --sync-progress var\(--motion-control\)/);
+  assert.match(styles, /@keyframes sync-border-travel/);
+});
+
 test("only agent output counts as output arriving after a turn ended", async () => {
   const [list, events, decision] = await Promise.all([
     readFile(new URL("../app/api/feed/snippets/route.ts", import.meta.url), "utf8"),

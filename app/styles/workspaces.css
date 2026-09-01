@@ -1705,6 +1705,50 @@
   margin: 0;
 }
 
+/* Sync progress, drawn as the button's own border rather than an indicator beside it.
+   Two background layers: the button's fill clipped to the padding box, and a conic
+   gradient clipped to the border box, so the border itself is the track. The rounded
+   corners sweep a little faster than the straight edges, which is what a conic gradient
+   does on a pill; nothing else traces a border without a second element. */
+@property --sync-progress {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --sync-angle {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+.sync-progress {
+  background:
+    linear-gradient(var(--surface-1), var(--surface-1)) padding-box,
+    conic-gradient(
+      from calc(var(--sync-angle) * 1deg),
+      var(--brand-blue) calc(var(--sync-progress) * 1%),
+      color-mix(in srgb, var(--ink) 14%, transparent) calc(var(--sync-progress) * 1%)
+    ) border-box;
+  border-color: transparent;
+  /* The registered property is what makes the fill grow between passes instead of
+     jumping from one share to the next. */
+  transition: --sync-progress var(--motion-control);
+}
+
+/* Before the first pass reports what is outstanding there is no share to show, so a
+   quarter of the border travels around it: the same signal a spinner gives. */
+.sync-progress.is-indeterminate {
+  --sync-progress: 25;
+  animation: sync-border-travel 1s linear infinite;
+  transition: none;
+}
+
+@keyframes sync-border-travel {
+  from { --sync-angle: 0; }
+  to { --sync-angle: 360; }
+}
+
 /* A compaction's two ends, in the thread header: where it came from, where it went. */
 .feed-detail-link {
   align-items: center;
