@@ -582,7 +582,9 @@ test("retry, fork and rewind act on the same interaction boundaries", async () =
   // Fork are two entry points into it, and the turn's uses the shared helper.
   assert.match(feed, /async function createForkFromHistory\(interactionIds: string\[\], toolDetails: boolean\)/);
   assert.match(feed, /createForkFromHistory\(\[\.\.\.selectedInteractions\], includeToolDetails\)/);
-  assert.match(feed, /createForkFromHistory\(interactionsBefore\(interactions, message\.id\), includeToolDetails\)/);
+  // A turn's Fork copies the thread as it stands, tool traffic included; only the
+  // selection modal makes that a choice.
+  assert.match(feed, /createForkFromHistory\(interactionsBefore\(interactions, message\.id\), true\)/);
   assert.match(feed, /interactions\.length - interactionsBefore\(interactions, message\.id\)\.length - 1/);
   assert.match(feed, /body: JSON\.stringify\(\{ interactionId: message\.id \}\)/);
   assert.match(feed, /onRetry=\{message\.role === "user" \? \(\) => void retryTurn\(message\.id\) : undefined\}/);

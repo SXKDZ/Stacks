@@ -1705,9 +1705,11 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   async function forkBefore(message: FeedMessage) {
     setForkingFromId(message.id);
     try {
-      // The same tool-detail choice the selection modal offers, so one setting
-      // governs how much history any copy of this thread carries.
-      await createForkFromHistory(interactionsBefore(interactions, message.id), includeToolDetails);
+      // A copy of the thread is a copy of the thread: tool requests and results come
+      // with it. The selection modal offers this as a choice because a hand-picked
+      // set of turns is often wanted as prose; a turn's own Fork promises the thread
+      // as it stands, and the seeded transcript is budget-bounded either way.
+      await createForkFromHistory(interactionsBefore(interactions, message.id), true);
     } finally {
       setForkingFromId(null);
     }
