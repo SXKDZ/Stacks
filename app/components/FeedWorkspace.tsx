@@ -1153,7 +1153,7 @@ function FeedHistorySelectionModal({
  * in), shows proposals to approve/reject, and offers a reply box. Mounted with a
  * `key` of the snippet id so switching selection resets its state cleanly.
  */
-function FeedDetail({ snippet, library, collections, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated }: {
+function FeedDetail({ snippet, library, collections, models, defaultModelLabel, defaultEffort, historySelectionRequest, onHistorySelectionClosed, onBack, onChanged, onCreated, onRename, onFork, onExport }: {
   snippet: FeedSnippet;
   library: LibraryPaper[];
   collections: Array<{ id: string; name: string }>;
@@ -1165,6 +1165,11 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   onBack: () => void;
   onChanged: () => void;
   onCreated: (id: string) => void;
+  /** The same whole-feed actions the sidebar row offers, reused by the composer's
+   *  commands so there is one implementation of each. */
+  onRename: (title?: string) => Promise<void>;
+  onFork: () => Promise<void>;
+  onExport: () => Promise<void>;
 }) {
   const feedName = snippet.title || snippet.instruction || "Untitled";
   const [messages, setMessages] = useState<FeedMessage[]>([]);
@@ -1759,6 +1764,22 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
         run: async () => { await stop(); return true; },
       }]
       : []),
+    {
+      name: "fork",
+      hint: "Continue in a copy of this thread, leaving this one as it is",
+      run: async () => { await onFork(); return true; },
+    },
+    {
+      name: "rename",
+      argument: "<new title>",
+      hint: "Retitle this feed",
+      run: async (title) => { await onRename(title || undefined); return true; },
+    },
+    {
+      name: "export",
+      hint: "Download this thread as Markdown",
+      run: async () => { await onExport(); return true; },
+    },
   ];
 
   const papersById = new Map(library.map((paper) => [paper.id, paper]));
@@ -2558,8 +2579,9 @@ export default function FeedWorkspace() {
     }
   }
 
-  async function renameSnippet(snippet: FeedSnippet) {
-    const next = window.prompt("Rename this feed", snippet.title || snippet.instruction || "")?.trim();
+  async function renameSnippet(snippet: FeedSnippet, title?: string) {
+    // The command supplies the title on its line; the menu item asks for one.
+    const next = (title ?? window.prompt("Rename this feed", snippet.title || snippet.instruction || "") ?? "").trim();
     if (!next || next === snippet.title) return;
     const response = await fetch(`/api/feed/snippets/${snippet.id}`, {
       method: "PATCH",
@@ -2720,6 +2742,9 @@ export default function FeedWorkspace() {
             defaultEffort={defaultEffort}
             historySelectionRequest={historySelectionRequest?.id === selected.id ? historySelectionRequest : null}
             onHistorySelectionClosed={() => setHistorySelectionRequest(null)}
+            onRename={(title) => renameSnippet(selected, title)}
+            onFork={() => forkSnippet(selected)}
+            onExport={() => exportSnippet(selected)}
             onBack={() => setSelectedId(null)}
             onChanged={loadSnippets}
             onCreated={(id) => {

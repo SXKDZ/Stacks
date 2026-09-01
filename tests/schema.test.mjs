@@ -492,12 +492,13 @@ test("a message that interrupts a turn carries that turn's request with it", asy
 });
 
 test("a thread's agent session can be compacted the way the interactive client does", async () => {
-  const [agent, route, feed, composer, errors] = await Promise.all([
+  const [agent, route, feed, composer, errors, styles] = await Promise.all([
     readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feed/snippets/[id]/compact/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/feed/AttachBox.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/feed-errors.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
   ]);
 
   // Verified against the installed CLI: `claude -p "/compact" --resume <id>` runs the
@@ -519,10 +520,20 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(composer, /const match = \/\^\\\/\(\[\\w-\]\+\)/);
   assert.match(composer, /commands\.find\(\(candidate\) => candidate\.name === match\[1\]\.toLowerCase\(\)\)/);
   assert.match(composer, /if \(await invocation\.command\.run\(invocation\.argument\)\) \{/);
-  assert.match(composer, /className="feed-command-palette" role="listbox"/);
+  assert.match(composer, /className="feed-command-menu" role="listbox"/);
   // The palette owns the keys that would otherwise send the message.
   assert.match(composer, /if \(commandMatches\.length\) \{[\s\S]*?event\.key === "ArrowDown"/);
   assert.match(composer, /completeCommand\(commandMatches\[activeCommand\]\)/);
+  // Opaque and lifted: --panel is translucent in both themes, so a floating list on
+  // it showed the thread through itself.
+  assert.match(styles, /\.feed-command-menu \{[^}]*background: var\(--panel-strong\)/);
+  assert.match(styles, /\.feed-command-menu \{[^}]*box-shadow: var\(--shadow-md\)/);
+  // Every command maps to an operation that already exists, and each is implemented
+  // once: the composer calls the same handlers the sidebar row does.
+  for (const name of ["compact", "stop", "fork", "rename", "export"]) {
+    assert.match(feed, new RegExp(`name: "${name}"`));
+  }
+  assert.match(feed, /run: async \(title\) => \{ await onRename\(title \|\| undefined\); return true; \}/);
   // The context-limit failure names the ways out that exist.
   assert.match(errors, /prompt is too long/i);
 });

@@ -409,6 +409,7 @@ export function AttachBox({
     >
       {dragging ? <div className="feed-drop-hint"><Paperclip size={18} /> Drop files to attach</div> : null}
 
+
       <div
         ref={panelRef}
         className="feed-dock-input is-panel-resizable"
@@ -475,7 +476,7 @@ export function AttachBox({
           </div>
         ) : null}
         {commandMatches.length ? (
-          <ul className="feed-command-palette" role="listbox" aria-label="Commands">
+          <ul className="feed-command-menu" role="listbox" aria-label="Commands">
             {commandMatches.map((command, index) => (
               <li key={command.name}>
                 <button
@@ -488,8 +489,11 @@ export function AttachBox({
                   onMouseDown={(event) => { event.preventDefault(); completeCommand(command); }}
                   onMouseEnter={() => setCommandIndex(index)}
                 >
-                  <code>/{command.name}{command.argument ? ` ${command.argument}` : ""}</code>
-                  <span>{command.hint}</span>
+                  <span className="feed-command-name">
+                    <code>/{command.name}</code>
+                    {command.argument ? <i>{command.argument}</i> : null}
+                  </span>
+                  <span className="feed-command-hint">{command.hint}</span>
                 </button>
               </li>
             ))}
