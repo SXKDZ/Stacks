@@ -1,8 +1,8 @@
-import { desc, eq, max, sql } from "drizzle-orm";
+import { desc, eq, inArray, max, sql } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, runFeedAgent } from "@/app/lib/feed-agent";
-import { effectiveFeedStatus } from "@/app/lib/feed-status";
+import { AGENT_MESSAGE_ROLES, effectiveFeedStatus } from "@/app/lib/feed-status";
 import { buildSnippetPrompt } from "@/app/lib/feed-prompt";
 import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 import { parseRequest } from "@/app/lib/schemas/parse";
@@ -28,9 +28,12 @@ export async function GET(): Promise<Response> {
     .groupBy(feedProposals.snippetId)
     .all();
   const pendingBySnippet = new Map(pendingRows.map((row) => [row.snippetId, Number(row.count)]));
+  // Agent-written rows only: see effectiveFeedStatus. A system note (an approval
+  // decision, a model switch) is not evidence of a run that outlived its turn.
   const latestMessageRows = database
     .select({ snippetId: feedMessages.snippetId, latestMessageAt: max(feedMessages.createdAt) })
     .from(feedMessages)
+    .where(inArray(feedMessages.role, AGENT_MESSAGE_ROLES))
     .groupBy(feedMessages.snippetId)
     .all();
   const latestMessageBySnippet = new Map(latestMessageRows.map((row) => [row.snippetId, row.latestMessageAt]));

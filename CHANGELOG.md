@@ -8,6 +8,10 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 - A step in the activity log wraps across the full width of the panel. The timestamp was a column holding a third of it, so a long step message wrapped in the ribbon left over while the space under the timestamps sat empty.
 
+### Fixed
+
+- Approving or rejecting a proposed change no longer turns its feed red. The decision writes a note into the thread, and a note arriving after the row's terminal timestamp was read as an agent run that had outlived its turn; only agent output counts now, and a decision moves the row's own timestamp with it.
+
 ## [0.6.0] - 2026-09-01
 
 ### Fixed

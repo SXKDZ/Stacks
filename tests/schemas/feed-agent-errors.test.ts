@@ -5,7 +5,7 @@ import test from "node:test";
 import { formatAgentFailure } from "../../app/lib/agent-error.ts";
 import { feedMaxTurnsArgs } from "../../app/lib/feed-agent.ts";
 import { coalesceLegacyAgentErrors, splitFeedError } from "../../app/lib/feed-errors.ts";
-import { effectiveFeedStatus } from "../../app/lib/feed-status.ts";
+import { AGENT_MESSAGE_ROLES, effectiveFeedStatus } from "../../app/lib/feed-status.ts";
 
 test("an agent failure preserves its structured result, stderr, and process exit", () => {
   const message = formatAgentFailure({
@@ -52,6 +52,23 @@ test("a thread that outgrew the context window says how to get out of it", () =>
   assert.match(parts.summary, /no longer fits the model's context window/);
   assert.match(parts.summary, /Fork it from an earlier turn, or rewind it/);
   assert.match(parts.details, /Prompt is too long/);
+});
+
+test("a note written into a finished thread is not read as a loose agent run", () => {
+  const finished = { status: "done", error: null, updatedAt: "2026-09-01T04:39:41.000Z" };
+
+  // Agent output after the terminal stamp is the case the rule exists for: an
+  // overlapping run that kept writing after another set Done.
+  const orphaned = effectiveFeedStatus(finished, "2026-09-01T04:42:26.000Z", false);
+  assert.equal(orphaned.status, "error");
+  assert.match(String(orphaned.error), /ended unexpectedly/);
+
+  // But approving a proposal writes a system note, and the caller must not count it:
+  // every feed turned red at the moment of a decision and stayed red until its next
+  // turn ended. AGENT_MESSAGE_ROLES is the filter the callers apply.
+  assert.deepEqual(AGENT_MESSAGE_ROLES, ["assistant", "tool"]);
+  assert.equal(effectiveFeedStatus(finished, "2026-09-01T04:39:41.000Z", false).status, "done");
+  assert.equal(effectiveFeedStatus(finished, null, false).status, "done");
 });
 
 test("legacy result and exit rows render as one failure", () => {
