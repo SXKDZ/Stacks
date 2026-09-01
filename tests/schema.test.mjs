@@ -509,6 +509,9 @@ test("a thread's agent session can be compacted the way the interactive client d
   // A new feed carries the summary forward and the original keeps its thread and its
   // session, so nothing that was readable stops being readable.
   assert.match(agent, /compactedFromId: snippetId/);
+  // No opening turn on the new feed: the original request is inside the summary, and
+  // repeating it would read as a turn the agent never received.
+  assert.match(agent, /instruction: "",/);
   assert.match(agent, /copyFileSync\(sourceTranscript, join\(targetProject/);
   assert.match(agent, /persistMessage\(targetId, "assistant", "text", summary\)/);
   // Each thread links to the other, and both rows are stamped after their notes: a

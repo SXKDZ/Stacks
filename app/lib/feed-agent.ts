@@ -459,7 +459,10 @@ export async function compactFeedSession(
     database.insert(feedSnippets).values({
       id: targetId,
       title: `Compacted: ${sourceName}`.slice(0, 200),
-      instruction: source.instruction,
+      // No opening turn: the request that started the original thread is inside the
+      // summary, and repeating it as this thread's own first message would read as a
+      // turn the agent never received. The title carries the subject.
+      instruction: "",
       status: "done",
       // The copy keeps the session id: ids are scoped to a project directory, and the
       // two feeds have their own, so nothing collides and no entry has to be rewritten.
