@@ -4,6 +4,8 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-01
+
 ### Changed
 
 - The sync button shows how far along it is in its own border, which fills clockwise from the top. It used to count the writes it had made in the label, which has no ceiling to be a share of, and the number was clipped to "80…".
@@ -372,7 +374,8 @@ Initial public release.
 - One-way OneDrive backup of the library, database, managed files, and feed transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.6.1
 [0.6.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.6.0
 [0.5.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.2
 [0.5.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.1
