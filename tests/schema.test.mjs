@@ -565,6 +565,47 @@ test("a thread's agent session can be compacted the way the interactive client d
   assert.match(errors, /prompt is too long/i);
 });
 
+test("cutting or copying a thread does not confuse its GitHub issue", async () => {
+  const [sync, github, truncate, agent, rewindRoute, retryRoute] = await Promise.all([
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-truncate.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/rewind/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/retry/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  // An abandoned issue is closed, not merely unlinked: left open, the inbound pass
+  // adopts it as a feed of its own, clones the thread into it and runs an agent there.
+  assert.match(truncate, /await enqueueCloseIssue\(snippet\.issueNumber\)/);
+  // And the marker decides authorship, so an orphan that was never closed (a crash, a
+  // manual edit) is still not mistaken for an issue written on a phone.
+  assert.match(github, /fromStacks: \(issue\.body \?\? ""\)\.includes\(STACKS_MARKER\)/);
+  assert.match(sync, /if \(issue\.fromStacks\) continue;/);
+
+  // Both sync loops re-read the feed row: they make network calls, and a cut landing
+  // mid-pass moves the feed to another issue.
+  assert.match(sync, /const feed = database\.select\(\)\.from\(feedSnippets\)\.where\(eq\(feedSnippets\.id, snapshot\.id\)\)\.get\(\);\s*\n\s*if \(!feed\) continue;/);
+  assert.match(sync, /if \(!feed \|\| feed\.issueNumber !== issueNumber\) \{[\s\S]*?deferredInbound = true;/);
+
+  // A failed turn reaches the phone, labelled as a failure rather than as the agent.
+  assert.match(sync, /const MIRRORED_KINDS = new Set\(\["text", "result", "error"\]\)/);
+  assert.match(sync, /if \(kind === "error"\) return "\*\*Stacks \(this turn failed\):\*\*"/);
+  // An in-app link would resolve against github.com in a mirrored comment.
+  assert.match(sync, /function withoutAppLinks/);
+  assert.match(sync, /const content = withoutAppLinks\(message\.content\.trim\(\)\)/);
+
+  // The compacted feed exists only once the CLI has succeeded, so a refusal cannot
+  // leave a row for a concurrent sync to open an issue against.
+  assert.match(agent, /Only now does the feed exist/);
+  // And a cut refuses while a compaction holds the run slot, which has no process to
+  // interrupt, rather than deleting the messages it is reading.
+  assert.match(agent, /export function isFeedUninterruptible/);
+  for (const route of [rewindRoute, retryRoute]) {
+    assert.match(route, /if \(isFeedUninterruptible\(id\)\) \{[\s\S]*?status: 409/);
+  }
+});
+
 test("retry, fork and rewind act on the same interaction boundaries", async () => {
   const [feed, rewindRoute, retryRoute, forkRoute, history, truncate] = await Promise.all([
     readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),

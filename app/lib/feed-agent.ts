@@ -127,6 +127,18 @@ export function isFeedRunning(snippetId: string): boolean {
   return runs.has(snippetId) || launching.has(snippetId);
 }
 
+/**
+ * True while the run slot is held by work that has no process to interrupt: a
+ * compaction copying and summarizing the session.
+ *
+ * stopFeedAndWait can only stop a spawned turn, so a caller that stops and then
+ * deletes messages (a rewind, a retry) has to refuse instead of proceeding, or it
+ * would cut the thread out from under work already in flight.
+ */
+export function isFeedUninterruptible(snippetId: string): boolean {
+  return launching.has(snippetId) && !runs.has(snippetId);
+}
+
 /** Subscribe to live events for a running snippet; returns an unsubscribe fn. */
 export function subscribeFeed(snippetId: string, listener: (event: FeedEvent) => void): () => void {
   if (!isFeedRunning(snippetId)) {
@@ -454,27 +466,7 @@ export async function compactFeedSession(
   const targetId = `feed-${crypto.randomUUID()}`;
   launching.add(snippetId);
   try {
-    const now = new Date().toISOString();
     const sourceName = source.title || source.instruction || "Untitled";
-    database.insert(feedSnippets).values({
-      id: targetId,
-      title: `Compacted: ${sourceName}`.slice(0, 200),
-      // No opening turn: the request that started the original thread is inside the
-      // summary, and repeating it as this thread's own first message would read as a
-      // turn the agent never received. The title carries the subject.
-      instruction: "",
-      status: "done",
-      // The copy keeps the session id: ids are scoped to a project directory, and the
-      // two feeds have their own, so nothing collides and no entry has to be rewritten.
-      sessionId,
-      model: source.model,
-      effort: source.effort,
-      historyMode: source.historyMode,
-      compactedFromId: snippetId,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-
     // feedWorkingDir only names the directory; the CLI needs it to exist to run in it.
     const workingDir = feedWorkingDir(targetId);
     mkdirSync(workingDir, { recursive: true });
@@ -511,9 +503,6 @@ export async function compactFeedSession(
 
     const parsed = parseJsonWith(CompactResultSchema, stdout.trim());
     if (code !== 0 || !parsed.ok || parsed.data.is_error) {
-      // The new feed never became usable, so it is removed rather than left as an
-      // empty thread the user has to clean up.
-      database.delete(feedSnippets).where(eq(feedSnippets.id, targetId)).run();
       const detail = (parsed.ok ? parsed.data.result : "") || stderr.trim() || `the CLI exited with code ${code ?? "none"}`;
       return { ok: false, message: `The session could not be compacted: ${detail}` };
     }
@@ -521,9 +510,32 @@ export async function compactFeedSession(
     // enough messages to compact") in the result text.
     const said = parsed.data.result.trim();
     if (said) {
-      database.delete(feedSnippets).where(eq(feedSnippets.id, targetId)).run();
       return { ok: false, message: said };
     }
+
+    // Only now does the feed exist. Created before the CLI ran, a refusal or a failure
+    // left a row to delete again, and a sync landing in that window would have opened
+    // an issue for it that nothing then closed: the inbound pass adopts such an issue
+    // as a feed of its own and runs an agent on it.
+    const now = new Date().toISOString();
+    database.insert(feedSnippets).values({
+      id: targetId,
+      title: `Compacted: ${sourceName}`.slice(0, 200),
+      // No opening turn: the request that started the original thread is inside the
+      // summary, and repeating it as this thread's own first message would read as a
+      // turn the agent never received. The title carries the subject.
+      instruction: "",
+      status: "done",
+      // The copy keeps the session id: ids are scoped to a project directory, and the
+      // two feeds have their own, so nothing collides and no entry has to be rewritten.
+      sessionId,
+      model: source.model,
+      effort: source.effort,
+      historyMode: source.historyMode,
+      compactedFromId: snippetId,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
 
     const summary = latestCompactSummary(join(targetProject, `${sessionId}.jsonl`));
     // Both threads say where the other one is, as a link: the pair is the point of a

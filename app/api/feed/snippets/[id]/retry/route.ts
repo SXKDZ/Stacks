@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedSnippets } from "@/db/schema";
-import { isFeedRunning, runFeedAgent, stopFeedAndWait } from "@/app/lib/feed-agent";
+import { isFeedRunning, isFeedUninterruptible, runFeedAgent, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { buildFeedTranscript } from "@/app/lib/feed-history";
 import { buildForkPrompt, buildSnippetPrompt } from "@/app/lib/feed-prompt";
 import { feedInteractions, truncateFeedAt } from "@/app/lib/feed-truncate";
@@ -51,6 +51,11 @@ export async function POST(
     return Response.json({ error: "That interaction is not part of this feed." }, { status: 404 });
   }
 
+  // A compaction holds the run slot with no process to interrupt, so stopping would
+  // return at once and this would delete the messages it is reading.
+  if (isFeedUninterruptible(id)) {
+    return Response.json({ error: "This thread is being compacted. Try again when that finishes." }, { status: 409 });
+  }
   if (isFeedRunning(id)) {
     await stopFeedAndWait(id);
   }

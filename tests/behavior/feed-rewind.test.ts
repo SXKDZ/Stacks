@@ -189,6 +189,55 @@ test("a retry keeps the turn's own message and removes only what it produced", a
   assert.deepEqual(truncation.kept.map((message) => message.id), ["feed-retry-1-a1", "feed-retry-1-u2"]);
 });
 
+test("a fork leaves a pending proposal behind", async () => {
+  const feed = await seedFeed("feed-fork-1");
+  const { POST } = await import("../../app/api/feed/snippets/[id]/fork/route.ts");
+  const { ensureDatabase } = await import("../../db/bootstrap.ts");
+  const { feedProposals } = await import("../../db/schema.ts");
+  const { eq } = await import("drizzle-orm");
+  const database = await ensureDatabase();
+
+  const forked = await readJson<{ id: string }>(await POST(
+    jsonRequest("http://127.0.0.1/api/feed/snippets/feed-fork-1/fork", {}),
+    context("feed-fork-1"),
+  ));
+
+  assert.equal(forked.status, 200);
+  // The applied one is history worth copying; the pending one is a library change
+  // still awaiting approval, and copied it would be queued twice, offered in two
+  // threads and mirrored under two issues.
+  const copied = database.select().from(feedProposals).where(eq(feedProposals.snippetId, forked.body.id)).all();
+  assert.deepEqual(copied.map((proposal) => proposal.status), ["applied"]);
+  // The source keeps both.
+  assert.equal(database.select().from(feedProposals).where(eq(feedProposals.snippetId, "feed-fork-1")).all().length, 2);
+  void feed;
+});
+
+test("cutting a mirrored thread closes the issue it abandons", async () => {
+  // The outbox records the repo each op targets, so a close is only queued when one is
+  // configured; without this the enqueue is a no-op, as it is for a library with no
+  // GitHub sync set up.
+  process.env.STACKS_GITHUB_REPO = "SXKDZ/stacks-test";
+  const feed = await seedFeed("feed-rewind-5", { issueNumber: 77 });
+  const { truncateFeedAt } = await import("../../app/lib/feed-truncate.ts");
+  const { ensureDatabase } = await import("../../db/bootstrap.ts");
+  const { feedGithubOutbox, feedSnippets } = await import("../../db/schema.ts");
+  const { eq } = await import("drizzle-orm");
+  const database = await ensureDatabase();
+  const snippet = database.select().from(feedSnippets).where(eq(feedSnippets.id, "feed-rewind-5")).get()!;
+
+  await truncateFeedAt(snippet, "feed-rewind-5-u2", { keepStarter: false });
+
+  // Unlinking alone left the issue open, and an open issue no feed claims is adopted
+  // by the next inbound pass as a feed of its own, which clones the thread and runs an
+  // agent on the clone. Closed, it reads as history and is skipped.
+  const queued = database.select().from(feedGithubOutbox).where(eq(feedGithubOutbox.issueNumber, 77)).all();
+  assert.deepEqual(queued.map((row) => row.op), ["close-issue"]);
+  const { snippet: after } = await feed.read();
+  assert.equal(after.issueNumber, null);
+  delete process.env.STACKS_GITHUB_REPO;
+});
+
 test("a rewind unlinks a feed mirrored to a GitHub issue", async () => {
   const feed = await seedFeed("feed-rewind-3", { issueNumber: 42 });
 

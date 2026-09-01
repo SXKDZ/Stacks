@@ -60,6 +60,10 @@ export interface GitHubIssue {
   updatedAt: string;
   /** GitHub marks issues that are actually PRs; we skip those. */
   isPullRequest: boolean;
+  /** True when Stacks opened this issue (its body carries the marker). An issue no
+   *  feed claims any more is one Stacks abandoned, not one a phone wrote, so it must
+   *  never be adopted as a new feed. */
+  fromStacks: boolean;
 }
 
 export interface GitHubComment {
@@ -329,6 +333,9 @@ export async function listIssues(config: GitHubConfig, since?: string): Promise<
     issues: items.map((issue) => ({
       number: issue.number,
       title: issue.title,
+      // Read before the marker is stripped, since stripping is what made an
+      // abandoned Stacks issue indistinguishable from one written on a phone.
+      fromStacks: (issue.body ?? "").includes(STACKS_MARKER),
       body: markerless(issue.body ?? ""),
       state: issue.state,
       updatedAt: issue.updated_at,

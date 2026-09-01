@@ -12,6 +12,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedProposals, feedSnippets } from "@/db/schema";
 import { groupFeedInteractions, messagesFromInteraction, type FeedInteraction } from "@/app/lib/feed-history";
+import { enqueueCloseIssue, flushGithubOutbox } from "@/app/lib/feed-github-outbox";
 
 type FeedSnippetRow = typeof feedSnippets.$inferSelect;
 export type FeedMessageRow = typeof feedMessages.$inferSelect;
@@ -107,7 +108,8 @@ export async function truncateFeedAt(
       // The removed messages are still comments on that issue, so keeping the link
       // would let the next sync read one back in as new and start a turn on it.
       // Everything that stays has to be mirrored again into the replacement issue,
-      // hence the comment ids pointing into the old one are dropped.
+      // hence the comment ids pointing into the old one are dropped. The abandoned
+      // issue is closed below, the way a deleted feed's is.
       tx.update(feedMessages)
         .set({ githubCommentId: null, attachmentsSynced: 0 })
         .where(eq(feedMessages.snippetId, snippet.id))
@@ -121,7 +123,7 @@ export async function truncateFeedAt(
         snippetId: snippet.id,
         role: "system",
         kind: "text",
-        content: `Removed messages mirrored to GitHub issue #${snippet.issueNumber}; the next sync opens a fresh issue.`,
+        content: `Removed messages mirrored to GitHub issue #${snippet.issueNumber}. That issue is closed and no longer read; the next sync opens a fresh one for this thread.`,
         createdAt: now,
       }).run();
     }
@@ -145,6 +147,15 @@ export async function truncateFeedAt(
       .where(eq(feedSnippets.id, snippet.id))
       .run();
   });
+
+  // Closed, not merely unlinked. An abandoned issue left open is adopted by the next
+  // inbound pass as a brand-new feed, which clones the thread and starts an agent run
+  // on the clone; a closed unlinked issue is skipped as history. This is the same
+  // outbox the delete path uses, and the sync drains it before reading issues.
+  if (snippet.issueNumber !== null) {
+    await enqueueCloseIssue(snippet.issueNumber);
+    void flushGithubOutbox().catch(() => {});
+  }
 
   return { target, removed, kept };
 }
