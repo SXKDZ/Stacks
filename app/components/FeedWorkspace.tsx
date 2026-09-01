@@ -2769,7 +2769,11 @@ export default function FeedWorkspace() {
                 size="small"
                 onClick={() => void syncGithub()}
                 disabled={syncing}
-                aria-label="Sync the GitHub inbox"
+                // The share is in the border, not the label, so it is spelled out here
+                // for anyone who cannot see the border.
+                aria-label={syncing
+                  ? syncPercent === null ? "Syncing the GitHub inbox" : `Syncing the GitHub inbox, ${syncPercent}% done`
+                  : "Sync the GitHub inbox"}
                 // The button's own border is the progress: it fills clockwise from the
                 // top as the share grows, and turns while the first pass is in flight.
                 className={syncing ? `sync-progress${syncPercent === null ? " is-indeterminate" : ""}` : undefined}
@@ -2777,7 +2781,7 @@ export default function FeedWorkspace() {
                 icon={<RefreshCw className={syncing ? "spin" : ""} size={15} />}
                 kbd={`${modKey}S`}
               >
-                {syncing ? (syncPercent === null ? "Syncing…" : `Syncing ${syncPercent}%`) : "Sync"}
+                {syncing ? "Syncing" : "Sync"}
               </ActionButton>
             </div>
           </div>

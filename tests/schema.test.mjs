@@ -578,7 +578,10 @@ test("the sync button shows how far along it is, not how many writes it made", a
   assert.match(sync, /function outstandingWrites/);
   assert.match(sync, /remaining: outstandingWrites\(database\)/);
   assert.match(feed, /Math\.min\(99, Math\.round\(\(syncProgress\.done \/ \(syncProgress\.done \+ syncProgress\.remaining\)\) \* 100\)\)/);
-  assert.match(feed, /`Syncing \$\{syncPercent\}%`/);
+  // The label stays one word: the border is what says how far along it is, and the
+  // share is spelled out in aria-label for anyone who cannot see the border.
+  assert.match(feed, /\{syncing \? "Syncing" : "Sync"\}/);
+  assert.match(feed, /`Syncing the GitHub inbox, \$\{syncPercent\}% done`/);
   // The button's own border is the progress: a conic gradient clipped to the border box
   // over the fill clipped to the padding box, so nothing is added beside the button.
   assert.match(feed, /className=\{syncing \? `sync-progress\$\{syncPercent === null \? " is-indeterminate" : ""\}` : undefined\}/);

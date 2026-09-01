@@ -6,7 +6,7 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ### Changed
 
-- The sync button shows how far along it is: its own border fills clockwise from the top, and the label reads a percentage. It used to count the writes it had made, which has no ceiling to be a share of, and the number was clipped to "80…".
+- The sync button shows how far along it is in its own border, which fills clockwise from the top. It used to count the writes it had made in the label, which has no ceiling to be a share of, and the number was clipped to "80…".
 
 ## [0.6.0] - 2026-09-01
 
