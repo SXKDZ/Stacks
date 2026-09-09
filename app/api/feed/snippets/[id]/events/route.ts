@@ -61,6 +61,7 @@ export async function GET(
           kind: message.kind,
           content: message.content,
           toolUseId: message.toolUseId,
+          parentToolUseId: message.parentToolUseId,
           attachments: message.attachments,
           inputTokens: message.inputTokens,
           outputTokens: message.outputTokens,

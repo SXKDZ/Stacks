@@ -1,10 +1,11 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, join, resolve, sep } from "node:path";
 import { inArray } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { papers } from "@/db/schema";
 import { nextFreeName } from "@/app/lib/local-files";
-import type { SnippetAttachment } from "@/app/lib/schemas/attachments";
+import { parseJsonWith } from "@/app/lib/schemas/parse";
+import { SnippetAttachmentListSchema, type SnippetAttachment } from "@/app/lib/schemas/attachments";
 
 /**
  * A thing the agent can ground its work on. Two shapes:
@@ -64,23 +65,69 @@ export async function collectSnippetAttachments(
     attachments.push({ kind: "upload", relativePath: `${ATTACHMENTS_DIR}/${name}`, label: file.name || name });
   }
 
-  if (paperIds.length) {
-    const database = await ensureDatabase();
-    const rows = database
-      .select({ id: papers.id, title: papers.title })
-      .from(papers)
-      .where(inArray(papers.id, paperIds))
-      .all();
-    // Preserve the order the user attached them in, and skip ids that no longer
-    // exist. No file copy: the reference is just the id the agent reads by API.
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    for (const paperId of paperIds) {
-      const paper = byId.get(paperId);
-      if (paper) {
-        attachments.push({ kind: "paper", paperId: paper.id, label: paper.title || paper.id });
-      }
+  attachments.push(...(await paperAttachments(paperIds)));
+
+  return attachments;
+}
+
+/** A stored `attachments` column as a list, empty when it cannot be read. */
+export function parseAttachmentList(raw: string | null | undefined): SnippetAttachment[] {
+  if (!raw) return [];
+  const parsed = parseJsonWith(SnippetAttachmentListSchema, raw);
+  return parsed.ok ? parsed.data : [];
+}
+
+/**
+ * Attachments a turn already staged, offered again by the composer.
+ *
+ * A rewind takes a turn back so it can be asked differently, and its files are
+ * already in this feed's working directory: the next turn points at them instead of
+ * the browser uploading the same bytes a second time. Every entry is re-checked
+ * against the directory it claims to be in, because the list comes back from the
+ * client and the agent reads whatever relative path it is given.
+ */
+export async function resolveCarriedAttachments(
+  workingDir: string,
+  raw: string | null | undefined,
+): Promise<SnippetAttachment[]> {
+  const root = resolve(workingDir);
+  const staged: SnippetAttachment[] = [];
+  const paperIds: string[] = [];
+  for (const attachment of parseAttachmentList(raw)) {
+    if (attachment.kind === "paper") {
+      if (attachment.paperId) paperIds.push(attachment.paperId);
+      continue;
+    }
+    const relativePath = attachment.relativePath ?? "";
+    const target = resolve(root, relativePath);
+    if (!target.startsWith(`${root}${sep}`) || !existsSync(target)) {
+      continue;
+    }
+    staged.push({ kind: attachment.kind, label: attachment.label, relativePath });
+  }
+  // Papers are resolved by id again, so one renamed since the turn ran carries its
+  // current title and one deleted since is dropped rather than described to the agent.
+  return [...staged, ...(await paperAttachments(paperIds))];
+}
+
+/** Library papers as attachments: a reference by id, in the order given. */
+async function paperAttachments(paperIds: string[]): Promise<SnippetAttachment[]> {
+  if (!paperIds.length) return [];
+  const database = await ensureDatabase();
+  const rows = database
+    .select({ id: papers.id, title: papers.title })
+    .from(papers)
+    .where(inArray(papers.id, paperIds))
+    .all();
+  // Preserve the order the user attached them in, and skip ids that no longer
+  // exist. No file copy: the reference is just the id the agent reads by API.
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const attachments: SnippetAttachment[] = [];
+  for (const paperId of paperIds) {
+    const paper = byId.get(paperId);
+    if (paper) {
+      attachments.push({ kind: "paper", paperId: paper.id, label: paper.title || paper.id });
     }
   }
-
   return attachments;
 }

@@ -4,6 +4,29 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- A thread has an outline rail: every turn of the conversation, and the steps inside it that changed something (an edit with its line counts, an agent it spawned, a command left running, a workflow it started). Clicking a turn brings its request to the top of the view; clicking a step brings that card into the middle, opening the folded run it sits in. A turn's steps stay folded until you are reading that turn, the step count doubles as a filter for turns that changed nothing, and the rail's width is yours to drag.
+- An edit reads as a diff. Edit, Write, MultiEdit, and NotebookEdit show the lines they replaced against the lines they wrote, under the file's path, with the change counted on the card's summary.
+- An agent the thread spawned gets its own card: the prompt it was given, the steps it took, what it found, and what it spent.
+- A command left running in the background says how it ended. The shell's own result only reports that it was backgrounded, so a thread never showed whether the command finished or what it exited with.
+- A workflow names itself from the meta block it must declare, and lists the phases it runs.
+- Scrolling to either end of a thread brings in the next turns, so a long conversation is read by scrolling rather than by pressing a button once per page. Your place in it is kept as the new turns arrive above you.
+- A checklist the agent writes in its reply renders as a checklist.
+
+### Changed
+
+- Every tool call names what it acted on: the file read, the command run, the pattern searched for, the id watched. They used to read as the tool's name over a block of JSON.
+- Both ends of a compaction are links in the thread itself rather than in the header bar, where they named neither feed.
+
+### Fixed
+
+- Rewinding a turn keeps its attachments. The files it carried come back to the reply box with its text, and are sent again by reference instead of being uploaded a second time.
+- A subagent's work is attributed to the agent that did it. Claude streams a spawned agent's narration and tool calls in the same stream as its parent's, so they were stored as things your own agent said and did, one of them could be taken for the turn's answer, and they were mirrored onto the GitHub issue.
+- The feed fits a phone. A pane's width was floored by its widest unbreakable line, which stretched the list past the screen and let the page clip the New button, the search field, Sync, and Activity. The thread's header now reads as an app bar with its controls the same size, level, and evenly inset, the working directory sits on one line, and the row's action menu (rename, fork, select history, export, delete) is reachable without a hover.
+- Jumping to a turn near the end of a feed lands on that turn. The landing satisfied "the reader is at the bottom", which re-pinned the view to the newest turn and paged forward until the whole feed was rendered.
+- A tool card keeps its name and its glyph whole. A long command beside them shrank "Shell" to "Sh…" and squeezed a 13px icon to 7px, because flex distributes shrinking by size.
+
 ## [0.6.1] - 2026-09-01
 
 ### Changed

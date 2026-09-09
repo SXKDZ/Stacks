@@ -4,13 +4,15 @@
  * test must not do, so that half is asserted on the shared function it calls).
  */
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import { jsonRequest, readJson, createTempLibrary } from "../support/harness.ts";
 
 // Must happen before any db module is imported (library-paths resolves the root
 // once per process, and bootstrap caches its init promise).
-createTempLibrary("stacks-feed-rewind");
+const libraryDir = createTempLibrary("stacks-feed-rewind");
 
 const routeModule = import("../../app/api/feed/snippets/[id]/rewind/route.ts");
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -22,7 +24,7 @@ interface Row {
   content: string;
 }
 
-async function seedFeed(id: string, options: { issueNumber?: number } = {}): Promise<{
+async function seedFeed(id: string, options: { issueNumber?: number; starterAttachments?: unknown[] } = {}): Promise<{
   turns: string[];
   read: () => Promise<{ messages: Row[]; snippet: Record<string, unknown>; proposals: number }>;
 }> {
@@ -62,6 +64,9 @@ async function seedFeed(id: string, options: { issueNumber?: number } = {}): Pro
       kind: row.kind,
       content: row.content,
       githubCommentId: options.issueNumber ? 5000 + rows.indexOf(row) : null,
+      attachments: row.id === `${id}-u2` && options.starterAttachments
+        ? JSON.stringify(options.starterAttachments)
+        : null,
       inputTokens: row.inputTokens,
       outputTokens: row.outputTokens,
       durationMs: row.durationMs,
@@ -109,7 +114,7 @@ test("a rewind removes the chosen turn and everything after it", async () => {
 
   assert.equal(result.status, 200);
   // The message it rewound to comes back so the composer can offer it for editing.
-  assert.deepEqual(result.body, { removed: 3, reply: "and the healthcheck?" });
+  assert.deepEqual(result.body, { removed: 3, reply: "and the healthcheck?", attachments: [] });
 
   const { messages, snippet, proposals } = await feed.read();
   assert.deepEqual(messages.map((message) => message.id), ["feed-rewind-1-a1"]);
@@ -156,7 +161,7 @@ test("rewinding to the opening interaction clears the replies and keeps the ques
   assert.equal(result.status, 200);
   // Nothing returns to the composer: the instruction is still the thread's opening
   // turn, so handing back a copy of it would only duplicate the question.
-  assert.deepEqual(result.body, { removed: 4, reply: "" });
+  assert.deepEqual(result.body, { removed: 4, reply: "", attachments: [] });
   const { messages, snippet, proposals } = await feed.read();
   assert.equal(messages.length, 0);
   assert.equal(snippet.instruction, "explain the dockerfile");
@@ -246,4 +251,49 @@ test("cutting a mirrored thread retires its comments and keeps the issue", async
   assert.ok(messages.some((message) => message.role === "system" && /no longer read/.test(message.content)));
   void feedMessages;
   delete process.env.STACKS_GITHUB_REPO;
+});
+
+test("a rewind hands the turn's attachments back with its text", async () => {
+  // The file the turn attached stays staged in the feed's own directory, which is why
+  // the composer can offer it again instead of the browser uploading it a second time.
+  const workingDir = join(libraryDir, "feed", "feed-rewind-6");
+  mkdirSync(join(workingDir, "attachments"), { recursive: true });
+  writeFileSync(join(workingDir, "attachments", "notes.pdf"), "%PDF-1.4\n");
+  await seedFeed("feed-rewind-6", {
+    starterAttachments: [
+      { kind: "upload", relativePath: "attachments/notes.pdf", label: "notes.pdf" },
+      { kind: "paper", paperId: "paper-retrieval", label: "Adaptive Retrieval" },
+    ],
+  });
+
+  const result = await rewind("feed-rewind-6", "feed-rewind-6-u2");
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.attachments, [
+    { kind: "upload", relativePath: "attachments/notes.pdf", label: "notes.pdf" },
+    { kind: "paper", paperId: "paper-retrieval", label: "Adaptive Retrieval" },
+  ]);
+});
+
+test("carried attachments are re-checked against the feed's own directory", async () => {
+  const { resolveCarriedAttachments } = await import("../../app/lib/feed-attachments.ts");
+  const workingDir = join(libraryDir, "feed", "feed-rewind-6");
+
+  const resolved = await resolveCarriedAttachments(workingDir, JSON.stringify([
+    { kind: "upload", relativePath: "attachments/notes.pdf", label: "notes.pdf" },
+    // The list comes back from the browser, and the agent reads whatever relative path
+    // it is handed: one that climbs out of the feed's directory, or names a file that
+    // is not there, is not described to it.
+    { kind: "upload", relativePath: "../../../../etc/passwd", label: "passwd" },
+    { kind: "upload", relativePath: "attachments/deleted.pdf", label: "deleted.pdf" },
+    { kind: "paper", paperId: "paper-retrieval", label: "a title from before" },
+    { kind: "paper", paperId: "paper-gone", label: "removed from the library" },
+  ]));
+
+  assert.deepEqual(resolved, [
+    { kind: "upload", relativePath: "attachments/notes.pdf", label: "notes.pdf" },
+    // Resolved by id, so the label is the paper's title now rather than the one stored
+    // with the turn, and a paper deleted since is dropped.
+    { kind: "paper", paperId: "paper-retrieval", label: "Adaptive Retrieval for Long-Context Scientific Assistants" },
+  ]);
 });

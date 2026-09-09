@@ -205,12 +205,19 @@ export const feedMessages = sqliteTable(
       .references(() => feedSnippets.id, { onDelete: "cascade", onUpdate: "cascade" }),
     // user | assistant | system | event
     role: text("role").notNull(),
-    // text | tool_use | tool_result | result | error
+    // text | tool_use | tool_result | result | error | task
     kind: text("kind").notNull().default("text"),
     content: text("content").notNull().default(""),
     // Correlates a tool_use with its tool_result (Anthropic tool_use id), so the
-    // UI can pair them even when the agent issues tool calls in parallel.
+    // UI can pair them even when the agent issues tool calls in parallel. A "task"
+    // message carries the id of the tool call it reports on.
     toolUseId: text("tool_use_id"),
+    // Set when this message is a SUBAGENT's work rather than the thread's own: the
+    // id of the Agent/Task tool call that spawned it. The CLI streams a subagent's
+    // text and tool calls alongside the parent's, so without this they read as
+    // things the main agent said. Nested messages render inside their agent's card
+    // and are kept out of the thread, out of fork transcripts, and out of GitHub.
+    parentToolUseId: text("parent_tool_use_id"),
     // The GitHub issue-comment id this message was mirrored to or ingested from,
     // so sync neither double-posts nor re-ingests a comment. Null when local-only.
     githubCommentId: integer("github_comment_id"),

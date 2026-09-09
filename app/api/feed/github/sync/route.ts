@@ -158,7 +158,11 @@ function outstandingWrites(database: Awaited<ReturnType<typeof ensureDatabase>>)
   remaining += database
     .select({ count: sql<number>`count(*)` })
     .from(feedMessages)
-    .where(and(isNull(feedMessages.githubCommentId), inArray(feedMessages.kind, [...MIRRORED_KINDS])))
+    .where(and(
+      isNull(feedMessages.githubCommentId),
+      isNull(feedMessages.parentToolUseId),
+      inArray(feedMessages.kind, [...MIRRORED_KINDS]),
+    ))
     .get()?.count ?? 0;
   remaining += database
     .select({ count: sql<number>`count(*)` })
@@ -284,6 +288,9 @@ export async function POST(): Promise<Response> {
           .all();
         for (const message of messages) {
           if (!MIRRORED_KINDS.has(message.kind)) continue;
+          // A subagent's narration belongs to its own card in the thread, not to the
+          // issue: mirrored, it read as the agent answering the same question twice.
+          if (message.parentToolUseId) continue;
           // Backfill: a message mirrored before attachment upload existed has a
           // comment but no "Attachments:" section. Upload its files and edit the
           // comment to add the links, once — attachmentsSynced records completion

@@ -8,6 +8,7 @@ import { RunSettingsMenu } from "@/app/components/feed/RunSettingsMenu";
 import { MarkdownCodeEditor } from "@/app/components/ui/MarkdownCodeEditor";
 
 import { matchesSearch, paperMetaLine, paperSearchValues } from "@/app/lib/paper-meta";
+import type { SnippetAttachment } from "@/app/lib/schemas/attachments";
 import { EFFORT_LEVELS, effortLabel, effortSetting, type EffortSetting } from "@/app/lib/effort";
 
 /** A library paper the user can attach (its PDF/HTML is sent to the agent). */
@@ -54,6 +55,8 @@ export interface AttachSubmit {
   text: string;
   files: File[];
   paperIds: string[];
+  /** Attachments already staged server-side, sent as references (see initialAttachments). */
+  carried: SnippetAttachment[];
   /** The Bedrock model to run this feed with ("" = the default). */
   model: string;
   /** Reasoning effort for this feed ("" = the global Settings value). */
@@ -109,6 +112,7 @@ export function AttachBox({
   compact = false,
   initialText = "",
   initialPapers = [],
+  initialAttachments = [],
   hint,
   leadingAction,
   commands = [],
@@ -127,6 +131,12 @@ export function AttachBox({
   compact?: boolean;
   initialText?: string;
   initialPapers?: LibraryPaper[];
+  /**
+   * Attachments the server already holds, shown as chips and sent back by reference.
+   * A rewind hands back the turn it took, and its files are still staged in the feed's
+   * directory: re-asking keeps them without the browser uploading them again.
+   */
+  initialAttachments?: SnippetAttachment[];
   /** A short keyboard reminder shown beside the submit button. */
   hint?: ReactNode;
   /** Optional control shown beside the submit button (e.g. Stop while running). */
@@ -167,6 +177,7 @@ export function AttachBox({
   }, [initialModel]);
   const [files, setFiles] = useState<File[]>([]);
   const [papers, setPapers] = useState<LibraryPaper[]>(initialPapers);
+  const [carried, setCarried] = useState<SnippetAttachment[]>(initialAttachments);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -267,7 +278,7 @@ export function AttachBox({
     setHoverPreview({ url, left: rect.left, bottom: window.innerHeight - rect.top + 8 });
   }
 
-  const hasAttachments = files.length > 0 || papers.length > 0 || texts.length > 0;
+  const hasAttachments = files.length > 0 || papers.length > 0 || texts.length > 0 || carried.length > 0;
 
   // Move focus into the picker's search box when it opens. `autoFocus` on a
   // conditionally-rendered input is racy (the composer textarea can win the
@@ -367,12 +378,13 @@ export function AttachBox({
     const textFiles = texts.map((entry, index) =>
       new File([entry.content], `pasted-${index + 1}.txt`, { type: "text/plain" }),
     );
-    const cleared = await onSubmit({ text: text.trim(), files: [...files, ...textFiles], paperIds: papers.map((p) => p.id), model, effort });
+    const cleared = await onSubmit({ text: text.trim(), files: [...files, ...textFiles], paperIds: papers.map((p) => p.id), carried, model, effort });
     if (cleared) {
       setText("");
       setFiles([]);
       setPapers([]);
       setTexts([]);
+      setCarried([]);
       setPickerOpen(false);
       setPickerQuery("");
     }
@@ -473,6 +485,17 @@ export function AttachBox({
         </div>
         {hasAttachments ? (
           <div className="feed-attach-tray" ref={trayRef}>
+            {carried.map((attachment, index) => (
+              <span key={`carried-${index}`} className="feed-chip" title={attachment.label}>
+                {attachment.kind === "paper" ? <BookOpen size={12} /> : <FileText size={12} />}
+                <span className="feed-chip-label">{attachment.label}</span>
+                <button
+                  type="button"
+                  onClick={() => setCarried((current) => current.filter((_, i) => i !== index))}
+                  aria-label={`Remove ${attachment.label}`}
+                ><X size={12} /></button>
+              </span>
+            ))}
             {papers.map((paper) => (
               <span key={paper.id} className="feed-chip" title={paper.title}>
                 <BookOpen size={12} />

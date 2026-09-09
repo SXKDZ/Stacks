@@ -3,11 +3,11 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { feedSnippets } from "@/db/schema";
 import { isFeedRunning, isFeedUninterruptible, runFeedAgent, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { buildFeedTranscript } from "@/app/lib/feed-history";
+import { parseAttachmentList } from "@/app/lib/feed-attachments";
 import { buildForkPrompt, buildSnippetPrompt } from "@/app/lib/feed-prompt";
 import { feedInteractions, truncateFeedAt } from "@/app/lib/feed-truncate";
 import { isGithubSyncRunning } from "@/app/lib/feed-sync-state";
-import { parseJsonWith, parseWith } from "@/app/lib/schemas/parse";
-import { SnippetAttachmentListSchema } from "@/app/lib/schemas/attachments";
+import { parseWith } from "@/app/lib/schemas/parse";
 import { FeedInteractionCutSchema } from "@/app/lib/schemas/requests";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +78,7 @@ export async function POST(
     const prompt = buildSnippetPrompt({
       instruction: snippet.instruction,
       freeText: "",
-      attachments: attachmentList(snippet.attachments),
+      attachments: parseAttachmentList(snippet.attachments),
     });
     void runFeedAgent({ snippetId: id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
     return Response.json({ removed: truncation.removed.length, retried: snippet.instruction });
@@ -95,15 +95,8 @@ export async function POST(
   const prompt = buildForkPrompt({
     reply: starter.content,
     transcript,
-    attachments: attachmentList(starter.attachments),
+    attachments: parseAttachmentList(starter.attachments),
   });
   void runFeedAgent({ snippetId: id, sessionId: crypto.randomUUID(), prompt, resume: false }).catch(() => {});
   return Response.json({ removed: truncation.removed.length, retried: starter.content });
-}
-
-/** The turn's staged attachments, or none if the row cannot be read. */
-function attachmentList(raw: string | null) {
-  if (!raw) return [];
-  const parsed = parseJsonWith(SnippetAttachmentListSchema, raw);
-  return parsed.ok ? parsed.data : [];
 }

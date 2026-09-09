@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FoldVertical, FolderOpen, GitBranch, ListChecks, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Trash2, Undo2, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookOpen, Bot, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, CircleDot, Code2, Download, FileDiff, FolderOpen, GitBranch, ListChecks, ListTree, LoaderCircle, MoreVertical, Paperclip, Pencil, Plus, RefreshCw, Rss, Search, Square, Terminal, Trash2, Undo2, Workflow as WorkflowIcon, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,6 +20,8 @@ import { coalesceLegacyAgentErrors, splitFeedError } from "@/app/lib/feed-errors
 import { feedMarkdown } from "@/app/lib/feed-export";
 import { ThemeToggle } from "@/app/components/ui/ThemeToggle";
 import { groupFeedInteractions, interactionsBefore, OPENING_INTERACTION_ID, type FeedInteraction } from "@/app/lib/feed-history";
+import { backgroundShellId, buildFeedOutline, describeToolCall, isAsyncAgentMetadata, parseTaskReport, parseToolInvocation, type FeedTaskReport, type FeedToolView } from "@/app/lib/feed-tool-view";
+import { FeedOutline } from "@/app/components/feed/FeedOutline";
 
 interface FeedMessage {
   id: string;
@@ -27,6 +29,8 @@ interface FeedMessage {
   kind: string;
   content: string;
   toolUseId?: string | null;
+  /** The Agent/Task call this came from, when a subagent produced it. */
+  parentToolUseId?: string | null;
   attachments?: string | null;
   // The usage the CLI reported for the turn this message concludes. Absent (or 0)
   // on user turns, on tool traffic, and on threads recorded before it was stored.
@@ -55,9 +59,19 @@ interface FeedToolOperation {
   label: string;
   input?: string;
   result?: string;
+  /** How this call reads: a diff, a subagent, a shell, a workflow, or plain. */
+  view?: FeedToolView;
+  /** A subagent's own steps, in order, shown inside its card. */
+  children?: FeedMessage[];
+  /** What the call reported when it finished (background commands, subagents). */
+  report?: FeedTaskReport | null;
 }
 
 const FEED_HISTORY_WINDOW = 8;
+const FEED_OUTLINE_KEY = "stacks-feed-outline";
+const FEED_OUTLINE_WIDTH_KEY = "stacks-feed-outline-width";
+const FEED_OUTLINE_MIN = 180;
+const FEED_OUTLINE_MAX = 520;
 
 /** A meta chip on a proposal card. The `action` chip (e.g. "Create paper") is
  *  the primary, brand-tinted label; the rest (paper type, venue) are neutral. */
@@ -461,10 +475,62 @@ function renderToolContent(content: string, feedId: string, feedName: string): R
   return <MarkdownContent content={toolFence(content)} className="feed-tool-md" feedId={feedId} feedName={feedName} />;
 }
 
+/** The glyph for a tool operation, by what the operation is. */
+/** Every glyph in a tool summary is this size, so a run of cards reads as one row of
+ *  the same kind of thing. */
+const TOOL_GLYPH = 13;
+
+function toolGlyph(view: FeedToolView | undefined): ReactNode {
+  if (view?.kind === "diff") return <FileDiff size={TOOL_GLYPH} aria-hidden="true" />;
+  if (view?.kind === "subagent") return <Bot size={TOOL_GLYPH} aria-hidden="true" />;
+  if (view?.kind === "shell") return <Terminal size={TOOL_GLYPH} aria-hidden="true" />;
+  if (view?.kind === "workflow") return <WorkflowIcon size={TOOL_GLYPH} aria-hidden="true" />;
+  return <Wrench size={TOOL_GLYPH} aria-hidden="true" />;
+}
+
+/**
+ * An edit as a diff: the lines the agent replaced against the lines it wrote.
+ *
+ * The tool reports only the strings it swapped, not the file around them, so this is
+ * that swap aligned line by line — which is the part being decided anyway. A whole
+ * file written for the first time has no other side, so it is all additions.
+ */
+function FeedToolDiff({ view }: { view: Extract<FeedToolView, { kind: "diff" }> }) {
+  return (
+    <div className="feed-diff" role="group" aria-label={`Diff of ${view.diff.path || "a file"}`}>
+      {view.diff.path ? <code className="feed-diff-path">{view.diff.path}</code> : null}
+      <pre className="feed-diff-body">
+        {view.diff.lines.map((line, index) => (
+          <span key={index} className={`feed-diff-line is-${line.type}`}>
+            <span className="feed-diff-sign" aria-hidden="true">{line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}</span>
+            <span className="feed-diff-text">{line.text || " "}</span>
+          </span>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
+/** Tokens/steps/time a subagent or background command reported on finishing. */
+function FeedTaskUsage({ report, withStatus }: { report: FeedTaskReport; withStatus: boolean }) {
+  const parts = [
+    withStatus && report.status ? report.status : "",
+    report.totalTokens ? `${compactTokens(report.totalTokens)} tokens` : "",
+    report.toolUses ? `${report.toolUses} tool ${report.toolUses === 1 ? "call" : "calls"}` : "",
+    report.durationMs ? formatDuration(report.durationMs) : "",
+  ].filter(Boolean);
+  if (!parts.length) return null;
+  return <p className="feed-tool-usage">{parts.join(" · ")}</p>;
+}
+
 /**
  * Keep expensive Markdown/highlighting out of the tree until the user opens a
  * tool operation. Native <details> hides its descendants visually but React
  * would otherwise still parse and mount every multi-kilobyte request/result.
+ *
+ * The summary names the operation and its subject (the file, the command, the agent)
+ * so a run of calls can be read without opening any of them; the body is whichever
+ * shape the call has, falling back to the request/result pair.
  */
 const FeedToolCall = memo(function FeedToolCall({ operation, feedId, feedName }: {
   operation: FeedToolOperation;
@@ -472,21 +538,104 @@ const FeedToolCall = memo(function FeedToolCall({ operation, feedId, feedName }:
   feedName: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const view = operation.view;
+  const shellId = view?.kind === "shell" && view.background ? backgroundShellId(operation.result) : null;
+  // A nested result is shown inside the nested call it answers, so it is not also a
+  // step of its own; what remains is the subagent's calls and what it said.
+  const nested = operation.children ?? [];
+  const nestedPaired = new Set(nested.filter((child) => child.kind === "tool_use").map((child) => child.toolUseId));
+  const children = nested.filter((child) => !(child.kind === "tool_result" && nestedPaired.has(child.toolUseId)));
+  const reported = operation.report?.summary.trim() ?? "";
+  const lastSaid = children.filter((child) => child.kind === "text").at(-1)?.content.trim() ?? "";
+  // An async agent's tool result is internal launch metadata that says not to quote it;
+  // what it actually found arrives as its report. Threads recorded before those reports
+  // were stored have only the metadata, and it is still not worth showing.
+  const showResult = operation.result !== undefined
+    && !isAsyncAgentMetadata(operation.result)
+    && !(view?.kind === "subagent" && reported !== "");
+  const showReported = reported !== "" && reported !== operation.result?.trim() && reported !== lastSaid;
   return (
-    <details className="feed-tool-call" onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary><Wrench size={12} /> <span>{operation.label}</span></summary>
+    <details
+      className={`feed-tool-call is-${view?.kind ?? "generic"}`}
+      data-op-id={operation.id}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary>
+        {toolGlyph(view)}
+        <span className="feed-tool-name">{view?.heading.name ?? operation.label}</span>
+        {view?.heading.subject ? <code className="feed-tool-subject">{view.heading.subject}</code> : null}
+        {view?.heading.stat ? <span className="feed-tool-stat">{view.heading.stat}</span> : null}
+        {shellId ? <span className="feed-tool-badge">{shellId}</span> : null}
+        {children.length ? <span className="feed-tool-badge">{children.length} {children.length === 1 ? "step" : "steps"}</span> : null}
+      </summary>
       {expanded ? (
         <div className="feed-tool-io">
-          {operation.input !== undefined ? (
+          {view?.kind === "diff" ? <FeedToolDiff view={view} /> : null}
+          {view?.kind === "subagent" && view.prompt ? (
             <>
-              <span className="feed-tool-tag">Request</span>
-              {renderToolContent(operation.input, feedId, feedName)}
+              <span className="feed-tool-tag">Prompt</span>
+              <MarkdownContent content={view.prompt} className="feed-tool-md" feedId={feedId} feedName={feedName} />
             </>
           ) : null}
-          {operation.result !== undefined ? (
+          {/* A subagent's own run: what it said and what it called, in order, inside
+              the card for the call that started it rather than loose in the thread. */}
+          {children.length ? (
+            <>
+              <span className="feed-tool-tag">Its steps</span>
+              <div className="feed-tool-group-items">
+                {children.map((child) => (
+                  child.kind === "text"
+                    ? <MarkdownContent key={child.id} content={child.content} className="feed-tool-md" feedId={feedId} feedName={feedName} />
+                    : <FeedToolCall key={child.id} operation={childOperation(child, children)} feedId={feedId} feedName={feedName} />
+                ))}
+              </div>
+            </>
+          ) : null}
+          {view?.kind === "workflow" ? (
+            <>
+              {view.phases.length ? (
+                <>
+                  <span className="feed-tool-tag">Phases</span>
+                  <ol className="feed-tool-phases">{view.phases.map((phase, index) => <li key={index}>{phase}</li>)}</ol>
+                </>
+              ) : null}
+              <span className="feed-tool-tag">Script</span>
+              {renderToolContent(view.script, feedId, feedName)}
+            </>
+          ) : null}
+          {view?.kind === "shell" ? (
+            <>
+              <span className="feed-tool-tag">Command</span>
+              {renderToolContent(view.command, feedId, feedName)}
+            </>
+          ) : null}
+          {/* The raw request stays available for every other shape: the typed bodies
+              above show what was decided, not every field the tool was given. */}
+          {view === undefined || view.kind === "generic" ? (
+            operation.input !== undefined ? (
+              <>
+                <span className="feed-tool-tag">Request</span>
+                {renderToolContent(operation.input, feedId, feedName)}
+              </>
+            ) : null
+          ) : null}
+          {showResult ? (
             <>
               <span className="feed-tool-tag">Result</span>
-              {renderToolContent(operation.result, feedId, feedName)}
+              {renderToolContent(operation.result ?? "", feedId, feedName)}
+            </>
+          ) : null}
+          {operation.report ? (
+            <>
+              {showReported ? (
+                <>
+                  <span className="feed-tool-tag">{view?.kind === "subagent" ? "What it found" : "Finished"}</span>
+                  <MarkdownContent content={reported} className="feed-tool-md" feedId={feedId} feedName={feedName} />
+                </>
+              ) : null}
+              {/* The reported sentence already says how it ended, so the line under
+                  it carries only what it spent. */}
+              <FeedTaskUsage report={operation.report} withStatus={!showReported} />
             </>
           ) : null}
         </div>
@@ -494,6 +643,36 @@ const FeedToolCall = memo(function FeedToolCall({ operation, feedId, feedName }:
     </details>
   );
 });
+
+/** One nested step of a subagent's run, paired with its result by tool_use id. */
+function childOperation(message: FeedMessage, siblings: FeedMessage[]): FeedToolOperation {
+  if (message.kind !== "tool_use") {
+    return { id: message.id, label: "tool result", result: message.content };
+  }
+  const invocation = parseToolInvocation(message.content);
+  const result = siblings.find((sibling) => sibling.kind === "tool_result" && sibling.toolUseId === message.toolUseId);
+  return {
+    id: message.id,
+    label: invocation.name,
+    input: invocation.raw,
+    result: result?.content,
+    view: describeToolCall(invocation),
+  };
+}
+
+/** The distinct operations in a collapsed run, most frequent first. */
+function toolRunSummary(operations: FeedToolOperation[]): string {
+  const counts = new Map<string, number>();
+  for (const operation of operations) {
+    const name = operation.view?.heading.name ?? operation.label;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const named = [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 4)
+    .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name));
+  return named.join(", ") + (counts.size > 4 ? ", …" : "");
+}
 
 /** A consecutive run of tools mounts only its count until the group is opened. */
 const FeedToolGroup = memo(function FeedToolGroup({ operations, feedId, feedName }: {
@@ -503,11 +682,19 @@ const FeedToolGroup = memo(function FeedToolGroup({ operations, feedId, feedName
 }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <details className="feed-tool-group" onToggle={(event) => setExpanded(event.currentTarget.open)}>
+    <details
+      className="feed-tool-group"
+      /* What this run holds, so a jump from the outline can open the group the card
+         it wants is folded inside. */
+      data-op-ids={operations.map((operation) => operation.id).join(" ")}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
       <summary>
-        <ChevronRight className="disclosure-chevron" size={14} aria-hidden="true" />
-        <Wrench size={13} />
-        <span>{operations.length} tool operations</span>
+        <ChevronRight className="disclosure-chevron" size={TOOL_GLYPH} aria-hidden="true" />
+        <Wrench size={TOOL_GLYPH} aria-hidden="true" />
+        <span className="feed-tool-name">{operations.length} tool operations</span>
+        {/* Which ones, so a collapsed run says what the agent did there. */}
+        <span className="feed-tool-detail">{toolRunSummary(operations)}</span>
       </summary>
       {expanded ? (
         <div className="feed-tool-group-items">
@@ -1181,11 +1368,12 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   const [proposalBlockOpen, setProposalBlockOpen] = useState<Record<string, boolean>>({});
   const [proposals, setProposals] = useState<FeedProposal[]>([]);
   const [replying, setReplying] = useState(false);
-  // The turn a retry or rewind is working on, the text a rewind recovered, and the
-  // key that remounts the composer around that text.
+  // The turn a retry or rewind is working on, what a rewind recovered from it, and
+  // the key that remounts the composer around that text and those attachments.
   const [busyTurnId, setBusyTurnId] = useState<string | null>(null);
   const [forkingFromId, setForkingFromId] = useState<string | null>(null);
   const [restoredReply, setRestoredReply] = useState("");
+  const [restoredAttachments, setRestoredAttachments] = useState<FeedAttachment[]>([]);
   const [composerNonce, setComposerNonce] = useState(0);
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolvingAll, setResolvingAll] = useState<"approve" | "reject" | null>(null);
@@ -1200,6 +1388,13 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   const [includeToolDetails, setIncludeToolDetails] = useState(false);
   const [creatingFromHistory, setCreatingFromHistory] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
+  // The outline rail: shown or hidden, and whether it lists every turn or only the
+  // ones that changed something. Remembered, since it is a way of working rather than
+  // a per-thread choice.
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [outlineStepsOnly, setOutlineStepsOnly] = useState(false);
+  const [outlineWidth, setOutlineWidth] = useState(244);
+  const [activeInteractionId, setActiveInteractionId] = useState<string | null>(null);
   const [visibleInteractionCount, setVisibleInteractionCount] = useState(FEED_HISTORY_WINDOW);
   const [visibleInteractionStart, setVisibleInteractionStart] = useState<number | null>(null);
   const running = snippet.status === "running" || snippet.status === "queued";
@@ -1222,11 +1417,58 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   const replayingHistoryRef = useRef(true);
   const userScrollIntentRef = useRef(false);
   const userScrollIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Paging the rendered window by scrolling. The thread holds every message the feed
+  // has (the stream replays them all), so only a slice is mounted at a time: reaching
+  // an end of that slice widens it rather than fetching anything. The handlers live in
+  // refs because the scroll listener is bound once, and the guard stops a burst of
+  // scroll events from paging several times before the first one has settled.
+  const pageThreadRef = useRef<{ earlier: (() => void) | null; later: (() => void) | null }>({ earlier: null, later: null });
+  const pagingThreadRef = useRef(false);
+  /**
+   * While a jump is settling, the view belongs to it.
+   *
+   * A jump re-windows the thread around its target, and a target near the end of the
+   * feed leaves little below it: the landing then satisfies "the reader is at the
+   * bottom", which re-pinned the view to the newest turn and paged forward until the
+   * whole feed was rendered. Asking for a turn ten from the end took you to the last
+   * one instead. The token is what makes a second jump during the first one safe: only
+   * the newest jump's timer may clear the flag.
+   */
+  const jumpingRef = useRef(false);
+  const jumpTokenRef = useRef(0);
   const historySelectionRequestNonce = historySelectionRequest?.nonce ?? null;
 
   useEffect(() => {
     if (historySelectionRequestNonce !== null) setSelectingHistory(true);
   }, [historySelectionRequestNonce]);
+
+  useEffect(() => {
+    setOutlineOpen(window.localStorage.getItem(FEED_OUTLINE_KEY) === "open");
+    const saved = Number(window.localStorage.getItem(FEED_OUTLINE_WIDTH_KEY));
+    if (saved >= FEED_OUTLINE_MIN && saved <= FEED_OUTLINE_MAX) setOutlineWidth(saved);
+  }, []);
+
+  /** Drag the rail's inner edge. Dragging left widens it, so the pointer and the edge
+   *  move together; the shared helper owns the listener lifecycle. */
+  function startOutlineResize(event: React.PointerEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = outlineWidth;
+    beginPointerResize(
+      event.pointerId,
+      (clientX) => setOutlineWidth(Math.min(FEED_OUTLINE_MAX, Math.max(FEED_OUTLINE_MIN, startWidth + startX - clientX))),
+      // Read back through the setter, as the sidebar's own handle does: the closure
+      // above captured the width at the start of the drag, not where it ended.
+      () => setOutlineWidth((width) => { window.localStorage.setItem(FEED_OUTLINE_WIDTH_KEY, String(width)); return width; }),
+    );
+  }
+
+  function toggleOutline() {
+    setOutlineOpen((open) => {
+      window.localStorage.setItem(FEED_OUTLINE_KEY, open ? "closed" : "open");
+      return !open;
+    });
+  }
 
   const scrollToBottom = useCallback(() => {
     const body = bodyRef.current;
@@ -1321,9 +1563,25 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     };
     const onScroll = () => {
       const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
-      if (nearBottom) pinnedToBottomRef.current = true;
+      if (nearBottom && !jumpingRef.current) pinnedToBottomRef.current = true;
       else if (!replayingHistoryRef.current && userScrollIntentRef.current) pinnedToBottomRef.current = false;
       setAtBottom(nearBottom);
+      // Which turn the reader is in, for the outline's highlight. Compared before
+      // setting so an ordinary scroll does not re-render the rail on every event.
+      const turns = [...body.querySelectorAll<HTMLElement>("[data-interaction-id]")];
+      const top = body.getBoundingClientRect().top;
+      const current = turns.filter((turn) => turn.getBoundingClientRect().top <= top + 120).at(-1)
+        ?? turns[0];
+      const currentId = current?.dataset.interactionId ?? null;
+      setActiveInteractionId((previous) => (previous === currentId ? previous : currentId));
+      // Scrolling into either end of the rendered window brings the next turns in, so
+      // a long thread is read by scrolling rather than by pressing a button each time.
+      // Only after the history has finished replaying: during the replay the view is
+      // still being driven to the bottom, and paging then would widen the window to
+      // the whole feed before the reader has seen anything.
+      if (jumpingRef.current || replayingHistoryRef.current || pagingThreadRef.current) return;
+      if (body.scrollTop < 200) pageThreadRef.current.earlier?.();
+      else if (nearBottom) pageThreadRef.current.later?.();
     };
     onScroll();
     body.addEventListener("scroll", onScroll, { passive: true });
@@ -1425,14 +1683,16 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     setError(null);
     try {
       let response: Response;
-      if (payload.files.length || payload.paperIds.length) {
+      if (payload.files.length || payload.paperIds.length || payload.carried.length) {
         const form = new FormData();
         form.set("reply", payload.text);
         form.set("model", payload.model);
         form.set("effort", payload.effort);
-        form.set("effort", payload.effort);
         for (const file of payload.files) form.append("files", file);
         for (const paperId of payload.paperIds) form.append("paperIds", paperId);
+        // Already staged in the feed's directory (a rewound turn's files), so they
+        // travel as references and the server re-checks each one.
+        if (payload.carried.length) form.set("carried", JSON.stringify(payload.carried));
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, { method: "POST", body: form });
       } else {
         response = await fetch(`/api/feed/snippets/${snippet.id}/reply`, {
@@ -1567,6 +1827,12 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     () => groupFeedInteractions(snippet.instruction, snippet.attachments, messages),
     [messages, snippet.attachments, snippet.instruction],
   );
+  // Built from the whole thread, since the point of the rail is to reach what is not
+  // on screen. Only when it is open: on a 1400-turn feed this is real work.
+  const outline = useMemo(
+    () => (outlineOpen ? buildFeedOutline(interactions) : []),
+    [interactions, outlineOpen],
+  );
   const visibleStart = visibleInteractionStart ?? Math.max(0, interactions.length - visibleInteractionCount);
   const visibleInteractions = useMemo(
     () => interactions.slice(visibleStart, visibleStart + visibleInteractionCount),
@@ -1601,12 +1867,39 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     const body = bodyRef.current;
     const previousHeight = body?.scrollHeight ?? 0;
     const added = Math.min(FEED_HISTORY_WINDOW, hiddenInteractionCount);
+    if (!added) return;
+    pagingThreadRef.current = true;
     if (visibleInteractionStart !== null) setVisibleInteractionStart(Math.max(0, visibleStart - added));
     setVisibleInteractionCount((current) => Math.min(interactions.length, current + added));
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      // The turns arrive above the reader, so keep their eye where it was: without
+      // this the content they were reading jumps down by the new block's height.
       if (body) body.scrollTop += body.scrollHeight - previousHeight;
+      pagingThreadRef.current = false;
     }));
   }
+
+  /**
+   * The turns after the window, when a jump to an interaction has anchored it mid
+   * thread. Nothing to compensate: they arrive below the reader, and the window keeps
+   * its start until the view returns to the bottom.
+   */
+  function showLaterInteractions() {
+    if (visibleInteractionStart === null || !hiddenLaterInteractionCount) return;
+    pagingThreadRef.current = true;
+    setVisibleInteractionCount((current) =>
+      Math.min(interactions.length - visibleInteractionStart, current + FEED_HISTORY_WINDOW));
+    requestAnimationFrame(() => requestAnimationFrame(() => { pagingThreadRef.current = false; }));
+  }
+
+  // Refreshed after every render so the scroll listener, which is bound once, always
+  // calls the current closures and stops offering a direction with nothing left in it.
+  useEffect(() => {
+    pageThreadRef.current = {
+      earlier: historyReady && hiddenInteractionCount ? showEarlierInteractions : null,
+      later: historyReady && hiddenLaterInteractionCount ? showLaterInteractions : null,
+    };
+  });
 
   function setVisibleInteractions(ids: string[], shouldSelect: boolean) {
     setSelectedInteractions((current) => {
@@ -1619,7 +1912,15 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     });
   }
 
-  function jumpToInteraction(id: string) {
+  /**
+   * Scroll the thread to one of its turns, or to a single operation inside it.
+   *
+   * The window is re-centred on the turn first, because a turn outside it is not in
+   * the document to scroll to. An operation may still be folded inside a collapsed run
+   * of tool calls, which mounts its children only when open, so the group holding it is
+   * opened and then the card itself is brought into view.
+   */
+  function jumpToInteraction(id: string, operationId?: string) {
     const index = interactions.findIndex((interaction) => interaction.id === id);
     if (index !== -1) {
       const centeredStart = Math.max(0, Math.min(
@@ -1631,11 +1932,79 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     }
     cancelHistorySelection();
     pinnedToBottomRef.current = false;
+    // Held for long enough to cover the smooth scroll and the correction pass after it.
+    const jumpToken = (jumpTokenRef.current += 1);
+    jumpingRef.current = true;
+    window.setTimeout(() => {
+      if (jumpTokenRef.current === jumpToken) jumpingRef.current = false;
+    }, 1400);
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const target = [...(bodyRef.current?.querySelectorAll<HTMLElement>("[data-interaction-id]") ?? [])]
-        .find((element) => element.dataset.interactionId === id);
-      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+      const body = bodyRef.current;
+      if (!body) return;
+      if (operationId) {
+        focusOperation(body, id, operationId);
+        return;
+      }
+      jumpToTurn(body, id);
     }));
+  }
+
+  /**
+   * Bring one operation's card into view, opening the collapsed run it is folded into.
+   *
+   * The cards inside a run are mounted only once it is open, and that mounting is a
+   * React render rather than something the toggle does synchronously, so the card is
+   * waited for over a few frames instead of assumed to be there on the next one. If it
+   * never appears the turn itself is the fallback, which is always in the document.
+   */
+  function focusOperation(body: HTMLElement, interactionId: string, operationId: string, attempt = 0) {
+    const group = body.querySelector<HTMLDetailsElement>(`details[data-op-ids~="${operationId}"]`);
+    if (group && !group.open) group.open = true;
+    const card = body.querySelector<HTMLElement>(`[data-op-id="${operationId}"]`);
+    if (card) {
+      // A card is centred: what matters is its body, above and below the summary line.
+      alignInThread(body, card, "centre");
+      // Long enough to find with the eye once the scroll settles, then gone.
+      card.classList.add("is-jump-target");
+      window.setTimeout(() => card.classList.remove("is-jump-target"), 1600);
+      return;
+    }
+    if (attempt < 12) {
+      requestAnimationFrame(() => focusOperation(body, interactionId, operationId, attempt + 1));
+      return;
+    }
+    jumpToTurn(body, interactionId);
+  }
+
+  function jumpToTurn(body: HTMLElement, id: string) {
+    const target = [...body.querySelectorAll<HTMLElement>("[data-interaction-id]")]
+      .find((element) => element.dataset.interactionId === id);
+    // The request goes to the top with its answer below it. Centred, half the view was
+    // the tail of the previous turn, which reads as having jumped to the wrong one.
+    if (target) alignInThread(body, target, "top");
+  }
+
+  /**
+   * Bring something in the thread to rest, then correct once its surroundings settle.
+   *
+   * A jump re-renders the window around its target, and the turns above it keep growing
+   * for a few hundred milliseconds as markdown, images, and diagrams lay out: the first
+   * scroll lands and the target then drifts by hundreds of pixels. The second pass only
+   * runs when it actually drifted, so an accurate jump is left alone.
+   */
+  function alignInThread(body: HTMLElement, element: HTMLElement, align: "top" | "centre") {
+    const offset = () => {
+      const view = body.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
+      return align === "top"
+        ? rect.top - view.top - 16
+        : rect.top + rect.height / 2 - (view.top + view.height / 2);
+    };
+    const settle = () => body.scrollTo({ top: body.scrollTop + offset(), behavior: "smooth" });
+    settle();
+    window.setTimeout(() => {
+      if (Math.abs(offset()) > 80) settle();
+    }, 360);
   }
 
   /**
@@ -1726,7 +2095,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     // and the thread shows those collapsed rather than as messages of their own.
     const later = interactions.length - interactionsBefore(interactions, message.id).length - 1;
     const scope = later > 0 ? `this turn and the ${later} after it` : "this turn";
-    if (!window.confirm(`Rewind to before this message? Stacks removes ${scope} from this thread and puts the text back in the reply box. This cannot be undone.`)) {
+    if (!window.confirm(`Rewind to before this message? Stacks removes ${scope} from this thread and puts the message back in the reply box with its attachments. This cannot be undone.`)) {
       return;
     }
     setBusyTurnId(message.id);
@@ -1741,10 +2110,12 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
         setError(await readError(response));
         return;
       }
-      const payload = await response.json().catch(() => null) as { reply?: string } | null;
-      // A fresh composer carrying the recovered text: remounting is what clears
-      // the previous one's staged files, which belonged to the turn just removed.
+      const payload = await response.json().catch(() => null) as { reply?: string; attachments?: FeedAttachment[] } | null;
+      // A fresh composer holding what the turn was: its text, and its attachments as
+      // chips. Those files are still staged in the feed's directory, so re-asking
+      // sends them again by reference; remounting clears whatever was staged before.
       setRestoredReply(payload?.reply ?? "");
+      setRestoredAttachments(payload?.attachments ?? []);
       setComposerNonce((nonce) => nonce + 1);
       setStreamNonce((nonce) => nonce + 1);
       onChanged();
@@ -1759,13 +2130,17 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
   // the snapshot the composer already loads, and keep the id as secondary text.
   // Both directions of a compaction: where this thread came from, and where it was
   // carried on. Read off the list the sidebar already has rather than asked for.
+  // Each link names the thread it leads to: "Compacted from" alone left the reader
+  // to guess which feed that was, and a thread can be continued in more than one.
+  const feedLabel = (feed: FeedSnippet) => feed.title || feed.instruction || "Untitled";
+  const compactionSource = snippet.compactedFromId
+    ? siblings.find((feed) => feed.id === snippet.compactedFromId)
+    : undefined;
   const compactionLinks = [
-    ...(snippet.compactedFromId && siblings.some((feed) => feed.id === snippet.compactedFromId)
-      ? [{ id: snippet.compactedFromId, label: "Compacted from" }]
-      : []),
+    ...(compactionSource ? [{ id: compactionSource.id, label: "Compacted from", name: feedLabel(compactionSource) }] : []),
     ...siblings
       .filter((feed) => feed.compactedFromId === snippet.id)
-      .map((feed) => ({ id: feed.id, label: "Continued in" })),
+      .map((feed) => ({ id: feed.id, label: "Continued in", name: feedLabel(feed) })),
   ];
 
   const threadCommands: FeedCommand[] = [
@@ -1905,7 +2280,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     <section className="feed-detail">
       <header className="feed-detail-head feed-detail-thread-head">
         <div className="feed-detail-head-inner">
-          <button type="button" className="feed-detail-back" onClick={onBack} aria-label="Back to list"><ArrowLeft size={16} /></button>
+          <ActionButton variant="secondary" size="icon" className="feed-detail-back" onClick={onBack} aria-label="Back to list" icon={<ArrowLeft />} />
           <div className="feed-detail-heading">
             <h1>{snippet.title || snippet.instruction || "Untitled"}</h1>
             <div className="feed-detail-meta">
@@ -1916,19 +2291,8 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
               {snippetStats(snippet).map((stat) => (
                 <span key={stat} className="feed-detail-stat">{stat}</span>
               ))}
-              <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Created ${fullTime(snippet.createdAt)}`}>Created {relativeTime(snippet.createdAt)}</span>
+              <span className="feed-detail-stat feed-detail-stat-created feed-time-tip" tabIndex={0} data-tip={`Created ${fullTime(snippet.createdAt)}`}>Created {relativeTime(snippet.createdAt)}</span>
               <span className="feed-detail-stat feed-time-tip" tabIndex={0} data-tip={`Updated ${fullTime(snippet.updatedAt)}`}>Updated {relativeTime(snippet.updatedAt)}</span>
-              {compactionLinks.map((link) => (
-                <button
-                  key={link.id}
-                  type="button"
-                  className="feed-detail-link"
-                  onClick={() => onOpenFeed(link.id)}
-                >
-                  <FoldVertical size={12} aria-hidden="true" />
-                  {link.label}
-                </button>
-              ))}
             </div>
             <button
               type="button"
@@ -1943,9 +2307,20 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
             </button>
           </div>
           {pendingCount ? <span className="feed-detail-badge">{pendingCount} to approve</span> : null}
+          <ActionButton
+            variant="secondary"
+            size="icon"
+            className={`feed-outline-toggle ${outlineOpen ? "is-active" : ""}`}
+            aria-pressed={outlineOpen}
+            aria-label={outlineOpen ? "Hide the outline" : "Show the outline"}
+            onClick={toggleOutline}
+            icon={<ListTree />}
+          />
         </div>
       </header>
 
+      <div className="feed-detail-main">
+      <div className="feed-detail-column">
       <div className="feed-detail-body" ref={bodyRef}>
         <div className="feed-detail-body-inner" ref={bodyInnerRef}>
         {snippet.status === "error" && snippet.error && !hasStoredError ? (
@@ -1999,7 +2374,23 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
             // position alone mispairs them. Results claimed by id are skipped
             // when the loop reaches them.
             const resultById = new Map<string, FeedMessage>();
+            // A subagent's own steps, gathered under the call that spawned them, and
+            // what each finished call reported. Both are shown inside their tool card
+            // rather than as turns of their own: they are the inside of one call.
+            const nestedByParent = new Map<string, FeedMessage[]>();
+            const reportByToolUse = new Map<string, FeedTaskReport>();
             for (const message of displayMessages) {
+              if (message.parentToolUseId) {
+                const nested = nestedByParent.get(message.parentToolUseId) ?? [];
+                nested.push(message);
+                nestedByParent.set(message.parentToolUseId, nested);
+                continue;
+              }
+              if (message.kind === "task" && message.toolUseId) {
+                const report = parseTaskReport(message.content);
+                if (report) reportByToolUse.set(message.toolUseId, report);
+                continue;
+              }
               if (message.kind === "tool_result" && message.toolUseId) {
                 resultById.set(message.toolUseId, message);
               }
@@ -2007,6 +2398,14 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
             const claimed = new Set<string>();
             let pendingToolOperations: FeedToolOperation[] = [];
             const addToolOperation = (operation: FeedToolOperation) => {
+              // A spawned agent is a run of its own, often minutes of work and its own
+              // tool calls, so it keeps its own card instead of being counted inside
+              // "3 tool operations" next to a file read.
+              if (operation.view?.kind === "subagent") {
+                flushToolOperations();
+                nodes.push(<FeedToolCall key={operation.id} operation={operation} feedId={snippet.id} feedName={feedName} />);
+                return;
+              }
               pendingToolOperations.push(operation);
             };
             // Proposals with no rendered anchor are emitted in their own place in the
@@ -2038,6 +2437,10 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
             };
             for (let i = 0; i < displayMessages.length; i += 1) {
               const message = displayMessages[i];
+              // Rendered inside the card of the call they belong to.
+              if (message.parentToolUseId || message.kind === "task") {
+                continue;
+              }
               if (message.kind === "tool_use") {
                 let resultMessage: FeedMessage | null = null;
                 if (message.toolUseId && resultById.has(message.toolUseId)) {
@@ -2051,14 +2454,15 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
                     claimed.add(next.id);
                   }
                 }
-                const space = message.content.indexOf(" ");
-                const toolName = space === -1 ? message.content : message.content.slice(0, space);
-                const toolInput = space === -1 ? "" : message.content.slice(space + 1);
+                const invocation = parseToolInvocation(message.content);
                 addToolOperation({
                   id: message.id,
-                  label: toolName,
-                  input: toolInput,
+                  label: invocation.name,
+                  input: invocation.raw,
                   result: resultMessage?.content,
+                  view: describeToolCall(invocation),
+                  children: message.toolUseId ? nestedByParent.get(message.toolUseId) : undefined,
+                  report: message.toolUseId ? reportByToolUse.get(message.toolUseId) ?? null : null,
                 });
                 continue;
               }
@@ -2160,6 +2564,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           library={library}
           models={models}
           initialText={restoredReply}
+          initialAttachments={restoredAttachments}
           initialModel={snippet.model ?? ""}
           initialEffort={snippet.effort ?? ""}
           defaultModelLabel={defaultModelLabel}
@@ -2178,6 +2583,21 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
           ) : undefined}
         />
       </footer>
+      </div>
+      {outlineOpen ? (
+        <FeedOutline
+          entries={outline}
+          activeId={activeInteractionId}
+          stepsOnly={outlineStepsOnly}
+          width={outlineWidth}
+          onStepsOnlyChange={setOutlineStepsOnly}
+          onResizeStart={startOutlineResize}
+          onJump={jumpToInteraction}
+          onClose={toggleOutline}
+        />
+      ) : null}
+      </div>
+
       {selectingHistory ? createPortal(
         <FeedHistorySelectionModal
           feedName={feedName}
@@ -2213,6 +2633,7 @@ export default function FeedWorkspace() {
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
+  const pageRef = useRef<HTMLElement>(null);
   const [libraryName, setLibraryName] = useState("My Paper Library");
   const [query, setQuery] = useState("");
 
@@ -2221,6 +2642,37 @@ export default function FeedWorkspace() {
     const saved = Number(window.localStorage.getItem(FEED_SIDEBAR_KEY));
     if (saved >= FEED_SIDEBAR_MIN && saved <= FEED_SIDEBAR_MAX) setSidebarWidth(saved);
   }, []);
+
+  /**
+   * Publish the height of the header the theme toggle floats over.
+   *
+   * The toggle is a page-level overlay, so it cannot centre itself on a bar that is a
+   * grandchild of the pane it covers. A thread's bar is as tall as its wrapped
+   * statistics make it — two rows on a wide window, three or four on a phone — so a
+   * fixed height left the toggle (and the back button beside it) sitting high. Written
+   * as a custom property so the CSS keeps deciding what to do with it.
+   */
+  useEffect(() => {
+    const page = pageRef.current;
+    if (!page) return;
+    // The thread (or composer) bar is the one the toggle covers; the list's bar is what
+    // remains when a phone has collapsed to one pane and that pane is the list. A
+    // hidden pane measures zero, which is how the visible one is chosen.
+    const bars = [page.querySelector<HTMLElement>(".feed-detail-head"), page.querySelector<HTMLElement>(".feed-list-head")];
+    // clientHeight, not the border box: the bar's 1px bottom border is not part of the
+    // row its controls sit in, and centring on it put the floating toggle a pixel below
+    // the button beside it.
+    const height = (bar: HTMLElement | null) => bar?.clientHeight ?? 0;
+    const publish = () => page.style.setProperty("--feed-head-height", `${height(bars[0]) || height(bars[1]) || 62}px`);
+    const observer = new ResizeObserver(publish);
+    for (const bar of bars) {
+      if (bar) observer.observe(bar);
+    }
+    publish();
+    return () => observer.disconnect();
+    // The bars are replaced when the view changes between the list, the composer, and
+    // a thread, so the observer re-attaches to whichever ones are mounted now.
+  }, [selectedId, composing, ready]);
 
   // The shared handler owns the listener lifecycle: it matches the pointer id,
   // coalesces moves into a frame, and releases on cancel, blur, or a button let
@@ -2693,7 +3145,14 @@ export default function FeedWorkspace() {
 
   const showDetail = Boolean(selected) && !composing;
   return (
-    <main className={`feed-page workspace-enter app-interaction-scope ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`} style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}>
+    <main
+      ref={pageRef}
+      className={`feed-page workspace-enter app-interaction-scope ${showDetail || composing ? "has-selection" : ""} ${showDetail ? "has-thread" : ""}`}
+      style={{ ["--feed-sidebar-width" as string]: `${sidebarWidth}px` }}
+    >
+      {/* Floating over whichever header is showing, and centred on it: the bar's
+          height depends on how far the thread's statistics wrap, which is why it is
+          measured rather than assumed. */}
       <div className="feed-theme-toggle">
         <ThemeToggle />
       </div>

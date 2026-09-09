@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { ensureDatabase } from "@/db/bootstrap";
 import { feedSnippets } from "@/db/schema";
 import { isFeedRunning, isFeedUninterruptible, stopFeedAndWait } from "@/app/lib/feed-agent";
+import { parseAttachmentList } from "@/app/lib/feed-attachments";
 import { feedInteractions, truncateFeedAt } from "@/app/lib/feed-truncate";
 import { isGithubSyncRunning } from "@/app/lib/feed-sync-state";
 import { parseWith } from "@/app/lib/schemas/parse";
@@ -63,9 +64,15 @@ export async function POST(
   }
 
   // The opening interaction's user turn is the feed's own instruction, which stays:
-  // rewinding there clears the replies and leaves the question standing.
+  // rewinding there clears the replies and leaves the question standing, attachments
+  // included, so there is nothing for the composer to take back.
+  //
+  // Any other turn goes with its files, and they stay staged in the feed's working
+  // directory: the composer gets them back as chips so re-asking keeps what the
+  // question was about instead of silently dropping it.
   return Response.json({
     removed: truncation.removed.length,
     reply: truncation.target.opening ? "" : truncation.target.userText,
+    attachments: truncation.target.opening ? [] : parseAttachmentList(truncation.target.userAttachments),
   });
 }

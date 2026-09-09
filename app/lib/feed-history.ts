@@ -16,6 +16,8 @@ export interface FeedHistoryMessage {
   kind: string;
   content: string;
   toolUseId?: string | null;
+  /** Set when a subagent produced this, not the thread's own agent. */
+  parentToolUseId?: string | null;
   attachments?: string | null;
   createdAt: string;
 }
@@ -99,6 +101,9 @@ const CONVERSATION_KINDS = new Set(["text", "result"]);
 const TOOL_DETAIL_KINDS = new Set(["text", "result", "tool_use", "tool_result"]);
 
 function historyMessageAllowed(message: FeedHistoryMessage, includeToolDetails: boolean): boolean {
+  // A subagent's own steps are the inside of one tool call in this thread. Copied
+  // into a fork's transcript they read as the thread's agent talking to itself.
+  if (message.parentToolUseId) return false;
   // Claude persists tool observations with role="tool". Check the kind before
   // applying the conversational-role guard, otherwise selecting "tool details"
   // silently keeps every request but drops every corresponding result.
