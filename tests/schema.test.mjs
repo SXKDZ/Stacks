@@ -1924,3 +1924,29 @@ test("a tool summary keeps its verb, its glyph, and its measure whole", async ()
   // does not carry them as well.
   assert.doesNotMatch(feed, /className="feed-detail-link"/);
 });
+
+test("a paused sync says what paused it, what is left, and when it can carry on", async () => {
+  const [feed, sync, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The pause is a local write budget, not a GitHub failure: writes go a second apart
+  // and stop after 400 in an hour, under GitHub's own content-creation ceiling. None of
+  // that is guessable from the word "Paused", so the entry states it.
+  assert.match(sync, /const MIN_MUTATION_INTERVAL_MS = 1_000;/);
+  assert.match(sync, /const MAX_MUTATIONS_PER_HOUR = 400;/);
+  assert.match(feed, /Stacks sends GitHub a second apart and stops after 400 writes in an hour, below GitHub's own limit\./);
+  assert.match(feed, /\$\{queued\}: sync again in \$\{formatDuration\(pausedForMs\)\} to carry on\./);
+  assert.match(feed, /remainingItems\s*\? `\$\{remainingItems\} item\$\{remainingItems === 1 \? "" : "s"\} still queued`/);
+  // "Paused safely" named neither the cause nor the cure; the reason lives in the
+  // message, so the label only says which state this is.
+  assert.doesNotMatch(feed, /Paused safely/);
+
+  // That account is several lines long, and the row it sits in clips to one line
+  // everywhere else (there it is a job's title), so the sync's own rows wrap.
+  assert.match(feed, /className="background-task-panel sync-activity-panel"/);
+  assert.match(styles, /\.sync-activity-panel \.background-task-row strong \{[^}]*white-space: normal/s);
+  assert.match(styles, /\.background-task-row strong,\s*\.background-task-row small \{[^}]*white-space: nowrap/s);
+});

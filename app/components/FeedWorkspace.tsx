@@ -332,7 +332,7 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
   return (
     <aside className={`background-task-dock ${open ? "is-open" : ""}`} aria-label="Sync activity">
       {open ? (
-        <div className="background-task-panel">
+        <div className="background-task-panel sync-activity-panel">
           <header>
             <span><ListChecks size={16} /><strong>Sync activity</strong></span>
             <div>
@@ -346,7 +346,7 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
                 {entry.status === "success" ? <CircleCheck size={16} /> : entry.status === "paused" ? <CircleDot size={16} /> : <CircleAlert size={16} />}
                 <span>
                   <strong>{entry.summary}</strong>
-                  <small>{entry.status === "success" ? "Completed" : entry.status === "paused" ? "Paused safely" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
+                  <small>{entry.status === "success" ? "Completed" : entry.status === "paused" ? "Paused" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
                   {entry.status === "error" ? (
                     <details className="background-task-diagnostics">
                       <summary>
@@ -2800,6 +2800,7 @@ export default function FeedWorkspace() {
       let totalMutations = 0;
       let truncated = false;
       let pausedForMs = 0;
+      let remainingItems = 0;
 
       // GitHub has no bulk Issues endpoint. The server therefore checkpoints a
       // small serial write batch and asks for another pass. Continue those
@@ -2828,10 +2829,8 @@ export default function FeedWorkspace() {
           totals[key] = (totals[key] ?? 0) + (Number.isFinite(value) ? value : 0);
         }
         totalMutations += typeof data.mutations === "number" && Number.isFinite(data.mutations) ? data.mutations : 0;
-        setSyncProgress({
-          done: totalMutations,
-          remaining: typeof data.remaining === "number" && Number.isFinite(data.remaining) ? Math.max(0, data.remaining) : 0,
-        });
+        remainingItems = typeof data.remaining === "number" && Number.isFinite(data.remaining) ? Math.max(0, data.remaining) : 0;
+        setSyncProgress({ done: totalMutations, remaining: remainingItems });
         truncated ||= Boolean(data.truncated);
         if (!data.pending) break;
         if (data.pauseReason === "cooldown") {
@@ -2856,12 +2855,25 @@ export default function FeedWorkspace() {
       ].filter(Boolean);
       const base = parts.length
         ? `Synced: ${parts.join(", ")}`
-        : pausedForMs ? "No items were sent in this pass" : "Synced, already up to date";
+        : pausedForMs ? "Nothing was sent in this pass" : "Synced, already up to date";
+      const queued = remainingItems
+        ? `${remainingItems} item${remainingItems === 1 ? "" : "s"} still queued`
+        : "";
       setSyncAlert(null);
       if (pausedForMs) {
-        recordSync("paused", `${base}. More items remain; sync again in ${formatDuration(pausedForMs)}.`);
+        // A pause is the write budget, not a failure, and it is invisible unless it is
+        // named: Stacks spaces its GitHub writes a second apart and stops after 400 in
+        // an hour, under GitHub's own content-creation ceiling of 500, so a backlog of
+        // hundreds of comments cannot get the token rate limited.
+        recordSync("paused", [
+          `${base}.`,
+          "Stacks sends GitHub a second apart and stops after 400 writes in an hour, below GitHub's own limit.",
+          queued ? `${queued}: sync again in ${formatDuration(pausedForMs)} to carry on.` : `Sync again in ${formatDuration(pausedForMs)} to carry on.`,
+        ].join(" "));
+      } else if (truncated) {
+        recordSync("success", `${base}.${queued ? ` ${queued}: sync again to carry on.` : " More remain, so sync again."}`);
       } else {
-        recordSync("success", truncated ? `${base} (more remain, sync again)` : base);
+        recordSync("success", base);
       }
       await loadSnippets();
     } catch (error) {

@@ -4,6 +4,10 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Fixed
+
+- A paused sync says what paused it. Stacks sends GitHub one write per second and stops after 400 in an hour, below GitHub's own content-creation ceiling, so a backlog of hundreds of comments cannot get the token rate limited. The activity entry now names that budget, says how many items are still queued, and says when a further sync can carry on, where it used to read "Paused safely" over a sentence clipped to "More i…".
+
 ## [0.6.2] - 2026-09-09
 
 ### Added
