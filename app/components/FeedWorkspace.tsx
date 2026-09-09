@@ -1436,6 +1436,8 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
    */
   const jumpingRef = useRef(false);
   const jumpTokenRef = useRef(0);
+  /** The rail's highlight was set by a jump, and holds until a real gesture arrives. */
+  const markedTurnRef = useRef(false);
   const historySelectionRequestNonce = historySelectionRequest?.nonce ?? null;
 
   useEffect(() => {
@@ -1574,15 +1576,24 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
       if (jumpingRef.current || replayingHistoryRef.current || pagingThreadRef.current) return;
       if (body.scrollTop < 200) pageThreadRef.current.earlier?.();
       else if (nearBottom) pageThreadRef.current.later?.();
-      // Which turn the reader is in, for the outline's highlight. Compared before
-      // setting so an ordinary scroll does not re-render the rail on every event. Left
-      // alone while a jump settles: the turn asked for is the one to mark, and in a
-      // thread already scrolled to its end it may never reach the top of the view.
+      // Which turn the reader is in, for the outline's highlight. A turn a jump marked
+      // holds until the reader moves themselves: the relayout that follows a jump emits
+      // scroll events of its own, and letting those decide put the highlight back on
+      // the neighbouring turn a moment after the one asked for had been marked.
+      if (markedTurnRef.current && !userScrollIntentRef.current) return;
+      markedTurnRef.current = false;
       const turns = [...body.querySelectorAll<HTMLElement>("[data-interaction-id]")];
       const top = body.getBoundingClientRect().top;
-      const current = turns.filter((turn) => turn.getBoundingClientRect().top <= top + 120).at(-1)
-        ?? turns[0];
+      // Normally the deepest turn to have begun above the top edge. At the end of the
+      // thread that is the wrong answer: the last turn's request sits below the edge
+      // whenever its reply is shorter than the view, and no amount of scrolling can
+      // raise it, so the turn being read was reported as the one before it.
+      const current = body.scrollHeight - body.scrollTop - body.clientHeight <= 8
+        ? turns.at(-1)
+        : turns.filter((turn) => turn.getBoundingClientRect().top <= top + 120).at(-1) ?? turns[0];
       const currentId = current?.dataset.interactionId ?? null;
+      // Compared before setting, so an ordinary scroll does not re-render the rail on
+      // every event.
       setActiveInteractionId((previous) => (previous === currentId ? previous : currentId));
     };
     onScroll();
@@ -1936,6 +1947,7 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     pinnedToBottomRef.current = false;
     // Marked at once, so the rail shows the turn that was asked for even where the view
     // cannot bring it to the top.
+    markedTurnRef.current = true;
     setActiveInteractionId(id);
     // Held for long enough to cover the smooth scroll and the correction pass after it.
     const jumpToken = (jumpTokenRef.current += 1);

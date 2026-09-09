@@ -7,7 +7,7 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 ### Fixed
 
 - A paused sync says what it is waiting for: "399 posted, 1 file uploaded. 357 left, sync again in 52m." under "Paused: hourly write limit". The entry wraps instead of clipping to "More i…", and "Paused safely" named neither the cause nor the cure. Stacks writes to GitHub once a second and stops after 400 in an hour, under GitHub's own ceiling of 500.
-- Clicking a turn in the outline keeps that turn highlighted. The highlight follows whichever turn sits at the top of the view, which in a thread already scrolled to its end is the turn before the one asked for.
+- Clicking a turn in the outline keeps that turn highlighted. It used to light up and then hand off to its neighbour a moment later: the relayout after a jump emits scroll events of its own, and the highlight followed whichever turn sat at the top of the view. The mark now holds until you scroll yourself, and at the end of a thread the rule names the last turn rather than the one before it (the last request sits below the top edge whenever its reply is shorter than the window).
 
 ## [0.6.2] - 2026-09-09
 

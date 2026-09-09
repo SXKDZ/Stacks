@@ -1882,8 +1882,17 @@ test("the outline reaches any turn of a thread and any change inside it", async 
   // The turn asked for is the one the rail marks, and the scroll-derived highlight is
   // left alone while the jump settles: in a thread already scrolled to its end the
   // target never reaches the top of the view, so the rule marked its neighbour.
-  assert.match(feed, /setActiveInteractionId\(id\);/);
+  assert.match(feed, /markedTurnRef\.current = true;\s*setActiveInteractionId\(id\);/);
   assert.match(feed, /else if \(nearBottom\) pageThreadRef\.current\.later\?\.\(\);\s*\/\/ Which turn the reader is in/);
+  // A jump's mark holds until the reader moves themselves. Held only for the length of
+  // the jump, the relayout that follows it emitted scroll events of its own and the
+  // rule took the highlight back a moment later: the turn asked for lit up and then
+  // handed off to its neighbour.
+  assert.match(feed, /if \(markedTurnRef\.current && !userScrollIntentRef\.current\) return;\s*markedTurnRef\.current = false;/);
+  // At the end of the thread the rule must name the last turn: its request sits below
+  // the top edge whenever its reply is shorter than the view, and no scrolling can
+  // raise it, so the deepest-turn-above-the-edge rule named the turn before it.
+  assert.match(feed, /body\.scrollHeight - body\.scrollTop - body\.clientHeight <= 8\s*\? turns\.at\(-1\)/);
   assert.match(feed, /if \(jumpingRef\.current \|\| replayingHistoryRef\.current \|\| pagingThreadRef\.current\) return;/);
 
   // The rail's width is the reader's, and it is remembered.
