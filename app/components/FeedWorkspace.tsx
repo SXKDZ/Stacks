@@ -346,7 +346,7 @@ function SyncActivityDock({ log, onClear }: { log: SyncLogEntry[]; onClear: () =
                 {entry.status === "success" ? <CircleCheck size={16} /> : entry.status === "paused" ? <CircleDot size={16} /> : <CircleAlert size={16} />}
                 <span>
                   <strong>{entry.summary}</strong>
-                  <small>{entry.status === "success" ? "Completed" : entry.status === "paused" ? "Paused" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
+                  <small>{entry.status === "success" ? "Completed" : entry.status === "paused" ? "Paused: hourly write limit" : "Needs attention"} · {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
                   {entry.status === "error" ? (
                     <details className="background-task-diagnostics">
                       <summary>
@@ -1566,14 +1566,6 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
       if (nearBottom && !jumpingRef.current) pinnedToBottomRef.current = true;
       else if (!replayingHistoryRef.current && userScrollIntentRef.current) pinnedToBottomRef.current = false;
       setAtBottom(nearBottom);
-      // Which turn the reader is in, for the outline's highlight. Compared before
-      // setting so an ordinary scroll does not re-render the rail on every event.
-      const turns = [...body.querySelectorAll<HTMLElement>("[data-interaction-id]")];
-      const top = body.getBoundingClientRect().top;
-      const current = turns.filter((turn) => turn.getBoundingClientRect().top <= top + 120).at(-1)
-        ?? turns[0];
-      const currentId = current?.dataset.interactionId ?? null;
-      setActiveInteractionId((previous) => (previous === currentId ? previous : currentId));
       // Scrolling into either end of the rendered window brings the next turns in, so
       // a long thread is read by scrolling rather than by pressing a button each time.
       // Only after the history has finished replaying: during the replay the view is
@@ -1582,6 +1574,16 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
       if (jumpingRef.current || replayingHistoryRef.current || pagingThreadRef.current) return;
       if (body.scrollTop < 200) pageThreadRef.current.earlier?.();
       else if (nearBottom) pageThreadRef.current.later?.();
+      // Which turn the reader is in, for the outline's highlight. Compared before
+      // setting so an ordinary scroll does not re-render the rail on every event. Left
+      // alone while a jump settles: the turn asked for is the one to mark, and in a
+      // thread already scrolled to its end it may never reach the top of the view.
+      const turns = [...body.querySelectorAll<HTMLElement>("[data-interaction-id]")];
+      const top = body.getBoundingClientRect().top;
+      const current = turns.filter((turn) => turn.getBoundingClientRect().top <= top + 120).at(-1)
+        ?? turns[0];
+      const currentId = current?.dataset.interactionId ?? null;
+      setActiveInteractionId((previous) => (previous === currentId ? previous : currentId));
     };
     onScroll();
     body.addEventListener("scroll", onScroll, { passive: true });
@@ -1932,6 +1934,9 @@ function FeedDetail({ snippet, library, collections, models, defaultModelLabel, 
     }
     cancelHistorySelection();
     pinnedToBottomRef.current = false;
+    // Marked at once, so the rail shows the turn that was asked for even where the view
+    // cannot bring it to the top.
+    setActiveInteractionId(id);
     // Held for long enough to cover the smooth scroll and the correction pass after it.
     const jumpToken = (jumpTokenRef.current += 1);
     jumpingRef.current = true;
@@ -2855,23 +2860,15 @@ export default function FeedWorkspace() {
       ].filter(Boolean);
       const base = parts.length
         ? `Synced: ${parts.join(", ")}`
-        : pausedForMs ? "Nothing was sent in this pass" : "Synced, already up to date";
-      const queued = remainingItems
-        ? `${remainingItems} item${remainingItems === 1 ? "" : "s"} still queued`
-        : "";
+        : pausedForMs ? "Nothing sent this pass" : "Synced, already up to date";
+      const left = remainingItems ? `${remainingItems} left` : "";
       setSyncAlert(null);
+      // What was sent, what is left, when to come back. Why it stopped is the entry's
+      // own status line, which names the limit.
       if (pausedForMs) {
-        // A pause is the write budget, not a failure, and it is invisible unless it is
-        // named: Stacks spaces its GitHub writes a second apart and stops after 400 in
-        // an hour, under GitHub's own content-creation ceiling of 500, so a backlog of
-        // hundreds of comments cannot get the token rate limited.
-        recordSync("paused", [
-          `${base}.`,
-          "Stacks sends GitHub a second apart and stops after 400 writes in an hour, below GitHub's own limit.",
-          queued ? `${queued}: sync again in ${formatDuration(pausedForMs)} to carry on.` : `Sync again in ${formatDuration(pausedForMs)} to carry on.`,
-        ].join(" "));
+        recordSync("paused", `${base}. ${left ? `${left}, ` : ""}sync again in ${formatDuration(pausedForMs)}.`);
       } else if (truncated) {
-        recordSync("success", `${base}.${queued ? ` ${queued}: sync again to carry on.` : " More remain, so sync again."}`);
+        recordSync("success", `${base}. ${left ? `${left}, ` : ""}sync again.`);
       } else {
         recordSync("success", base);
       }

@@ -6,7 +6,8 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
-- A paused sync says what paused it. Stacks sends GitHub one write per second and stops after 400 in an hour, below GitHub's own content-creation ceiling, so a backlog of hundreds of comments cannot get the token rate limited. The activity entry now names that budget, says how many items are still queued, and says when a further sync can carry on, where it used to read "Paused safely" over a sentence clipped to "More i…".
+- A paused sync says what it is waiting for: "399 posted, 1 file uploaded. 357 left, sync again in 52m." under "Paused: hourly write limit". The entry wraps instead of clipping to "More i…", and "Paused safely" named neither the cause nor the cure. Stacks writes to GitHub once a second and stops after 400 in an hour, under GitHub's own ceiling of 500.
+- Clicking a turn in the outline keeps that turn highlighted. The highlight follows whichever turn sits at the top of the view, which in a thread already scrolled to its end is the turn before the one asked for.
 
 ## [0.6.2] - 2026-09-09
 
