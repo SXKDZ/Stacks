@@ -4,6 +4,8 @@ All notable changes to Stacks are documented here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-09-09
+
 ### Added
 
 - A thread has an outline rail: every turn of the conversation, and the steps inside it that changed something (an edit with its line counts, an agent it spawned, a command left running, a workflow it started). Clicking a turn brings its request to the top of the view; clicking a step brings that card into the middle, opening the folded run it sits in. A turn's steps stay folded until you are reading that turn, the step count doubles as a filter for turns that changed nothing, and the rail's width is yours to drag.
@@ -397,7 +399,8 @@ Initial public release.
 - One-way OneDrive backup of the library, database, managed files, and feed transcripts.
 - Light and dark themes, and an in-app update check against GitHub releases.
 
-[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/SXKDZ/Stacks/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.6.2
 [0.6.1]: https://github.com/SXKDZ/Stacks/releases/tag/v0.6.1
 [0.6.0]: https://github.com/SXKDZ/Stacks/releases/tag/v0.6.0
 [0.5.2]: https://github.com/SXKDZ/Stacks/releases/tag/v0.5.2
