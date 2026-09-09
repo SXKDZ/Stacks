@@ -669,6 +669,20 @@
   font-size: var(--type-caption);
 }
 
+/* A sync's own report wraps. Elsewhere a row is a job's one-line title, but this
+   line is the whole account of a pass: what it sent, what is left, and when it can
+   carry on, and clipped to one line it ended at "More i…". */
+.sync-activity-panel .background-task-row strong {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.sync-activity-panel .background-task-row small {
+  overflow: visible;
+  white-space: normal;
+}
+
 .background-task-row small {
   font-size: var(--type-micro);
 }

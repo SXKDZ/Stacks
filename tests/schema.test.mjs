@@ -1879,6 +1879,11 @@ test("the outline reaches any turn of a thread and any change inside it", async 
   assert.match(feed, /const jumpToken = \(jumpTokenRef\.current \+= 1\);\s*jumpingRef\.current = true;/);
   assert.match(feed, /if \(jumpTokenRef\.current === jumpToken\) jumpingRef\.current = false;/);
   assert.match(feed, /if \(nearBottom && !jumpingRef\.current\) pinnedToBottomRef\.current = true;/);
+  // The turn asked for is the one the rail marks, and the scroll-derived highlight is
+  // left alone while the jump settles: in a thread already scrolled to its end the
+  // target never reaches the top of the view, so the rule marked its neighbour.
+  assert.match(feed, /setActiveInteractionId\(id\);/);
+  assert.match(feed, /else if \(nearBottom\) pageThreadRef\.current\.later\?\.\(\);\s*\/\/ Which turn the reader is in/);
   assert.match(feed, /if \(jumpingRef\.current \|\| replayingHistoryRef\.current \|\| pagingThreadRef\.current\) return;/);
 
   // The rail's width is the reader's, and it is remembered.
@@ -1923,4 +1928,31 @@ test("a tool summary keeps its verb, its glyph, and its measure whole", async ()
   // Both ends of a compaction are notes in the thread with the same links, so the bar
   // does not carry them as well.
   assert.doesNotMatch(feed, /className="feed-detail-link"/);
+});
+
+test("a paused sync says what paused it, what is left, and when it can carry on", async () => {
+  const [feed, sync, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/github-sync.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The pause is a local write budget, not a GitHub failure: writes go a second apart
+  // and stop after 400 in an hour, under GitHub's own content-creation ceiling. None of
+  // that is guessable from the word "Paused", so the entry states it.
+  assert.match(sync, /const MIN_MUTATION_INTERVAL_MS = 1_000;/);
+  assert.match(sync, /const MAX_MUTATIONS_PER_HOUR = 400;/);
+  // The numbers go in the message, the reason in the status line. Two short lines, not
+  // a paragraph: this is a 233px rail.
+  assert.match(feed, /`\$\{base\}\. \$\{left \? `\$\{left\}, ` : ""\}sync again in \$\{formatDuration\(pausedForMs\)\}\.`/);
+  assert.match(feed, /const left = remainingItems \? `\$\{remainingItems\} left` : "";/);
+  assert.match(feed, /entry\.status === "paused" \? "Paused: hourly write limit"/);
+  // "Paused safely" named neither the cause nor the cure.
+  assert.doesNotMatch(feed, /Paused safely/);
+
+  // That account is several lines long, and the row it sits in clips to one line
+  // everywhere else (there it is a job's title), so the sync's own rows wrap.
+  assert.match(feed, /className="background-task-panel sync-activity-panel"/);
+  assert.match(styles, /\.sync-activity-panel \.background-task-row strong \{[^}]*white-space: normal/s);
+  assert.match(styles, /\.background-task-row strong,\s*\.background-task-row small \{[^}]*white-space: nowrap/s);
 });
