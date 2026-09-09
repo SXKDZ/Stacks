@@ -223,8 +223,11 @@
   background: var(--canvas);
   display: grid;
   /* Two columns only — the single 1px seam is the sidebar's own border-right, so
-     there is no gap band between the panes. The drag handle is an overlay. */
-  grid-template-columns: var(--feed-sidebar-width) 1fr;
+     there is no gap band between the panes. The drag handle is an overlay.
+     minmax(0, …) on both: a bare `1fr` floors at the column's min-content width,
+     so one nowrap row (a title line, a stat row, a path) stretched the pane past
+     the viewport and the page's overflow:hidden cut the right-hand side off. */
+  grid-template-columns: minmax(0, var(--feed-sidebar-width)) minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
   position: relative;
@@ -321,17 +324,17 @@
 .feed-theme-toggle {
   align-items: center;
   display: flex;
-  height: 62px;
+  /* The bar this floats over is as tall as its content wraps: two rows on a wide
+     window, more on a phone. FeedWorkspace measures it and publishes the height, so
+     the toggle is centred on the real bar rather than on a guess (which left it
+     sitting high whenever the statistics wrapped). */
+  height: var(--feed-head-height, 62px);
   justify-content: center;
   position: absolute;
   right: 0;
   top: 0;
   width: 76px;
   z-index: 30;
-}
-
-.feed-page.has-thread > .feed-theme-toggle {
-  height: 86px;
 }
 
 /* Filter the history list by title/instruction. */
@@ -1427,18 +1430,11 @@
   padding-top: 8px;
 }
 
+/* Back, the outline toggle, and the theme toggle are the same control at the same
+   size: the shared icon button. Only its visibility differs here — the back button
+   exists once the panes have collapsed to one. */
 .feed-detail-back {
-  align-items: center;
-  background: transparent;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-control);
-  color: var(--muted);
-  cursor: pointer;
   display: none;
-  flex-shrink: 0;
-  height: 32px;
-  justify-content: center;
-  width: 32px;
 }
 
 .feed-detail-heading {
@@ -1586,11 +1582,308 @@
    pane's right edge; an inner wrapper caps and centers the reading column.
    Reserve the scrollbar gutter on both edges so the centered column lines up
    with the (non-scrolling) footer dock instead of shifting left. */
+/* Everything below the header is one row: the thread with its composer, and the
+   outline beside them. The rail runs the full height, and the composer belongs to the
+   thread's column, so it stays centred on the conversation instead of on the pane. */
+.feed-detail-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.feed-detail-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
 .feed-detail-body {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
+}
+
+/* The outline rail: every turn of the thread, and the steps inside it that changed
+   something. Its own scroll, a hairline off the thread. */
+.feed-outline {
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
+  /* Width is dragged and remembered, so it arrives as an inline style. */
+  position: relative;
+}
+
+/* The drag handle on the rail's inner edge: a hit area over the seam, consuming no
+   layout width, tinted only while it is being used (like the sidebar's own). */
+.feed-outline-resize {
+  cursor: col-resize;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 9px;
+  z-index: 5;
+}
+
+.feed-outline-resize::before {
+  background: transparent;
+  content: "";
+  inset: 0;
+  margin: 0 auto;
+  position: absolute;
+  transition: background var(--motion-fast);
+  width: 2px;
+}
+
+.feed-outline-resize:hover::before,
+.is-resizing-column .feed-outline-resize::before {
+  background: var(--brand-blue);
+}
+
+.feed-outline-head {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--type-caption);
+  gap: 7px;
+  padding: 9px 10px 9px 12px;
+}
+
+.feed-outline-head strong {
+  color: var(--ink);
+  font-size: var(--type-control);
+  font-weight: 650;
+}
+
+/* The step count doubles as the filter: pressed, the rail drops every turn that
+   changed nothing, which is how a handful of edits are found in a thousand turns. */
+.feed-outline-filter {
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--type-micro);
+  margin-left: auto;
+  padding: 1px 8px;
+  transition: background var(--motion-control), color var(--motion-control);
+}
+
+.feed-outline-filter:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.feed-outline-filter.is-active {
+  background: var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
+  color: var(--brand-blue-strong);
+}
+
+.feed-outline-filter:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.feed-outline-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  padding: 2px;
+}
+
+.feed-outline-close:hover {
+  color: var(--ink);
+}
+
+.feed-outline-empty {
+  color: var(--soft);
+  font-size: var(--type-caption);
+  line-height: 1.45;
+  margin: 0;
+  padding: 12px;
+}
+
+.feed-outline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+/* One turn: a fold control for its steps, the request's first line, and — while it is
+   folded — how many steps it holds. */
+.feed-outline-row {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.feed-outline-row:hover {
+  background: var(--surface-2);
+}
+
+.feed-outline-row.is-active {
+  background: var(--brand-blue-soft);
+}
+
+.feed-outline-row.is-active .feed-outline-turn {
+  color: var(--brand-blue-strong);
+  font-weight: 600;
+}
+
+.feed-outline-fold {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--soft);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  padding: 0;
+  transition: transform var(--motion-control);
+  width: 16px;
+}
+
+.feed-outline-fold.is-open {
+  transform: rotate(90deg);
+}
+
+.feed-outline-fold.is-empty {
+  cursor: default;
+}
+
+.feed-outline-fold:hover:not(.is-empty) {
+  color: var(--ink);
+}
+
+/* The label is cut rather than wrapped, so the rail stays a column of scannable rows. */
+.feed-outline-turn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  flex: 1;
+  font: inherit;
+  font-size: var(--type-caption);
+  min-width: 0;
+  overflow: hidden;
+  padding: 5px 2px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-outline-turn:hover {
+  color: var(--ink);
+}
+
+.feed-outline-turn-count {
+  color: var(--soft);
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.feed-outline-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+  /* Indented under their turn, with a rule that ties them to it. */
+  margin: 1px 0 3px 14px;
+  border-left: 1px solid var(--line);
+  padding: 0 0 0 6px;
+}
+
+.feed-outline-op {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: var(--type-micro);
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 6px;
+  text-align: left;
+  width: 100%;
+}
+
+.feed-outline-op > svg {
+  color: var(--brand-blue-strong);
+  flex-shrink: 0;
+}
+
+.feed-outline-op-subject {
+  font-family: var(--font-mono);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "+9 −1" for an edit: the change itself, which is what the rail is scanned for. */
+.feed-outline-op-stat {
+  color: var(--soft);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.feed-outline-op:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* The header's control for the rail. */
+.feed-outline-toggle.is-active {
+  background: var(--brand-blue-soft);
+  border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
+  color: var(--brand-blue-strong);
+}
+
+/* Where a jump landed, so the eye finds the card the rail was aimed at. */
+.feed-tool-call.is-jump-target,
+.feed-tool-group.is-jump-target {
+  animation: feed-jump-flash 1.6s var(--ease-standard, ease) both;
+}
+
+@keyframes feed-jump-flash {
+  0%, 45% {
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px var(--brand-blue-soft);
+  }
+  100% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
 }
 
 .feed-detail-body-inner {
@@ -1747,23 +2040,6 @@
 @keyframes sync-border-travel {
   from { --sync-angle: 0; }
   to { --sync-angle: 360; }
-}
-
-/* A compaction's two ends, in the thread header: where it came from, where it went. */
-.feed-detail-link {
-  align-items: center;
-  background: none;
-  border: 0;
-  color: var(--brand-blue-strong);
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  gap: 4px;
-  padding: 0;
-}
-
-.feed-detail-link:hover {
-  text-decoration: underline;
 }
 
 /* The composer's command list, opened by typing "/". A dropdown pinned just above the
@@ -2114,6 +2390,16 @@
   .feed-rich-actions {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  /* Hover-revealed controls are unreachable on a touch screen: the row's kebab is
+     the only way to rename, fork, compact, pick history, or delete a feed, and it
+     never appeared on a phone. Shown always, with the title kept clear of it. */
+  .feed-row-kebab {
+    display: flex;
+  }
+  .feed-row-title {
+    padding-right: 24px;
   }
 }
 
@@ -3047,9 +3333,147 @@
   outline-offset: -2px;
 }
 
-.feed-tool-call > summary > span {
+/* The operation's name, then its subject. The name carries the weight; the subject
+   is monospace because it is nearly always a path, a command, or an id, and it is
+   allowed to be cut rather than to wrap the summary onto a second line. */
+/* What the call is. Never shrinks: a card reading "Sh…" says nothing, and flex
+   distributes shrinking by size, so beside a 900px command this 40px word was the
+   first thing crushed. */
+.feed-tool-name {
+  flex-shrink: 0;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* What it acted on: a path, a command, an id. Code, because that is what it is, and
+   the one part allowed to be cut when the row runs out of room. */
+.feed-tool-subject {
+  background: none;
+  color: var(--soft);
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-size: var(--type-caption);
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Its measure ("+9 −1"): short, tabular, and kept whole. */
+.feed-tool-stat {
+  color: var(--soft);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A shell id, or a subagent's step count: a fact about the call, pushed to the end
+   of the row so a column of cards lines its badges up. */
+.feed-tool-badge {
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  color: var(--soft);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+  margin-left: auto;
+  padding: 1px 7px;
+}
+
+/* Every glyph in a summary keeps its size. Without this the row shrank the icon
+   itself to make room for a long command, so a terminal came out 7px wide beside a
+   13px wrench. */
+:is(.feed-tool-call, .feed-tool-group) > summary > svg {
+  flex-shrink: 0;
+}
+
+/* The four shapes that read as something in particular get their glyph tinted, so a
+   diff, a subagent, a shell, and a workflow are told apart before being opened. */
+:is(.feed-tool-call.is-diff, .feed-tool-call.is-subagent, .feed-tool-call.is-shell, .feed-tool-call.is-workflow) > summary > svg:first-child {
+  color: var(--brand-blue-strong);
+}
+
+/* An edit, as the lines it replaced against the lines it wrote. */
+.feed-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 11px;
+}
+
+.feed-diff-path {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  overflow-wrap: anywhere;
+}
+
+.feed-diff-body {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  line-height: 1.5;
+  margin: 0;
+  overflow-x: auto;
+  padding: 6px 0;
+}
+
+.feed-diff-line {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px;
+  white-space: pre-wrap;
+}
+
+/* Tinted the same way the rest of the app signals added and removed, and never by
+   colour alone: every line keeps its +/-/space sign. */
+.feed-diff-line.is-add {
+  background: color-mix(in srgb, var(--status-complete) 12%, transparent);
+  color: var(--ink);
+}
+
+.feed-diff-line.is-remove {
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
+  color: var(--ink);
+}
+
+.feed-diff-line.is-context {
+  color: var(--muted);
+}
+
+.feed-diff-sign {
+  color: var(--soft);
+  flex-shrink: 0;
+  user-select: none;
+  width: 0.7em;
+}
+
+.feed-diff-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A workflow's phases, in the order it declares them. */
+.feed-tool-phases {
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--type-caption);
+  gap: 2px;
+  margin: 0;
+  padding: 4px 11px 8px 28px;
+}
+
+/* What a subagent or a background command spent, under its own report. */
+.feed-tool-usage {
+  color: var(--soft);
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  padding: 2px 11px 8px;
 }
 
 :is(.feed-tool-call, .feed-tool-group)[open] > summary {
@@ -3100,6 +3524,16 @@
    on the same element out-specifies the global light-theme pre background. */
 .feed-tool-md {
   padding: 4px 11px 8px;
+}
+
+/* A card's prose (a subagent's prompt, what it found, its narration) is part of the
+   card, so it reads at the card's size rather than at the thread's: at body size it
+   towered over the request and result blocks around it. */
+.feed-tool-io .markdown-content.feed-tool-md,
+.feed-tool-io .markdown-content.feed-tool-md p,
+.feed-tool-io .markdown-content.feed-tool-md li {
+  font-size: var(--type-control);
+  line-height: 1.5;
 }
 
 .feed-tool-empty {
@@ -3209,7 +3643,7 @@
    selected, then swap to the detail pane with a back button. */
 @media (max-width: 720px) {
   .feed-page {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .feed-sidebar-resize {
     display: none;
@@ -3225,6 +3659,66 @@
   }
   .feed-detail-back {
     display: inline-flex;
+  }
+  /* Two 40px controls plus the title is all a 390px bar holds, and the moon keeps the
+     same 16px from the right edge that the back button keeps from the left (the mobile
+     gutter), so the bar reads as symmetrical. */
+  .feed-theme-toggle {
+    justify-content: flex-end;
+    padding-right: 16px;
+    width: 56px;
+  }
+  .feed-list-head,
+  .feed-detail-head-inner {
+    padding-right: 56px;
+  }
+
+  /* One pane means the floating theme toggle now hangs over whichever pane is
+     showing, so both headers reserve its slot: on the list it sat on top of the
+     New button. Narrower here than on the desktop, where it clears a 32px gutter
+     as well. */
+  /* A phone has 390px to spend: 32px gutters each side took a sixth of the
+     reading column, and every one of these panels resolves the same two vars. */
+  .feed-detail,
+  .feed-detail-pane,
+  .feed-compose {
+    --feed-gutter: 16px;
+  }
+
+  /* The path stays, but on one line: wrapped it took a third of the header. Its tap
+     still opens the directory on the machine running Stacks. */
+  .feed-working-directory-link code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The bubble keeps its inset shape but claims the width a phone needs. */
+  .feed-turn-user {
+    max-width: 92%;
+  }
+
+  /* A 244px rail beside a 390px thread leaves neither readable, and the header has no
+     room for another control: on a phone the row menu's history selection is the way
+     around a long thread. */
+  .feed-outline,
+  .feed-outline-toggle {
+    display: none;
+  }
+
+  /* Two ages in a row that already wrapped three lines deep. The one being asked
+     is when this thread last moved; a tap on the row still carries its full date. */
+  .feed-detail-stat-created {
+    display: none;
+  }
+
+  /* No modifier keys to press, and the row it shared with Send has no room. */
+  .feed-dock-hint {
+    display: none;
+  }
+  /* A full model label ("Claude Opus 5 · US") pushed Send onto its own line. */
+  .feed-dock-tools .run-settings-trigger {
+    max-width: 128px;
   }
 }
 

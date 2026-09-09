@@ -3,7 +3,7 @@ import { ensureDatabase } from "@/db/bootstrap";
 import { feedMessages, feedSnippets } from "@/db/schema";
 import { feedWorkingDir, isFeedRunning, runFeedAgent, stopFeedAndWait } from "@/app/lib/feed-agent";
 import { buildFollowUpPrompt, buildForkPrompt } from "@/app/lib/feed-prompt";
-import { collectSnippetAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
+import { collectSnippetAttachments, resolveCarriedAttachments, type SnippetAttachment } from "@/app/lib/feed-attachments";
 import { markOutcomesReported, unreportedOutcomes } from "@/app/lib/feed-outcomes";
 import { parseWith } from "@/app/lib/schemas/parse";
 import { effortSetting } from "@/app/lib/effort";
@@ -25,6 +25,9 @@ export async function POST(
   let effort: string | null = null;
   let files: File[] = [];
   let paperIds: string[] = [];
+  // Attachments a rewind took back with its turn. They are already staged in this
+  // feed's directory, so they come back as references rather than as uploads.
+  let carried: string | null = null;
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
@@ -33,6 +36,7 @@ export async function POST(
     if (form.has("effort")) effort = String(form.get("effort") ?? "").trim();
     paperIds = form.getAll("paperIds").map((value) => String(value)).filter(Boolean);
     files = form.getAll("files").filter((value): value is File => value instanceof File);
+    if (form.has("carried")) carried = String(form.get("carried") ?? "");
   } else {
     const parsed = parseWith(FeedReplyRequestSchema, await request.json().catch(() => ({})));
     const body = parsed.ok ? parsed.data : {};
@@ -46,10 +50,11 @@ export async function POST(
   if (!snippet) {
     return Response.json({ error: "Snippet not found." }, { status: 404 });
   }
-  let attachments: SnippetAttachment[] = [];
-  if (files.length || paperIds.length) {
-    attachments = await collectSnippetAttachments(feedWorkingDir(id), files, paperIds);
-  }
+  const workingDir = feedWorkingDir(id);
+  const attachments: SnippetAttachment[] = [
+    ...(carried ? await resolveCarriedAttachments(workingDir, carried) : []),
+    ...(files.length || paperIds.length ? await collectSnippetAttachments(workingDir, files, paperIds) : []),
+  ];
   if (!reply && !attachments.length) {
     return Response.json({ error: "Enter a follow-up message or attach a file." }, { status: 400 });
   }

@@ -32,7 +32,7 @@ type FeedEvent =
   // emitter and the events route only ever meant "running", and the client reads the
   // event, not its body.
   | { type: "status" }
-  | { type: "message"; id: string; role: string; kind: string; content: string; toolUseId?: string | null; createdAt: string }
+  | { type: "message"; id: string; role: string; kind: string; content: string; toolUseId?: string | null; parentToolUseId?: string | null; createdAt: string }
   | { type: "proposal"; id: string; messageId: string | null; operation: string; status: string; summary: string; createdAt: string }
   | { type: "usage"; messageId: string; inputTokens: number; outputTokens: number; durationMs: number }
   | { type: "done"; status: string };
@@ -244,12 +244,13 @@ async function persistMessage(
   kind: string,
   content: string,
   toolUseId: string | null = null,
+  parentToolUseId: string | null = null,
 ): Promise<FeedEvent> {
   const database = await ensureDatabase();
   const id = createId("msg");
   const createdAt = new Date().toISOString();
-  database.insert(feedMessages).values({ id, snippetId, role, kind, content, toolUseId, createdAt }).run();
-  return { type: "message", id, role, kind, content, toolUseId, createdAt };
+  database.insert(feedMessages).values({ id, snippetId, role, kind, content, toolUseId, parentToolUseId, createdAt }).run();
+  return { type: "message", id, role, kind, content, toolUseId, parentToolUseId, createdAt };
 }
 
 async function persistProposal(
@@ -728,20 +729,46 @@ export async function runFeedAgent(options: {
       await setSessionId(snippetId, id);
       return;
     }
+    // How a subagent's work is told apart from the thread's own. The CLI streams a
+    // spawned agent's text and tool calls in the same stream as its parent's, tagged
+    // with the Agent call that started it; untagged, they read as things the main
+    // agent said and did.
+    const parentToolUseId = typeof event.parent_tool_use_id === "string" ? event.parent_tool_use_id : null;
+    // What a background command or a subagent finished with. The Bash result only
+    // says a command was backgrounded, so without this the thread never shows how it
+    // ended; for an agent it carries the tokens and time it spent.
+    if (event.type === "system" && event.subtype === "task_notification" && typeof event.tool_use_id === "string") {
+      emit(snippetId, await persistMessage(
+        snippetId,
+        "assistant",
+        "task",
+        JSON.stringify({
+          status: typeof event.status === "string" ? event.status : "",
+          summary: typeof event.summary === "string" ? event.summary : "",
+          usage: event.usage ?? null,
+        }),
+        event.tool_use_id,
+      ));
+      return;
+    }
     if (event.type === "assistant") {
       const message = event.message as { content?: Array<Record<string, unknown>> } | undefined;
       for (const block of message?.content ?? []) {
         if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
-          const persisted = await persistMessage(snippetId, "assistant", "text", block.text);
-          lastAssistantText = block.text.trim();
-          if (persisted.type === "message") {
-            lastAssistantId = persisted.id;
+          const persisted = await persistMessage(snippetId, "assistant", "text", block.text, null, parentToolUseId);
+          // A subagent's narration is not the thread's answer: it belongs to the card
+          // for its own run, and must not be mistaken for the reply this turn ends on.
+          if (!parentToolUseId) {
+            lastAssistantText = block.text.trim();
+            if (persisted.type === "message") {
+              lastAssistantId = persisted.id;
+            }
           }
           emit(snippetId, persisted);
         } else if (block.type === "tool_use") {
           const summary = `${String(block.name ?? "tool")} ${JSON.stringify(block.input ?? {})}`;
           const toolUseId = typeof block.id === "string" ? block.id : null;
-          emit(snippetId, await persistMessage(snippetId, "assistant", "tool_use", summary, toolUseId));
+          emit(snippetId, await persistMessage(snippetId, "assistant", "tool_use", summary, toolUseId, parentToolUseId));
         }
       }
       return;
@@ -752,7 +779,7 @@ export async function runFeedAgent(options: {
       for (const block of message?.content ?? []) {
         if (block.type === "tool_result") {
           const toolUseId = typeof block.tool_use_id === "string" ? block.tool_use_id : null;
-          emit(snippetId, await persistMessage(snippetId, "tool", "tool_result", toolResultText(block.content), toolUseId));
+          emit(snippetId, await persistMessage(snippetId, "tool", "tool_result", toolResultText(block.content), toolUseId, parentToolUseId));
         }
       }
       return;

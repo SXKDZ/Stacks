@@ -865,6 +865,24 @@
 
 .markdown-content li {
   display: list-item;
+}
+
+/* A checklist the agent wrote (`- [ ] step`) is the closest thing a headless run has
+   to the terminal's todo list, and GFM already parses it. Drop the bullet so the box
+   is the marker, and mute what is already done so the remaining work stands out. */
+.markdown-content li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.1em;
+}
+
+.markdown-content li > input[type="checkbox"] {
+  accent-color: var(--brand-blue);
+  margin-right: 7px;
+  vertical-align: baseline;
+}
+
+.markdown-content li:has(> input[type="checkbox"]:checked) {
+  color: var(--soft);
 }.publication-detail-list > span {
   align-items: flex-start;
   line-height: 1.45;

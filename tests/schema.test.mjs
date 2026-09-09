@@ -1759,3 +1759,168 @@ test("no CSS rule is fully superseded by a later copy of the same selector", asy
   const count = Number(/superseded by a later same-selector block: (\d+)/.exec(stdout)?.[1] ?? "-1");
   assert.equal(count, 0, `dead CSS blocks found (run scripts/find-dead-css.py):\n${stdout}`);
 });
+
+test("a subagent's run is attributed to the call that spawned it", async () => {
+  const [agent, feed, events, sync, schema, bootstrap, styles] = await Promise.all([
+    readFile(new URL("../app/lib/feed-agent.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/snippets/[id]/events/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feed/github/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/bootstrap.ts", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // The CLI streams a spawned agent's text and tool calls in the same stream as its
+  // parent's, tagged with the Agent call that started it. Stored untagged they read
+  // as things the thread's own agent said, and one of them would be taken for the
+  // answer the turn ends on.
+  assert.match(schema, /parentToolUseId: text\("parent_tool_use_id"\)/);
+  assert.match(bootstrap, /ALTER TABLE feed_messages ADD COLUMN parent_tool_use_id TEXT/);
+  assert.match(agent, /const parentToolUseId = typeof event\.parent_tool_use_id === "string" \? event\.parent_tool_use_id : null/);
+  assert.match(agent, /persistMessage\(snippetId, "assistant", "text", block\.text, null, parentToolUseId\)/);
+  assert.match(agent, /if \(!parentToolUseId\) \{\s*lastAssistantText = block\.text\.trim\(\)/);
+  assert.match(agent, /persistMessage\(snippetId, "assistant", "tool_use", summary, toolUseId, parentToolUseId\)/);
+  assert.match(agent, /persistMessage\(snippetId, "tool", "tool_result", toolResultText\(block\.content\), toolUseId, parentToolUseId\)/);
+  assert.match(events, /parentToolUseId: message\.parentToolUseId/);
+
+  // A backgrounded command's result only says it was backgrounded, so how it ended
+  // comes from the task notification; for an agent that event carries its usage.
+  assert.match(agent, /event\.subtype === "task_notification" && typeof event\.tool_use_id === "string"/);
+  assert.match(agent, /"task",\s*JSON\.stringify\(\{\s*status:/);
+
+  // Nested work renders inside its own agent's card, never as a turn of the thread
+  // and never on the GitHub issue.
+  assert.match(feed, /if \(message\.parentToolUseId\) \{\s*const nested = nestedByParent\.get/);
+  assert.match(feed, /if \(message\.parentToolUseId \|\| message\.kind === "task"\) \{\s*continue;/);
+  assert.match(feed, /if \(operation\.view\?\.kind === "subagent"\) \{\s*flushToolOperations\(\)/);
+  assert.match(sync, /if \(message\.parentToolUseId\) continue;/);
+  assert.match(sync, /isNull\(feedMessages\.parentToolUseId\)/);
+
+  // The four shapes worth reading as themselves, each with its own glyph and body.
+  assert.match(feed, /view\?\.kind === "diff" \? <FeedToolDiff view=\{view\} \/> : null/);
+  assert.match(feed, /view\?\.kind === "subagent" && view\.prompt/);
+  assert.match(feed, /view\?\.kind === "workflow"/);
+  assert.match(feed, /view\?\.kind === "shell"/);
+  assert.match(styles, /\.feed-diff-line\.is-add \{[^}]*background: color-mix\(in srgb, var\(--status-complete\)/s);
+  assert.match(styles, /\.feed-diff-line\.is-remove \{[^}]*background: color-mix\(in srgb, var\(--rose\)/s);
+  // Never colour alone: each line keeps its +/- sign.
+  assert.match(feed, /line\.type === "add" \? "\+" : line\.type === "remove" \? "-" : " "/);
+});
+
+test("a long thread is read by scrolling, and the phone gets one pane that fits", async () => {
+  const [feed, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Reaching either end of the rendered window widens it, so paging back through a
+  // long feed is a scroll rather than a button press per page. The compensation keeps
+  // the reader's place when turns arrive above them.
+  assert.match(feed, /if \(body\.scrollTop < 200\) pageThreadRef\.current\.earlier\?\.\(\)/);
+  assert.match(feed, /else if \(nearBottom\) pageThreadRef\.current\.later\?\.\(\)/);
+  assert.match(feed, /if \(jumpingRef\.current \|\| replayingHistoryRef\.current \|\| pagingThreadRef\.current\) return;/);
+  assert.match(feed, /body\.scrollTop \+= body\.scrollHeight - previousHeight;\s*pagingThreadRef\.current = false;/);
+  assert.match(feed, /function showLaterInteractions\(\)/);
+
+  // A bare 1fr column floors at its content's min-content width, which stretched the
+  // list pane past a phone's viewport and let the page's overflow clip it.
+  assert.match(styles, /\.feed-page \{[^}]*grid-template-columns: minmax\(0, var\(--feed-sidebar-width\)\) minmax\(0, 1fr\)/s);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.feed-page \{\s*grid-template-columns: minmax\(0, 1fr\);/);
+  // One pane means the floating theme toggle overlays whichever pane shows, so both
+  // headers reserve its slot.
+  assert.match(styles, /\.feed-list-head,\s*\.feed-detail-head-inner \{\s*padding-right: 56px;/);
+  // The moon keeps the same distance from the right edge as the back button keeps from
+  // the left, so the bar is not lopsided.
+  assert.match(styles, /\.feed-theme-toggle \{\s*justify-content: flex-end;\s*padding-right: 16px;\s*width: 56px;/);
+  // Back, the outline toggle, and the theme toggle are one control at one size, and
+  // the toggle centres on the bar's measured height rather than a guessed one.
+  assert.match(styles, /\.feed-theme-toggle \{[^}]*height: var\(--feed-head-height, 62px\)/s);
+  assert.doesNotMatch(styles, /\.feed-detail-back \{[^}]*height: 32px/s);
+  // Hover-only controls cannot be reached by touch: the row's menu is the only way
+  // to rename, fork, compact, or delete a feed.
+  assert.match(styles, /@media \(hover: none\) \{[\s\S]*?\.feed-row-kebab \{\s*display: flex;/);
+});
+
+test("the outline reaches any turn of a thread and any change inside it", async () => {
+  const [feed, outline, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/feed/FeedOutline.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Built from every interaction, not the rendered window: the point of the rail is to
+  // reach what is not on screen. Only while it is open, since a long feed makes this
+  // real work.
+  assert.match(feed, /outlineOpen \? buildFeedOutline\(interactions\) : \[\]/);
+  assert.match(feed, /<FeedOutline[\s\S]*?entries=\{outline\}[\s\S]*?activeId=\{activeInteractionId\}/);
+
+  // A turn's steps stay folded until it is the turn being read or the reader opens it.
+  assert.match(outline, /opened\.has\(id\) \|\| \(id === activeId && !folded\.has\(id\)\)/);
+  assert.match(outline, /entry\.operations\.length && !open \? \(\s*<span className="feed-outline-turn-count">/);
+  // Each step carries what it changed, which is what the rail is scanned for.
+  assert.match(outline, /operation\.heading\.stat \? <span className="feed-outline-op-stat">/);
+
+  // A jump to a turn puts its request at the top of the view; a jump to one operation
+  // centres its card, opening the collapsed run it is folded inside first.
+  assert.match(feed, /if \(target\) alignInThread\(body, target, "top"\)/);
+  assert.match(feed, /alignInThread\(body, card, "centre"\)/);
+  assert.match(feed, /data-op-ids~="\$\{operationId\}"/);
+  assert.match(feed, /if \(group && !group\.open\) group\.open = true/);
+  assert.match(feed, /if \(attempt < 12\)/);
+  // The window around a jump keeps growing as its markdown lays out, so the landing is
+  // corrected once, and only when it actually drifted.
+  assert.match(feed, /if \(Math\.abs\(offset\(\)\) > 80\) settle\(\);/);
+
+  // A jump owns the view until it settles. A target near the end of a feed leaves
+  // little below it, so the landing satisfied "the reader is at the bottom": the view
+  // re-pinned to the newest turn and paged forward until the whole feed was rendered,
+  // which took a turn ten from the end to the last one instead.
+  assert.match(feed, /const jumpToken = \(jumpTokenRef\.current \+= 1\);\s*jumpingRef\.current = true;/);
+  assert.match(feed, /if \(jumpTokenRef\.current === jumpToken\) jumpingRef\.current = false;/);
+  assert.match(feed, /if \(nearBottom && !jumpingRef\.current\) pinnedToBottomRef\.current = true;/);
+  assert.match(feed, /if \(jumpingRef\.current \|\| replayingHistoryRef\.current \|\| pagingThreadRef\.current\) return;/);
+
+  // The rail's width is the reader's, and it is remembered.
+  assert.match(feed, /FEED_OUTLINE_WIDTH_KEY, String\(width\)/);
+  assert.match(feed, /onResizeStart=\{startOutlineResize\}/);
+  assert.match(styles, /\.feed-outline-resize \{[^}]*cursor: col-resize/s);
+  // Its own scroll, so paging the thread never moves the rail being aimed with.
+  assert.match(styles, /\.feed-outline-list \{[^}]*overflow-y: auto/s);
+  // The composer sits in the thread's own column, so it stays centred on the
+  // conversation rather than on the pane with the rail's width folded in.
+  assert.match(feed, /<div className="feed-detail-column">\s*<div className="feed-detail-body"/);
+  assert.match(feed, /<\/footer>\s*<\/div>\s*\{outlineOpen \? \(/);
+  assert.match(styles, /\.feed-detail-column \{[^}]*flex-direction: column/s);
+  // The bar's control row is what the floating toggle aligns with: its 1px bottom
+  // border is not part of that row, and centring on the border box put the toggle a
+  // pixel below the button beside it.
+  assert.match(feed, /const height = \(bar: HTMLElement \| null\) => bar\?\.clientHeight \?\? 0;/);
+  // No room for a 244px rail beside a 390px thread.
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.feed-outline,\s*\.feed-outline-toggle \{\s*display: none;/);
+});
+
+test("a tool summary keeps its verb, its glyph, and its measure whole", async () => {
+  const [feed, styles] = await Promise.all([
+    readFile(new URL("../app/components/FeedWorkspace.tsx", import.meta.url), "utf8"),
+    readApplicationStyles(),
+  ]);
+
+  // Three slots that behave differently when the row runs out of width: the verb never
+  // gives (a card reading "Sh…" says nothing), the subject is code and is cut, the
+  // measure is short enough to keep. Flex shrinks by size, so without this the 40px
+  // word was crushed to make room for a 900px command.
+  assert.match(feed, /<span className="feed-tool-name">\{view\?\.heading\.name \?\? operation\.label\}<\/span>/);
+  assert.match(feed, /<code className="feed-tool-subject">\{view\.heading\.subject\}<\/code>/);
+  assert.match(styles, /\.feed-tool-name \{\s*flex-shrink: 0/);
+  assert.match(styles, /\.feed-tool-subject \{[^}]*text-overflow: ellipsis/s);
+  assert.match(styles, /\.feed-tool-stat \{[^}]*flex-shrink: 0/s);
+  // The glyph is not squeezed either: it came out 7px wide beside a 13px wrench.
+  assert.match(styles, /:is\(\.feed-tool-call, \.feed-tool-group\) > summary > svg \{\s*flex-shrink: 0/);
+  assert.match(feed, /const TOOL_GLYPH = 13;/);
+  // A card's prose reads at the card's size, not the thread's.
+  assert.match(styles, /\.feed-tool-io \.markdown-content\.feed-tool-md,[\s\S]*?font-size: var\(--type-control\)/);
+  // Both ends of a compaction are notes in the thread with the same links, so the bar
+  // does not carry them as well.
+  assert.doesNotMatch(feed, /className="feed-detail-link"/);
+});

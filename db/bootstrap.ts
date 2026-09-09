@@ -99,6 +99,7 @@ const schemaStatements = [
     kind TEXT NOT NULL DEFAULT 'text',
     content TEXT NOT NULL DEFAULT '',
     tool_use_id TEXT,
+    parent_tool_use_id TEXT,
     github_comment_id INTEGER,
     attachments TEXT,
     attachments_synced INTEGER NOT NULL DEFAULT 0,
@@ -371,6 +372,11 @@ async function initializeDatabase(): Promise<void> {
   const feedMessageColumns = tableColumns(raw, "feed_messages");
   if (!feedMessageColumns.has("attachments_synced")) {
     raw.prepare("ALTER TABLE feed_messages ADD COLUMN attachments_synced INTEGER NOT NULL DEFAULT 0").run();
+  }
+  // Which subagent a message belongs to. Existing rows stay null: threads recorded
+  // before this ran have their subagents' work inline, which is how it was shown.
+  if (!feedMessageColumns.has("parent_tool_use_id")) {
+    raw.prepare("ALTER TABLE feed_messages ADD COLUMN parent_tool_use_id TEXT").run();
   }
 
   sweepNonArxivCategories(raw);

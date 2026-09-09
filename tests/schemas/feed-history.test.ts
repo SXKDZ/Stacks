@@ -213,3 +213,31 @@ test("history attachment cloning copies staged uploads but keeps papers as refer
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a subagent's own steps are not copied as the thread's conversation", () => {
+  // The CLI streams a spawned agent's narration and tool calls alongside the parent's,
+  // tagged with the call that started them. They belong to that call's card: seeded
+  // into a fork's transcript they read as the thread's agent talking to itself, and
+  // selected into a new feed they duplicate work the copy never did.
+  const nested: FeedHistoryMessage[] = [
+    ...history,
+    message("t9", "assistant", "tool_use", "Agent {\"subagent_type\":\"Explore\"}", { toolUseId: "toolu_9" }),
+    message("n1", "assistant", "text", "Subagent narration", { parentToolUseId: "toolu_9" }),
+    message("n2", "assistant", "tool_use", "Bash {\"command\":\"ls\"}", { toolUseId: "toolu_10", parentToolUseId: "toolu_9" }),
+    message("n3", "tool", "tool_result", "a.txt b.txt", { toolUseId: "toolu_10", parentToolUseId: "toolu_9" }),
+  ];
+
+  const transcript = buildFeedTranscript("Opening question", nested, true);
+  assert.ok(!transcript.includes("Subagent narration"));
+  assert.ok(!transcript.includes("a.txt b.txt"));
+  // The parent's own call still counts as the thread's tool detail.
+  assert.ok(transcript.includes("Agent"));
+
+  const selected = selectFeedHistory({
+    instruction: "Opening question",
+    messages: nested,
+    interactionIds: ["opening"],
+    includeToolDetails: true,
+  });
+  assert.ok(!selected.messages.some((entry) => entry.parentToolUseId));
+});
